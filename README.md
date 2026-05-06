@@ -1,9 +1,12 @@
 # kirakira-agent
 
-手搓一个 agent harness，记录学习过程。
+A small Python coding agent harness, built as a hands-on learning project.
 
-Kirakira Agent 是一个小型 Python coding agent harness，核心思路来自
-`learn-claude-code`：模型负责决策，harness 提供工具、上下文、观察和执行边界。
+Kirakira Agent follows the harness engineering idea from `learn-claude-code`:
+the model decides, while the harness provides tools, context, observations, and
+execution boundaries.
+
+Chinese README: [README-cn.md](README-cn.md)
 
 ## Quick Start
 
@@ -11,7 +14,7 @@ Kirakira Agent 是一个小型 Python coding agent harness，核心思路来自
 python3 -m kirakira_agent
 ```
 
-需要在 `.env` 中配置 OpenAI-compatible 模型服务：
+Configure an OpenAI-compatible model service in `.env`:
 
 ```bash
 OPENAI_COMPATIBLE_BASE_URL=http://localhost:8000/v1
@@ -19,24 +22,25 @@ OPENAI_COMPATIBLE_API_KEY=not-needed-for-local
 MODEL_ID=qwen2.5-coder
 ```
 
-兼容 DeepSeek、Qwen、GLM、vLLM、LM Studio 等支持 `/v1/chat/completions`
-和 tool calling 的服务。
+It works with services that expose `/v1/chat/completions` and support tool
+calling, such as DeepSeek, Qwen, GLM, vLLM, and LM Studio compatible servers.
 
 ## CLI Commands
 
-- `/tools`：列出工具。
-- `/skills`：列出 `skills/**/SKILL.md`。
-- `/compact`：压缩当前上下文。
-- `/exit`：退出。
+- `/tools`: List available tools.
+- `/skills`: List loadable `skills/**/SKILL.md` files.
+- `/compact`: Compress the current conversation context.
+- `/exit`: Exit the REPL.
 
 ## Built-in Tools
 
-- `bash`：在 workspace 内执行命令，带危险命令拦截和超时。
-- `read_file`：读取 workspace 内文件。
-- `write_file`：写入 workspace 内文件。
-- `edit_file`：精确替换文件内容。
-- `load_skill`：按名称加载 skill。
-- `compact`：触发上下文压缩。
+- `bash`: Run shell commands in the workspace, with basic dangerous-command
+  blocking and timeouts.
+- `read_file`: Read files inside the workspace.
+- `write_file`: Write files inside the workspace.
+- `edit_file`: Replace exact text in a workspace file.
+- `load_skill`: Load a skill by name.
+- `compact`: Trigger context compression.
 
 ## Development
 
