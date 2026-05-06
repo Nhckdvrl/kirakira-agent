@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kirakira-agent"
+version = "0.1.0"
+description = "A small, model-agnostic coding agent harness."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = []
+
+[project.scripts]
+kirakira-agent = "kirakira_agent.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["kirakira_agent*"]
