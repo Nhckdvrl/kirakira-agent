@@ -58,7 +58,11 @@ def repl(agent: Agent, workdir: Path) -> None:
             continue
 
         history.append({"role": "user", "content": query})
-        response = agent.run(history)
+        try:
+            response = agent.run(history)
+        except RuntimeError as exc:
+            print("Error: %s" % exc)
+            continue
         print_response_text(response.text)
 
 

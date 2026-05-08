@@ -1,4 +1,5 @@
 import json
+import os
 import unittest
 
 from kirakira_agent.models.openai_compatible import OpenAICompatibleClient
@@ -34,6 +35,36 @@ class OpenAICompatibleTests(unittest.TestCase):
         self.assertEqual(response.tool_calls[0].name, "read_file")
         self.assertEqual(response.tool_calls[0].arguments["path"], "README.md")
 
+    def test_parse_and_forward_reasoning_content_for_tool_calls(self):
+        client = OpenAICompatibleClient(base_url="http://example.test/v1", api_key="")
+        payload = {
+            "choices": [
+                {
+                    "finish_reason": "tool_calls",
+                    "message": {
+                        "content": "I will inspect the file.",
+                        "reasoning_content": "Need to read README before answering.",
+                        "tool_calls": [
+                            {
+                                "id": "call_1",
+                                "type": "function",
+                                "function": {
+                                    "name": "read_file",
+                                    "arguments": json.dumps({"path": "README.md"}),
+                                },
+                            }
+                        ],
+                    },
+                }
+            ]
+        }
+
+        response = client.parse_response(payload)
+        converted = client._to_openai_messages([assistant_message_from_response(response)], system="")
+
+        self.assertEqual(response.reasoning_content, "Need to read README before answering.")
+        self.assertEqual(converted[0]["reasoning_content"], "Need to read README before answering.")
+
     def test_tool_result_message_shape(self):
         message = tool_result_message(ToolResult("call_1", "done", False))
 
@@ -51,6 +82,23 @@ class OpenAICompatibleTests(unittest.TestCase):
         self.assertEqual(converted[0]["role"], "system")
         args = converted[1]["tool_calls"][0]["function"]["arguments"]
         self.assertEqual(json.loads(args), {"command": "pwd"})
+
+    def test_deepseek_v4_disables_thinking_by_default(self):
+        client = OpenAICompatibleClient(base_url="https://api.deepseek.com", api_key="")
+
+        self.assertEqual(client._thinking_config("deepseek-v4-flash"), {"type": "disabled"})
+
+    def test_thinking_config_can_be_overridden(self):
+        old_value = os.environ.get("OPENAI_COMPATIBLE_THINKING")
+        os.environ["OPENAI_COMPATIBLE_THINKING"] = "enabled"
+        try:
+            client = OpenAICompatibleClient(base_url="https://api.deepseek.com", api_key="")
+            self.assertEqual(client._thinking_config("deepseek-v4-flash"), {"type": "enabled"})
+        finally:
+            if old_value is None:
+                os.environ.pop("OPENAI_COMPATIBLE_THINKING", None)
+            else:
+                os.environ["OPENAI_COMPATIBLE_THINKING"] = old_value
 
 
 if __name__ == "__main__":

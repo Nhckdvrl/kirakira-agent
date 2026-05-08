@@ -29,6 +29,7 @@ class ToolResult:
 @dataclass
 class ModelResponse:
     text: str = ""
+    reasoning_content: str = ""
     tool_calls: List[ToolCall] = field(default_factory=list)
     stop_reason: str = "end_turn"
     raw: Optional[JsonDict] = None
@@ -40,6 +41,8 @@ class ModelResponse:
 
 def assistant_message_from_response(response: ModelResponse) -> JsonDict:
     message: JsonDict = {"role": "assistant", "content": response.text or ""}
+    if response.reasoning_content:
+        message["reasoning_content"] = response.reasoning_content
     if response.tool_calls:
         message["tool_calls"] = [
             {

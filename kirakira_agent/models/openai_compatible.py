@@ -35,6 +35,9 @@ class OpenAICompatibleClient:
             "messages": self._to_openai_messages(messages, system),
             "max_tokens": max_tokens,
         }
+        thinking = self._thinking_config(model)
+        if thinking is not None:
+            payload["thinking"] = thinking
         if tools:
             payload["tools"] = [self._to_openai_tool(tool) for tool in tools]
             payload["tool_choice"] = "auto"
@@ -53,7 +56,11 @@ class OpenAICompatibleClient:
             detail = exc.read().decode("utf-8", errors="replace")
             raise RuntimeError("Model request failed: HTTP %s %s" % (exc.code, detail)) from exc
         except urllib.error.URLError as exc:
-            raise RuntimeError("Model request failed: %s" % exc.reason) from exc
+            raise RuntimeError(
+                "Model request failed for %s: %s. Check OPENAI_COMPATIBLE_BASE_URL, "
+                "network/DNS/proxy settings, API key, and MODEL_ID."
+                % (self._chat_completions_url(), exc.reason)
+            ) from exc
 
         return self.parse_response(json.loads(body))
 
@@ -65,6 +72,7 @@ class OpenAICompatibleClient:
         choice = choices[0]
         message = choice.get("message") or {}
         text = message.get("content") or ""
+        reasoning_content = message.get("reasoning_content") or ""
         tool_calls = []
         for raw_call in message.get("tool_calls") or []:
             fn = raw_call.get("function") or {}
@@ -88,7 +96,13 @@ class OpenAICompatibleClient:
 
         finish_reason = choice.get("finish_reason") or ""
         stop_reason = "tool_use" if tool_calls or finish_reason == "tool_calls" else "end_turn"
-        return ModelResponse(text=text, tool_calls=tool_calls, stop_reason=stop_reason, raw=payload)
+        return ModelResponse(
+            text=text,
+            reasoning_content=reasoning_content,
+            tool_calls=tool_calls,
+            stop_reason=stop_reason,
+            raw=payload,
+        )
 
     def _headers(self) -> Dict[str, str]:
         headers = {"Content-Type": "application/json"}
@@ -102,6 +116,21 @@ class OpenAICompatibleClient:
         if self.base_url.endswith("/v1"):
             return self.base_url + "/chat/completions"
         return self.base_url + "/v1/chat/completions"
+
+    def _thinking_config(self, model: str) -> Optional[JsonDict]:
+        requested = os.getenv("OPENAI_COMPATIBLE_THINKING")
+        if requested:
+            value = requested.strip().lower()
+            if value in ("enabled", "disabled"):
+                return {"type": value}
+            if value in ("off", "false", "0", "no"):
+                return {"type": "disabled"}
+            if value in ("on", "true", "1", "yes"):
+                return {"type": "enabled"}
+
+        if "api.deepseek.com" in self.base_url and model.startswith("deepseek-v4-"):
+            return {"type": "disabled"}
+        return None
 
     def _to_openai_tool(self, tool: ToolSpec) -> JsonDict:
         return {
@@ -129,23 +158,27 @@ class OpenAICompatibleClient:
                 )
                 continue
             if role == "assistant" and msg.get("tool_calls"):
-                converted.append(
-                    {
-                        "role": "assistant",
-                        "content": msg.get("content") or "",
-                        "tool_calls": [
-                            {
-                                "id": call.get("id"),
-                                "type": "function",
-                                "function": {
-                                    "name": (call.get("function") or {}).get("name"),
-                                    "arguments": json.dumps((call.get("function") or {}).get("arguments", {})),
-                                },
-                            }
-                            for call in msg.get("tool_calls", [])
-                        ],
-                    }
-                )
+                assistant_msg = {
+                    "role": "assistant",
+                    "content": msg.get("content") or "",
+                    "tool_calls": [
+                        {
+                            "id": call.get("id"),
+                            "type": "function",
+                            "function": {
+                                "name": (call.get("function") or {}).get("name"),
+                                "arguments": json.dumps((call.get("function") or {}).get("arguments", {})),
+                            },
+                        }
+                        for call in msg.get("tool_calls", [])
+                    ],
+                }
+                if msg.get("reasoning_content"):
+                    assistant_msg["reasoning_content"] = msg.get("reasoning_content")
+                converted.append(assistant_msg)
                 continue
-            converted.append({"role": role, "content": msg.get("content", "")})
+            converted_msg = {"role": role, "content": msg.get("content", "")}
+            if role == "assistant" and msg.get("reasoning_content"):
+                converted_msg["reasoning_content"] = msg.get("reasoning_content")
+            converted.append(converted_msg)
         return converted

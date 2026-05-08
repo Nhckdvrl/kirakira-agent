@@ -1,22 +1,27 @@
 import os
 import subprocess
 import sys
+import tempfile
 import unittest
+from pathlib import Path
 
 
 class CliTests(unittest.TestCase):
     def test_cli_reports_missing_env(self):
-        env = os.environ.copy()
-        env.pop("MODEL_ID", None)
-        env.pop("OPENAI_COMPATIBLE_BASE_URL", None)
-        proc = subprocess.run(
-            [sys.executable, "-m", "kirakira_agent"],
-            input="/exit\n",
-            text=True,
-            capture_output=True,
-            env=env,
-            timeout=10,
-        )
+        with tempfile.TemporaryDirectory() as tmp:
+            env = os.environ.copy()
+            env.pop("MODEL_ID", None)
+            env.pop("OPENAI_COMPATIBLE_BASE_URL", None)
+            env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1])
+            proc = subprocess.run(
+                [sys.executable, "-m", "kirakira_agent"],
+                input="/exit\n",
+                text=True,
+                capture_output=True,
+                cwd=tmp,
+                env=env,
+                timeout=10,
+            )
 
         self.assertNotEqual(proc.returncode, 0)
         self.assertIn("MODEL_ID", proc.stderr + proc.stdout)

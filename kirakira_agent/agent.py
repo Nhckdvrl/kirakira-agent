@@ -8,7 +8,7 @@ from kirakira_agent.tools.registry import ToolRegistry
 
 
 DEFAULT_SYSTEM = (
-    "You are a coding agent. Use tools to solve tasks. "
+    "You are a coding agent. You can use tools to solve tasks. "
     "Act when tool use helps, and give a concise final answer when done."
 )
 

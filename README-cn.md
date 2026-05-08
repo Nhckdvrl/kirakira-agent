@@ -19,6 +19,21 @@ OPENAI_COMPATIBLE_API_KEY=not-needed-for-local
 MODEL_ID=qwen2.5-coder
 ```
 
+DeepSeek 示例：
+
+```bash
+OPENAI_COMPATIBLE_BASE_URL=https://api.deepseek.com
+OPENAI_COMPATIBLE_API_KEY=your-deepseek-api-key
+MODEL_ID=deepseek-v4-flash
+```
+
+DeepSeek V4 默认会关闭 thinking mode，以避免工具调用多轮对话时必须回传
+`reasoning_content` 的协议限制。如需显式开启：
+
+```bash
+OPENAI_COMPATIBLE_THINKING=enabled
+```
+
 兼容 DeepSeek、Qwen、GLM、vLLM、LM Studio 等支持 `/v1/chat/completions`
 和 tool calling 的服务。
 
