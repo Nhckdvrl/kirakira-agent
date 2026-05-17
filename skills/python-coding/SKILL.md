@@ -6,6 +6,7 @@ description: Make focused Python code changes that match this repository's style
 # Python Coding
 
 Use this skill when implementing or refactoring Python code in this repository.
+It is intentionally compact so the harness can load it during local experiments.
 
 ## Style
 

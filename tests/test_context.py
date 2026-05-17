@@ -1,3 +1,5 @@
+"""Kirakira Agent learning harness module."""
+
 import tempfile
 import unittest
 from pathlib import Path

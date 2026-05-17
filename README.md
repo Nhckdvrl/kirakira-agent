@@ -2,6 +2,8 @@
 
 A Python coding agent harness, built as a hands-on learning project.
 
+Status: experimental and intentionally small.
+
 Kirakira Agent follows the harness engineering idea from `learn-claude-code`:
 the model decides, while the harness provides tools, context, observations, and
 execution boundaries.

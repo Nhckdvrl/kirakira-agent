@@ -1,3 +1,5 @@
+"""Kirakira Agent learning harness module."""
+
 import json
 import os
 import unittest

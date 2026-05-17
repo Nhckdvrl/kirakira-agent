@@ -1,3 +1,5 @@
+"""Kirakira Agent learning harness module."""
+
 import os
 from pathlib import Path
 from typing import List

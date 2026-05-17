@@ -1,3 +1,5 @@
+"""Kirakira Agent learning harness module."""
+
 from typing import List, Protocol
 
 from kirakira_agent.schema import JsonDict, ModelResponse, ToolSpec

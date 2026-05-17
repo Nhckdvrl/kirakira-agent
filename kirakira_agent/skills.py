@@ -1,3 +1,5 @@
+"""Kirakira Agent learning harness module."""
+
 import re
 from pathlib import Path
 from typing import Dict, List, Tuple

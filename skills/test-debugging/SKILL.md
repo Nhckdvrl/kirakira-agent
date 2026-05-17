@@ -7,6 +7,7 @@ description: Diagnose failing tests and turn failures into small, verified fixes
 
 Use this skill when tests fail, behavior regresses, or a bug report includes an
 error message.
+It favors small fixes that can be verified by the standard unittest suite.
 
 ## Workflow
 

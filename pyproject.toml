@@ -9,6 +9,7 @@ description = "A small, model-agnostic coding agent harness."
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = []
+keywords = ["agent", "harness", "tool-calling"]
 
 [project.scripts]
 kirakira-agent = "kirakira_agent.cli:main"

@@ -2,6 +2,8 @@
 
 手搓一个 agent harness，记录学习过程。
 
+状态：实验性项目，刻意保持小而清晰。
+
 Kirakira Agent 是一个小型 Python coding agent harness，核心思路来自
 `learn-claude-code`：模型负责决策，harness 提供工具、上下文、观察和执行边界。
 

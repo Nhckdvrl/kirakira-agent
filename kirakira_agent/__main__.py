@@ -1,3 +1,5 @@
+"""Kirakira Agent learning harness module."""
+
 from .cli import main
 
 

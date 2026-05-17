@@ -1,3 +1,5 @@
+"""Kirakira Agent learning harness module."""
+
 from .builtins import build_default_registry
 from .registry import Tool, ToolRegistry
 

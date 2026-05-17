@@ -7,6 +7,7 @@ description: Explore an unfamiliar repository before making changes.
 
 Use this skill when a request requires understanding the project structure,
 entry points, or existing conventions before editing code.
+It keeps exploration grounded in files that own the behavior under discussion.
 
 ## Workflow
 

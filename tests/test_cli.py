@@ -1,3 +1,5 @@
+"""Kirakira Agent learning harness module."""
+
 import os
 import subprocess
 import sys
