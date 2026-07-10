@@ -1,10 +1,13 @@
 """Kirakira Agent learning harness module."""
 
 import subprocess
+import json
 from pathlib import Path
 from typing import Optional
 
+from kirakira_agent.memory import MemoryRuntime
 from kirakira_agent.schema import ToolSpec
+from kirakira_agent.session import SessionManager
 from kirakira_agent.skills import SkillLoader
 from kirakira_agent.tools.registry import ToolRegistry, object_schema
 
@@ -28,9 +31,19 @@ def truncate(text: str, limit: int = OUTPUT_LIMIT) -> str:
 
 
 class WorkspaceTools:
-    def __init__(self, workdir: Path, skill_loader: SkillLoader) -> None:
+    def __init__(
+        self,
+        workdir: Path,
+        skill_loader: SkillLoader,
+        memory: MemoryRuntime | None = None,
+        session_manager: SessionManager | None = None,
+        registry: ToolRegistry | None = None,
+    ) -> None:
         self.workdir = workdir.resolve()
         self.skill_loader = skill_loader
+        self.memory = memory
+        self.session_manager = session_manager
+        self.registry = registry
 
     def bash(self, command: str, timeout: int = 120) -> str:
         dangerous = ["rm -rf /", "sudo", "shutdown", "reboot", "> /dev/"]
@@ -78,11 +91,60 @@ class WorkspaceTools:
     def compact(self) -> str:
         return "Compacting context."
 
+    def memorize(self, content: str) -> str:
+        if self.memory is None:
+            return "Error: Memory runtime is not enabled"
+        source_ref = ""
+        if self.registry is not None:
+            ctx = self.registry.context
+            session_key = str(ctx.get("session_key") or "")
+            if session_key and self.session_manager is not None:
+                source_ref = self.session_manager.peek_next_message_id(session_key)
+        record = self.memory.memorize(content, source_ref=source_ref)
+        return "记忆已写入: %s" % record.id
 
-def build_default_registry(workdir: Path, skills_dir: Optional[Path] = None) -> ToolRegistry:
+    def recall_memory(self, query: str, limit: int = 5) -> str:
+        if self.memory is None:
+            return "[]"
+        records = self.memory.recall(query, limit=limit)
+        return json.dumps([r.to_json() for r in records], ensure_ascii=False, indent=2)
+
+    def forget_memory(self, ids) -> str:
+        if self.memory is None:
+            return "Error: Memory runtime is not enabled"
+        if isinstance(ids, str):
+            ids = [ids]
+        forgotten = self.memory.forget([str(item) for item in ids])
+        return json.dumps({"superseded_ids": forgotten}, ensure_ascii=False)
+
+    def search_messages(self, query: str, limit: int = 10) -> str:
+        if self.session_manager is None:
+            return "[]"
+        return json.dumps(
+            self.session_manager.search_messages(query, limit=limit),
+            ensure_ascii=False,
+            indent=2,
+        )
+
+    def fetch_messages(self, source_ref: str, context: int = 2) -> str:
+        if self.session_manager is None:
+            return "[]"
+        return json.dumps(
+            self.session_manager.fetch_messages(source_ref, context=context),
+            ensure_ascii=False,
+            indent=2,
+        )
+
+
+def build_default_registry(
+    workdir: Path,
+    skills_dir: Optional[Path] = None,
+    memory: MemoryRuntime | None = None,
+    session_manager: SessionManager | None = None,
+) -> ToolRegistry:
     skill_loader = SkillLoader(skills_dir or (workdir / "skills"))
-    handlers = WorkspaceTools(workdir, skill_loader)
     registry = ToolRegistry()
+    handlers = WorkspaceTools(workdir, skill_loader, memory, session_manager, registry)
     registry.register(
         ToolSpec(
             "bash",
@@ -155,5 +217,54 @@ def build_default_registry(workdir: Path, skills_dir: Optional[Path] = None) -> 
             object_schema({}, []),
         ),
         handlers.compact,
+    )
+    registry.register(
+        ToolSpec(
+            "memorize",
+            "Write a stable user fact or preference into long-term memory.",
+            object_schema({"content": {"type": "string"}}, ["content"]),
+        ),
+        handlers.memorize,
+    )
+    registry.register(
+        ToolSpec(
+            "recall_memory",
+            "Search long-term memory semantically/lexically.",
+            object_schema(
+                {"query": {"type": "string"}, "limit": {"type": "integer"}},
+                ["query"],
+            ),
+        ),
+        handlers.recall_memory,
+    )
+    registry.register(
+        ToolSpec(
+            "forget_memory",
+            "Mark memory items as forgotten by id.",
+            object_schema({"ids": {"type": "array", "items": {"type": "string"}}}, ["ids"]),
+        ),
+        handlers.forget_memory,
+    )
+    registry.register(
+        ToolSpec(
+            "search_messages",
+            "Keyword search persisted chat messages and return source refs.",
+            object_schema(
+                {"query": {"type": "string"}, "limit": {"type": "integer"}},
+                ["query"],
+            ),
+        ),
+        handlers.search_messages,
+    )
+    registry.register(
+        ToolSpec(
+            "fetch_messages",
+            "Fetch persisted chat messages around a source_ref.",
+            object_schema(
+                {"source_ref": {"type": "string"}, "context": {"type": "integer"}},
+                ["source_ref"],
+            ),
+        ),
+        handlers.fetch_messages,
     )
     return registry

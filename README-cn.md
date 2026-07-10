@@ -46,6 +46,50 @@ OPENAI_COMPATIBLE_THINKING=enabled
 - `/compact`：压缩当前上下文。
 - `/exit`：退出。
 
+## 被动 Channel
+
+当前被动 runtime 支持 Web、Telegram、QQ/OneBot。它们都只负责“用户发消息后 agent 回复”，不包含主动链路。
+
+Web：
+
+```bash
+python3 -m kirakira_agent --serve --web
+# 浏览器打开 http://127.0.0.1:8765
+```
+
+Telegram：
+
+```bash
+TELEGRAM_BOT_TOKEN=123456:abcdef python3 -m kirakira_agent --serve --telegram
+```
+
+可选白名单：
+
+```bash
+TELEGRAM_ALLOW_FROM=123456789,alice
+```
+
+QQ/NapCat/OneBot HTTP：
+
+```bash
+python3 -m kirakira_agent --serve --qq
+```
+
+把 NapCat/OneBot 的 HTTP 上报地址配置为：
+
+```text
+http://127.0.0.1:8766/qq/webhook
+```
+
+常用 QQ 环境变量：
+
+```bash
+QQ_BOT_UIN=12345
+ONEBOT_API_BASE_URL=http://127.0.0.1:3000
+QQ_GROUP_ALLOW=777,888
+QQ_REQUIRE_AT=true
+```
+
 ## Built-in Tools
 
 - `bash`：在 workspace 内执行命令，带危险命令拦截和超时。
@@ -58,5 +102,5 @@ OPENAI_COMPATIBLE_THINKING=enabled
 ## Development
 
 ```bash
-python3 -m unittest
+python3 -m unittest discover -v
 ```
