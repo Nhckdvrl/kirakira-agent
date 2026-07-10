@@ -274,7 +274,7 @@ Channel 回复
 
 - [x] `.env` 使用 DeepSeek OpenAI-compatible endpoint
 - [x] `MODEL_ID=deepseek-v4-flash`
-- [x] 本地写入用户提供的 DeepSeek API key 用于测试
+- [x] 使用临时环境变量注入用户提供的 DeepSeek API key 用于测试
 - [x] 上传前恢复 `.env` 占位 key，避免泄露
 - [x] 保留 `OpenAICompatibleClient`
 - [x] DeepSeek v4 默认关闭 thinking
@@ -296,6 +296,11 @@ Channel 回复
 - [x] 测试新增 passive research tools
 - [x] 测试 message_push
 - [x] 测试工具 lifecycle events
+- [x] 测试 web_fetch 本地/内网地址默认拒绝
+- [x] 测试 registry 同步执行 async tool 的兼容路径
+- [x] 测试 memorize 与 consolidation 去重
+- [x] 测试 Telegram 长回复分片
+- [x] 测试 QQ OneBot failed retcode/status
 - [x] 用 conda 环境跑单元测试
 - [x] 用 conda 环境跑真实 agent 功能测试
 

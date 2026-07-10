@@ -102,7 +102,7 @@ QQ_REQUIRE_AT=true
 - `memorize`、`recall_memory`、`forget_memory`：管理长期记忆。
 - `search_messages`、`fetch_messages`：搜索和回源持久化对话历史。
 - `tool_search`：搜索可用工具。
-- `web_fetch`、`web_search`：抓取 URL 和搜索网页。
+- `web_fetch`、`web_search`：抓取 URL 和搜索网页；`web_fetch` 默认拒绝本地/内网地址，可信本地测试可设置 `KIRAKIRA_ALLOW_PRIVATE_WEB_FETCH=true`。
 - `message_push`：通过 bus 向指定 channel/chat 发送消息。
 
 ## Development

@@ -110,11 +110,14 @@ class MessageBus:
                 msg = await asyncio.wait_for(self._outbound.get(), timeout=1.0)
             except asyncio.TimeoutError:
                 continue
-            await self._chat_lane.run_passive(
-                msg.channel,
-                msg.chat_id,
-                lambda: self._send_outbound(msg),
-            )
+            try:
+                await self._chat_lane.run_passive(
+                    msg.channel,
+                    msg.chat_id,
+                    lambda: self._send_outbound(msg),
+                )
+            finally:
+                self._outbound.task_done()
 
     async def _send_outbound(self, msg: OutboundMessage) -> None:
         subscribers = list(self._subscribers.get(msg.channel, []))
@@ -146,4 +149,3 @@ class MessageBus:
     @property
     def outbound_size(self) -> int:
         return self._outbound.qsize()
-

@@ -211,23 +211,30 @@ class WebChannel:
         future: asyncio.Future[OutboundMessage] = loop.create_future()
         with self._lock:
             self._pending.setdefault(chat_id, []).append(future)
-        await self._ctx.bus.publish_inbound(
-            InboundMessage(
-                channel=self.name,
-                sender=str(payload.get("sender") or "web"),
-                chat_id=chat_id,
-                content=text,
-                media=[str(item) for item in payload.get("media", []) if str(item).strip()]
-                if isinstance(payload.get("media"), list)
-                else [],
-                metadata={"client_request_id": str(payload.get("request_id") or "")},
+        try:
+            await self._ctx.bus.publish_inbound(
+                InboundMessage(
+                    channel=self.name,
+                    sender=str(payload.get("sender") or "web"),
+                    chat_id=chat_id,
+                    content=text,
+                    media=[str(item) for item in payload.get("media", []) if str(item).strip()]
+                    if isinstance(payload.get("media"), list)
+                    else [],
+                    metadata={"client_request_id": str(payload.get("request_id") or "")},
+                )
             )
-        )
-        return await asyncio.wait_for(future, timeout=self.response_timeout)
+            return await asyncio.wait_for(future, timeout=self.response_timeout)
+        finally:
+            with self._lock:
+                futures = self._pending.get(chat_id, [])
+                if future in futures:
+                    futures.remove(future)
+                if not futures:
+                    self._pending.pop(chat_id, None)
 
     def _chat_id(self, session_id: str) -> str:
         prefix = "%s:" % self.name
         if session_id.startswith(prefix):
             return session_id[len(prefix):]
         return session_id
-
