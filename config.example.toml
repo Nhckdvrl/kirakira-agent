@@ -1,0 +1,40 @@
+[llm.main]
+model = "deepseek-v4-flash"
+api_key = "${DEEPSEEK_API_KEY}"
+base_url = "https://api.deepseek.com/v1"
+enable_thinking = false
+
+[agent]
+max_tokens = 8192
+max_iterations = 40
+system_prompt = "你是 Kirakira。使用与用户相同的语言回答；执行前核实，完成后给出可验证结果。"
+
+[agent.context]
+memory_window = 40
+
+# 可选：配置后启用语义+词法混合记忆检索；不配置则使用纯词法检索。
+[memory.embedding]
+model = ""
+api_key = ""
+base_url = ""
+
+[channels.chat]
+enabled = true
+host = "127.0.0.1"
+port = 8765
+channel_name = "web"
+
+[channels.telegram]
+token = ""
+allow_from = []
+channel_name = "telegram"
+
+[channels.qq]
+bot_uin = ""
+api_base_url = "http://127.0.0.1:3000"
+allow_from = []
+require_at = true
+channel_name = "qq"
+
+# [[channels.qq.groups]]
+# group_id = "123456789"

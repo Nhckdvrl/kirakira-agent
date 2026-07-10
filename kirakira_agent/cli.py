@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import List
 
 from kirakira_agent.agent import Agent, DEFAULT_SYSTEM
-from kirakira_agent.config import load_dotenv, require_env
+from kirakira_agent.config import config_value, load_dotenv, load_toml_config, require_env
 from kirakira_agent.bus import MessageBus
 from kirakira_agent.channels.contract import ChannelContext
 from kirakira_agent.channels.host import ChannelHost
@@ -19,6 +19,7 @@ from kirakira_agent.context_builder import ContextBuilder
 from kirakira_agent.event_bus import EventBus
 from kirakira_agent.events import InboundMessage, OutboundMessage
 from kirakira_agent.memory import MemoryRuntime
+from kirakira_agent.mcp import McpServerRegistry
 from kirakira_agent.models import OpenAICompatibleClient
 from kirakira_agent.plugins import PluginManager
 from kirakira_agent.runtime import (
@@ -30,14 +31,29 @@ from kirakira_agent.runtime import (
 )
 from kirakira_agent.schema import JsonDict
 from kirakira_agent.session import SessionManager
+from kirakira_agent.scheduler import SchedulerService
+from kirakira_agent.subagent import SubagentManager
 from kirakira_agent.skills import SkillLoader
 from kirakira_agent.tools import build_default_registry
 
 
 def build_agent(workdir: Path) -> Agent:
     load_dotenv(workdir / ".env")
-    model = require_env("MODEL_ID")
-    client = OpenAICompatibleClient()
+    app_config = load_toml_config(workdir / "config.toml")
+    model = os.getenv("MODEL_ID") or str(
+        config_value(app_config, "llm", "main", "model", default="")
+    )
+    if not model:
+        model = require_env("MODEL_ID")
+    client = OpenAICompatibleClient(
+        base_url=os.getenv("OPENAI_COMPATIBLE_BASE_URL")
+        or config_value(app_config, "llm", "main", "base_url"),
+        api_key=os.getenv("OPENAI_COMPATIBLE_API_KEY")
+        or config_value(app_config, "llm", "main", "api_key", default=""),
+        thinking_enabled=config_value(
+            app_config, "llm", "main", "enable_thinking"
+        ),
+    )
     registry = build_default_registry(workdir)
     skills = SkillLoader(workdir / "skills")
     system = (
@@ -68,7 +84,11 @@ def _build_channel_host(
     enable_web: bool = False,
     enable_telegram: bool = False,
     enable_qq: bool = False,
+    interrupt=None,
+    memory=None,
+    app_config=None,
 ) -> ChannelHost | None:
+    app_config = app_config or {}
     host = ChannelHost(
         lambda channel: ChannelContext(
             bus=bus,
@@ -76,42 +96,85 @@ def _build_channel_host(
             event_bus=event_bus,
             workspace=workdir,
             log=logging.getLogger("channels.%s" % channel.name),
+            interrupt=interrupt,
+            memory=memory,
         )
     )
     added = False
-    if enable_web or _env_bool("KIRAKIRA_WEB_ENABLED"):
+    chat_config = config_value(app_config, "channels", "chat", default={}) or {}
+    if enable_web or _env_bool(
+        "KIRAKIRA_WEB_ENABLED", bool(chat_config.get("enabled", False))
+    ):
         host.add(
             WebChannel(
-                host=os.getenv("KIRAKIRA_WEB_HOST", "127.0.0.1"),
-                port=int(os.getenv("KIRAKIRA_WEB_PORT", "8765")),
-                channel_name=os.getenv("KIRAKIRA_WEB_CHANNEL", "web"),
+                host=os.getenv("KIRAKIRA_WEB_HOST", str(chat_config.get("host") or "127.0.0.1")),
+                port=int(os.getenv("KIRAKIRA_WEB_PORT", str(chat_config.get("port") or 8765))),
+                channel_name=os.getenv("KIRAKIRA_WEB_CHANNEL", str(chat_config.get("channel_name") or "web")),
             )
         )
         added = True
-    telegram_token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
-    if enable_telegram or _env_bool("KIRAKIRA_TELEGRAM_ENABLED"):
+    telegram_config = config_value(app_config, "channels", "telegram", default={}) or {}
+    telegram_token = (
+        os.getenv("TELEGRAM_BOT_TOKEN")
+        or str(telegram_config.get("token") or "")
+    ).strip()
+    if enable_telegram or _env_bool(
+        "KIRAKIRA_TELEGRAM_ENABLED",
+        bool(telegram_config.get("enabled", bool(telegram_token))),
+    ):
         if not telegram_token:
             raise RuntimeError("TELEGRAM_BOT_TOKEN is required when Telegram channel is enabled")
         host.add(
             TelegramChannel(
                 token=telegram_token,
-                allow_from=_env_list("TELEGRAM_ALLOW_FROM"),
-                channel_name=os.getenv("KIRAKIRA_TELEGRAM_CHANNEL", "telegram"),
+                allow_from=_env_list("TELEGRAM_ALLOW_FROM")
+                or [str(item) for item in telegram_config.get("allow_from", [])],
+                channel_name=os.getenv(
+                    "KIRAKIRA_TELEGRAM_CHANNEL",
+                    str(telegram_config.get("channel_name") or "telegram"),
+                ),
             )
         )
         added = True
-    if enable_qq or _env_bool("KIRAKIRA_QQ_ENABLED"):
+    qq_config = config_value(app_config, "channels", "qq", default={}) or {}
+    qq_groups = qq_config.get("groups") or []
+    configured_group_ids = [
+        str(item.get("group_id"))
+        for item in qq_groups
+        if isinstance(item, dict) and item.get("group_id")
+    ]
+    group_policies = {
+        str(item["group_id"]): {
+            "allow_from": [str(user) for user in item.get("allow_from", [])],
+            "require_at": bool(item.get("require_at", True)),
+        }
+        for item in qq_groups
+        if isinstance(item, dict) and item.get("group_id")
+    }
+    if enable_qq or _env_bool(
+        "KIRAKIRA_QQ_ENABLED",
+        bool(qq_config.get("enabled", bool(qq_config.get("bot_uin")))),
+    ):
         host.add(
             QQChannel(
-                bot_uin=os.getenv("QQ_BOT_UIN", ""),
-                api_base_url=os.getenv("ONEBOT_API_BASE_URL", "http://127.0.0.1:3000"),
+                bot_uin=os.getenv("QQ_BOT_UIN", str(qq_config.get("bot_uin") or "")),
+                api_base_url=os.getenv(
+                    "ONEBOT_API_BASE_URL",
+                    str(qq_config.get("api_base_url") or "http://127.0.0.1:3000"),
+                ),
                 webhook_host=os.getenv("KIRAKIRA_QQ_WEBHOOK_HOST", "127.0.0.1"),
                 webhook_port=int(os.getenv("KIRAKIRA_QQ_WEBHOOK_PORT", "8766")),
                 access_token=os.getenv("ONEBOT_ACCESS_TOKEN", ""),
-                allow_from=_env_list("QQ_ALLOW_FROM"),
-                group_allow=_env_list("QQ_GROUP_ALLOW"),
-                require_at=_env_bool("QQ_REQUIRE_AT", True),
-                channel_name=os.getenv("KIRAKIRA_QQ_CHANNEL", "qq"),
+                allow_from=_env_list("QQ_ALLOW_FROM")
+                or [str(item) for item in qq_config.get("allow_from", [])],
+                group_allow=_env_list("QQ_GROUP_ALLOW") or configured_group_ids,
+                group_policies=group_policies,
+                require_at=_env_bool(
+                    "QQ_REQUIRE_AT", bool(qq_config.get("require_at", True))
+                ),
+                channel_name=os.getenv(
+                    "KIRAKIRA_QQ_CHANNEL", str(qq_config.get("channel_name") or "qq")
+                ),
             )
         )
         added = True
@@ -126,19 +189,75 @@ async def build_runtime(
     enable_qq: bool = False,
 ) -> CoreRuntime:
     load_dotenv(workdir / ".env")
-    model = require_env("MODEL_ID")
-    client = OpenAICompatibleClient()
+    app_config = load_toml_config(workdir / "config.toml")
+    model = os.getenv("MODEL_ID") or str(
+        config_value(app_config, "llm", "main", "model", default="")
+    )
+    if not model:
+        model = require_env("MODEL_ID")
+    client = OpenAICompatibleClient(
+        base_url=os.getenv("OPENAI_COMPATIBLE_BASE_URL")
+        or config_value(app_config, "llm", "main", "base_url"),
+        api_key=os.getenv("OPENAI_COMPATIBLE_API_KEY")
+        or config_value(app_config, "llm", "main", "api_key", default=""),
+        thinking_enabled=config_value(
+            app_config, "llm", "main", "enable_thinking"
+        ),
+    )
     bus = MessageBus()
     event_bus = EventBus()
     session_manager = SessionManager(workdir)
     memory = MemoryRuntime(workdir, session_manager=session_manager)
+    embedding_model = os.getenv("EMBEDDING_MODEL_ID") or str(
+        config_value(app_config, "memory", "embedding", "model", default="")
+    )
+    embedding_base_url = os.getenv("EMBEDDING_BASE_URL") or str(
+        config_value(app_config, "memory", "embedding", "base_url", default="")
+    )
+    if embedding_model and embedding_base_url:
+        memory.configure_embeddings(
+            model=embedding_model,
+            base_url=embedding_base_url,
+            api_key=os.getenv("EMBEDDING_API_KEY")
+            or str(
+                config_value(
+                    app_config, "memory", "embedding", "api_key", default=""
+                )
+            ),
+        )
     registry = build_default_registry(workdir, memory=memory, session_manager=session_manager, bus=bus)
-    context = ContextBuilder(workdir, memory)
+    mcp_registry = McpServerRegistry(workdir / "mcp_servers.json", registry)
+    await mcp_registry.load_and_connect_all()
+    context = ContextBuilder(
+        workdir,
+        memory,
+        system_prompt=str(
+            config_value(app_config, "agent", "system_prompt", default="")
+        ),
+    )
     config = RuntimeConfig(
         model=model,
-        max_iterations=int(os.getenv("AGENT_MAX_ITERATIONS", "10")),
-        max_tokens=int(os.getenv("AGENT_MAX_TOKENS", "8192")),
-        history_window=int(os.getenv("AGENT_HISTORY_WINDOW", "40")),
+        max_iterations=int(
+            os.getenv(
+                "AGENT_MAX_ITERATIONS",
+                str(config_value(app_config, "agent", "max_iterations", default=10)),
+            )
+        ),
+        max_tokens=int(
+            os.getenv(
+                "AGENT_MAX_TOKENS",
+                str(config_value(app_config, "agent", "max_tokens", default=8192)),
+            )
+        ),
+        history_window=int(
+            os.getenv(
+                "AGENT_HISTORY_WINDOW",
+                str(config_value(app_config, "agent", "context", "memory_window", default=40)),
+            )
+        ),
+        model_timeout_seconds=float(os.getenv("AGENT_MODEL_TIMEOUT", "120")),
+        repeated_tool_call_limit=int(os.getenv("AGENT_REPEATED_TOOL_LIMIT", "3")),
+        stream=_env_bool("AGENT_STREAM", True),
     )
     reasoner = DefaultReasoner(
         model_client=client,
@@ -146,6 +265,19 @@ async def build_runtime(
         config=config,
         context=context,
         event_bus=event_bus,
+    )
+    subagents = SubagentManager(
+        reasoner=reasoner,
+        tools=registry,
+        sessions=session_manager,
+        memory=memory,
+        bus=bus,
+    )
+    subagents.register_tool()
+    scheduler = SchedulerService(
+        workdir / ".kirakira" / "schedules.json",
+        bus=bus,
+        tools=registry,
     )
     pipeline = PassiveTurnPipeline(
         bus=bus,
@@ -158,12 +290,14 @@ async def build_runtime(
     )
     loop = AgentLoop(bus=bus, pipeline=pipeline)
     plugin_manager = PluginManager(
-        [workdir / "plugins"],
+        [workdir / ".kirakira" / "plugins", workdir / "plugins"],
         event_bus=event_bus,
         tool_registry=registry,
         workspace=workdir,
         session_manager=session_manager,
         memory=memory,
+        mcp_registry=mcp_registry,
+        skill_loader=context.skills,
     )
     await plugin_manager.load_all()
     reasoner.add_tool_hooks(plugin_manager.tool_hooks)
@@ -182,7 +316,25 @@ async def build_runtime(
         enable_web=enable_web,
         enable_telegram=enable_telegram,
         enable_qq=enable_qq,
+        interrupt=loop.request_interrupt,
+        memory=memory,
+        app_config=app_config,
     )
+    if plugin_manager.channels:
+        if channel_host is None:
+            channel_host = ChannelHost(
+                lambda channel: ChannelContext(
+                    bus=bus,
+                    session_manager=session_manager,
+                    event_bus=event_bus,
+                    workspace=workdir,
+                    log=logging.getLogger("channels.%s" % channel.name),
+                    interrupt=loop.request_interrupt,
+                    memory=memory,
+                )
+            )
+        for plugin_channel in plugin_manager.channels:
+            channel_host.add(plugin_channel)
     return CoreRuntime(
         bus=bus,
         event_bus=event_bus,
@@ -195,6 +347,9 @@ async def build_runtime(
         loop=loop,
         channel_host=channel_host,
         plugin_manager=plugin_manager,
+        mcp_registry=mcp_registry,
+        scheduler=scheduler,
+        subagents=subagents,
     )
 
 
@@ -248,8 +403,7 @@ async def runtime_repl(runtime: CoreRuntime, workdir: Path) -> None:
         await queue.put(msg)
 
     runtime.bus.subscribe_outbound("cli", on_outbound)
-    loop_task = asyncio.create_task(runtime.loop.run(), name="agent_loop")
-    dispatch_task = asyncio.create_task(runtime.bus.dispatch_outbound(), name="bus_dispatch")
+    tasks = await runtime.start_background(start_channels=False)
     print("kirakira-agent ready. /tools /skills /memory /exit")
     try:
         while True:
@@ -280,13 +434,7 @@ async def runtime_repl(runtime: CoreRuntime, workdir: Path) -> None:
             outbound = await queue.get()
             print_response_text(outbound.content)
     finally:
-        runtime.loop.stop()
-        runtime.bus.stop()
-        loop_task.cancel()
-        dispatch_task.cancel()
-        await asyncio.gather(loop_task, dispatch_task, return_exceptions=True)
-        if runtime.plugin_manager is not None:
-            await runtime.plugin_manager.terminate_all()
+        await runtime.stop_background(tasks)
 
 
 async def runtime_serve(runtime: CoreRuntime) -> None:

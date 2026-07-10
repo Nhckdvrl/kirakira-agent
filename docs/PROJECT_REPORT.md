@@ -1,924 +1,388 @@
-# Kirakira Agent 被动链路重构报告
+# Kirakira Agent 项目报告
 
-## 1. 项目目标
+## 1. 项目概述
 
-本项目原本是一个非常轻量的同步 agent harness：用户把消息交给 `Agent.run()`，模型决定是否调用工具，工具结果再追加回上下文，直到模型给出最终回复。这个实现适合学习 tool calling 的最小闭环，但离一个真正长期可用的 agent 还差很多关键结构：没有 channel 层、没有消息总线、没有独立 session、没有长期记忆、没有生命周期插件、没有工具 hook，也没有接近 akashic-agent 的被动回复主循环。
+Kirakira Agent 是一个面向真实运行场景的多渠道 AI Agent Runtime。项目以 `akashic-agent` 的被动回复架构为参考，将原有的最小 tool-calling demo 重构为包含消息入口、会话并发、长期记忆、流式工具循环、插件、MCP、子 Agent、调度和完整生命周期管理的系统。
 
-这次重构的目标，是参考 `Reference/akashic-agent` 中成熟的被动回复架构，把当前项目改造成一个更完整、可扩展、可实际运行的被动 agent runtime。主动链路、proactive、drift 暂时不复刻；Web、Telegram、QQ 属于被动入口，已经纳入本轮复刻范围。本轮重点是把“用户发一条消息，agent 被动回复”这条主路径搭扎实。
+项目刻意不包含自主主动链路：Agent 不会在没有用户请求的情况下自行读取数据源、判断是否触达用户，也不执行 proactive/drift 自治循环。Web、Telegram、QQ、用户显式定时任务和当前对话派生的后台工作均属于被动请求的延伸，完整保留。
 
-当前实现的主链路如下：
+## 2. 系统全景
 
 ```text
-用户 / Channel
-        ↓
-InboundMessage
-        ↓
-MessageBus
-        ↓
-AgentLoop
-        ↓
-PassiveTurnPipeline
-        ↓
-BeforeTurn：会话准备 + 记忆检索 + 插件拦截
-        ↓
-BeforeReasoning：工具上下文同步 + 插件拦截
-        ↓
-ContextBuilder：prompt 构建 + 当前时间信封 + 记忆注入 + skills
-        ↓
-DefaultReasoner：LLM 多轮 tool loop
-        ↓
-ToolExecutor：工具执行 + tool hook 改参 / 阻断 / 观察
-        ↓
-AfterReasoning：回复改写 + metadata/media 插件处理
-        ↓
-Session 持久化 + Memory consolidation
-        ↓
-AfterTurn / TurnCommitted 事件
-        ↓
-OutboundMessage
-        ↓
-MessageBus dispatch
-        ↓
-Channel 回复用户
+Web / Telegram / QQ / CLI
+              |
+              v
+       InboundMessage
+              |
+              v
+         MessageBus
+              |
+              v
+ AgentLoop: cross-session parallel
+            same-session serial
+              |
+              v
+     PassiveTurnPipeline
+              |
+     +--------+---------+
+     | session/history  |
+     | memory retrieval |
+     | skills/plugins   |
+     +--------+---------+
+              |
+              v
+       ContextBuilder
+              |
+              v
+ DefaultReasoner streaming loop
+              |
+      ToolExecutor + hooks
+              |
+  builtins / MCP / plugin / spawn
+              |
+              v
+ Session commit + lifecycle events
+              |
+              v
+       OutboundMessage
+              |
+              v
+       original Channel
+
+After reply: asynchronous LLM memory consolidation
+Before next same-session turn: wait for previous consolidation
 ```
 
-## 2. 与 akashic-agent 的对应关系
-
-这次不是机械复制整个参考项目，而是按“被动链路核心结构”做了精简复刻。保留了关键抽象、数据流和扩展点，去掉了本轮不需要的 dashboard、proactive、复杂 MCP 管理、后台任务调度等部分。
-
-| akashic-agent 概念 | 当前项目实现 | 说明 |
-| --- | --- | --- |
-| `bus.events.InboundMessage / OutboundMessage` | `kirakira_agent.events` | 定义 channel 与 agent 之间的消息协议 |
-| `bus.queue.MessageBus / ChatLane` | `kirakira_agent.bus` | 异步 inbound/outbound 队列，以及同一 chat 的发送顺序控制 |
-| `bus.event_bus.EventBus` | `kirakira_agent.event_bus` | lifecycle 事件的 ordered interception 与 fanout observer |
-| `session.manager.Session / SessionManager` | `kirakira_agent.session` | session 独立持久化，支持工具链历史重建 |
-| `core.memory.runtime / markdown` | `kirakira_agent.memory` | markdown 记忆文件 + 可检索 memory item store |
-| `agent.context.ContextBuilder` | `kirakira_agent.context_builder` | 组装系统 prompt、记忆、skills、当前时间信封 |
-| `agent.core.passive_turn.PassiveTurnPipeline` | `kirakira_agent.runtime.PassiveTurnPipeline` | 被动回复五阶段主链路 |
-| `agent.looping.core.AgentLoop` | `kirakira_agent.runtime.AgentLoop` | 从 bus 消费 inbound message 并驱动 pipeline |
-| `agent.tool_hooks.ToolExecutor` | `kirakira_agent.tool_hooks` | 工具调用前后 hook，可改参、阻断、观察 |
-| `agent.plugins.PluginManager` | `kirakira_agent.plugins` | 加载本地插件并收集 lifecycle modules/tool hooks |
-| OpenAI-compatible provider | `kirakira_agent.models.openai_compatible.OpenAICompatibleClient` | 保留原有模型客户端，并用于 DeepSeek |
-
-## 3. 当前代码结构
-
-核心新增模块如下：
+## 3. 代码结构
 
 ```text
 kirakira_agent/
-  events.py             # InboundMessage / OutboundMessage
-  bus.py                # MessageBus / ChatLane
-  event_bus.py          # lifecycle EventBus
-  session.py            # Session / SessionManager
-  memory.py             # MarkdownMemoryStore / MemoryRuntime
-  lifecycle.py          # BeforeTurnCtx / AfterReasoningCtx 等 lifecycle 数据合同
-  tool_hooks.py         # ToolExecutor / ToolHook / HookOutcome
-  context_builder.py    # prompt 构建与时间信封
-  runtime.py            # DefaultReasoner / PassiveTurnPipeline / AgentLoop / CoreRuntime
-  plugins.py            # Plugin / PluginManager
+  cli.py                    Runtime 装配、配置读取、CLI/serve 入口
+  runtime.py                DefaultReasoner、Pipeline、AgentLoop、CoreRuntime
+  events.py                 Channel/Bus 消息合同
+  bus.py                    队列、ChatLane、dispatch 和 graceful drain
+  lifecycle.py              7 phase ctx 与 turn/tool/stream 事件
+  event_bus.py              ordered interception 和 fanout observer
+  session.py                JSON session、FTS 索引、history reconstruction
+  memory.py                 Markdown/typed memory 与后台 consolidation
+  embeddings.py             OpenAI-compatible embedding client
+  context_builder.py        system prompt、时间、记忆、skills、附件
+  tool_hooks.py             pre/post/error 工具 hook executor
+  plugins.py                插件加载、回滚、配置、KV 和管理工具
+  plugin_manifest.py        .aka-plugin descriptor 安全解析
+  plugin_decorators.py      tool/hook/phase decorators
+  scheduler.py              用户显式定时消息
+  subagent.py               inline/background 子 Agent
   channels/
-    contract.py         # Channel / ChannelContext 协议
-    host.py             # ChannelHost 启停多个 channel
-    base.py             # AttachmentStore / MessageDeduper
-    web.py              # Web HTTP channel
-    telegram.py         # Telegram Bot API channel
-    qq.py               # QQ OneBot/NapCat HTTP channel
-  cli.py                # build_runtime 与 CLI local channel
-```
-
-原有模块仍然保留：
-
-```text
-kirakira_agent/
-  agent.py              # 旧同步 Agent 兼容层
-  schema.py             # ModelResponse / ToolCall / ToolResult / ToolSpec
+    contract.py             Channel 和 ChannelContext 协议
+    host.py                 多 Channel 生命周期
+    web.py                  HTTP chat、events、session/memory API
+    telegram.py             Telegram Bot API
+    qq.py                   QQ OneBot HTTP
+  mcp/
+    client.py               stdio JSON-RPC MCP client
+    registry.py             server/tool 动态注册和持久化
   models/
-    openai_compatible.py
+    openai_compatible.py    chat completion、SSE、retry、DeepSeek 兼容
   tools/
-    registry.py
-    builtins.py
-  skills.py
+    registry.py             schema、ContextVar、同步/异步执行
+    builtins.py             文件、shell、网络、视觉、记忆、消息工具
 ```
 
-也就是说，旧的 `Agent` 没有被删除。它仍然能通过现有测试，适合最小同步调用；新的完整 runtime 走 `build_runtime()`、`MessageBus` 和 `AgentLoop`。
+旧 `agent.py` 同步最小 API 仍然保留，用于兼容和教学；完整产品路径从 `cli.build_runtime()` 进入。
 
-## 4. 消息层：Inbound / Outbound / MessageBus
+## 4. 一条消息如何流动
 
-### 4.1 InboundMessage
+### 4.1 Channel 入站
 
-`kirakira_agent.events.InboundMessage` 是 channel 输入 agent 的统一协议：
+每个 Channel 只负责平台协议转换：
 
-- `channel`：来源渠道，例如 `cli`
-- `sender`：发送者标识
-- `chat_id`：会话路由 ID
-- `content`：用户文本内容
-- `timestamp`：消息时间，默认使用当前本地带时区时间
-- `media`：媒体路径或 URL 列表
-- `metadata`：扩展信息
+1. 验证 token、allow list、群策略和消息格式。
+2. 下载并校验附件，保存到工作区 `uploads/`。
+3. 生成 `InboundMessage(channel, sender, chat_id, content, media, metadata)`。
+4. 调用 `MessageBus.publish_inbound()`。
 
-`session_key` 默认由 `channel:chat_id` 组成。这样不同渠道、不同聊天窗口之间的历史天然隔离。
+Channel 不构建 prompt、不调用模型、不直接写 session，因此 Web、Telegram、QQ 可以共享完全相同的 Agent 行为。
 
-### 4.2 OutboundMessage
+### 4.2 MessageBus 与并发
 
-`kirakira_agent.events.OutboundMessage` 是 agent 回复 channel 的统一协议：
+`MessageBus` 有独立 inbound/outbound queue。`AgentLoop` 从 inbound 消费后，为每个消息创建 turn task：
 
-- `channel`
-- `chat_id`
-- `content`
-- `thinking`
-- `reply_to`
-- `media`
-- `metadata`
+- session key 默认是 `channel:chat_id`，也可由内部 completion metadata 覆盖。
+- 每个 session 对应一个 `asyncio.Lock`，保证历史和记忆的写入顺序。
+- 不同 session 不共享 lock，慢工具或慢模型不会阻塞其他用户。
+- outbound 使用 per-chat ticket，保证同一聊天按生成顺序发送。
 
-本轮已经接入 Web、Telegram、QQ 三种被动 channel。它们都遵循同一条原则：
+当用户执行 `/stop` 时，Channel 根据 session key 调用 interrupt callback。AgentLoop 取消当前 task，并把已执行的工具链和 partial stream 快照写入 session，后续对话仍可恢复上下文。
+
+### 4.3 BeforeTurn
+
+`PassiveTurnPipeline.run()` 先发出 `TurnStarted`。斜杠命令在昂贵的记忆检索前执行，使 `/tools`、`/skills`、`/memory` 和插件命令能够快速 abort。
+
+普通消息执行：
+
+1. 等待同 session 上一轮 memory consolidation。
+2. 从 Session 重建模型历史。
+3. 执行长期记忆召回。
+4. 识别 `$skill-name`。
+5. 依次执行 EventBus handler 和插件 BeforeTurn modules。
+
+插件可以修改历史、追加记忆候选、激活 skill、追加 hint，或直接返回回复终止本轮。
+
+### 4.4 BeforeReasoning 与 PromptRender
+
+Pipeline 使用 `ContextVar` 绑定当前 `session_key/channel/chat_id/timestamp`。这个上下文只在当前 async task 中可见，避免并发 turn 的工具路由串线。
+
+`ContextBuilder` 组装：
+
+- Agent 身份和行为规则。
+- workspace、memory、self、recent context 路径和内容。
+- 当前 channel/chat。
+- 带时区的今天/昨天/明天时间信封。
+- 检索得到的长期记忆。
+- skills catalog 和本轮激活的 skill 全文。
+- 插件 top/bottom sections 与 turn hints。
+- 用户附件路径和视觉工具提示。
+
+`PromptRenderCtx` 允许插件在最终请求模型前修改 messages、system prompt、可见工具和 hints。
+
+## 5. LLM Tool Loop
+
+`DefaultReasoner.run_turn()` 是被动回复的推理核心。
+
+每轮步骤：
+
+1. 根据 always-on、deferred LRU 和 disabled set 计算工具 schema。
+2. 调用 OpenAI-compatible client；启用 stream 时解析 SSE。
+3. 将正文和 reasoning 增量发布为 `StreamDeltaReady`。
+4. 没有 tool call 时返回最终回复。
+5. 有 tool call 时写入 assistant tool-call message。
+6. 对每个 call 发出 BeforeStep、ToolCallStarted。
+7. ToolExecutor 执行 pre hooks、真实工具、post hooks。
+8. 写入 tool result，发出 ToolCallCompleted、AfterStep。
+9. 下一 iteration 将完整 tool history 再交给模型。
+
+保护策略：
+
+- 参数 schema 失败不会调用 handler。
+- disabled/deferred 工具无法绕过可见性直接调用。
+- 相同工具及参数重复达到阈值后阻断，防止死循环。
+- model timeout 会取消本轮；shell cancellation 同时清理进程组。
+- context length/content safety 按裁剪计划重试。
+- 空回复重试一次。
+- 达 iteration 上限时再请求一次无工具阶段总结。
+
+DeepSeek thinking 模式下，每个包含工具调用的 assistant message 都保存并回放 `reasoning_content`，符合其多轮工具协议。
+
+## 6. 工具体系
+
+### 6.1 ToolRegistry
+
+ToolRegistry 保存 `ToolSpec + handler + deferred`，提供：
+
+- JSON schema 暴露和执行前校验。
+- `execute()`/`execute_async()` 双入口。
+- 同步 handler 自动放入 worker thread，不阻塞 event loop。
+- task-local context。
+- 动态 register/unregister。
+- runtime shutdown callback。
+
+### 6.2 ToolExecutor 与 Hook
+
+执行顺序固定为：
 
 ```text
-外部平台消息 -> InboundMessage -> MessageBus -> AgentLoop
-Agent 回复 -> OutboundMessage -> MessageBus dispatch -> 外部平台 API
+pre_tool_use -> invoke -> post_tool_use
+                       -> post_tool_error
 ```
 
-### 4.3 MessageBus
+pre hook 可以改参数或 deny。pre hook 自身异常采用 fail-closed，防止安全插件失效后仍执行危险动作；post hook 是观察型，单个失败不会撤销已经完成的工具副作用。
 
-`kirakira_agent.bus.MessageBus` 负责两个队列：
+### 6.3 内置工具
 
-- `_inbound`：channel → agent
-- `_outbound`：agent → channel
+- 文件：`list_dir`、`read_file`、`write_file`、`edit_file`。
+- Shell：`bash`、`task_output`、`task_stop`。
+- 网络：`web_fetch`、`web_search`。
+- 上下文：`load_skill`、`compact`、`tool_search`、`vision`。
+- 记忆：`memorize`、`recall_memory`、`forget_memory`。
+- 历史：`search_messages`、`fetch_messages`。
+- 消息：`message_push`。
+- 扩展：MCP、plugin management、`spawn`、`spawn_manage`。
+- 调度：`schedule`、`list_schedules`、`cancel_schedule`。
 
-关键方法：
+后台 shell 的 stdout/stderr 合并写入 `.kirakira/shell-tasks/*.log`。模型可轮询 offset；停止、timeout、turn cancellation 和 runtime shutdown 都会杀死整个进程组并删除日志。
 
-- `publish_inbound(msg)`
-- `consume_inbound()`
-- `complete_inbound(msg)`
-- `publish_outbound(msg)`
-- `subscribe_outbound(channel, callback)`
-- `dispatch_outbound()`
+`web_fetch` 每次请求和 redirect 都做 DNS/IP 校验，默认阻止 localhost 与私网；这是对 prompt injection 后 SSRF 的基础隔离。
 
-### 4.4 ChatLane
+## 7. Session 与消息检索
 
-`ChatLane` 是 akashic-agent 里很重要的一个思想：同一个 chat 的被动回复和发送不能互相踩。当前实现保留了基础的 per-chat send coordination，保证同一 `(channel, chat_id)` 下的 outbound dispatch 有顺序。
+Session JSON 是事实源，保存：
 
-本轮强审计后还补充了 outbound queue 的 `task_done()` 收尾，后续如果需要对 `_outbound.join()` 做 graceful shutdown，不会因为已 dispatch 的消息未标记完成而卡住。
+- user/assistant 内容、时间和 media。
+- reasoning、tools_used 和完整 tool_chain。
+- interrupted/partial_reply。
+- channel/chat/username/last_sender/turn count/tool count。
+- `last_consolidated`。
 
-## 5. AgentLoop：被动主循环入口
+文件名采用可读 key 加 hash，写入为原子 replace。`get_history()` 从 user boundary 开始，将持久化 tool chain 重新展开为 OpenAI-compatible assistant/tool message 序列。
 
-`kirakira_agent.runtime.AgentLoop` 是真正消费消息的主循环。
+SQLite `message_index.sqlite3` 是可重建的 FTS5 trigram 索引。`search_messages` 返回稳定 `source_ref=session:key:index`，`fetch_messages` 再从 JSON 事实源读取前后文。
 
-它做的事情很克制：
+## 8. 长期记忆
 
-1. 从 `MessageBus.consume_inbound()` 等待一条 `InboundMessage`
-2. 根据 `msg.session_key` 识别会话
-3. 创建异步任务执行 `PassiveTurnPipeline.run(msg, key)`
-4. 如果 pipeline 抛错，发出降级错误回复
-5. 调用 `MessageBus.complete_inbound(msg)`
-
-它不负责 prompt、不负责工具、不负责记忆。这些都下沉到 pipeline 和 reasoner。这样结构更接近 akashic-agent：loop 是主循环，pipeline 才是 turn 处理主干。
-
-## 6. Session：会话持久化与工具链重建
-
-`kirakira_agent.session.SessionManager` 把 session 持久化到：
+运行文件：
 
 ```text
-sessions/{safe_session_key}.json
+memory/MEMORY.md          人工区 + Runtime 托管长期记忆 block
+memory/SELF.md            自我模型
+memory/RECENT_CONTEXT.md  近期 turn 摘要
+memory/HISTORY.md         带 source marker 的时间线
+memory/PENDING.md         后续 optimizer 的稳定扩展点
+memory/items.json         类型化记忆事实源
 ```
 
-每个 `Session` 包含：
+记忆记录包括 id、content、type、source_ref、status、reinforcement、created/updated time 和可选 embedding。
 
-- `key`
-- `messages`
-- `created_at`
-- `updated_at`
-- `metadata`
-- `last_consolidated`
+召回流程：
 
-每轮成功回复后，pipeline 会写入两条消息：
+1. 中文 bigram、英文 token、substring 计算词法分。
+2. 若配置 embedding，则请求 `/embeddings` 并计算 cosine。
+3. 按 0.75 semantic + 0.25 lexical 混合。
+4. 叠加 exact substring 与 reinforcement 权重。
+5. 应用 type/since/until 过滤。
+6. 生成带 id/type/source 的 retrieved block 注入 prompt。
 
-1. 用户消息
-2. assistant 消息
+回复后先同步更新 RECENT_CONTEXT/HISTORY，再调度后台 LLM consolidation。达到窗口后，模型只抽取用户明确表达的稳定身份、偏好、流程和事件；assistant 建议不会作为用户事实。结果使用 JSON parser、source_ref 和 dedup 写入。
 
-assistant 消息不仅保存最终文本，还保存：
+## 9. 插件与 MCP
 
-- `tools_used`
-- `tool_chain`
-- `thinking`
-- 插件或 pipeline 写入的额外 metadata
+插件扫描 `<workspace>/.kirakira/plugins` 和 `<workspace>/plugins`。兼容 `.aka-plugin/plugin.json`，可声明：
 
-`tool_chain` 结构里记录每个工具调用：
+- lifecycle class/entry。
+- skills roots。
+- MCP servers。
+- config schema 和本地覆盖配置。
 
-- `call_id`
-- `name`
-- `arguments`
-- `result`
-- `status`
+`PluginContext` 提供 workspace、session、memory、event bus、tool registry、独立 data dir 和原子 KV。插件可通过类方法或 decorators 注册工具、hook 和 phase module。
 
-`Session.get_history()` 会把持久化的工具链重新展开成 OpenAI-compatible messages：
+MCP client 使用 Content-Length framed stdio JSON-RPC：
 
-```text
-assistant(tool_calls)
-tool(result)
-assistant(final reply)
+- `initialize` handshake。
+- request id -> Future 并发关联。
+- `tools/list` 和 `tools/call`。
+- timeout、server error、stderr drain、异常退出。
+
+MCP 远端工具默认 deferred，避免一次将大量 schema 塞入 prompt。模型用 `tool_search select:name` 解锁后才可调用。
+
+## 10. Subagent 与显式调度
+
+`spawn` 支持 inline 和 background：
+
+- 子 Agent 使用独立 session 和最大 20 iteration。
+- research 禁止 shell/write/edit；scripting 禁止网络/vision；general 同时具备两类能力。
+- 所有 profile 都禁止递归 spawn、消息推送、MCP/插件修改和定时任务。
+- background 最大 3 个，结果写入 `.kirakira/subagent-runs/<id>/result.json`。
+- `spawn_manage` 提供 list/cancel。
+- completion 以 `omit_user_turn` 内部消息回注原 session，再由主 Agent 组织用户回复。
+
+Scheduler 只处理用户明确创建的 fire time/interval，不执行自主判断。任务写入 `.kirakira/schedules.json`，到期后向原 channel 发布 OutboundMessage。
+
+## 11. Channel 细节
+
+### Web
+
+标准库 ThreadingHTTPServer 提供 chat 页面、消息 API、`/events` 长轮询、interrupt，以及 session/memory 管理端点。每次请求携带 client request id，解决同 session 并发 HTTP 请求拿错回复的问题。
+
+### Telegram
+
+直接对接 Bot API long polling。支持 allow list、图片/文档、reply context、长文本分片、429 retry、出站文件。SSE 增量先发送占位消息，再持续 edit，完成后定稿。
+
+### QQ
+
+接收 NapCat/OneBot HTTP webhook，支持 bearer/query token、私聊与逐群策略、require_at、CQ/structured media、发送者身份和去重。出站调用 OneBot API，并验证 HTTP、`status` 和 `retcode`。
+
+## 12. 配置与运行
+
+核心配置使用 `config.toml`，环境变量优先：
+
+```toml
+[llm.main]
+model = "deepseek-v4-flash"
+api_key = "${DEEPSEEK_API_KEY}"
+base_url = "https://api.deepseek.com/v1"
+enable_thinking = false
+
+[agent]
+max_iterations = 40
+max_tokens = 8192
+
+[channels.chat]
+enabled = true
+host = "127.0.0.1"
+port = 8765
 ```
 
-这样下一轮模型能看到之前工具调用的完整上下文，而不是只看到一句最终回复。这一点是 agent 能长期工作的关键。
-
-## 7. Memory：长期记忆、近期语境与检索
-
-当前记忆系统在 `kirakira_agent.memory`。
-
-初始化时会创建：
-
-```text
-memory/MEMORY.md
-memory/SELF.md
-memory/RECENT_CONTEXT.md
-memory/items.json
-```
-
-### 7.1 Markdown 记忆文件
-
-`MarkdownMemoryStore` 管理三份 markdown：
-
-- `MEMORY.md`：长期记忆，面向稳定事实、偏好、用户画像
-- `SELF.md`：agent 的自我认知或行为设定
-- `RECENT_CONTEXT.md`：近期语境摘要，用于下一轮理解最近发生了什么
-
-### 7.2 Memory item store
-
-`items.json` 是结构化 memory item store。每条 `MemoryRecord` 包含：
-
-- `id`
-- `content`
-- `created_at`
-- `source_ref`
-- `status`
-
-当前检索使用轻量 lexical scoring：英文/数字 token 与中文连续片段匹配。它不是 akashic-agent 默认 memory engine 那种复杂语义检索，但接口已经按可替换 engine 的方式组织，后续可以升级成 embedding / sqlite / akasha graph。
-
-### 7.3 每轮前检索
-
-在 `PassiveTurnPipeline.run()` 的前置阶段：
-
-1. 从 session 取历史
-2. 调 `memory.build_retrieval_block(msg.content)`
-3. 把相关 memory item 渲染成 `Retrieved Long-Term Memory` 块
-4. 注入 prompt
-
-### 7.4 每轮后 consolidation
-
-每轮回复后：
-
-1. `RECENT_CONTEXT.md` 追加一行近期摘要
-2. 如果用户明确说“记住：...”或“以后要记得...”，自动写入 memory item
-3. 更新 `session.last_consolidated`
-
-强审计后补充了两条防重复逻辑：
-
-- `memorize()` 对 active 且内容完全一致的记忆直接返回已有 record，不重复写入。
-- 如果模型本轮已经显式调用过 `memorize`，consolidation 不再根据同一条用户消息自动提取一份重复记忆。
-
-### 7.5 记忆工具
-
-默认工具集现在包含：
-
-- `memorize(content)`：写入长期记忆
-- `recall_memory(query, limit)`：检索长期记忆
-- `forget_memory(ids)`：把记忆标记为 forgotten
-- `search_messages(query, limit)`：关键词搜索 session 消息
-- `fetch_messages(source_ref, context)`：按 source ref 回源上下文
-
-这些工具对应了 akashic-agent prompt 里的历史检索协议与记忆纠错协议的最小可运行版本。
-
-### 7.6 新增被动研究与推送工具
-
-对照 akashic-agent 的非主动工具集，当前项目还补了：
-
-- `list_dir(path)`：列出 workspace 内目录
-- `tool_search(query, limit)`：搜索当前可用工具
-- `web_fetch(url, max_chars)`：抓取网页并转成可读文本
-- `web_search(query, limit)`：返回网页搜索结果标题与 URL
-- `message_push(channel, chat_id, message)`：通过 MessageBus 向指定 channel/chat 发送消息
-
-`web_fetch` 默认拒绝 localhost、私有网段、link-local、reserved、multicast、unspecified 地址，避免 agent 工具被提示注入后扫描本机或内网服务。只有在可信本地测试中显式设置 `KIRAKIRA_ALLOW_PRIVATE_WEB_FETCH=true` 才允许访问这些地址。
-
-文件工具统一使用 UTF-8 读写；读取时用 `errors="replace"` 降级处理，避免遇到非 UTF-8 文本直接中断 turn。`bash` 工具补充了危险命令拦截和 timeout 上限。
-
-## 8. ContextBuilder：prompt 构建
-
-`kirakira_agent.context_builder.ContextBuilder` 负责每轮 prompt。
-
-它会组装：
-
-- agent 静态身份
-- 行为规范
-- 工作区路径
-- 当前运行环境
-- 当前 session 信息
-- `MEMORY.md`
-- `SELF.md`
-- `RECENT_CONTEXT.md`
-- 本轮检索到的 memory block
-- 当前激活 skill 内容
-- skill catalog
-- 插件注入的 system sections
-- 本轮额外 hints
-
-当前用户消息会被加上时间信封：
-
-```text
-[当前消息时间: ... | request_time=... | 今天=YYYY-MM-DD（周X） | 昨天=... | 明天=... | 相对时间以此为准]
-用户原始消息
-```
-
-这样模型处理“今天、明天、昨天、刚才”等相对时间时有明确锚点。
-
-## 9. DefaultReasoner：LLM tool loop
-
-`kirakira_agent.runtime.DefaultReasoner` 是模型推理与工具循环层。
-
-每轮执行过程：
-
-1. 构造 `PromptRenderCtx`
-2. 经过 `EventBus.emit(PromptRenderCtx)`
-3. 运行 prompt-render plugin modules
-4. 调 `ContextBuilder.render()` 得到 OpenAI-compatible messages
-5. 进入多轮 tool loop
-
-每个 iteration：
-
-1. 构造 `BeforeStepCtx`
-2. 经过 event bus 与 before-step plugin modules
-3. 如果插件要求 early stop，直接返回
-4. 调模型客户端 `complete()`
-5. 如果没有 tool calls，返回最终文本
-6. 如果有 tool calls，逐个经过 `ToolExecutor`
-7. 追加 assistant tool call message
-8. 追加 tool result message
-9. 构造 `AfterStepCtx` fanout 给观察者
-10. 进入下一轮
-
-当前还会发出工具 lifecycle 事件：
-
-- `TurnStarted`
-- `ToolCallStarted`
-- `ToolCallCompleted`
-
-这些事件可被 channel 或插件观察，用来实现工具轨迹、UI 状态、日志、审计等能力。
-
-最大轮数由 `RuntimeConfig.max_iterations` 控制，默认从环境变量 `AGENT_MAX_ITERATIONS` 读取，不设置则为 10。
-
-## 10. ToolExecutor：工具 hook
-
-`kirakira_agent.tool_hooks.ToolExecutor` 支持三类 hook：
-
-- `pre_tool_use`
-- `post_tool_use`
-- `post_tool_error`
-
-`pre_tool_use` 可以：
-
-- 允许工具调用
-- 修改工具参数
-- 拒绝工具调用
-- 追加额外提示信息
-
-功能测试里已经验证过：注册一个拒绝 `read_file` 的 hook 后，模型即使请求 `read_file`，实际工具也不会执行，session 里会记录：
-
-```text
-status = denied
-result = read_file denied by functional smoke hook
-```
-
-这对应 akashic-agent 的“插件可以阻断工具”能力。
-
-## 11. PassiveTurnPipeline：被动回复主干
-
-`kirakira_agent.runtime.PassiveTurnPipeline` 是本次复刻最核心的模块。
-
-它的 `run()` 包含完整被动 turn：
-
-### 11.1 BeforeTurn
-
-做这些事：
-
-1. `SessionManager.get_or_create(session_key)`
-2. `session.get_history()`
-3. memory retrieval
-4. skill mention 检测，例如 `$python-coding`
-5. 构造 `BeforeTurnCtx`
-6. 经过 `EventBus.emit()`
-7. 经过 before-turn plugin modules
-
-插件可以在这个阶段：
-
-- 修改 skill_names
-- 添加 extra_hints
-- 写 extra_metadata
-- `abort=True` 直接拦截本轮并返回 `abort_reply`
-
-### 11.2 BeforeReasoning
-
-做这些事：
-
-1. 设置工具上下文：
-   - `session_key`
-   - `channel`
-   - `chat_id`
-   - `current_timestamp`
-2. 构造 `BeforeReasoningCtx`
-3. 经过 event bus 与插件链
-
-插件可以在这个阶段继续补 hints、改 retrieved memory block、或者 abort。
-
-### 11.3 Reasoner
-
-调用 `DefaultReasoner.run_turn()`，进入 prompt render 和 LLM tool loop。
-
-返回 `ReasonerResult`：
-
-- `reply`
-- `tools_used`
-- `tool_chain`
-- `thinking`
-
-### 11.4 AfterReasoning
-
-构造 `AfterReasoningCtx`，允许插件改：
-
-- `reply`
-- `media`
-- `outbound_metadata`
-
-然后构造 `OutboundMessage`。
-
-### 11.5 Commit + Consolidation
-
-写入 session：
-
-1. user message
-2. assistant message
-
-assistant message 会带上完整 `tools_used` 与 `tool_chain`。
-
-然后调用 `memory.consolidate_turn()` 更新近期语境和显式记忆。
-
-### 11.6 AfterTurn
-
-fanout：
-
-- `TurnCommitted`
-- `AfterTurnCtx`
-
-然后如果 `dispatch_outbound=True`，调用 `bus.publish_outbound()`。
-
-## 12. PluginManager：插件系统
-
-`kirakira_agent.plugins.PluginManager` 会扫描：
-
-```text
-plugins/*/plugin.py
-```
-
-插件可以继承 `kirakira_agent.plugins.Plugin`，并实现：
-
-- `initialize()`
-- `terminate()`
-- `register_tools(registry)`
-- `before_turn_modules()`
-- `before_reasoning_modules()`
-- `prompt_render_modules()`
-- `before_step_modules()`
-- `after_step_modules()`
-- `after_reasoning_modules()`
-- `after_turn_modules()`
-- `tool_hooks()`
-
-每个插件实例会拿到一个轻量 `context`：
-
-- `event_bus`
-- `tool_registry`
-- `workspace`
-- `session_manager`
-- `memory`
-- `plugin_dir`
-
-当前插件系统已经覆盖用户要求里的核心能力：
-
-- 拦截命令：before-turn / before-reasoning module 可以 abort
-- 注入协议：prompt-render / before-step module 可以加 system sections 或 hints
-- 阻断工具：tool hook 的 `decision="deny"`
-- 挂载新工具：`register_tools(registry)`
-
-## 13. CLI runtime
-
-`python3 -m kirakira_agent` 现在不再只走旧同步 `Agent`。它会调用：
-
-```python
-build_runtime(workdir)
-```
-
-构建完整 runtime：
-
-- `MessageBus`
-- `EventBus`
-- `SessionManager`
-- `MemoryRuntime`
-- `ToolRegistry`
-- `ContextBuilder`
-- `DefaultReasoner`
-- `PassiveTurnPipeline`
-- `AgentLoop`
-- `PluginManager`
-
-CLI 输入会被转成：
-
-```python
-InboundMessage(
-    channel="cli",
-    sender="local",
-    chat_id="local",
-    content=query,
-)
-```
-
-CLI 支持本地控制命令：
-
-- `/tools`
-- `/skills`
-- `/memory`
-- `/exit`
-
-普通文本都会通过 bus 进入 agent loop。
-
-## 14. Web / Telegram / QQ channel
-
-用户指出“只是不复刻主动链路，不代表不要 Telegram/QQ/Web”。因此当前实现已经补齐这三类被动 channel。它们不参与 proactive，不会主动发起对话；只负责把外部平台的用户消息送入被动主链路，并把 agent 回复发回平台。
-
-### 14.1 Channel 通用协议
-
-channel 协议在 `kirakira_agent.channels.contract`：
-
-```python
-class Channel(Protocol):
-    name: str
-    async def start(self, ctx: ChannelContext) -> None: ...
-    async def stop(self) -> None: ...
-```
-
-`ChannelContext` 提供：
-
-- `bus`
-- `session_manager`
-- `event_bus`
-- `workspace`
-- `log`
-
-`ChannelHost` 负责统一启动和停止多个 channel。
-
-强审计后，CLI 的 runtime 构建和运行已经统一在同一个 asyncio event loop 内完成，避免跨 `asyncio.run()` 携带 bus、queue、channel 状态。`CoreRuntime.stop_background()` 和 REPL 退出路径都会调用插件 `terminate()`。
-
-### 14.2 WebChannel
-
-实现文件：
-
-```text
-kirakira_agent/channels/web.py
-```
-
-Web channel 使用 Python 标准库 `http.server`，不引入 FastAPI 或 WebSocket 依赖。它提供：
-
-- `GET /`：一个简单可用的网页聊天界面
-- `GET /health`：健康检查
-- `POST /message`：发送消息并等待本轮 agent 回复
-
-请求格式：
-
-```json
-{
-  "session_id": "my-session",
-  "text": "你好"
-}
-```
-
-响应格式：
-
-```json
-{
-  "channel": "web",
-  "chat_id": "my-session",
-  "session_id": "web:my-session",
-  "content": "agent 回复",
-  "thinking": "",
-  "media": [],
-  "metadata": {}
-}
-```
-
-启动方式：
+运行：
 
 ```bash
-python3 -m kirakira_agent --serve --web
+python -m kirakira_agent
+python -m kirakira_agent --serve
+python -m kirakira_agent --serve --web --telegram --qq
 ```
 
-可配置环境变量：
+## 13. 验证记录
+
+本轮实际使用已有 conda 环境：
 
 ```text
-KIRAKIRA_WEB_ENABLED=true
-KIRAKIRA_WEB_HOST=127.0.0.1
-KIRAKIRA_WEB_PORT=8765
-KIRAKIRA_WEB_CHANNEL=web
-```
-
-强审计后，`POST /message` 等待 outbound 的 pending future 会在成功、超时、publish 失败时统一清理，避免长时间服务后同一 chat 的 pending 列表泄漏。
-
-### 14.3 TelegramChannel
-
-实现文件：
-
-```text
-kirakira_agent/channels/telegram.py
-```
-
-Telegram channel 使用 Telegram Bot API long polling：
-
-- 入站：`getUpdates`
-- 出站：`sendMessage`
-- 去重：`chat_id:message_id`
-- 白名单：用户 id 或 username
-
-启动方式：
-
-```bash
-TELEGRAM_BOT_TOKEN=xxx python3 -m kirakira_agent --serve --telegram
-```
-
-可配置环境变量：
-
-```text
-KIRAKIRA_TELEGRAM_ENABLED=true
-TELEGRAM_BOT_TOKEN=123456:abcdef
-TELEGRAM_ALLOW_FROM=123456789,alice
-KIRAKIRA_TELEGRAM_CHANNEL=telegram
-```
-
-消息处理：
-
-1. Telegram 用户发文本给 bot
-2. channel 转成 `InboundMessage(channel="telegram", chat_id=<telegram chat id>)`
-3. agent 被动回复
-4. outbound dispatch 调 Telegram `sendMessage`
-
-当前实现以文本消息为主，后续可以继续扩展图片、文件下载、streaming edit、typing indicator 等参考项目里的高级能力。
-
-强审计后，Telegram 出站回复会按 4096 字符分片发送，不再直接截断长回复。
-
-### 14.4 QQChannel
-
-实现文件：
-
-```text
-kirakira_agent/channels/qq.py
-```
-
-QQ channel 使用 OneBot/NapCat 风格 HTTP webhook + HTTP API：
-
-- 入站：NapCat / OneBot 向本地 webhook POST 事件
-- 出站：调用 OneBot HTTP API
-  - 私聊：`send_private_msg`
-  - 群聊：`send_group_msg`
-
-启动方式：
-
-```bash
-python3 -m kirakira_agent --serve --qq
-```
-
-默认 webhook：
-
-```text
-http://127.0.0.1:8766/qq/webhook
-```
-
-可配置环境变量：
-
-```text
-KIRAKIRA_QQ_ENABLED=true
-QQ_BOT_UIN=12345
-ONEBOT_API_BASE_URL=http://127.0.0.1:3000
-ONEBOT_ACCESS_TOKEN=
-KIRAKIRA_QQ_WEBHOOK_HOST=127.0.0.1
-KIRAKIRA_QQ_WEBHOOK_PORT=8766
-QQ_ALLOW_FROM=10001,10002
-QQ_GROUP_ALLOW=777,888
-QQ_REQUIRE_AT=true
-KIRAKIRA_QQ_CHANNEL=qq
-```
-
-chat_id 约定：
-
-- 私聊：`<user_id>`
-- 群聊：`gqq:<group_id>`
-
-群聊过滤：
-
-- `QQ_GROUP_ALLOW` 非空时，只处理白名单群
-- `QQ_ALLOW_FROM` 非空时，只处理白名单用户
-- `QQ_REQUIRE_AT=true` 且配置了 `QQ_BOT_UIN` 时，群消息必须包含 `[CQ:at,qq=<bot_uin>]`
-
-这对应参考项目里 QQ channel 的核心被动行为：QQ 事件先过滤，再转成 `InboundMessage`，最终通过 bus 回复。
-
-强审计后，QQ 去重键包含 `message_type/group_id/user_id/message_id`，避免不同群里相同 message id 误判重复。OneBot HTTP API 返回体会检查 `status` 与 `retcode`，失败响应会抛出错误并进入 bus 的 outbound retry/logging 路径。
-
-## 15. DeepSeek 接入
-
-`.env` 当前配置为：
-
-```text
-OPENAI_COMPATIBLE_BASE_URL=https://api.deepseek.com
-OPENAI_COMPATIBLE_API_KEY=<your-deepseek-api-key>
-MODEL_ID=deepseek-v4-flash
-```
-
-真实 DeepSeek key 只在本地测试命令里通过临时环境变量注入，不写入仓库文件。
-
-模型客户端仍然是原有的 `OpenAICompatibleClient`。它会向：
-
-```text
-https://api.deepseek.com/v1/chat/completions
-```
-
-发送 OpenAI-compatible chat completions 请求。
-
-对于 `deepseek-v4-*`，现有逻辑会默认加：
-
-```json
-{"thinking": {"type": "disabled"}}
-```
-
-这点已有测试覆盖。
-
-## 16. Conda 环境
-
-实际找到的 conda / mamba：
-
-```text
-/home/xiang/miniconda3/condabin/conda
-/home/xiang/.local/bin/micromamba
-```
-
-可用环境：
-
-```text
-xingshu-vllm   /home/xiang/.conda/envs/xingshu-vllm    Python 3.12.13
-cotmad-env     /home/xiang/cotmad-env                  Python 3.12.13
-base           /home/xiang/miniconda3                  Python 3.13.13
-fgvd           /home/xiang/miniconda3/envs/fgvd         Python 3.12.13
-openslime      /home/xiang/miniconda3/envs/openslime    Python 3.12.12
-verl-clean     /home/xiang/miniconda3/envs/verl-clean   Python 3.12.0
-mamba-bpr      /home/xiang/nlp/.mamba-bpr               Python 3.10.20
-```
-
-本轮实际功能测试使用：
-
-```bash
 /home/xiang/.conda/envs/xingshu-vllm/bin/python
+Python 3.12
 ```
 
-额外确认：
+自动化结果：
 
-```bash
-/home/xiang/miniconda3/envs/fgvd/bin/python -m unittest discover -v
-```
+- `compileall` 通过。
+- 83 项 unittest 全部通过。
+- `git diff --check` 通过。
+- fake MCP stdio server 完成 initialize/list/call/error/disconnect 集成测试。
+- Web/Telegram/QQ 均有本地协议级集成测试。
 
-也能通过所有测试。
+DeepSeek 在线结果：
 
-## 17. 验证情况
+1. `deepseek-v4-flash` 普通 completion 返回 `ONLINE_OK`。
+2. 真实 SSE tool loop 收到 41 个 delta。
+3. 模型调用 `write_file`、`read_file`，两次状态均为 success。
+4. 临时文件内容严格为 `KIRAKIRA_TOOL_OK`。
+5. session 保存 2 组 tool chain 和完整最终回复。
+6. 在线 consolidation 将 10 条消息推进至 `last_consolidated=6`。
+7. 生成 2 条可检索长期记忆，并写入 HISTORY。
 
-### 17.1 单元测试
+API key 仅存在于单次测试进程环境，没有进入代码、配置、文档或 Git。
 
-命令：
+## 14. 局限与后续方向
 
-```bash
-python3 -m unittest discover -v
-```
+当前被动主链路可完整运行，但与 Reference 仍有三类专用差异：
 
-结果：
+- 没有外部 A2A Peer Agent 的进程冷启动和轮询；本地 subagent 与 MCP 已覆盖大多数委派场景。
+- 没有复制 React Dashboard 和 WebSocket transport；现有 Web API 已覆盖 chat/session/memory 管理。
+- 没有逐项移植 Akasha graph/default_memory 的 HyDE、query rewrite、procedure conflict 和 profile extraction；当前采用更易维护的 Markdown + typed records + optional hybrid retrieval。
 
-```text
-34 tests passed
-```
+后续若继续演进，优先级应是：可观测性指标和 trace API、A2A peer adapter、语义去重与 query rewrite、独立 Dashboard，而不是继续扩大核心 loop 的职责。
 
-覆盖内容：
+## 15. 简历项目介绍
 
-- 旧同步 agent 工具循环
-- unknown tool 错误处理
-- OpenAI-compatible response parsing
-- DeepSeek v4 thinking 默认关闭
-- 文件工具与 path escape 防护
-- `web_fetch` 默认拒绝本地/内网地址，测试环境变量显式放行
-- 同步 registry 对 async tool 的兼容处理
-- CLI 基础命令
-- bus -> loop -> pipeline -> outbound
-- session tool_chain 持久化
-- 显式记忆 consolidation
-- `memorize` 与 consolidation 去重
-- before-turn plugin abort
-- pre-tool hook denial
-- Web channel HTTP 入站和 outbound 回复
-- Web channel pending future 超时清理
-- QQ OneBot webhook 入站和 outbound API 回复
-- QQ OneBot failed retcode/status 检测
-- Telegram allow list 逻辑
-- Telegram 长回复分片
-- `list_dir`
-- `web_fetch`
-- `tool_search`
-- `message_push`
-- `TurnStarted`
-- `ToolCallStarted`
-- `ToolCallCompleted`
+### 精简版
 
-### 17.2 Conda 环境下的真实功能测试
+**Kirakira Agent｜多渠道可扩展 AI Agent Runtime**
 
-命令使用：
+参考 akashic-agent 重构并实现完整被动式 Agent 架构，打通 Web、Telegram、QQ/OneBot、CLI 到 MessageBus、会话隔离、长期记忆、流式 LLM Tool Loop、插件 Hook、MCP 和子 Agent 的端到端链路。实现跨会话并发/同会话串行、SSE 工具调用、DeepSeek reasoning 历史回放、FTS5 会话检索、语义+词法混合记忆、后台 consolidation、工具安全边界及 graceful shutdown；在 Python 3.12 conda 环境完成 83 项自动化测试，并使用 `deepseek-v4-flash` 在线验证真实工具循环与记忆抽取。
 
-```bash
-/home/xiang/.conda/envs/xingshu-vllm/bin/python
-```
+### 要点版
 
-真实跑了这些功能：
+- 设计异步 MessageBus 与 session-aware AgentLoop，实现跨会话并发、同会话串行、消息保序、turn 中断和可恢复工具链持久化。
+- 实现 OpenAI-compatible SSE Tool Loop，支持 fragmented tool calls、DeepSeek `reasoning_content` 回放、schema 校验、重复调用保护、上下文裁剪与故障重试。
+- 构建 Markdown + JSON + SQLite FTS5 长期记忆体系，支持 source evidence、幂等强化、遗忘/撤销、可选 embedding 混合检索和异步 LLM consolidation。
+- 设计插件/工具扩展层，支持 7 阶段生命周期、pre/post/error Hook、descriptor/config/KV、stdio MCP 动态工具、deferred discovery 和隔离回滚。
+- 接入 Web、Telegram、QQ/OneBot 与 CLI，完善附件、流式编辑、群策略、鉴权、并发 request correlation 和优雅关机。
 
-1. 从 `.env` 构建完整 runtime
-2. 通过 `InboundMessage -> MessageBus -> AgentLoop -> PassiveTurnPipeline -> OutboundMessage` 走完整被动链路
-3. 真实调用 DeepSeek `deepseek-v4-flash`
-4. 强制模型调用 `read_file`
-5. 验证 session 中确实记录：
-   - `tools_used=["read_file"]`
-   - tool call status 为 `success`
-   - tool result 包含测试 probe id
-6. 发送“请记住：...”并验证 memory recall 能检索回来
-7. 注册一个阻断 `read_file` 的 hook
-8. 验证工具调用被拒绝，并在 session 中记录 status 为 `denied`
-9. 直接验证 builtin tools：
-   - `write_file`
-   - `edit_file`
-   - `read_file`
-   - `bash`
-
-结果：
-
-```text
-overall_ok = true
-```
-
-### 17.3 Channel 集成测试
-
-新增 channel 测试覆盖：
-
-- `WebChannel`
-  - 启动本地 HTTP server
-  - `POST /message`
-  - 消息进入 agent loop
-  - HTTP 响应返回 agent 回复
-  - session 持久化为 `web:<session_id>`
-- `QQChannel`
-  - 启动本地 QQ webhook server
-  - 构造 OneBot 群消息事件
-  - 校验 `@bot` 群过滤
-  - 消息进入 agent loop
-  - fake OneBot API 收到 `/send_group_msg`
-  - session 持久化为 `qq:gqq:<group_id>`
-- `TelegramChannel`
-  - 校验 allow list 的 user id 与 username 匹配逻辑
-
-## 18. 当前边界与后续方向
-
-当前实现已经把被动回复链路的架子搭起来了，但还有一些明显后续方向：
-
-1. 记忆检索目前是轻量 lexical matching，后续可以换成 embedding / sqlite FTS / akasha graph。
-2. 插件系统已有核心 hook，但还没有 manifest、依赖管理、全局注册表、插件配置模型。
-3. MCP/tool discovery 目前没有完整复刻，后续可以按 akashic-agent 的 `tool_search` 和 MCP registry 扩展。
-4. Web/Telegram/QQ 已有被动 channel；高级能力如 Telegram markdown entity、图片/文件、streaming edit、QQ 图片下载可以继续细化。
-5. 主动链路/proactive/drift 本轮没有实现，后续可以基于当前 session、memory、bus、outbound port 继续加。
-6. Session 当前是 JSON 文件，适合轻量开发；如果对话量增长，建议迁移 SQLite。
-7. Prompt 规则已覆盖核心行为，但还可以继续迁移 akashic-agent 更细的历史检索协议、记忆纠错协议和 channel-specific rendering policy。
-
-更完整的差异审计见：
-
-```text
-docs/DIFFERENCE_AUDIT.md
-```
-
-## 19. 总结
-
-当前项目已经从“一个同步 toy agent”升级成“具备完整被动链路的 agent runtime”。它现在有明确的消息协议、异步 bus、session、长期记忆、prompt builder、tool loop、插件 lifecycle、工具 hook、CLI channel、Web channel、Telegram channel、QQ channel，以及真实 DeepSeek 运行验证。
-
-这不是完整 akashic-agent 的一比一复制，但已经精准复刻了用户要求里最重要的被动回复主链路：
-
-```text
-Channel
-  -> MessageBus
-  -> AgentLoop
-  -> 记忆检索 + prompt 构建 + LLM tool loop
-  -> 工具 / 插件 hook / 记忆工具
-  -> session commit + consolidation
-  -> Outbound reply
-```
+建议在简历中同时附上 GitHub 链接，并将“83 项测试”和“DeepSeek 在线 tool loop”保留为可量化证据。

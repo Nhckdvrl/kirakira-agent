@@ -9,6 +9,75 @@ from kirakira_agent.schema import ModelResponse, ToolCall, ToolResult, ToolSpec,
 
 
 class OpenAICompatibleTests(unittest.TestCase):
+    def test_stream_parser_accumulates_text_reasoning_and_fragmented_tool_call(self):
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return None
+
+            def __iter__(self):
+                chunks = [
+                    {"choices": [{"delta": {"reasoning_content": "think "}}]},
+                    {"choices": [{"delta": {"content": "hello "}}]},
+                    {
+                        "choices": [
+                            {
+                                "delta": {
+                                    "tool_calls": [
+                                        {
+                                            "index": 0,
+                                            "id": "call_1",
+                                            "function": {
+                                                "name": "read_file",
+                                                "arguments": '{"path":',
+                                            },
+                                        }
+                                    ]
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "choices": [
+                            {
+                                "delta": {
+                                    "tool_calls": [
+                                        {
+                                            "index": 0,
+                                            "function": {"arguments": '"README.md"}'},
+                                        }
+                                    ]
+                                },
+                                "finish_reason": "tool_calls",
+                            }
+                        ]
+                    },
+                ]
+                for chunk in chunks:
+                    yield ("data: " + json.dumps(chunk) + "\n").encode("utf-8")
+                yield b"data: [DONE]\n"
+
+        client = OpenAICompatibleClient(base_url="http://example.test/v1", api_key="")
+        client._open = lambda _payload: FakeResponse()
+        deltas = []
+
+        response = client.complete_stream(
+            [{"role": "user", "content": "hi"}],
+            [],
+            "",
+            "model",
+            100,
+            lambda content, reasoning: deltas.append((content, reasoning)),
+        )
+
+        self.assertEqual(response.text, "hello ")
+        self.assertEqual(response.reasoning_content, "think ")
+        self.assertEqual(response.tool_calls[0].name, "read_file")
+        self.assertEqual(response.tool_calls[0].arguments, {"path": "README.md"})
+        self.assertEqual(deltas, [("", "think "), ("hello ", "")])
+
     def test_parse_tool_call_response(self):
         client = OpenAICompatibleClient(base_url="http://example.test/v1", api_key="")
         payload = {

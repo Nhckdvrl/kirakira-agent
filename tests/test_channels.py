@@ -20,6 +20,8 @@ from kirakira_agent.event_bus import EventBus
 from kirakira_agent.memory import MemoryRuntime
 from kirakira_agent.runtime import AgentLoop, DefaultReasoner, PassiveTurnPipeline, RuntimeConfig
 from kirakira_agent.schema import ModelResponse
+from kirakira_agent.events import OutboundMessage
+from kirakira_agent.lifecycle import StreamDeltaReady
 from kirakira_agent.session import SessionManager
 from kirakira_agent.tools import build_default_registry
 
@@ -117,6 +119,82 @@ class FakeOneBotServer:
 
 
 class ChannelTests(unittest.TestCase):
+    def test_web_channel_correlates_concurrent_requests_in_same_session(self):
+        class EchoModel:
+            def complete(self, messages, tools, system, model, max_tokens):
+                current = str(messages[-1].get("content") or "").splitlines()[-1]
+                return ModelResponse(text="reply:" + current)
+
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                workdir = Path(tmp)
+                bus = MessageBus()
+                event_bus = EventBus()
+                sessions = SessionManager(workdir)
+                memory = MemoryRuntime(workdir, session_manager=sessions)
+                tools = build_default_registry(workdir, memory=memory, session_manager=sessions)
+                config = RuntimeConfig(model="fake", max_iterations=3)
+                reasoner = DefaultReasoner(
+                    model_client=EchoModel(),
+                    tools=tools,
+                    config=config,
+                    context=ContextBuilder(workdir, memory),
+                    event_bus=event_bus,
+                )
+                pipeline = PassiveTurnPipeline(
+                    bus=bus,
+                    event_bus=event_bus,
+                    session_manager=sessions,
+                    memory=memory,
+                    tools=tools,
+                    reasoner=reasoner,
+                    config=config,
+                )
+                loop = AgentLoop(bus=bus, pipeline=pipeline)
+                port = free_port()
+                channel = WebChannel(host="127.0.0.1", port=port)
+                ctx = ChannelContext(
+                    bus,
+                    sessions,
+                    event_bus,
+                    workdir,
+                    __import__("logging").getLogger("test.web.concurrent"),
+                )
+                tasks = await start_core(bus, loop)
+                await channel.start(ctx)
+
+                def post(text, request_id):
+                    request = urllib.request.Request(
+                        "http://127.0.0.1:%d/message" % port,
+                        data=json.dumps(
+                            {
+                                "session_id": "same",
+                                "request_id": request_id,
+                                "text": text,
+                            }
+                        ).encode("utf-8"),
+                        headers={"content-type": "application/json"},
+                        method="POST",
+                    )
+                    return json.loads(
+                        urllib.request.urlopen(request, timeout=10).read().decode("utf-8")
+                    )
+
+                try:
+                    first, second = await asyncio.gather(
+                        asyncio.to_thread(post, "first", "r1"),
+                        asyncio.to_thread(post, "second", "r2"),
+                    )
+                    self.assertEqual(
+                        {first["content"], second["content"]},
+                        {"reply:first", "reply:second"},
+                    )
+                finally:
+                    await channel.stop()
+                    await stop_core(bus, loop, tasks)
+
+        asyncio.run(scenario())
+
     def test_web_channel_posts_message_and_returns_agent_reply(self):
         async def scenario():
             with tempfile.TemporaryDirectory() as tmp:
@@ -142,6 +220,107 @@ class ChannelTests(unittest.TestCase):
                 finally:
                     await channel.stop()
                     await stop_core(bus, loop, tasks)
+
+        asyncio.run(scenario())
+
+    def test_web_channel_long_poll_receives_unsolicited_outbound(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                workdir = Path(tmp)
+                bus = MessageBus()
+                event_bus = EventBus()
+                sessions = SessionManager(workdir)
+                port = free_port()
+                channel = WebChannel(host="127.0.0.1", port=port)
+                ctx = ChannelContext(
+                    bus,
+                    sessions,
+                    event_bus,
+                    workdir,
+                    __import__("logging").getLogger("test.web.events"),
+                )
+                dispatcher = asyncio.create_task(bus.dispatch_outbound())
+                await channel.start(ctx)
+
+                def poll():
+                    return json.loads(
+                        urllib.request.urlopen(
+                            "http://127.0.0.1:%d/events?session_id=events" % port,
+                            timeout=10,
+                        )
+                        .read()
+                        .decode("utf-8")
+                    )
+
+                try:
+                    poll_task = asyncio.create_task(asyncio.to_thread(poll))
+                    await asyncio.sleep(0.05)
+                    await bus.publish_outbound(
+                        OutboundMessage("web", "events", "scheduled hello")
+                    )
+                    payload = await asyncio.wait_for(poll_task, timeout=3)
+                    self.assertEqual(payload["content"], "scheduled hello")
+                finally:
+                    bus.stop()
+                    await channel.stop()
+                    await dispatcher
+
+        asyncio.run(scenario())
+
+    def test_web_management_api_lists_updates_and_forgets_memory(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                workdir = Path(tmp)
+                bus = MessageBus()
+                event_bus = EventBus()
+                sessions = SessionManager(workdir)
+                memory = MemoryRuntime(workdir, session_manager=sessions)
+                record = memory.memorize("original memory")
+                port = free_port()
+                channel = WebChannel(host="127.0.0.1", port=port)
+                ctx = ChannelContext(
+                    bus,
+                    sessions,
+                    event_bus,
+                    workdir,
+                    __import__("logging").getLogger("test.web.management"),
+                    memory=memory,
+                )
+                await channel.start(ctx)
+                try:
+                    listed = json.loads(
+                        await asyncio.to_thread(
+                            lambda: urllib.request.urlopen(
+                                "http://127.0.0.1:%d/api/memories" % port,
+                                timeout=5,
+                            ).read()
+                        )
+                    )
+                    self.assertEqual(listed["memories"][0]["id"], record.id)
+
+                    patch_request = urllib.request.Request(
+                        "http://127.0.0.1:%d/api/memory" % port,
+                        data=json.dumps(
+                            {"id": record.id, "content": "updated memory"}
+                        ).encode("utf-8"),
+                        headers={"content-type": "application/json"},
+                        method="PATCH",
+                    )
+                    await asyncio.to_thread(
+                        lambda: urllib.request.urlopen(patch_request, timeout=5).read()
+                    )
+                    self.assertEqual(memory.recall("updated")[0].content, "updated memory")
+
+                    delete_request = urllib.request.Request(
+                        "http://127.0.0.1:%d/api/memory?id=%s" % (port, record.id),
+                        method="DELETE",
+                    )
+                    await asyncio.to_thread(
+                        lambda: urllib.request.urlopen(delete_request, timeout=5).read()
+                    )
+                    self.assertEqual(memory.recall("updated"), [])
+                finally:
+                    await channel.stop()
 
         asyncio.run(scenario())
 
@@ -207,6 +386,29 @@ class ChannelTests(unittest.TestCase):
         self.assertEqual(len(chunks), 2)
         self.assertEqual(len(chunks[0]), 4096)
         self.assertEqual(len(chunks[1]), 4)
+
+    def test_telegram_stream_edits_one_message_then_finalizes(self):
+        async def scenario():
+            channel = TelegramChannel(token="test-token")
+            calls = []
+
+            def fake_api(method, params):
+                calls.append((method, dict(params)))
+                return {"ok": True, "result": {"message_id": 42}}
+
+            channel._api = fake_api
+            await channel._on_stream_delta(
+                StreamDeltaReady("telegram:1", "telegram", "1", 0, "hello", "")
+            )
+            await channel._on_response(
+                OutboundMessage("telegram", "1", "hello world")
+            )
+
+            self.assertEqual(calls[0][0], "sendMessage")
+            self.assertEqual(calls[1][0], "editMessageText")
+            self.assertEqual(calls[1][1]["text"], "hello world")
+
+        asyncio.run(scenario())
 
     def test_qq_api_rejects_failed_retcode(self):
         onebot = FakeOneBotServer(body=b'{"status":"failed","retcode":100,"wording":"bad"}')

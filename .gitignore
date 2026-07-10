@@ -6,3 +6,8 @@ uploads/
 __pycache__/
 *.pyc
 memory/items.json
+memory/HISTORY.md
+memory/PENDING.md
+.kirakira/
+mcp_servers.json
+config.toml

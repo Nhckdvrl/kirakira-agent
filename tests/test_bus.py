@@ -1,0 +1,46 @@
+"""Message bus ordering and cross-chat concurrency tests."""
+
+import asyncio
+import unittest
+
+from kirakira_agent.bus import MessageBus
+from kirakira_agent.events import OutboundMessage
+
+
+class BusTests(unittest.TestCase):
+    def test_outbound_is_ordered_per_chat_and_concurrent_across_chats(self):
+        async def scenario():
+            bus = MessageBus()
+            events = []
+
+            async def send(message):
+                events.append(("start", message.chat_id, message.content))
+                if message.content == "first":
+                    await asyncio.sleep(0.05)
+                elif message.content == "other":
+                    await asyncio.sleep(0.01)
+                events.append(("end", message.chat_id, message.content))
+
+            bus.subscribe_outbound("test", send)
+            dispatcher = asyncio.create_task(bus.dispatch_outbound())
+            await bus.publish_outbound(OutboundMessage("test", "same", "first"))
+            await bus.publish_outbound(OutboundMessage("test", "same", "second"))
+            await bus.publish_outbound(OutboundMessage("test", "different", "other"))
+            self.assertTrue(await bus.drain(timeout=2))
+            bus.stop()
+            await dispatcher
+
+            self.assertLess(
+                events.index(("end", "different", "other")),
+                events.index(("end", "same", "first")),
+            )
+            self.assertLess(
+                events.index(("end", "same", "first")),
+                events.index(("start", "same", "second")),
+            )
+
+        asyncio.run(scenario())
+
+
+if __name__ == "__main__":
+    unittest.main()

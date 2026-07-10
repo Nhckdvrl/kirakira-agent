@@ -1,21 +1,26 @@
 """Tests for the Akashic-style passive runtime."""
 
 import asyncio
+import json
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 
 from kirakira_agent.bus import MessageBus
 from kirakira_agent.context_builder import ContextBuilder
 from kirakira_agent.event_bus import EventBus
-from kirakira_agent.events import InboundMessage
+from kirakira_agent.events import InboundMessage, OutboundMessage
 from kirakira_agent.memory import MemoryRuntime
+from kirakira_agent.models.base import ContextLengthError
 from kirakira_agent.runtime import AgentLoop, DefaultReasoner, PassiveTurnPipeline, RuntimeConfig
-from kirakira_agent.schema import ModelResponse, ToolCall
+from kirakira_agent.schema import ModelResponse, ToolCall, ToolSpec
 from kirakira_agent.session import SessionManager
+from kirakira_agent.subagent import SubagentManager
 from kirakira_agent.tool_hooks import HookOutcome
 from kirakira_agent.tools import build_default_registry
-from kirakira_agent.lifecycle import ToolCallCompleted, ToolCallStarted, TurnStarted
+from kirakira_agent.lifecycle import StreamDeltaReady, ToolCallCompleted, ToolCallStarted, TurnStarted
 
 
 class FakeModel:
@@ -56,6 +61,489 @@ def build_test_runtime(workdir, model):
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_agent_loop_parallelizes_sessions_but_serializes_same_session(self):
+        class RecordingPipeline:
+            def __init__(self, bus):
+                self.bus = bus
+                self.events = []
+
+            async def run(self, message, key):
+                self.events.append(("start", key, message.content))
+                if message.content == "first":
+                    await asyncio.sleep(0.05)
+                elif message.content == "other":
+                    await asyncio.sleep(0.01)
+                self.events.append(("end", key, message.content))
+                await self.bus.publish_outbound(
+                    OutboundMessage(message.channel, message.chat_id, message.content)
+                )
+
+        async def scenario():
+            bus = MessageBus()
+            pipeline = RecordingPipeline(bus)
+            loop = AgentLoop(bus=bus, pipeline=pipeline)
+            received = []
+
+            async def collect(message):
+                received.append(message.content)
+                if len(received) == 3:
+                    loop.stop()
+                    bus.stop()
+
+            bus.subscribe_outbound("cli", collect)
+            tasks = [
+                asyncio.create_task(loop.run()),
+                asyncio.create_task(bus.dispatch_outbound()),
+            ]
+            await bus.publish_inbound(InboundMessage("cli", "u", "same", "first"))
+            await bus.publish_inbound(InboundMessage("cli", "u", "same", "second"))
+            await bus.publish_inbound(InboundMessage("cli", "u", "other", "other"))
+            await asyncio.wait_for(asyncio.gather(*tasks), timeout=3)
+
+            self.assertLess(
+                pipeline.events.index(("end", "cli:other", "other")),
+                pipeline.events.index(("end", "cli:same", "first")),
+            )
+            self.assertLess(
+                pipeline.events.index(("end", "cli:same", "first")),
+                pipeline.events.index(("start", "cli:same", "second")),
+            )
+
+        asyncio.run(scenario())
+
+    def test_interrupt_persists_resumable_turn_marker(self):
+        class SlowModel:
+            def __init__(self):
+                self.started = threading.Event()
+
+            def complete(self, messages, tools, system, model, max_tokens):
+                self.started.set()
+                time.sleep(0.2)
+                return ModelResponse(text="too late")
+
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                model = SlowModel()
+                bus, loop, sessions, _memory = build_test_runtime(Path(tmp), model)
+                loop_task = asyncio.create_task(loop.run())
+                await bus.publish_inbound(
+                    InboundMessage("cli", "tester", "interrupt", "long task")
+                )
+                await asyncio.to_thread(model.started.wait, 1)
+
+                self.assertTrue(loop.request_interrupt("cli:interrupt"))
+                await asyncio.wait_for(bus._inbound.join(), timeout=2)
+                loop.stop()
+                await loop_task
+
+                session = sessions.get_or_create("cli:interrupt")
+                self.assertEqual(session.messages[-1]["content"], "[interrupted]")
+                self.assertTrue(session.messages[-1]["interrupted"])
+
+        asyncio.run(scenario())
+
+    def test_streaming_model_emits_delta_lifecycle_events(self):
+        class StreamingModel:
+            def complete_stream(
+                self, messages, tools, system, model, max_tokens, on_delta
+            ):
+                on_delta("你", "先想")
+                on_delta("好", "")
+                return ModelResponse(text="你好", reasoning_content="先想")
+
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                _bus, loop, _sessions, _memory = build_test_runtime(
+                    Path(tmp), StreamingModel()
+                )
+                deltas = []
+                loop.pipeline.event_bus.on(
+                    StreamDeltaReady,
+                    lambda event: deltas.append(
+                        (event.content_delta, event.reasoning_delta)
+                    ),
+                )
+
+                outbound = await loop.pipeline.run(
+                    InboundMessage("cli", "tester", "chat", "hello"),
+                    "cli:chat",
+                    dispatch_outbound=False,
+                )
+
+                self.assertEqual(outbound.content, "你好")
+                self.assertEqual(deltas, [("你", "先想"), ("好", "")])
+
+        asyncio.run(scenario())
+
+    def test_spawn_runs_isolated_child_and_disables_recursive_spawn(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                model = FakeModel(
+                    [
+                        ModelResponse(
+                            tool_calls=[
+                                ToolCall("parent_call", "spawn", {"task": "inspect project"})
+                            ]
+                        ),
+                        ModelResponse(text="child result"),
+                        ModelResponse(text="parent result"),
+                    ]
+                )
+                _bus, loop, sessions, memory = build_test_runtime(Path(tmp), model)
+                manager = SubagentManager(
+                    reasoner=loop.pipeline.reasoner,
+                    tools=loop.pipeline.tools,
+                    sessions=sessions,
+                    memory=memory,
+                    bus=_bus,
+                )
+                manager.register_tool()
+
+                outbound = await loop.pipeline.run(
+                    InboundMessage("cli", "tester", "chat", "delegate"),
+                    "cli:chat",
+                    dispatch_outbound=False,
+                )
+
+                self.assertEqual(outbound.content, "parent result")
+                self.assertNotIn("spawn", [spec.name for spec in model.calls[1]["tools"]])
+                child_files = [
+                    path
+                    for path in (Path(tmp) / "sessions").glob("*.json")
+                    if "sub_" in path.name
+                ]
+                self.assertEqual(len(child_files), 1)
+
+        asyncio.run(scenario())
+
+    def test_background_spawn_reinjects_completion_into_parent_session(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                model = FakeModel([ModelResponse(text="background result")])
+                bus, loop, sessions, memory = build_test_runtime(Path(tmp), model)
+                manager = SubagentManager(
+                    reasoner=loop.pipeline.reasoner,
+                    tools=loop.pipeline.tools,
+                    sessions=sessions,
+                    memory=memory,
+                    bus=bus,
+                )
+                manager.register_tool()
+                token = loop.pipeline.tools.set_context(
+                    session_key="web:parent",
+                    channel="web",
+                    chat_id="parent",
+                )
+                try:
+                    accepted = json.loads(
+                        await manager.spawn("inspect project", mode="background")
+                    )
+                finally:
+                    loop.pipeline.tools.reset_context(token)
+
+                self.assertEqual(accepted["status"], "running")
+                self.assertTrue(await manager.wait(timeout=2.0))
+                completion = await asyncio.wait_for(bus.consume_inbound(), timeout=1.0)
+                self.assertEqual(completion.session_key, "web:parent")
+                self.assertTrue(completion.metadata["omit_user_turn"])
+                self.assertTrue(completion.metadata["subagent_completion"])
+                self.assertIn("background result", completion.content)
+                await bus.complete_inbound(completion)
+                await manager.shutdown()
+
+        asyncio.run(scenario())
+
+    def test_background_spawn_management_limit_and_cancel(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                model = FakeModel([])
+                bus, loop, sessions, memory = build_test_runtime(Path(tmp), model)
+                manager = SubagentManager(
+                    reasoner=loop.pipeline.reasoner,
+                    tools=loop.pipeline.tools,
+                    sessions=sessions,
+                    memory=memory,
+                    bus=bus,
+                )
+                manager.register_tool()
+                release = asyncio.Event()
+
+                async def blocked_child(*args, **kwargs):
+                    await release.wait()
+                    return {
+                        "task_id": args[0],
+                        "status": "completed",
+                        "result": "done",
+                    }
+
+                manager._run_child = blocked_child
+                token = loop.pipeline.tools.set_context(
+                    session_key="web:parent",
+                    channel="web",
+                    chat_id="parent",
+                )
+                try:
+                    accepted = [
+                        json.loads(
+                            await manager.spawn(
+                                "job %d" % index,
+                                mode="background",
+                                label="job-%d" % index,
+                            )
+                        )
+                        for index in range(3)
+                    ]
+                    rejected = await manager.spawn("job 4", mode="background")
+                finally:
+                    loop.pipeline.tools.reset_context(token)
+
+                listing = json.loads(await manager.manage("list"))
+                self.assertEqual(listing["running_count"], 3)
+                self.assertIn("limit 3", rejected)
+                self.assertTrue(await manager.cancel(accepted[0]["task_id"]))
+                cancelled = await asyncio.wait_for(bus.consume_inbound(), timeout=1.0)
+                self.assertIn('status="cancelled"', cancelled.content)
+                await bus.complete_inbound(cancelled)
+
+                release.set()
+                self.assertTrue(await manager.wait(timeout=2.0))
+                self.assertEqual(json.loads(await manager.manage("list"))["running_count"], 0)
+                await manager.shutdown()
+
+        asyncio.run(scenario())
+
+    def test_tool_search_unlocks_deferred_tool_for_next_iteration(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                model = FakeModel(
+                    [
+                        ModelResponse(
+                            tool_calls=[
+                                ToolCall(
+                                    "search", "tool_search", {"query": "select:remote_demo"}
+                                )
+                            ]
+                        ),
+                        ModelResponse(
+                            tool_calls=[ToolCall("remote", "remote_demo", {})]
+                        ),
+                        ModelResponse(text="done"),
+                    ]
+                )
+                _bus, loop, _sessions, _memory = build_test_runtime(Path(tmp), model)
+                loop.pipeline.tools.register(
+                    ToolSpec(
+                        "remote_demo",
+                        "Deferred remote demo",
+                        {"type": "object", "properties": {}, "required": []},
+                    ),
+                    lambda: "remote ok",
+                    deferred=True,
+                )
+
+                await loop.pipeline.run(
+                    InboundMessage("cli", "tester", "chat", "use remote"),
+                    "cli:chat",
+                    dispatch_outbound=False,
+                )
+
+                self.assertNotIn(
+                    "remote_demo", [spec.name for spec in model.calls[0]["tools"]]
+                )
+                self.assertIn(
+                    "remote_demo", [spec.name for spec in model.calls[1]["tools"]]
+                )
+
+        asyncio.run(scenario())
+
+    def test_context_length_error_retries_with_trimmed_history(self):
+        class OverflowOnceModel:
+            def __init__(self):
+                self.calls = []
+
+            def complete(self, messages, tools, system, model, max_tokens):
+                self.calls.append([dict(message) for message in messages])
+                if len(self.calls) == 1:
+                    raise ContextLengthError("too long")
+                return ModelResponse(text="recovered")
+
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                model = OverflowOnceModel()
+                _bus, loop, sessions, _memory = build_test_runtime(Path(tmp), model)
+                session = sessions.get_or_create("cli:chat")
+                for index in range(8):
+                    session.add_message("user", "u%d %s" % (index, "x" * 200))
+                    session.add_message("assistant", "a%d %s" % (index, "y" * 200))
+
+                outbound = await loop.pipeline.run(
+                    InboundMessage("cli", "tester", "chat", "current"),
+                    "cli:chat",
+                    dispatch_outbound=False,
+                )
+
+                self.assertEqual(outbound.content, "recovered")
+                self.assertEqual(len(model.calls), 2)
+                self.assertLessEqual(len(model.calls[1]), len(model.calls[0]))
+
+        asyncio.run(scenario())
+
+    def test_post_response_consolidation_extracts_memory_in_background(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                model = FakeModel(
+                    [
+                        ModelResponse(text="current reply"),
+                        ModelResponse(
+                            text=(
+                                '{"memories":[{"content":"用户长期喜欢爵士乐",'
+                                '"memory_type":"preference"}],'
+                                '"history":["用户讨论了音乐偏好"]}'
+                            )
+                        ),
+                    ]
+                )
+                _bus, loop, sessions, memory = build_test_runtime(Path(tmp), model)
+                session = sessions.get_or_create("cli:chat")
+                for index in range(4):
+                    session.add_message("user", "historical user %d" % index)
+                    session.add_message("assistant", "historical assistant %d" % index)
+
+                outbound = await loop.pipeline.run(
+                    InboundMessage("cli", "tester", "chat", "current"),
+                    "cli:chat",
+                    dispatch_outbound=False,
+                )
+                self.assertEqual(outbound.content, "current reply")
+                await memory.shutdown()
+
+                recalled = memory.recall("爵士乐")
+                self.assertEqual(recalled[0].memory_type, "preference")
+                self.assertGreater(sessions.get_or_create("cli:chat").last_consolidated, 0)
+
+        asyncio.run(scenario())
+
+    def test_before_turn_history_rewrite_reaches_model(self):
+        class RewriteHistory:
+            def run(self, ctx):
+                ctx.history_messages = (
+                    {"role": "user", "content": "plugin history"},
+                    {"role": "assistant", "content": "plugin answer"},
+                )
+                return ctx
+
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                model = FakeModel([ModelResponse(text="done")])
+                _bus, loop, sessions, _memory = build_test_runtime(Path(tmp), model)
+                session = sessions.get_or_create("cli:chat")
+                session.add_message("user", "old history")
+                session.add_message("assistant", "old answer")
+                loop.pipeline.add_before_turn_plugin_modules([RewriteHistory()])
+
+                await loop.pipeline.run(
+                    InboundMessage("cli", "tester", "chat", "current"),
+                    "cli:chat",
+                    dispatch_outbound=False,
+                )
+
+                contents = [msg.get("content") for msg in model.calls[0]["messages"]]
+                self.assertIn("plugin history", contents)
+                self.assertNotIn("old history", contents)
+
+        asyncio.run(scenario())
+
+    def test_disabled_tool_is_hidden_and_direct_call_is_denied(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                model = FakeModel(
+                    [
+                        ModelResponse(
+                            tool_calls=[
+                                ToolCall("call_1", "read_file", {"path": "secret.txt"})
+                            ]
+                        ),
+                        ModelResponse(text="blocked"),
+                    ]
+                )
+                _bus, loop, sessions, _memory = build_test_runtime(Path(tmp), model)
+                events = []
+                loop.pipeline.event_bus.on(
+                    ToolCallCompleted,
+                    lambda event: events.append((event.tool_name, event.status)),
+                )
+
+                await loop.pipeline.run(
+                    InboundMessage(
+                        "cli",
+                        "tester",
+                        "chat",
+                        "read",
+                        metadata={"disabled_tools": ["read_file"]},
+                    ),
+                    "cli:chat",
+                    dispatch_outbound=False,
+                )
+
+                self.assertNotIn(
+                    "read_file", [spec.name for spec in model.calls[0]["tools"]]
+                )
+                call = sessions.get_or_create("cli:chat").messages[-1]["tool_chain"][0]["calls"][0]
+                self.assertEqual(call["status"], "denied")
+                self.assertIn(("read_file", "denied"), events)
+
+        asyncio.run(scenario())
+
+    def test_failed_builtin_tool_is_recorded_as_error(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                model = FakeModel(
+                    [
+                        ModelResponse(
+                            tool_calls=[
+                                ToolCall("call_1", "read_file", {"path": "missing.txt"})
+                            ]
+                        ),
+                        ModelResponse(text="failed as expected"),
+                    ]
+                )
+                _bus, loop, sessions, _memory = build_test_runtime(Path(tmp), model)
+
+                await loop.pipeline.run(
+                    InboundMessage("cli", "tester", "chat", "read"),
+                    "cli:chat",
+                    dispatch_outbound=False,
+                )
+
+                call = sessions.get_or_create("cli:chat").messages[-1]["tool_chain"][0]["calls"][0]
+                self.assertEqual(call["status"], "error")
+
+        asyncio.run(scenario())
+
+    def test_turn_persistence_flags(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                model = FakeModel([ModelResponse(text="ack")])
+                _bus, loop, sessions, memory = build_test_runtime(Path(tmp), model)
+
+                await loop.pipeline.run(
+                    InboundMessage(
+                        "cli",
+                        "tester",
+                        "chat",
+                        "请记住：不应写入",
+                        metadata={"omit_user_turn": True, "skip_post_memory": True},
+                    ),
+                    "cli:chat",
+                    dispatch_outbound=False,
+                )
+
+                session = sessions.get_or_create("cli:chat")
+                self.assertEqual([msg["role"] for msg in session.messages], ["assistant"])
+                self.assertEqual(memory.recall("不应写入"), [])
+
+        asyncio.run(scenario())
+
     def test_bus_to_loop_to_outbound_and_session_tool_chain(self):
         async def scenario():
             with tempfile.TemporaryDirectory() as tmp:
@@ -173,6 +661,34 @@ class RuntimeTests(unittest.TestCase):
                 await asyncio.wait_for(asyncio.gather(*tasks), timeout=5)
 
                 self.assertEqual(got, ["blocked by plugin"])
+                self.assertEqual(model.calls, [])
+
+        asyncio.run(scenario())
+
+    def test_slash_command_can_abort_before_memory_retrieval(self):
+        class CommandModule:
+            def run(self, ctx):
+                ctx.abort = True
+                ctx.abort_reply = "command handled"
+                return ctx
+
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                model = FakeModel([ModelResponse(text="unused")])
+                _bus, loop, _sessions, memory = build_test_runtime(Path(tmp), model)
+                loop.pipeline.add_before_turn_plugin_modules([CommandModule()])
+
+                def fail_if_called(_query):
+                    raise AssertionError("memory retrieval should be skipped")
+
+                memory.build_retrieval_block = fail_if_called
+                outbound = await loop.pipeline.run(
+                    InboundMessage("cli", "tester", "chat", "/status"),
+                    "cli:chat",
+                    dispatch_outbound=False,
+                )
+
+                self.assertEqual(outbound.content, "command handled")
                 self.assertEqual(model.calls, [])
 
         asyncio.run(scenario())

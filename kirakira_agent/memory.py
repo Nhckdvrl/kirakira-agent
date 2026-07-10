@@ -2,14 +2,23 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
+import math
+import os
 import re
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
+from typing import Any, Dict, List
+from uuid import uuid4
 
 from kirakira_agent.session import Session, SessionManager
+from kirakira_agent.embeddings import EmbeddingClient
+
+logger = logging.getLogger(__name__)
 
 
 def _now() -> str:
@@ -19,8 +28,31 @@ def _now() -> str:
 def _tokenize(text: str) -> set[str]:
     lowered = text.lower()
     ascii_words = set(re.findall(r"[a-z0-9_\-]{2,}", lowered))
-    cjk = set(re.findall(r"[\u4e00-\u9fff]{2,}", lowered))
+    cjk_runs = re.findall(r"[\u4e00-\u9fff]+", lowered)
+    cjk = {
+        run[index : index + 2]
+        for run in cjk_runs
+        for index in range(max(1, len(run) - 1))
+        if run[index : index + 2]
+    }
     return ascii_words | cjk
+
+
+def _normalize_content(text: str) -> str:
+    return " ".join(text.lower().split())
+
+
+def _atomic_write(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp = path.with_name(".%s.%d.%s.tmp" % (path.name, os.getpid(), uuid4().hex))
+    try:
+        temp.write_text(content, encoding="utf-8")
+        os.replace(temp, path)
+    finally:
+        try:
+            temp.unlink()
+        except FileNotFoundError:
+            pass
 
 
 @dataclass
@@ -30,15 +62,28 @@ class MemoryRecord:
     created_at: str = field(default_factory=_now)
     source_ref: str = ""
     status: str = "active"
+    memory_type: str = "requested_memory"
+    reinforcement: int = 1
+    updated_at: str = field(default_factory=_now)
+    embedding: List[float] | None = None
 
-    def to_json(self) -> Dict[str, str]:
+    def to_json(self) -> Dict[str, object]:
         return {
             "id": self.id,
             "content": self.content,
             "created_at": self.created_at,
             "source_ref": self.source_ref,
             "status": self.status,
+            "memory_type": self.memory_type,
+            "reinforcement": self.reinforcement,
+            "updated_at": self.updated_at,
+            "embedding": self.embedding,
         }
+
+    def to_public_json(self) -> Dict[str, object]:
+        payload = self.to_json()
+        payload.pop("embedding", None)
+        return payload
 
 
 class MarkdownMemoryStore:
@@ -48,10 +93,14 @@ class MarkdownMemoryStore:
         self.memory_path = self.root / "MEMORY.md"
         self.self_path = self.root / "SELF.md"
         self.recent_path = self.root / "RECENT_CONTEXT.md"
+        self.history_path = self.root / "HISTORY.md"
+        self.pending_path = self.root / "PENDING.md"
         for path, title in (
             (self.memory_path, "# Long-Term Memory\n"),
             (self.self_path, "# Self Model\n"),
             (self.recent_path, "# Recent Context\n"),
+            (self.history_path, "# History\n"),
+            (self.pending_path, "# Pending Memory\n"),
         ):
             if not path.exists():
                 path.write_text(title, encoding="utf-8")
@@ -71,12 +120,45 @@ class MarkdownMemoryStore:
         lines = updated.splitlines()
         if len(lines) > 80:
             lines = [lines[0]] + lines[-79:]
-        self.recent_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        _atomic_write(self.recent_path, "\n".join(lines) + "\n")
 
     def append_memory(self, record: MemoryRecord) -> None:
-        with self.memory_path.open("a", encoding="utf-8") as fh:
+        self.sync_memory_records([record])
+
+    def sync_memory_records(self, records: List[MemoryRecord]) -> None:
+        start = "<!-- kirakira:managed-memory:start -->"
+        end = "<!-- kirakira:managed-memory:end -->"
+        existing = self.read_long_term().rstrip()
+        pattern = re.compile(re.escape(start) + r".*?" + re.escape(end), re.S)
+        existing = pattern.sub("", existing).rstrip()
+        # Migrate lines emitted by the early runtime before managed blocks existed.
+        existing = re.sub(r"(?m)^- \[mem_\d+\](?: source=\S+)? .*\n?", "", existing).rstrip()
+        lines = [start]
+        for record in records:
+            if record.status != "active":
+                continue
             source = " source=%s" % record.source_ref if record.source_ref else ""
-            fh.write("- [%s]%s %s\n" % (record.id, source, record.content.strip()))
+            lines.append(
+                "- [%s type=%s reinforced=%d]%s %s"
+                % (
+                    record.id,
+                    record.memory_type,
+                    record.reinforcement,
+                    source,
+                    record.content.strip(),
+                )
+            )
+        lines.append(end)
+        _atomic_write(self.memory_path, existing + "\n\n" + "\n".join(lines) + "\n")
+
+    def append_history(self, source_ref: str, summary: str) -> None:
+        marker = "<!-- turn:%s -->" % source_ref
+        existing = self.history_path.read_text(encoding="utf-8")
+        if marker in existing:
+            return
+        timestamp = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
+        with self.history_path.open("a", encoding="utf-8") as handle:
+            handle.write("%s\n[%s] %s\n" % (marker, timestamp, summary.strip()))
 
 
 class MemoryRuntime:
@@ -86,50 +168,148 @@ class MemoryRuntime:
         self.session_manager = session_manager
         self.items_path = self.store.root / "items.json"
         self._records: List[MemoryRecord] = []
+        self._record_lock = threading.RLock()
+        self._tasks: Dict[str, asyncio.Task[None]] = {}
+        self._locks: Dict[str, asyncio.Lock] = {}
+        self.embedding_client: EmbeddingClient | None = None
         self._load()
+        if self.session_manager is not None:
+            self.session_manager.on_delete(self._forget_session_memories)
 
-    def memorize(self, content: str, source_ref: str = "") -> MemoryRecord:
-        content = content.strip()
-        if not content:
-            raise ValueError("memory content is empty")
-        for record in self._records:
-            if record.status == "active" and record.content.strip() == content:
-                return record
-        record = MemoryRecord(
-            id=self._next_id(),
-            content=content,
-            source_ref=source_ref,
-        )
-        self._records.append(record)
-        self.store.append_memory(record)
-        self._save()
-        return record
+    def configure_embeddings(
+        self, *, base_url: str, api_key: str, model: str
+    ) -> None:
+        if base_url.strip() and model.strip():
+            self.embedding_client = EmbeddingClient(
+                base_url=base_url,
+                api_key=api_key,
+                model=model,
+            )
 
-    def recall(self, query: str, limit: int = 5) -> List[MemoryRecord]:
+    def memorize(
+        self,
+        content: str,
+        source_ref: str = "",
+        memory_type: str = "requested_memory",
+    ) -> MemoryRecord:
+        with self._record_lock:
+            content = content.strip()
+            if not content:
+                raise ValueError("memory content is empty")
+            normalized = _normalize_content(content)
+            for record in self._records:
+                if record.status == "active" and _normalize_content(record.content) == normalized:
+                    if source_ref and source_ref == record.source_ref:
+                        return record
+                    record.reinforcement += 1
+                    record.updated_at = _now()
+                    if source_ref:
+                        record.source_ref = source_ref
+                    self._save()
+                    return record
+            record = MemoryRecord(
+                id=self._next_id(),
+                content=content,
+                source_ref=source_ref,
+                memory_type=memory_type.strip() or "requested_memory",
+                embedding=self._embed_or_none(content),
+            )
+            self._records.append(record)
+            self._save()
+            return record
+
+    def recall(
+        self,
+        query: str,
+        limit: int = 5,
+        memory_types: List[str] | None = None,
+        since: str = "",
+        until: str = "",
+    ) -> List[MemoryRecord]:
         q_tokens = _tokenize(query)
-        scored: List[tuple[int, MemoryRecord]] = []
-        for record in self._records:
+        query_embedding = self._embed_or_none(query) if query.strip() else None
+        allowed_types = {item for item in (memory_types or []) if item}
+        since_dt = self._parse_optional_time(since)
+        until_dt = self._parse_optional_time(until)
+        scored: List[tuple[float, MemoryRecord]] = []
+        with self._record_lock:
+            records = list(self._records)
+        for record in records:
             if record.status != "active":
                 continue
+            if allowed_types and record.memory_type not in allowed_types:
+                continue
+            created = self._parse_optional_time(record.created_at)
+            if since_dt and created and created < since_dt:
+                continue
+            if until_dt and created and created > until_dt:
+                continue
             tokens = _tokenize(record.content)
-            score = len(q_tokens & tokens)
+            overlap = len(q_tokens & tokens)
+            lexical = overlap / max(
+                1.0, math.sqrt(len(q_tokens) * max(1, len(tokens)))
+            )
+            semantic = self._cosine(query_embedding, record.embedding)
+            score = lexical if semantic is None else semantic * 0.75 + lexical * 0.25
             if query.lower().strip() and query.lower().strip() in record.content.lower():
-                score += 5
-            if score > 0 or not q_tokens:
+                score += 2.0
+            score += min(0.25, math.log1p(max(1, record.reinforcement)) * 0.05)
+            if (
+                overlap > 0
+                or query.lower().strip() in record.content.lower()
+                or not q_tokens
+                or semantic is not None
+                and semantic >= 0.25
+            ):
                 scored.append((score, record))
         scored.sort(key=lambda item: (item[0], item[1].created_at), reverse=True)
         return [record for _, record in scored[: max(1, limit)]]
 
     def forget(self, ids: List[str]) -> List[str]:
-        forgotten: List[str] = []
-        wanted = set(ids)
-        for record in self._records:
-            if record.id in wanted and record.status == "active":
-                record.status = "forgotten"
-                forgotten.append(record.id)
-        if forgotten:
-            self._save()
-        return forgotten
+        with self._record_lock:
+            forgotten: List[str] = []
+            wanted = set(ids)
+            for record in self._records:
+                if record.id in wanted and record.status == "active":
+                    record.status = "forgotten"
+                    forgotten.append(record.id)
+            if forgotten:
+                self._save()
+            return forgotten
+
+    def list_records(self, *, include_forgotten: bool = False) -> List[Dict[str, object]]:
+        with self._record_lock:
+            records = [
+                record
+                for record in self._records
+                if include_forgotten or record.status == "active"
+            ]
+        records.sort(key=lambda item: item.updated_at, reverse=True)
+        return [record.to_public_json() for record in records]
+
+    def update_record(
+        self,
+        memory_id: str,
+        *,
+        content: str | None = None,
+        memory_type: str | None = None,
+    ) -> bool:
+        with self._record_lock:
+            for record in self._records:
+                if record.id != memory_id:
+                    continue
+                if content is not None:
+                    value = content.strip()
+                    if not value:
+                        raise ValueError("memory content is empty")
+                    record.content = value
+                    record.embedding = self._embed_or_none(value)
+                if memory_type is not None:
+                    record.memory_type = memory_type.strip() or record.memory_type
+                record.updated_at = _now()
+                self._save()
+                return True
+            return False
 
     def build_retrieval_block(self, query: str, limit: int = 5) -> str:
         records = self.recall(query, limit=limit)
@@ -138,7 +318,10 @@ class MemoryRuntime:
         lines = ["## Retrieved Long-Term Memory"]
         for record in records:
             source = " source_ref=%s" % record.source_ref if record.source_ref else ""
-            lines.append("- [%s]%s %s" % (record.id, source, record.content))
+            lines.append(
+                "- [%s type=%s reinforced=%d]%s %s"
+                % (record.id, record.memory_type, record.reinforcement, source, record.content)
+            )
         return "\n".join(lines)
 
     def consolidate_turn(self, session: Session, user_content: str, assistant_reply: str) -> None:
@@ -147,14 +330,171 @@ class MemoryRuntime:
             assistant_reply.strip().replace("\n", " ")[:220],
         )
         self.store.append_recent(summary)
+        source_ref = self._latest_user_source_ref(session)
+        self.store.append_history(source_ref, summary)
         if self._last_assistant_used_memorize(session):
-            session.last_consolidated = len(session.messages)
             return
         maybe_memory = self._extract_explicit_memory(user_content)
         if maybe_memory:
-            source_ref = "%s:%d" % (session.key, max(0, len(session.messages) - 2))
             self.memorize(maybe_memory, source_ref=source_ref)
-        session.last_consolidated = len(session.messages)
+
+    async def wait_for_session(self, session_key: str, timeout: float = 30.0) -> None:
+        task = self._tasks.get(session_key)
+        if task is None or task.done():
+            return
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=max(0.1, timeout))
+        except asyncio.TimeoutError:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+    def schedule_consolidation(
+        self,
+        session: Session,
+        *,
+        model_client: Any,
+        model: str,
+        min_messages: int = 6,
+        keep_messages: int = 4,
+    ) -> None:
+        existing = self._tasks.get(session.key)
+        if existing is not None and not existing.done():
+            return
+        task = asyncio.create_task(
+            self._consolidate_session(
+                session,
+                model_client=model_client,
+                model=model,
+                min_messages=min_messages,
+                keep_messages=keep_messages,
+            ),
+            name="memory-consolidation:%s" % session.key,
+        )
+        self._tasks[session.key] = task
+
+        def done(completed: asyncio.Task[None]) -> None:
+            if self._tasks.get(session.key) is completed:
+                self._tasks.pop(session.key, None)
+            try:
+                completed.result()
+            except asyncio.CancelledError:
+                return
+            except Exception:
+                logger.exception("memory consolidation failed for %s", session.key)
+
+        task.add_done_callback(done)
+
+    async def shutdown(self, timeout: float = 30.0) -> None:
+        tasks = [task for task in self._tasks.values() if not task.done()]
+        if not tasks:
+            return
+        _done, pending = await asyncio.wait(tasks, timeout=max(0.1, timeout))
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
+    async def _consolidate_session(
+        self,
+        session: Session,
+        *,
+        model_client: Any,
+        model: str,
+        min_messages: int,
+        keep_messages: int,
+    ) -> None:
+        lock = self._locks.setdefault(session.key, asyncio.Lock())
+        async with lock:
+            total = len(session.messages)
+            start = max(0, min(int(session.last_consolidated), total))
+            end = max(start, total - max(0, keep_messages))
+            if end - start < max(2, min_messages):
+                return
+            selected = session.messages[start:end]
+            first_user = next(
+                (
+                    index
+                    for index, message in enumerate(selected)
+                    if message.get("role") == "user"
+                ),
+                None,
+            )
+            if first_user is None:
+                session.last_consolidated = end
+                if self.session_manager is not None:
+                    self.session_manager.save(session)
+                return
+            start += first_user
+            selected = selected[first_user:]
+            transcript = "\n".join(
+                "[%s] %s" % (
+                    str(message.get("role") or "unknown"),
+                    str(message.get("content") or "")[:3000],
+                )
+                for message in selected
+            )
+            prompt = (
+                "从下面对话中提取可长期保留的信息。只把用户明确表达的稳定事实、偏好、"
+                "身份、反复可用的操作规则写入 memories；不要把 assistant 的建议当用户事实。"
+                "同时生成 1-3 条简短时间线摘要。仅返回 JSON："
+                '{"memories":[{"content":"...","memory_type":"identity|preference|procedure|event"}],'
+                '"history":["..."]}。没有可提取内容时数组留空。\n\n' + transcript
+            )
+            response = await asyncio.to_thread(
+                model_client.complete,
+                [{"role": "user", "content": prompt}],
+                [],
+                "",
+                model,
+                1200,
+            )
+            text = str(getattr(response, "text", "") or "").strip()
+            payload = self._parse_consolidation_json(text)
+            source_ref = "%s:%d-%d" % (session.key, start, end - 1)
+            for item in payload.get("memories", [])[:10]:
+                if not isinstance(item, dict):
+                    continue
+                content = str(item.get("content") or "").strip()
+                memory_type = str(item.get("memory_type") or "event").strip()
+                if content:
+                    await asyncio.to_thread(
+                        self.memorize,
+                        content,
+                        source_ref,
+                        memory_type,
+                    )
+            for index, summary in enumerate(payload.get("history", [])[:3]):
+                value = str(summary or "").strip()
+                if value:
+                    self.store.append_history(
+                        "%s:summary:%d" % (source_ref, index), value
+                    )
+            session.last_consolidated = end
+            if self.session_manager is not None:
+                self.session_manager.save(session)
+
+    @staticmethod
+    def _parse_consolidation_json(text: str) -> Dict[str, Any]:
+        if text.startswith("```"):
+            text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+        try:
+            payload = json.loads(text)
+        except ValueError:
+            match = re.search(r"\{.*\}", text, flags=re.S)
+            if not match:
+                return {"memories": [], "history": []}
+            try:
+                payload = json.loads(match.group(0))
+            except ValueError:
+                return {"memories": [], "history": []}
+        if not isinstance(payload, dict):
+            return {"memories": [], "history": []}
+        memories = payload.get("memories")
+        history = payload.get("history")
+        return {
+            "memories": memories if isinstance(memories, list) else [],
+            "history": history if isinstance(history, list) else [],
+        }
 
     def search_messages(self, query: str, limit: int = 10) -> List[Dict[str, str]]:
         if self.session_manager is None:
@@ -190,16 +530,23 @@ class MemoryRuntime:
                 created_at=str(item.get("created_at") or _now()),
                 source_ref=str(item.get("source_ref") or ""),
                 status=str(item.get("status") or "active"),
+                memory_type=str(item.get("memory_type") or "requested_memory"),
+                reinforcement=max(1, int(item.get("reinforcement") or 1)),
+                updated_at=str(item.get("updated_at") or item.get("created_at") or _now()),
+                embedding=[float(value) for value in item.get("embedding", [])]
+                if isinstance(item.get("embedding"), list) and item.get("embedding")
+                else None,
             )
             for item in data
             if item.get("id") and item.get("content")
         ]
 
     def _save(self) -> None:
-        self.items_path.write_text(
+        _atomic_write(
+            self.items_path,
             json.dumps([r.to_json() for r in self._records], ensure_ascii=False, indent=2),
-            encoding="utf-8",
         )
+        self.store.sync_memory_records(self._records)
 
     def _next_id(self) -> str:
         highest = 0
@@ -220,3 +567,54 @@ class MemoryRuntime:
                 if call.get("name") == "memorize":
                     return True
         return False
+
+    def _embed_or_none(self, text: str) -> List[float] | None:
+        if self.embedding_client is None or not text.strip():
+            return None
+        try:
+            return self.embedding_client.embed(text)
+        except Exception:
+            logger.exception("embedding failed; falling back to lexical memory")
+            return None
+
+    @staticmethod
+    def _cosine(
+        first: List[float] | None, second: List[float] | None
+    ) -> float | None:
+        if not first or not second or len(first) != len(second):
+            return None
+        dot = sum(a * b for a, b in zip(first, second))
+        first_norm = math.sqrt(sum(value * value for value in first))
+        second_norm = math.sqrt(sum(value * value for value in second))
+        if first_norm <= 0 or second_norm <= 0:
+            return None
+        return dot / (first_norm * second_norm)
+
+    @staticmethod
+    def _parse_optional_time(value: str) -> datetime | None:
+        if not value:
+            return None
+        try:
+            parsed = datetime.fromisoformat(value)
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo is not None else parsed.astimezone()
+
+    @staticmethod
+    def _latest_user_source_ref(session: Session) -> str:
+        for index in range(len(session.messages) - 1, -1, -1):
+            if session.messages[index].get("role") == "user":
+                return "%s:%d" % (session.key, index)
+        return "%s:%d" % (session.key, len(session.messages))
+
+    def _forget_session_memories(self, session_key: str) -> None:
+        prefix = session_key + ":"
+        with self._record_lock:
+            changed = False
+            for record in self._records:
+                if record.status == "active" and record.source_ref.startswith(prefix):
+                    record.status = "forgotten"
+                    record.updated_at = _now()
+                    changed = True
+            if changed:
+                self._save()
