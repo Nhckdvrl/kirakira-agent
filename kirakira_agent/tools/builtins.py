@@ -2,9 +2,16 @@
 
 import subprocess
 import json
+import html
+import re
+import urllib.parse
+import urllib.request
+import urllib.error
 from pathlib import Path
 from typing import Optional
 
+from kirakira_agent.bus import MessageBus
+from kirakira_agent.events import OutboundMessage
 from kirakira_agent.memory import MemoryRuntime
 from kirakira_agent.schema import ToolSpec
 from kirakira_agent.session import SessionManager
@@ -38,12 +45,14 @@ class WorkspaceTools:
         memory: MemoryRuntime | None = None,
         session_manager: SessionManager | None = None,
         registry: ToolRegistry | None = None,
+        bus: MessageBus | None = None,
     ) -> None:
         self.workdir = workdir.resolve()
         self.skill_loader = skill_loader
         self.memory = memory
         self.session_manager = session_manager
         self.registry = registry
+        self.bus = bus
 
     def bash(self, command: str, timeout: int = 120) -> str:
         dangerous = ["rm -rf /", "sudo", "shutdown", "reboot", "> /dev/"]
@@ -71,6 +80,20 @@ class WorkspaceTools:
             lines = lines[:limit] + ["... (%d more lines)" % (len(lines) - limit)]
         return truncate("\n".join(lines))
 
+    def list_dir(self, path: str = ".") -> str:
+        target = safe_path(self.workdir, path)
+        if not target.exists():
+            return "Error: Path does not exist: %s" % path
+        if not target.is_dir():
+            return "Error: Path is not a directory: %s" % path
+        rows = []
+        for item in sorted(target.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
+            rel = item.relative_to(self.workdir)
+            kind = "dir" if item.is_dir() else "file"
+            size = "" if item.is_dir() else str(item.stat().st_size)
+            rows.append("%s\t%s\t%s" % (kind, rel, size))
+        return truncate("\n".join(rows) or "(empty)")
+
     def write_file(self, path: str, content: str) -> str:
         target = safe_path(self.workdir, path)
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -90,6 +113,98 @@ class WorkspaceTools:
 
     def compact(self) -> str:
         return "Compacting context."
+
+    def tool_search(self, query: str = "", limit: int = 20) -> str:
+        if self.registry is None:
+            return "[]"
+        terms = [term.lower() for term in re.findall(r"[\w:-]+", query)]
+        matches = []
+        for spec in self.registry.specs():
+            haystack = ("%s %s" % (spec.name, spec.description)).lower()
+            score = sum(1 for term in terms if term in haystack) if terms else 1
+            if score:
+                matches.append(
+                    {
+                        "name": spec.name,
+                        "description": spec.description,
+                        "score": score,
+                        "input_schema": spec.input_schema,
+                    }
+                )
+        matches.sort(key=lambda item: (item["score"], item["name"]), reverse=True)
+        return json.dumps(matches[: max(1, int(limit))], ensure_ascii=False, indent=2)
+
+    def web_fetch(self, url: str, max_chars: int = 12000) -> str:
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            return "Error: URL must start with http:// or https://"
+        req = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": "kirakira-agent/0.1 (+https://github.com/Nhckdvrl/kirakira-agent)",
+                "Accept": "text/html,text/plain,application/json;q=0.9,*/*;q=0.5",
+            },
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                content_type = resp.headers.get("content-type", "")
+                raw = resp.read()
+        except urllib.error.HTTPError as exc:
+            return "Error: HTTP %s while fetching %s" % (exc.code, url)
+        except urllib.error.URLError as exc:
+            return "Error: Fetch failed for %s: %s" % (url, exc.reason)
+        text = raw.decode("utf-8", errors="replace")
+        if "html" in content_type.lower() or "<html" in text[:500].lower():
+            text = self._html_to_text(text)
+        return truncate(text.strip(), max(1000, int(max_chars)))
+
+    def web_search(self, query: str, limit: int = 5) -> str:
+        q = query.strip()
+        if not q:
+            return "[]"
+        url = "https://duckduckgo.com/html/?" + urllib.parse.urlencode({"q": q})
+        try:
+            req = urllib.request.Request(
+                url,
+                headers={"User-Agent": "kirakira-agent/0.1"},
+                method="GET",
+            )
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                html_text = resp.read().decode("utf-8", errors="replace")
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
+            return json.dumps([{"error": str(exc)}], ensure_ascii=False)
+        results = []
+        for match in re.finditer(r"(?is)<a[^>]+class=['\"]result__a['\"][^>]+href=['\"]([^'\"]+)['\"][^>]*>(.*?)</a>", html_text):
+            href = html.unescape(match.group(1))
+            title = self._html_to_text(match.group(2)).strip()
+            if href.startswith("//duckduckgo.com/l/?"):
+                parsed = urllib.parse.urlparse("https:" + href)
+                qs = urllib.parse.parse_qs(parsed.query)
+                href = qs.get("uddg", [href])[0]
+            if title and href:
+                results.append({"title": title, "url": href})
+            if len(results) >= max(1, int(limit)):
+                break
+        if not results:
+            return json.dumps(
+                [{"note": "No structured results parsed; use web_fetch for a known URL.", "query": q}],
+                ensure_ascii=False,
+                indent=2,
+            )
+        return json.dumps(results, ensure_ascii=False, indent=2)
+
+    async def message_push(self, channel: str, chat_id: str, message: str) -> str:
+        if self.bus is None:
+            return "Error: Message bus is not available"
+        channel = channel.strip()
+        chat_id = chat_id.strip()
+        if not channel or not chat_id:
+            return "Error: channel and chat_id are required"
+        await self.bus.publish_outbound(
+            OutboundMessage(channel=channel, chat_id=chat_id, content=message)
+        )
+        return "已发送"
 
     def memorize(self, content: str) -> str:
         if self.memory is None:
@@ -135,16 +250,28 @@ class WorkspaceTools:
             indent=2,
         )
 
+    def _html_to_text(self, value: str) -> str:
+        text = re.sub(r"(?is)<(script|style).*?>.*?</\1>", " ", value)
+        text = re.sub(r"(?is)<br\s*/?>", "\n", text)
+        text = re.sub(r"(?is)</(p|div|li|h[1-6]|tr)>", "\n", text)
+        text = re.sub(r"(?is)<[^>]+>", " ", text)
+        text = html.unescape(text)
+        text = re.sub(r"[ \t\r\f\v]+", " ", text)
+        text = re.sub(r"\n\s+", "\n", text)
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        return text.strip()
+
 
 def build_default_registry(
     workdir: Path,
     skills_dir: Optional[Path] = None,
     memory: MemoryRuntime | None = None,
     session_manager: SessionManager | None = None,
+    bus: MessageBus | None = None,
 ) -> ToolRegistry:
     skill_loader = SkillLoader(skills_dir or (workdir / "skills"))
     registry = ToolRegistry()
-    handlers = WorkspaceTools(workdir, skill_loader, memory, session_manager, registry)
+    handlers = WorkspaceTools(workdir, skill_loader, memory, session_manager, registry, bus)
     registry.register(
         ToolSpec(
             "bash",
@@ -172,6 +299,14 @@ def build_default_registry(
             ),
         ),
         handlers.read_file,
+    )
+    registry.register(
+        ToolSpec(
+            "list_dir",
+            "List files and directories inside the workspace.",
+            object_schema({"path": {"type": "string"}}, []),
+        ),
+        handlers.list_dir,
     )
     registry.register(
         ToolSpec(
@@ -217,6 +352,54 @@ def build_default_registry(
             object_schema({}, []),
         ),
         handlers.compact,
+    )
+    registry.register(
+        ToolSpec(
+            "tool_search",
+            "Search available tools by name or description.",
+            object_schema(
+                {"query": {"type": "string"}, "limit": {"type": "integer"}},
+                [],
+            ),
+        ),
+        handlers.tool_search,
+    )
+    registry.register(
+        ToolSpec(
+            "web_fetch",
+            "Fetch a web page or URL and return readable text.",
+            object_schema(
+                {"url": {"type": "string"}, "max_chars": {"type": "integer"}},
+                ["url"],
+            ),
+        ),
+        handlers.web_fetch,
+    )
+    registry.register(
+        ToolSpec(
+            "web_search",
+            "Search the web and return result titles and URLs.",
+            object_schema(
+                {"query": {"type": "string"}, "limit": {"type": "integer"}},
+                ["query"],
+            ),
+        ),
+        handlers.web_search,
+    )
+    registry.register(
+        ToolSpec(
+            "message_push",
+            "Send a message to a channel/chat through the MessageBus.",
+            object_schema(
+                {
+                    "channel": {"type": "string"},
+                    "chat_id": {"type": "string"},
+                    "message": {"type": "string"},
+                },
+                ["channel", "chat_id", "message"],
+            ),
+        ),
+        handlers.message_push,
     )
     registry.register(
         ToolSpec(

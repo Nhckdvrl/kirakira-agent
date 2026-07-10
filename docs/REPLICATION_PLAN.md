@@ -156,6 +156,11 @@ Channel 回复
   - [x] `load_skill`
   - [x] `compact`
 - [x] 默认工具新增 memory/history tools
+- [x] 新增 `list_dir`
+- [x] 新增 `tool_search`
+- [x] 新增 `web_fetch`
+- [x] 新增 `web_search`
+- [x] 新增 `message_push`
 
 ### 3.8 Tool Hook
 
@@ -190,6 +195,9 @@ Channel 回复
 - [x] 实现 BeforeReasoning
 - [x] 实现 AfterReasoning
 - [x] 实现 AfterTurn
+- [x] 发出 `TurnStarted`
+- [x] 发出 `ToolCallStarted`
+- [x] 发出 `ToolCallCompleted`
 - [x] 实现 session commit
 - [x] 实现 memory consolidation
 - [x] 实现 outbound publish
@@ -285,6 +293,9 @@ Channel 回复
 - [x] 测试 Web HTTP channel
 - [x] 测试 QQ OneBot webhook channel
 - [x] 测试 Telegram allow list
+- [x] 测试新增 passive research tools
+- [x] 测试 message_push
+- [x] 测试工具 lifecycle events
 - [x] 用 conda 环境跑单元测试
 - [x] 用 conda 环境跑真实 agent 功能测试
 
