@@ -106,7 +106,9 @@ QQ_REQUIRE_AT=true
 - `memorize`, `recall_memory`, `forget_memory`: Manage long-term memory.
 - `search_messages`, `fetch_messages`: Search and fetch persisted chat history.
 - `tool_search`: Search available tools.
-- `web_fetch`, `web_search`: Fetch URLs and search the web.
+- `web_fetch`, `web_search`: Fetch URLs and search the web. `web_fetch`
+  blocks local/private addresses by default; set
+  `KIRAKIRA_ALLOW_PRIVATE_WEB_FETCH=true` only for trusted local tests.
 - `message_push`: Send a message to a channel/chat through the bus.
 
 ## Development

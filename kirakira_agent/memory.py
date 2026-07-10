@@ -92,8 +92,11 @@ class MemoryRuntime:
         content = content.strip()
         if not content:
             raise ValueError("memory content is empty")
+        for record in self._records:
+            if record.status == "active" and record.content.strip() == content:
+                return record
         record = MemoryRecord(
-            id="mem_%04d" % (len(self._records) + 1),
+            id=self._next_id(),
             content=content,
             source_ref=source_ref,
         )
@@ -144,6 +147,9 @@ class MemoryRuntime:
             assistant_reply.strip().replace("\n", " ")[:220],
         )
         self.store.append_recent(summary)
+        if self._last_assistant_used_memorize(session):
+            session.last_consolidated = len(session.messages)
+            return
         maybe_memory = self._extract_explicit_memory(user_content)
         if maybe_memory:
             source_ref = "%s:%d" % (session.key, max(0, len(session.messages) - 2))
@@ -195,3 +201,22 @@ class MemoryRuntime:
             encoding="utf-8",
         )
 
+    def _next_id(self) -> str:
+        highest = 0
+        for record in self._records:
+            match = re.fullmatch(r"mem_(\d+)", record.id)
+            if match:
+                highest = max(highest, int(match.group(1)))
+        return "mem_%04d" % (highest + 1)
+
+    def _last_assistant_used_memorize(self, session: Session) -> bool:
+        if not session.messages:
+            return False
+        message = session.messages[-1]
+        if message.get("role") != "assistant":
+            return False
+        for group in message.get("tool_chain") or []:
+            for call in group.get("calls") or []:
+                if call.get("name") == "memorize":
+                    return True
+        return False

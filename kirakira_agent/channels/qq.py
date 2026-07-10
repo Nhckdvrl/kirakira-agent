@@ -104,11 +104,11 @@ class QQChannel:
         message_id = str(payload.get("message_id") or "").strip()
         if not raw_message or not user_id:
             return {"ok": True, "ignored": "empty"}
-        if self._deduper.seen("%s:%s:%s" % (message_type, user_id, message_id)):
+        group_id = str(payload.get("group_id") or "").strip()
+        if self._deduper.seen("%s:%s:%s:%s" % (message_type, group_id, user_id, message_id)):
             return {"ok": True, "ignored": "duplicate"}
 
         if message_type == "group":
-            group_id = str(payload.get("group_id") or "").strip()
             if not group_id:
                 return {"ok": True, "ignored": "missing_group"}
             if self.group_allow and group_id not in self.group_allow:
@@ -200,11 +200,17 @@ class QQChannel:
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
             raise RuntimeError("OneBot API %s failed: HTTP %s %s" % (action, exc.code, detail)) from exc
-        return json.loads(body or "{}")
+        result = json.loads(body or "{}")
+        status = str(result.get("status") or "").lower()
+        retcode = result.get("retcode")
+        if status and status not in ("ok", "async"):
+            raise RuntimeError("OneBot API %s failed: %s" % (action, result))
+        if retcode not in (None, 0):
+            raise RuntimeError("OneBot API %s failed: %s" % (action, result))
+        return result
 
     def _is_at_bot(self, raw: str) -> bool:
         return any(qq == self.bot_uin for qq in _CQ_AT_RE.findall(raw))
 
     def _strip_at(self, raw: str) -> str:
         return _CQ_AT_RE.sub("", raw).strip()
-

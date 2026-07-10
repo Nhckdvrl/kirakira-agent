@@ -1,9 +1,12 @@
 """Kirakira Agent learning harness module."""
 
-import subprocess
+import ipaddress
 import json
 import html
+import os
 import re
+import socket
+import subprocess
 import urllib.parse
 import urllib.request
 import urllib.error
@@ -19,6 +22,14 @@ from kirakira_agent.skills import SkillLoader
 from kirakira_agent.tools.registry import ToolRegistry, object_schema
 
 OUTPUT_LIMIT = 50000
+PRIVATE_FETCH_ENV = "KIRAKIRA_ALLOW_PRIVATE_WEB_FETCH"
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in ("1", "true", "yes", "on", "enabled")
 
 
 def safe_path(workdir: Path, path: str) -> Path:
@@ -55,9 +66,9 @@ class WorkspaceTools:
         self.bus = bus
 
     def bash(self, command: str, timeout: int = 120) -> str:
-        dangerous = ["rm -rf /", "sudo", "shutdown", "reboot", "> /dev/"]
-        if any(item in command for item in dangerous):
+        if self._dangerous_shell_command(command):
             return "Error: Dangerous command blocked"
+        timeout = max(1, min(int(timeout), 300))
         try:
             result = subprocess.run(
                 command,
@@ -75,7 +86,7 @@ class WorkspaceTools:
             return "Error: %s" % exc
 
     def read_file(self, path: str, limit: Optional[int] = None) -> str:
-        lines = safe_path(self.workdir, path).read_text().splitlines()
+        lines = safe_path(self.workdir, path).read_text(encoding="utf-8", errors="replace").splitlines()
         if limit is not None and limit >= 0 and limit < len(lines):
             lines = lines[:limit] + ["... (%d more lines)" % (len(lines) - limit)]
         return truncate("\n".join(lines))
@@ -97,15 +108,15 @@ class WorkspaceTools:
     def write_file(self, path: str, content: str) -> str:
         target = safe_path(self.workdir, path)
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content)
+        target.write_text(content, encoding="utf-8")
         return "Wrote %d bytes to %s" % (len(content), path)
 
     def edit_file(self, path: str, old_text: str, new_text: str) -> str:
         target = safe_path(self.workdir, path)
-        content = target.read_text()
+        content = target.read_text(encoding="utf-8", errors="replace")
         if old_text not in content:
             return "Error: Text not found in %s" % path
-        target.write_text(content.replace(old_text, new_text, 1))
+        target.write_text(content.replace(old_text, new_text, 1), encoding="utf-8")
         return "Edited %s" % path
 
     def load_skill(self, name: str) -> str:
@@ -138,6 +149,9 @@ class WorkspaceTools:
         parsed = urllib.parse.urlparse(url)
         if parsed.scheme not in ("http", "https") or not parsed.netloc:
             return "Error: URL must start with http:// or https://"
+        validation_error = self._validate_fetch_target(parsed)
+        if validation_error:
+            return validation_error
         req = urllib.request.Request(
             url,
             headers={
@@ -260,6 +274,53 @@ class WorkspaceTools:
         text = re.sub(r"\n\s+", "\n", text)
         text = re.sub(r"\n{3,}", "\n\n", text)
         return text.strip()
+
+    def _validate_fetch_target(self, parsed: urllib.parse.ParseResult) -> str:
+        if _env_bool(PRIVATE_FETCH_ENV):
+            return ""
+        host = parsed.hostname
+        if not host:
+            return "Error: URL host is required"
+        try:
+            addresses = socket.getaddrinfo(host, parsed.port or (443 if parsed.scheme == "https" else 80), type=socket.SOCK_STREAM)
+        except OSError as exc:
+            return "Error: Could not resolve host %s: %s" % (host, exc)
+        for item in addresses:
+            ip = ipaddress.ip_address(item[4][0])
+            if (
+                ip.is_private
+                or ip.is_loopback
+                or ip.is_link_local
+                or ip.is_multicast
+                or ip.is_reserved
+                or ip.is_unspecified
+            ):
+                return (
+                    "Error: Refusing to fetch private/local address %s. "
+                    "Set %s=true only for trusted local tests."
+                ) % (ip, PRIVATE_FETCH_ENV)
+        return ""
+
+    def _dangerous_shell_command(self, command: str) -> bool:
+        normalized = re.sub(r"\s+", " ", command.strip().lower())
+        blocked_literals = [
+            "sudo ",
+            "shutdown",
+            "reboot",
+            "> /dev/",
+            "mkfs",
+            "dd if=",
+            ":(){",
+            "chmod -r 777 /",
+            "chown -r ",
+        ]
+        if any(item in normalized for item in blocked_literals):
+            return True
+        blocked_patterns = [
+            r"\brm\s+-[^\n;|&]*r[^\n;|&]*f[^\n;|&]*(?:/|\$home|~)",
+            r"\brm\s+-[^\n;|&]*f[^\n;|&]*r[^\n;|&]*(?:/|\$home|~)",
+        ]
+        return any(re.search(pattern, normalized) for pattern in blocked_patterns)
 
 
 def build_default_registry(

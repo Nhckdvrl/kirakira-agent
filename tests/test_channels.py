@@ -83,9 +83,10 @@ async def stop_core(bus, loop, tasks):
 
 
 class FakeOneBotServer:
-    def __init__(self):
+    def __init__(self, body=b'{"status":"ok","retcode":0}'):
         self.port = free_port()
         self.received = []
+        self.body = body
         outer = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -96,7 +97,7 @@ class FakeOneBotServer:
                 length = int(self.headers.get("content-length") or "0")
                 payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
                 outer.received.append((self.path, payload))
-                body = b'{"status":"ok","retcode":0}'
+                body = outer.body
                 self.send_response(200)
                 self.send_header("content-type", "application/json")
                 self.send_header("content-length", str(len(body)))
@@ -197,6 +198,25 @@ class ChannelTests(unittest.TestCase):
         self.assertTrue(channel._allowed("123", ""))
         self.assertTrue(channel._allowed("999", "Alice"))
         self.assertFalse(channel._allowed("999", "bob"))
+
+    def test_telegram_chunks_long_response(self):
+        channel = TelegramChannel(token="test-token")
+
+        chunks = channel._chunks("x" * 4100, 4096)
+
+        self.assertEqual(len(chunks), 2)
+        self.assertEqual(len(chunks[0]), 4096)
+        self.assertEqual(len(chunks[1]), 4)
+
+    def test_qq_api_rejects_failed_retcode(self):
+        onebot = FakeOneBotServer(body=b'{"status":"failed","retcode":100,"wording":"bad"}')
+        onebot.start()
+        try:
+            channel = QQChannel(api_base_url="http://127.0.0.1:%d" % onebot.port)
+            with self.assertRaises(RuntimeError):
+                channel._api("send_private_msg", {"user_id": "1", "message": "hi"})
+        finally:
+            onebot.stop()
 
 
 if __name__ == "__main__":

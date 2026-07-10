@@ -102,11 +102,12 @@ class TelegramChannel:
 
     async def _on_response(self, msg: OutboundMessage) -> None:
         text = msg.content.strip() or "(empty)"
-        await asyncio.to_thread(self._api, "sendMessage", {
-            "chat_id": msg.chat_id,
-            "text": text[:4096],
-            "disable_web_page_preview": "true",
-        })
+        for chunk in self._chunks(text, 4096):
+            await asyncio.to_thread(self._api, "sendMessage", {
+                "chat_id": msg.chat_id,
+                "text": chunk,
+                "disable_web_page_preview": "true",
+            })
 
     def _allowed(self, user_id: str, username: str) -> bool:
         if not self.allow_from:
@@ -128,3 +129,12 @@ class TelegramChannel:
             raise RuntimeError("Telegram API %s failed: %s" % (method, payload))
         return payload
 
+    def _chunks(self, text: str, size: int) -> list[str]:
+        if len(text) <= size:
+            return [text]
+        chunks = []
+        remaining = text
+        while remaining:
+            chunks.append(remaining[:size])
+            remaining = remaining[size:]
+        return chunks

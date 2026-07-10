@@ -4,7 +4,7 @@
 
 本项目原本是一个非常轻量的同步 agent harness：用户把消息交给 `Agent.run()`，模型决定是否调用工具，工具结果再追加回上下文，直到模型给出最终回复。这个实现适合学习 tool calling 的最小闭环，但离一个真正长期可用的 agent 还差很多关键结构：没有 channel 层、没有消息总线、没有独立 session、没有长期记忆、没有生命周期插件、没有工具 hook，也没有接近 akashic-agent 的被动回复主循环。
 
-这次重构的目标，是参考 `Reference/akashic-agent` 中成熟的被动回复架构，把当前项目改造成一个更完整、可扩展、可实际运行的被动 agent runtime。主动链路、proactive、drift、dashboard、Telegram/QQ/Web 这些更大的外围系统暂时不复刻；本轮重点是把“用户发一条消息，agent 被动回复”这条主路径搭扎实。
+这次重构的目标，是参考 `Reference/akashic-agent` 中成熟的被动回复架构，把当前项目改造成一个更完整、可扩展、可实际运行的被动 agent runtime。主动链路、proactive、drift 暂时不复刻；Web、Telegram、QQ 属于被动入口，已经纳入本轮复刻范围。本轮重点是把“用户发一条消息，agent 被动回复”这条主路径搭扎实。
 
 当前实现的主链路如下：
 
@@ -157,6 +157,8 @@ Agent 回复 -> OutboundMessage -> MessageBus dispatch -> 外部平台 API
 
 `ChatLane` 是 akashic-agent 里很重要的一个思想：同一个 chat 的被动回复和发送不能互相踩。当前实现保留了基础的 per-chat send coordination，保证同一 `(channel, chat_id)` 下的 outbound dispatch 有顺序。
 
+本轮强审计后还补充了 outbound queue 的 `task_done()` 收尾，后续如果需要对 `_outbound.join()` 做 graceful shutdown，不会因为已 dispatch 的消息未标记完成而卡住。
+
 ## 5. AgentLoop：被动主循环入口
 
 `kirakira_agent.runtime.AgentLoop` 是真正消费消息的主循环。
@@ -268,6 +270,11 @@ memory/items.json
 2. 如果用户明确说“记住：...”或“以后要记得...”，自动写入 memory item
 3. 更新 `session.last_consolidated`
 
+强审计后补充了两条防重复逻辑：
+
+- `memorize()` 对 active 且内容完全一致的记忆直接返回已有 record，不重复写入。
+- 如果模型本轮已经显式调用过 `memorize`，consolidation 不再根据同一条用户消息自动提取一份重复记忆。
+
 ### 7.5 记忆工具
 
 默认工具集现在包含：
@@ -289,6 +296,10 @@ memory/items.json
 - `web_fetch(url, max_chars)`：抓取网页并转成可读文本
 - `web_search(query, limit)`：返回网页搜索结果标题与 URL
 - `message_push(channel, chat_id, message)`：通过 MessageBus 向指定 channel/chat 发送消息
+
+`web_fetch` 默认拒绝 localhost、私有网段、link-local、reserved、multicast、unspecified 地址，避免 agent 工具被提示注入后扫描本机或内网服务。只有在可信本地测试中显式设置 `KIRAKIRA_ALLOW_PRIVATE_WEB_FETCH=true` 才允许访问这些地址。
+
+文件工具统一使用 UTF-8 读写；读取时用 `errors="replace"` 降级处理，避免遇到非 UTF-8 文本直接中断 turn。`bash` 工具补充了危险命令拦截和 timeout 上限。
 
 ## 8. ContextBuilder：prompt 构建
 
@@ -562,6 +573,8 @@ class Channel(Protocol):
 
 `ChannelHost` 负责统一启动和停止多个 channel。
 
+强审计后，CLI 的 runtime 构建和运行已经统一在同一个 asyncio event loop 内完成，避免跨 `asyncio.run()` 携带 bus、queue、channel 状态。`CoreRuntime.stop_background()` 和 REPL 退出路径都会调用插件 `terminate()`。
+
 ### 14.2 WebChannel
 
 实现文件：
@@ -614,6 +627,8 @@ KIRAKIRA_WEB_PORT=8765
 KIRAKIRA_WEB_CHANNEL=web
 ```
 
+强审计后，`POST /message` 等待 outbound 的 pending future 会在成功、超时、publish 失败时统一清理，避免长时间服务后同一 chat 的 pending 列表泄漏。
+
 ### 14.3 TelegramChannel
 
 实现文件：
@@ -652,6 +667,8 @@ KIRAKIRA_TELEGRAM_CHANNEL=telegram
 4. outbound dispatch 调 Telegram `sendMessage`
 
 当前实现以文本消息为主，后续可以继续扩展图片、文件下载、streaming edit、typing indicator 等参考项目里的高级能力。
+
+强审计后，Telegram 出站回复会按 4096 字符分片发送，不再直接截断长回复。
 
 ### 14.4 QQChannel
 
@@ -708,15 +725,19 @@ chat_id 约定：
 
 这对应参考项目里 QQ channel 的核心被动行为：QQ 事件先过滤，再转成 `InboundMessage`，最终通过 bus 回复。
 
+强审计后，QQ 去重键包含 `message_type/group_id/user_id/message_id`，避免不同群里相同 message id 误判重复。OneBot HTTP API 返回体会检查 `status` 与 `retcode`，失败响应会抛出错误并进入 bus 的 outbound retry/logging 路径。
+
 ## 15. DeepSeek 接入
 
 `.env` 当前配置为：
 
 ```text
 OPENAI_COMPATIBLE_BASE_URL=https://api.deepseek.com
-OPENAI_COMPATIBLE_API_KEY=<已写入用户提供的 key>
+OPENAI_COMPATIBLE_API_KEY=<your-deepseek-api-key>
 MODEL_ID=deepseek-v4-flash
 ```
+
+真实 DeepSeek key 只在本地测试命令里通过临时环境变量注入，不写入仓库文件。
 
 模型客户端仍然是原有的 `OpenAICompatibleClient`。它会向：
 
@@ -782,7 +803,7 @@ python3 -m unittest discover -v
 结果：
 
 ```text
-29 tests passed
+34 tests passed
 ```
 
 覆盖内容：
@@ -792,15 +813,21 @@ python3 -m unittest discover -v
 - OpenAI-compatible response parsing
 - DeepSeek v4 thinking 默认关闭
 - 文件工具与 path escape 防护
+- `web_fetch` 默认拒绝本地/内网地址，测试环境变量显式放行
+- 同步 registry 对 async tool 的兼容处理
 - CLI 基础命令
 - bus -> loop -> pipeline -> outbound
 - session tool_chain 持久化
 - 显式记忆 consolidation
+- `memorize` 与 consolidation 去重
 - before-turn plugin abort
 - pre-tool hook denial
 - Web channel HTTP 入站和 outbound 回复
+- Web channel pending future 超时清理
 - QQ OneBot webhook 入站和 outbound API 回复
+- QQ OneBot failed retcode/status 检测
 - Telegram allow list 逻辑
+- Telegram 长回复分片
 - `list_dir`
 - `web_fetch`
 - `tool_search`

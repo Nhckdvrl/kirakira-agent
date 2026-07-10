@@ -1,5 +1,6 @@
 """Kirakira Agent learning harness module."""
 
+import asyncio
 from dataclasses import dataclass
 import inspect
 from typing import Any, Callable, Dict, List, Optional
@@ -54,6 +55,13 @@ class ToolRegistry:
             return ToolResult(call.id, "Error: Unknown tool '%s'" % call.name, is_error=True)
         try:
             output = tool.handler(**call.arguments)
+            if inspect.isawaitable(output):
+                try:
+                    asyncio.get_running_loop()
+                except RuntimeError:
+                    output = asyncio.run(output)
+                else:
+                    raise RuntimeError("Async tool '%s' requires execute_async" % call.name)
             return ToolResult(call.id, str(output), is_error=False)
         except Exception as exc:
             return ToolResult(call.id, "Error: %s" % exc, is_error=True)

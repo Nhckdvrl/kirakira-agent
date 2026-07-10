@@ -4,6 +4,7 @@ import tempfile
 import unittest
 import asyncio
 import json
+import os
 import socket
 import threading
 import urllib.parse
@@ -48,6 +49,21 @@ class ToolTests(unittest.TestCase):
         self.assertTrue(missing.is_error)
         self.assertIn("Unknown tool", missing.content)
 
+    def test_registry_sync_execute_runs_async_tool_when_no_loop(self):
+        async def echo_async(text):
+            return "async:%s" % text
+
+        registry = ToolRegistry()
+        registry.register(
+            ToolSpec("echo_async", "Echo text asynchronously", {"type": "object", "properties": {}, "required": []}),
+            echo_async,
+        )
+
+        result = registry.execute(ToolCall("1", "echo_async", {"text": "hi"}))
+
+        self.assertFalse(result.is_error)
+        self.assertEqual(result.content, "async:hi")
+
     def test_registry_has_passive_research_tools(self):
         with tempfile.TemporaryDirectory() as tmp:
             registry = build_default_registry(Path(tmp))
@@ -82,12 +98,27 @@ class ToolTests(unittest.TestCase):
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 tools = WorkspaceTools(Path(tmp), SkillLoader(Path(tmp) / "skills"))
-                text = tools.web_fetch("http://127.0.0.1:%d/" % port)
+                old_value = os.environ.get("KIRAKIRA_ALLOW_PRIVATE_WEB_FETCH")
+                os.environ["KIRAKIRA_ALLOW_PRIVATE_WEB_FETCH"] = "true"
+                try:
+                    text = tools.web_fetch("http://127.0.0.1:%d/" % port)
+                finally:
+                    if old_value is None:
+                        os.environ.pop("KIRAKIRA_ALLOW_PRIVATE_WEB_FETCH", None)
+                    else:
+                        os.environ["KIRAKIRA_ALLOW_PRIVATE_WEB_FETCH"] = old_value
             self.assertIn("Web Fetch OK", text)
         finally:
             server.shutdown()
             server.server_close()
             thread.join(timeout=3)
+
+    def test_web_fetch_blocks_local_http_by_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tools = WorkspaceTools(Path(tmp), SkillLoader(Path(tmp) / "skills"))
+            text = tools.web_fetch("http://127.0.0.1:9/")
+
+        self.assertIn("Refusing to fetch private/local address", text)
 
     def test_message_push_publishes_outbound(self):
         async def scenario():

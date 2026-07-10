@@ -194,6 +194,7 @@ async def build_runtime(
         pipeline=pipeline,
         loop=loop,
         channel_host=channel_host,
+        plugin_manager=plugin_manager,
     )
 
 
@@ -284,6 +285,8 @@ async def runtime_repl(runtime: CoreRuntime, workdir: Path) -> None:
         loop_task.cancel()
         dispatch_task.cancel()
         await asyncio.gather(loop_task, dispatch_task, return_exceptions=True)
+        if runtime.plugin_manager is not None:
+            await runtime.plugin_manager.terminate_all()
 
 
 async def runtime_serve(runtime: CoreRuntime) -> None:
@@ -298,6 +301,19 @@ async def runtime_serve(runtime: CoreRuntime) -> None:
         await runtime.stop_background(tasks)
 
 
+async def _main_async(args: argparse.Namespace, workdir: Path) -> None:
+    runtime = await build_runtime(
+        workdir,
+        enable_web=args.web,
+        enable_telegram=args.telegram,
+        enable_qq=args.qq,
+    )
+    if args.serve or args.web or args.telegram or args.qq:
+        await runtime_serve(runtime)
+    else:
+        await runtime_repl(runtime, workdir)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Kirakira Agent")
     parser.add_argument("--serve", action="store_true", help="Run background agent loop and configured channels.")
@@ -306,15 +322,4 @@ def main() -> None:
     parser.add_argument("--qq", action="store_true", help="Enable QQ OneBot webhook channel.")
     args = parser.parse_args()
     workdir = Path(os.getcwd()).resolve()
-    runtime = asyncio.run(
-        build_runtime(
-            workdir,
-            enable_web=args.web,
-            enable_telegram=args.telegram,
-            enable_qq=args.qq,
-        )
-    )
-    if args.serve or args.web or args.telegram or args.qq:
-        asyncio.run(runtime_serve(runtime))
-    else:
-        asyncio.run(runtime_repl(runtime, workdir))
+    asyncio.run(_main_async(args, workdir))

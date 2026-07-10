@@ -115,6 +115,35 @@ class RuntimeTests(unittest.TestCase):
 
         asyncio.run(scenario())
 
+    def test_memorize_tool_does_not_duplicate_consolidation_memory(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                workdir = Path(tmp)
+                model = FakeModel(
+                    [
+                        ModelResponse(tool_calls=[ToolCall("call_1", "memorize", {"content": "我喜欢蓝色"})]),
+                        ModelResponse(text="记住了。"),
+                    ]
+                )
+                bus, loop, _sessions, memory = build_test_runtime(workdir, model)
+
+                async def collect(_msg):
+                    loop.stop()
+                    bus.stop()
+
+                bus.subscribe_outbound("cli", collect)
+                tasks = [
+                    asyncio.create_task(loop.run()),
+                    asyncio.create_task(bus.dispatch_outbound()),
+                ]
+                await bus.publish_inbound(InboundMessage("cli", "tester", "chat", "请记住：我喜欢蓝色"))
+                await asyncio.wait_for(asyncio.gather(*tasks), timeout=5)
+
+                recalled = memory.recall("蓝色", limit=10)
+                self.assertEqual([r.content for r in recalled].count("我喜欢蓝色"), 1)
+
+        asyncio.run(scenario())
+
     def test_before_turn_module_can_abort(self):
         class AbortModule:
             async def run(self, ctx):

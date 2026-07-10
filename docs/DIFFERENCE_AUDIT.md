@@ -289,7 +289,7 @@ scheduler 是用户触发的延迟 side effect，边界上接近主动触达。�
 结果：
 
 ```text
-29 tests passed
+34 tests passed
 ```
 
 新增覆盖：
@@ -301,6 +301,12 @@ scheduler 是用户触发的延迟 side effect，边界上接近主动触达。�
 - `TurnStarted`
 - `ToolCallStarted`
 - `ToolCallCompleted`
+- `web_fetch` 默认拒绝本地/内网地址
+- registry 同步执行 async tool
+- `memorize` 与 consolidation 去重
+- Telegram 长回复分片
+- QQ OneBot failed retcode/status
+- Web channel pending future 清理
 
 ## 6. 下一步建议
 
@@ -312,4 +318,3 @@ scheduler 是用户触发的延迟 side effect，边界上接近主动触达。�
 4. 精简 spawn/subagent。
 5. 插件 manifest/config。
 6. streaming provider + Web/Telegram streaming。
-

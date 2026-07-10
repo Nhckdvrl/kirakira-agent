@@ -32,7 +32,7 @@ from kirakira_agent.lifecycle import (
 )
 from kirakira_agent.memory import MemoryRuntime
 from kirakira_agent.models.base import ModelClient
-from kirakira_agent.schema import ModelResponse, ToolCall, assistant_message_from_response, tool_result_message
+from kirakira_agent.schema import ModelResponse, ToolCall, ToolResult, assistant_message_from_response, tool_result_message
 from kirakira_agent.session import SessionManager
 from kirakira_agent.tool_hooks import ToolExecutionRequest, ToolExecutor, ToolHook
 from kirakira_agent.tools.registry import ToolRegistry
@@ -228,15 +228,11 @@ class DefaultReasoner:
                 )
                 messages.append(
                     tool_result_message(
-                        type(
-                            "_Result",
-                            (),
-                            {
-                                "tool_call_id": call.id,
-                                "content": result["content"],
-                                "is_error": result["status"] != "success",
-                            },
-                        )()
+                        ToolResult(
+                            tool_call_id=call.id,
+                            content=result["content"],
+                            is_error=result["status"] != "success",
+                        )
                     )
                 )
             tool_chain.append(group)
@@ -559,6 +555,7 @@ class CoreRuntime:
     pipeline: PassiveTurnPipeline
     loop: AgentLoop
     channel_host: ChannelHost | None = None
+    plugin_manager: Any | None = None
 
     def add_tool_hooks(self, hooks: List[ToolHook]) -> None:
         self.reasoner.add_tool_hooks(hooks)
@@ -580,3 +577,5 @@ class CoreRuntime:
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+        if self.plugin_manager is not None:
+            await self.plugin_manager.terminate_all()
