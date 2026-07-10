@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Callable, Optional, Protocol
 
 from kirakira_agent.bus import MessageBus
 from kirakira_agent.event_bus import EventBus
@@ -26,4 +26,5 @@ class ChannelContext:
     event_bus: EventBus
     workspace: Path
     log: logging.Logger
-
+    interrupt: Optional[Callable[[str], bool]] = None
+    memory: Any = None

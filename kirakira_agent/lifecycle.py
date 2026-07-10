@@ -165,3 +165,13 @@ class ToolCallCompleted:
     arguments: JsonDict
     result: str
     status: str
+
+
+@dataclass(frozen=True)
+class StreamDeltaReady:
+    session_key: str
+    channel: str
+    chat_id: str
+    iteration: int
+    content_delta: str = ""
+    reasoning_delta: str = ""

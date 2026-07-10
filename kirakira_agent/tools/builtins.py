@@ -1,17 +1,23 @@
 """Kirakira Agent learning harness module."""
 
+import asyncio
+import base64
+from dataclasses import dataclass
 import ipaddress
 import json
 import html
 import os
 import re
+import signal
 import socket
-import subprocess
+import threading
+import time
 import urllib.parse
 import urllib.request
 import urllib.error
 from pathlib import Path
 from typing import Optional
+from uuid import uuid4
 
 from kirakira_agent.bus import MessageBus
 from kirakira_agent.events import OutboundMessage
@@ -23,6 +29,19 @@ from kirakira_agent.tools.registry import ToolRegistry, object_schema
 
 OUTPUT_LIMIT = 50000
 PRIVATE_FETCH_ENV = "KIRAKIRA_ALLOW_PRIVATE_WEB_FETCH"
+SHELL_FOREGROUND_SECONDS = 15
+
+
+@dataclass
+class _ShellTask:
+    task_id: str
+    command: str
+    process: asyncio.subprocess.Process
+    log_path: Path
+    pump_task: asyncio.Task[None]
+    timeout_task: asyncio.Task[None] | None
+    started_at: float
+    started_at_ms: int
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -64,29 +83,134 @@ class WorkspaceTools:
         self.session_manager = session_manager
         self.registry = registry
         self.bus = bus
+        self._mutation_locks: dict[str, threading.Lock] = {}
+        self._shell_tasks: dict[str, _ShellTask] = {}
+        self._shell_dir = self.workdir / ".kirakira" / "shell-tasks"
 
-    def bash(self, command: str, timeout: int = 120) -> str:
+    async def bash(
+        self,
+        command: str,
+        timeout: Optional[int] = None,
+        run_in_background: bool = False,
+        auto_promote: bool = True,
+    ) -> str:
         if self._dangerous_shell_command(command):
             return "Error: Dangerous command blocked"
-        timeout = max(1, min(int(timeout), 300))
+        explicit_timeout = timeout is not None
+        hard_timeout = max(1, min(int(timeout or 120), 21_600))
+        if auto_promote:
+            hard_timeout = min(hard_timeout, 600)
+        process = None
         try:
-            result = subprocess.run(
+            process = await asyncio.create_subprocess_shell(
                 command,
-                shell=True,
                 cwd=str(self.workdir),
-                capture_output=True,
-                text=True,
-                timeout=timeout,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+                start_new_session=True,
             )
-            output = (result.stdout + result.stderr).strip()
-            return truncate(output or "(no output)")
-        except subprocess.TimeoutExpired:
-            return "Error: Timeout (%ss)" % timeout
+            task = self._register_shell_task(
+                command,
+                process,
+                hard_timeout if explicit_timeout or not run_in_background else None,
+            )
+            if run_in_background:
+                return self._shell_task_payload(task, auto_promoted=False)
+            foreground_wait = (
+                min(SHELL_FOREGROUND_SECONDS, hard_timeout)
+                if auto_promote
+                else hard_timeout
+            )
+            try:
+                await asyncio.wait_for(
+                    asyncio.shield(process.wait()), timeout=foreground_wait
+                )
+            except asyncio.TimeoutError:
+                if auto_promote and hard_timeout > foreground_wait:
+                    return self._shell_task_payload(task, auto_promoted=True)
+                await self._stop_shell_task(task, remove=False)
+                output = self._read_shell_log(task)
+                self._remove_shell_task(task)
+                return "Error: Timeout (%ss)\n%s" % (hard_timeout, output)
+            await task.pump_task
+            output = self._read_shell_log(task)
+            self._remove_shell_task(task)
+            if process.returncode:
+                return truncate(
+                    "Error: Command exited with code %d\n%s"
+                    % (process.returncode, output)
+                )
+            return truncate(output)
+        except asyncio.CancelledError:
+            if process is not None and process.returncode is None:
+                self._kill_process_group(process)
+                await process.wait()
+            raise
+        except TimeoutError:
+            return "Error: Timeout (%ss)" % hard_timeout
         except OSError as exc:
             return "Error: %s" % exc
 
-    def read_file(self, path: str, limit: Optional[int] = None) -> str:
-        lines = safe_path(self.workdir, path).read_text(encoding="utf-8", errors="replace").splitlines()
+    async def task_output(
+        self,
+        task_id: str,
+        block: bool = False,
+        timeout_ms: int = 30000,
+        offset: int = 0,
+    ) -> str:
+        task = self._shell_tasks.get(task_id)
+        if task is None:
+            return "Error: Unknown background task '%s'" % task_id
+        if block and task.process.returncode is None:
+            try:
+                await asyncio.wait_for(
+                    asyncio.shield(task.process.wait()),
+                    timeout=max(0.0, min(int(timeout_ms), 30_000) / 1000.0),
+                )
+            except asyncio.TimeoutError:
+                pass
+        if task.process.returncode is not None:
+            await asyncio.gather(task.pump_task, return_exceptions=True)
+        text = self._read_shell_log(task)
+        offset = max(0, min(int(offset), len(text)))
+        elapsed_ms = int((time.monotonic() - task.started_at) * 1000)
+        return json.dumps(
+            {
+                "task_id": task_id,
+                "status": "running" if task.process.returncode is None else "completed",
+                "done": task.process.returncode is not None,
+                "exit_code": task.process.returncode,
+                "elapsed_ms": elapsed_ms,
+                "next_offset": len(text),
+                "output": truncate(text[offset:]),
+            },
+            ensure_ascii=False,
+        )
+
+    async def task_stop(self, task_id: str) -> str:
+        task = self._shell_tasks.get(task_id)
+        if task is None:
+            return json.dumps({"task_id": task_id, "status": "not_found"})
+        await self._stop_shell_task(task, remove=True)
+        return json.dumps({"task_id": task_id, "status": "stopped"})
+
+    async def shutdown(self) -> None:
+        for task in list(self._shell_tasks.values()):
+            await self._stop_shell_task(task, remove=True)
+
+    def read_file(
+        self, path: str, limit: Optional[int] = None, offset: int = 0
+    ) -> str:
+        target = safe_path(self.workdir, path)
+        if not target.is_file():
+            return "Error: File does not exist: %s" % path
+        with target.open("rb") as handle:
+            head = handle.read(4096)
+        if b"\x00" in head:
+            return "Error: Binary file cannot be read as text: %s" % path
+        all_lines = target.read_text(encoding="utf-8", errors="replace").splitlines()
+        offset = max(0, int(offset))
+        lines = all_lines[offset:]
         if limit is not None and limit >= 0 and limit < len(lines):
             lines = lines[:limit] + ["... (%d more lines)" % (len(lines) - limit)]
         return truncate("\n".join(lines))
@@ -108,19 +232,91 @@ class WorkspaceTools:
     def write_file(self, path: str, content: str) -> str:
         target = safe_path(self.workdir, path)
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content, encoding="utf-8")
+        with self._mutation_lock(target):
+            self._atomic_write_text(target, content)
         return "Wrote %d bytes to %s" % (len(content), path)
 
-    def edit_file(self, path: str, old_text: str, new_text: str) -> str:
+    def edit_file(
+        self,
+        path: str,
+        old_text: str,
+        new_text: str,
+        replace_all: bool = False,
+    ) -> str:
         target = safe_path(self.workdir, path)
-        content = target.read_text(encoding="utf-8", errors="replace")
-        if old_text not in content:
-            return "Error: Text not found in %s" % path
-        target.write_text(content.replace(old_text, new_text, 1), encoding="utf-8")
-        return "Edited %s" % path
+        if not old_text:
+            return "Error: old_text cannot be empty"
+        with self._mutation_lock(target):
+            content = target.read_text(encoding="utf-8", errors="replace")
+            count = content.count(old_text)
+            if count == 0:
+                return "Error: Text not found in %s" % path
+            if count > 1 and not replace_all:
+                return (
+                    "Error: Text occurs %d times in %s; provide a unique old_text "
+                    "or set replace_all=true" % (count, path)
+                )
+            replacements = count if replace_all else 1
+            self._atomic_write_text(
+                target, content.replace(old_text, new_text, replacements)
+            )
+        return "Edited %s (%d replacement%s)" % (
+            path,
+            replacements,
+            "s" if replacements != 1 else "",
+        )
 
     def load_skill(self, name: str) -> str:
         return self.skill_loader.load(name)
+
+    async def vision(self, image_paths, prompt: str = "请详细描述并分析图片。") -> str:
+        from kirakira_agent.models.openai_compatible import OpenAICompatibleClient
+
+        if isinstance(image_paths, str):
+            image_paths = [image_paths]
+        if not isinstance(image_paths, list) or not image_paths:
+            return "Error: image_paths must contain at least one image"
+        model = os.getenv("VISION_MODEL_ID", "").strip()
+        if not model:
+            return "Error: VISION_MODEL_ID is not configured"
+        content = [{"type": "text", "text": prompt}]
+        total = 0
+        for raw_path in image_paths[:8]:
+            path = safe_path(self.workdir, str(raw_path))
+            if not path.is_file():
+                return "Error: Image does not exist: %s" % raw_path
+            data = path.read_bytes()
+            total += len(data)
+            if total > 10 * 1024 * 1024:
+                return "Error: Total image input exceeds 10 MB"
+            mime = self._image_mime(data)
+            if not mime:
+                return "Error: Unsupported or invalid image: %s" % raw_path
+            content.append(
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": "data:%s;base64,%s"
+                        % (mime, base64.b64encode(data).decode("ascii"))
+                    },
+                }
+            )
+        client = OpenAICompatibleClient(
+            base_url=os.getenv("VISION_BASE_URL")
+            or os.getenv("OPENAI_COMPATIBLE_BASE_URL"),
+            api_key=os.getenv("VISION_API_KEY")
+            if os.getenv("VISION_API_KEY") is not None
+            else os.getenv("OPENAI_COMPATIBLE_API_KEY", ""),
+        )
+        response = await asyncio.to_thread(
+            client.complete,
+            [{"role": "user", "content": content}],
+            [],
+            "你是视觉分析助手。只根据提供的图片和问题回答。",
+            model,
+            2048,
+        )
+        return response.text or "Error: Vision model returned an empty response"
 
     def compact(self) -> str:
         return "Compacting context."
@@ -128,6 +324,30 @@ class WorkspaceTools:
     def tool_search(self, query: str = "", limit: int = 20) -> str:
         if self.registry is None:
             return "[]"
+        query = query.strip()
+        if not query:
+            return json.dumps(
+                {"matched": [], "unlocked": [], "tip": "query is required"},
+                ensure_ascii=False,
+            )
+        selected = []
+        if query.lower().startswith("select:"):
+            requested = [item.strip() for item in query[7:].split(",") if item.strip()]
+            selected = [name for name in requested if self.registry.has(name)]
+            missing = [name for name in requested if not self.registry.has(name)]
+            matched = [
+                {
+                    "name": name,
+                    "description": self.registry.get_tool(name).spec.description,
+                    "input_schema": self.registry.get_tool(name).spec.input_schema,
+                }
+                for name in selected
+            ]
+            return json.dumps(
+                {"matched": matched, "unlocked": selected, "missing": missing},
+                ensure_ascii=False,
+                indent=2,
+            )
         terms = [term.lower() for term in re.findall(r"[\w:-]+", query)]
         matches = []
         for spec in self.registry.specs():
@@ -143,7 +363,15 @@ class WorkspaceTools:
                     }
                 )
         matches.sort(key=lambda item: (item["score"], item["name"]), reverse=True)
-        return json.dumps(matches[: max(1, int(limit))], ensure_ascii=False, indent=2)
+        matched = matches[: max(1, min(20, int(limit)))]
+        return json.dumps(
+            {
+                "matched": matched,
+                "unlocked": [item["name"] for item in matched],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
 
     def web_fetch(self, url: str, max_chars: int = 12000) -> str:
         parsed = urllib.parse.urlparse(url)
@@ -160,14 +388,40 @@ class WorkspaceTools:
             },
             method="GET",
         )
+        owner = self
+
+        class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, redirect_req, fp, code, msg, headers, newurl):
+                redirect = urllib.parse.urlparse(newurl)
+                if redirect.scheme not in ("http", "https") or not redirect.netloc:
+                    raise urllib.error.URLError("unsafe redirect URL")
+                error = owner._validate_fetch_target(redirect)
+                if error:
+                    raise urllib.error.URLError(error)
+                return super().redirect_request(
+                    redirect_req, fp, code, msg, headers, newurl
+                )
+
+        opener = urllib.request.build_opener(SafeRedirectHandler())
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
+            with opener.open(req, timeout=30) as resp:
                 content_type = resp.headers.get("content-type", "")
-                raw = resp.read()
+                declared = int(resp.headers.get("content-length") or "0")
+                if declared > 5 * 1024 * 1024:
+                    return "Error: Response exceeds 5 MB"
+                raw = resp.read(5 * 1024 * 1024 + 1)
         except urllib.error.HTTPError as exc:
             return "Error: HTTP %s while fetching %s" % (exc.code, url)
         except urllib.error.URLError as exc:
             return "Error: Fetch failed for %s: %s" % (url, exc.reason)
+        if len(raw) > 5 * 1024 * 1024:
+            return "Error: Response exceeds 5 MB"
+        lowered_type = content_type.lower()
+        if lowered_type and not any(
+            item in lowered_type
+            for item in ("text/", "json", "xml", "javascript", "x-www-form-urlencoded")
+        ):
+            return "Error: Unsupported response content type: %s" % content_type
         text = raw.decode("utf-8", errors="replace")
         if "html" in content_type.lower() or "<html" in text[:500].lower():
             text = self._html_to_text(text)
@@ -220,7 +474,7 @@ class WorkspaceTools:
         )
         return "已发送"
 
-    def memorize(self, content: str) -> str:
+    def memorize(self, content: str, memory_type: str = "requested_memory") -> str:
         if self.memory is None:
             return "Error: Memory runtime is not enabled"
         source_ref = ""
@@ -229,14 +483,33 @@ class WorkspaceTools:
             session_key = str(ctx.get("session_key") or "")
             if session_key and self.session_manager is not None:
                 source_ref = self.session_manager.peek_next_message_id(session_key)
-        record = self.memory.memorize(content, source_ref=source_ref)
+        record = self.memory.memorize(
+            content, source_ref=source_ref, memory_type=memory_type
+        )
         return "记忆已写入: %s" % record.id
 
-    def recall_memory(self, query: str, limit: int = 5) -> str:
+    def recall_memory(
+        self,
+        query: str,
+        limit: int = 5,
+        memory_types=None,
+        since: str = "",
+        until: str = "",
+    ) -> str:
         if self.memory is None:
             return "[]"
-        records = self.memory.recall(query, limit=limit)
-        return json.dumps([r.to_json() for r in records], ensure_ascii=False, indent=2)
+        if isinstance(memory_types, str):
+            memory_types = [memory_types]
+        records = self.memory.recall(
+            query,
+            limit=limit,
+            memory_types=[str(item) for item in (memory_types or [])],
+            since=since,
+            until=until,
+        )
+        return json.dumps(
+            [r.to_public_json() for r in records], ensure_ascii=False, indent=2
+        )
 
     def forget_memory(self, ids) -> str:
         if self.memory is None:
@@ -322,6 +595,145 @@ class WorkspaceTools:
         ]
         return any(re.search(pattern, normalized) for pattern in blocked_patterns)
 
+    @staticmethod
+    def _image_mime(data: bytes) -> str:
+        if data.startswith(b"\x89PNG\r\n\x1a\n"):
+            return "image/png"
+        if data.startswith(b"\xff\xd8\xff"):
+            return "image/jpeg"
+        if data.startswith((b"GIF87a", b"GIF89a")):
+            return "image/gif"
+        if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+            return "image/webp"
+        return ""
+
+    async def _drain_stream(self, stream) -> str:
+        if stream is None:
+            return ""
+        chunks = bytearray()
+        while True:
+            data = await stream.read(8192)
+            if not data:
+                break
+            if len(chunks) < OUTPUT_LIMIT:
+                chunks.extend(data[: OUTPUT_LIMIT - len(chunks)])
+        return chunks.decode("utf-8", errors="replace")
+
+    def _register_shell_task(
+        self,
+        command: str,
+        process: asyncio.subprocess.Process,
+        timeout: int | None,
+    ) -> _ShellTask:
+        self._shell_dir.mkdir(parents=True, exist_ok=True)
+        task_id = "shell_%s" % uuid4().hex[:12]
+        log_path = self._shell_dir / (task_id + ".log")
+        log_path.touch()
+        pump = asyncio.create_task(
+            self._pump_shell_log(process.stdout, log_path),
+            name="shell-pump:%s" % task_id,
+        )
+        task = _ShellTask(
+            task_id=task_id,
+            command=command,
+            process=process,
+            log_path=log_path,
+            pump_task=pump,
+            timeout_task=None,
+            started_at=time.monotonic(),
+            started_at_ms=int(time.time() * 1000),
+        )
+        if timeout is not None:
+            task.timeout_task = asyncio.create_task(
+                self._enforce_shell_timeout(task, timeout),
+                name="shell-timeout:%s" % task_id,
+            )
+        self._shell_tasks[task_id] = task
+        return task
+
+    @staticmethod
+    async def _pump_shell_log(stream, path: Path) -> None:
+        if stream is None:
+            return
+        with path.open("ab") as handle:
+            while True:
+                chunk = await stream.read(8192)
+                if not chunk:
+                    break
+                handle.write(chunk)
+                handle.flush()
+
+    async def _enforce_shell_timeout(self, task: _ShellTask, timeout: int) -> None:
+        try:
+            await asyncio.sleep(timeout)
+            if task.process.returncode is None:
+                self._kill_process_group(task.process)
+                await task.process.wait()
+        except asyncio.CancelledError:
+            raise
+
+    def _shell_task_payload(self, task: _ShellTask, *, auto_promoted: bool) -> str:
+        return json.dumps(
+            {
+                "background_task_id": task.task_id,
+                "status": "running",
+                "auto_promoted": auto_promoted,
+                "started_at_ms": task.started_at_ms,
+                "message": "Use task_output to poll and task_stop to cancel.",
+            },
+            ensure_ascii=False,
+        )
+
+    @staticmethod
+    def _read_shell_log(task: _ShellTask) -> str:
+        try:
+            return task.log_path.read_text(encoding="utf-8", errors="replace").strip() or "(no output)"
+        except FileNotFoundError:
+            return "(no output)"
+
+    async def _stop_shell_task(self, task: _ShellTask, *, remove: bool) -> None:
+        if task.process.returncode is None:
+            self._kill_process_group(task.process)
+            await task.process.wait()
+        await asyncio.gather(task.pump_task, return_exceptions=True)
+        if remove:
+            self._remove_shell_task(task)
+
+    def _remove_shell_task(self, task: _ShellTask) -> None:
+        self._shell_tasks.pop(task.task_id, None)
+        current = asyncio.current_task()
+        if task.timeout_task is not None and task.timeout_task is not current:
+            task.timeout_task.cancel()
+        try:
+            task.log_path.unlink()
+        except FileNotFoundError:
+            pass
+
+    @staticmethod
+    def _kill_process_group(process: asyncio.subprocess.Process) -> None:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            try:
+                process.kill()
+            except ProcessLookupError:
+                pass
+
+    def _mutation_lock(self, path: Path) -> threading.Lock:
+        return self._mutation_locks.setdefault(str(path.resolve()), threading.Lock())
+
+    @staticmethod
+    def _atomic_write_text(path: Path, content: str) -> None:
+        temp = path.with_name(".%s.%s.tmp" % (path.name, uuid4().hex))
+        try:
+            temp.write_text(content, encoding="utf-8")
+            os.replace(temp, path)
+        finally:
+            try:
+                temp.unlink()
+            except FileNotFoundError:
+                pass
+
 
 def build_default_registry(
     workdir: Path,
@@ -333,6 +745,7 @@ def build_default_registry(
     skill_loader = SkillLoader(skills_dir or (workdir / "skills"))
     registry = ToolRegistry()
     handlers = WorkspaceTools(workdir, skill_loader, memory, session_manager, registry, bus)
+    registry.add_shutdown_callback(handlers.shutdown)
     registry.register(
         ToolSpec(
             "bash",
@@ -341,11 +754,37 @@ def build_default_registry(
                 {
                     "command": {"type": "string"},
                     "timeout": {"type": "integer"},
+                    "run_in_background": {"type": "boolean"},
+                    "auto_promote": {"type": "boolean"},
                 },
                 ["command"],
             ),
         ),
         handlers.bash,
+    )
+    registry.register(
+        ToolSpec(
+            "task_output",
+            "Poll output and status for a background shell task.",
+            object_schema(
+                {
+                    "task_id": {"type": "string"},
+                    "block": {"type": "boolean"},
+                    "timeout_ms": {"type": "integer"},
+                    "offset": {"type": "integer"},
+                },
+                ["task_id"],
+            ),
+        ),
+        handlers.task_output,
+    )
+    registry.register(
+        ToolSpec(
+            "task_stop",
+            "Stop and clean up a background shell task.",
+            object_schema({"task_id": {"type": "string"}}, ["task_id"]),
+        ),
+        handlers.task_stop,
     )
     registry.register(
         ToolSpec(
@@ -355,6 +794,7 @@ def build_default_registry(
                 {
                     "path": {"type": "string"},
                     "limit": {"type": "integer"},
+                    "offset": {"type": "integer"},
                 },
                 ["path"],
             ),
@@ -392,6 +832,7 @@ def build_default_registry(
                     "path": {"type": "string"},
                     "old_text": {"type": "string"},
                     "new_text": {"type": "string"},
+                    "replace_all": {"type": "boolean"},
                 },
                 ["path", "old_text", "new_text"],
             ),
@@ -405,6 +846,23 @@ def build_default_registry(
             object_schema({"name": {"type": "string"}}, ["name"]),
         ),
         handlers.load_skill,
+    )
+    registry.register(
+        ToolSpec(
+            "vision",
+            "Analyze one or more local image attachments using the configured vision model.",
+            object_schema(
+                {
+                    "image_paths": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                    "prompt": {"type": "string"},
+                },
+                ["image_paths"],
+            ),
+        ),
+        handlers.vision,
     )
     registry.register(
         ToolSpec(
@@ -466,7 +924,22 @@ def build_default_registry(
         ToolSpec(
             "memorize",
             "Write a stable user fact or preference into long-term memory.",
-            object_schema({"content": {"type": "string"}}, ["content"]),
+            object_schema(
+                {
+                    "content": {"type": "string"},
+                    "memory_type": {
+                        "type": "string",
+                        "enum": [
+                            "requested_memory",
+                            "identity",
+                            "preference",
+                            "procedure",
+                            "event",
+                        ],
+                    },
+                },
+                ["content"],
+            ),
         ),
         handlers.memorize,
     )
@@ -475,7 +948,16 @@ def build_default_registry(
             "recall_memory",
             "Search long-term memory semantically/lexically.",
             object_schema(
-                {"query": {"type": "string"}, "limit": {"type": "integer"}},
+                {
+                    "query": {"type": "string"},
+                    "limit": {"type": "integer"},
+                    "memory_types": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                    "since": {"type": "string"},
+                    "until": {"type": "string"},
+                },
                 ["query"],
             ),
         ),

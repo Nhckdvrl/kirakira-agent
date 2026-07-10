@@ -7,6 +7,7 @@ import json
 import os
 import socket
 import threading
+import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -17,6 +18,7 @@ from kirakira_agent.schema import ToolCall, ToolSpec
 from kirakira_agent.skills import SkillLoader
 from kirakira_agent.tools.builtins import WorkspaceTools, build_default_registry, safe_path
 from kirakira_agent.tools.registry import ToolRegistry
+from kirakira_agent.tool_hooks import ToolExecutionRequest, ToolExecutor
 
 
 class ToolTests(unittest.TestCase):
@@ -63,6 +65,128 @@ class ToolTests(unittest.TestCase):
 
         self.assertFalse(result.is_error)
         self.assertEqual(result.content, "async:hi")
+
+    def test_registry_context_is_isolated_between_async_tasks(self):
+        async def scenario():
+            registry = ToolRegistry()
+
+            async def read_context(delay):
+                await asyncio.sleep(delay)
+                return registry.context.get("session_key", "")
+
+            registry.register(
+                ToolSpec(
+                    "read_context",
+                    "Read task-local context",
+                    {"type": "object", "properties": {}, "required": []},
+                ),
+                read_context,
+            )
+
+            async def run_one(session_key, delay):
+                token = registry.set_context(session_key=session_key)
+                try:
+                    return await registry.execute_async(
+                        ToolCall(session_key, "read_context", {"delay": delay})
+                    )
+                finally:
+                    registry.reset_context(token)
+
+            first, second = await asyncio.gather(
+                run_one("session:first", 0.03),
+                run_one("session:second", 0.01),
+            )
+            self.assertEqual(first.content, "session:first")
+            self.assertEqual(second.content, "session:second")
+
+        asyncio.run(scenario())
+
+    def test_sync_tool_handler_does_not_block_event_loop(self):
+        async def scenario():
+            registry = ToolRegistry()
+
+            def slow():
+                time.sleep(0.05)
+                return "done"
+
+            registry.register(
+                ToolSpec("slow", "Slow", {"type": "object", "properties": {}}),
+                slow,
+            )
+            ticked = []
+
+            async def ticker():
+                await asyncio.sleep(0.01)
+                ticked.append(True)
+
+            result, _ = await asyncio.gather(
+                registry.execute_async(ToolCall("1", "slow", {})), ticker()
+            )
+            self.assertEqual(result.content, "done")
+            self.assertEqual(ticked, [True])
+
+        asyncio.run(scenario())
+
+    def test_pre_hook_failure_fails_closed_without_invoking_tool(self):
+        class BrokenHook:
+            name = "broken"
+            event = "pre_tool_use"
+
+            def matches(self, _ctx):
+                return True
+
+            async def run(self, _ctx):
+                raise RuntimeError("hook broke")
+
+        async def scenario():
+            invoked = []
+            executor = ToolExecutor([BrokenHook()])
+            request = ToolExecutionRequest("s", "c", "1", "demo", {})
+
+            async def invoke(_name, _args):
+                invoked.append(True)
+                return "done"
+
+            with self.assertLogs("kirakira_agent.tool_hooks", level="ERROR"):
+                result = await executor.execute(request, invoke)
+            self.assertEqual(result.status, "error")
+            self.assertEqual(invoked, [])
+
+        asyncio.run(scenario())
+
+    def test_registry_marks_error_text_as_failed_result(self):
+        registry = ToolRegistry()
+        registry.register(
+            ToolSpec("fails", "Fail", {"type": "object", "properties": {}}),
+            lambda: "Error: expected failure",
+        )
+
+        result = registry.execute(ToolCall("1", "fails", {}))
+
+        self.assertTrue(result.is_error)
+
+    def test_registry_validates_required_argument_types_before_handler(self):
+        called = []
+        registry = ToolRegistry()
+        registry.register(
+            ToolSpec(
+                "typed",
+                "Typed tool",
+                {
+                    "type": "object",
+                    "properties": {"count": {"type": "integer"}},
+                    "required": ["count"],
+                },
+            ),
+            lambda count: called.append(count) or "ok",
+        )
+
+        missing = registry.execute(ToolCall("1", "typed", {}))
+        wrong = registry.execute(ToolCall("2", "typed", {"count": "one"}))
+
+        self.assertTrue(missing.is_error)
+        self.assertTrue(wrong.is_error)
+        self.assertEqual(called, [])
 
     def test_registry_has_passive_research_tools(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -132,10 +256,70 @@ class ToolTests(unittest.TestCase):
                         {"channel": "cli", "chat_id": "c1", "message": "hello"},
                     )
                 )
-                outbound = await asyncio.wait_for(bus._outbound.get(), timeout=1)
+                outbound, _ticket = await asyncio.wait_for(bus._outbound.get(), timeout=1)
                 self.assertEqual(result.content, "已发送")
                 self.assertIsInstance(outbound, OutboundMessage)
                 self.assertEqual(outbound.content, "hello")
+
+        asyncio.run(scenario())
+
+    def test_background_shell_can_be_polled_and_cleaned(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                registry = build_default_registry(Path(tmp))
+                started = await registry.execute_async(
+                    ToolCall(
+                        "1",
+                        "bash",
+                        {
+                            "command": (
+                                "python -c \"import time; print('start', flush=True); "
+                                "time.sleep(0.1); print('done')\""
+                            ),
+                            "run_in_background": True,
+                        },
+                    )
+                )
+                task_id = json.loads(started.content)["background_task_id"]
+                output = await registry.execute_async(
+                    ToolCall(
+                        "2",
+                        "task_output",
+                        {"task_id": task_id, "block": True, "timeout_ms": 2000},
+                    )
+                )
+                payload = json.loads(output.content)
+                self.assertTrue(payload["done"])
+                self.assertIn("start", payload["output"])
+                self.assertIn("done", payload["output"])
+                stopped = await registry.execute_async(
+                    ToolCall("3", "task_stop", {"task_id": task_id})
+                )
+                self.assertEqual(json.loads(stopped.content)["status"], "stopped")
+                await registry.shutdown()
+
+        asyncio.run(scenario())
+
+    def test_registry_shutdown_kills_background_shell(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                registry = build_default_registry(Path(tmp))
+                started = await registry.execute_async(
+                    ToolCall(
+                        "1",
+                        "bash",
+                        {
+                            "command": "python -c \"import time; time.sleep(30)\"",
+                            "run_in_background": True,
+                        },
+                    )
+                )
+                task_id = json.loads(started.content)["background_task_id"]
+                await asyncio.wait_for(registry.shutdown(), timeout=2.0)
+                result = await registry.execute_async(
+                    ToolCall("2", "task_output", {"task_id": task_id})
+                )
+                self.assertTrue(result.is_error)
 
         asyncio.run(scenario())
 
@@ -145,7 +329,7 @@ class ToolTests(unittest.TestCase):
             result = registry.execute(ToolCall("1", "tool_search", {"query": "fetch"}))
             payload = json.loads(result.content)
 
-        self.assertTrue(any(item["name"] == "web_fetch" for item in payload))
+        self.assertTrue(any(item["name"] == "web_fetch" for item in payload["matched"]))
 
 
 if __name__ == "__main__":

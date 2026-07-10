@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
+import logging
 from typing import Any, Dict, List, Literal, Protocol
+
+from kirakira_agent.schema import ToolResult
+
+logger = logging.getLogger(__name__)
 
 JsonDict = Dict[str, Any]
 HookEvent = Literal["pre_tool_use", "post_tool_use", "post_tool_error"]
@@ -54,8 +60,14 @@ class ToolExecutionResult:
 
 
 class ToolExecutor:
-    def __init__(self, hooks: List[ToolHook] | None = None) -> None:
+    def __init__(
+        self,
+        hooks: List[ToolHook] | None = None,
+        *,
+        timeout_seconds: float = 300.0,
+    ) -> None:
         self._hooks = list(hooks or [])
+        self.timeout_seconds = max(1.0, float(timeout_seconds))
 
     def add_hooks(self, hooks: List[ToolHook]) -> None:
         self._hooks.extend(hooks)
@@ -67,9 +79,18 @@ class ToolExecutor:
             if hook.event != "pre_tool_use":
                 continue
             ctx = HookContext("pre_tool_use", request, dict(args))
-            if not hook.matches(ctx):
-                continue
-            outcome = await hook.run(ctx)
+            try:
+                if not hook.matches(ctx):
+                    continue
+                outcome = await hook.run(ctx)
+            except Exception as exc:
+                logger.exception("pre-tool hook failed: %s", hook.name)
+                return ToolExecutionResult(
+                    "error",
+                    "Error: Pre-tool hook '%s' failed: %s" % (hook.name, exc),
+                    args,
+                    extra,
+                )
             if outcome.updated_input is not None:
                 args = dict(outcome.updated_input)
             if outcome.extra_message:
@@ -77,23 +98,52 @@ class ToolExecutor:
             if outcome.decision == "deny":
                 return ToolExecutionResult("denied", outcome.reason or "工具调用被拦截", args, extra)
         try:
-            output = await invoker(request.tool_name, args)
+            invoked = await asyncio.wait_for(
+                invoker(request.tool_name, args), timeout=self.timeout_seconds
+            )
+        except asyncio.TimeoutError:
+            error = "tool timed out after %.1f seconds" % self.timeout_seconds
+            await self._run_error_hooks(request, args, error, extra)
+            return ToolExecutionResult("error", "Error: %s" % error, args, extra)
         except Exception as exc:
             error = str(exc)
-            for hook in self._hooks:
-                if hook.event == "post_tool_error":
-                    ctx = HookContext("post_tool_error", request, dict(args), error=error)
+            await self._run_error_hooks(request, args, error, extra)
+            return ToolExecutionResult("error", "工具执行出错: %s" % error, args, extra)
+        if isinstance(invoked, ToolResult):
+            output = invoked.content
+            if invoked.is_error:
+                await self._run_error_hooks(request, args, output, extra)
+                return ToolExecutionResult("error", output, args, extra)
+        else:
+            output = str(invoked)
+        for hook in self._hooks:
+            if hook.event == "post_tool_use":
+                ctx = HookContext("post_tool_use", request, dict(args), result=output)
+                try:
                     if hook.matches(ctx):
                         outcome = await hook.run(ctx)
                         if outcome.extra_message:
                             extra.append(outcome.extra_message)
-            return ToolExecutionResult("error", "工具执行出错: %s" % error, args, extra)
-        for hook in self._hooks:
-            if hook.event == "post_tool_use":
-                ctx = HookContext("post_tool_use", request, dict(args), result=output)
-                if hook.matches(ctx):
-                    outcome = await hook.run(ctx)
-                    if outcome.extra_message:
-                        extra.append(outcome.extra_message)
+                except Exception:
+                    logger.exception("post-tool hook failed: %s", hook.name)
         return ToolExecutionResult("success", str(output), args, extra)
 
+    async def _run_error_hooks(
+        self,
+        request: ToolExecutionRequest,
+        args: JsonDict,
+        error: str,
+        extra: List[str],
+    ) -> None:
+        for hook in self._hooks:
+            if hook.event != "post_tool_error":
+                continue
+            ctx = HookContext("post_tool_error", request, dict(args), error=error)
+            try:
+                if not hook.matches(ctx):
+                    continue
+                outcome = await hook.run(ctx)
+                if outcome.extra_message:
+                    extra.append(outcome.extra_message)
+            except Exception:
+                logger.exception("post-tool-error hook failed: %s", hook.name)

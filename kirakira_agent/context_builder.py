@@ -42,10 +42,19 @@ def build_time_envelope(ts: datetime | None) -> str:
 
 
 class ContextBuilder:
-    def __init__(self, workspace: Path, memory: MemoryRuntime) -> None:
+    def __init__(
+        self,
+        workspace: Path,
+        memory: MemoryRuntime,
+        system_prompt: str = "",
+    ) -> None:
         self.workspace = workspace
         self.memory = memory
         self.skills = SkillLoader(workspace / "skills")
+        self.system_prompt = system_prompt.strip() or (
+            "你是 Kirakira，一个可使用工具、拥有长期记忆、支持插件生命周期拦截的 AI agent。"
+            "使用与用户相同的语言回答，准确、自然；必要时先调用工具核实。"
+        )
 
     def render(
         self,
@@ -53,6 +62,7 @@ class ContextBuilder:
         channel: str,
         chat_id: str,
         content: str,
+        media: Optional[List[str]] = None,
         timestamp: datetime,
         history: List[Dict[str, Any]],
         retrieved_memory_block: str = "",
@@ -71,6 +81,10 @@ class ContextBuilder:
             system_sections_bottom=system_sections_bottom or [],
         )
         user_text = build_time_envelope(timestamp) + "\n" + content
+        if media:
+            user_text += "\n\n<attachments>\n" + "\n".join(
+                "- %s" % item for item in media
+            ) + "\n</attachments>"
         return [
             {"role": "system", "content": prompt},
             *history,
@@ -91,10 +105,10 @@ class ContextBuilder:
         workspace_path = str(self.workspace.resolve())
         sections = [
             "# Kirakira Agent",
-            "你是一个可使用工具、拥有长期记忆、支持插件生命周期拦截的 AI agent。回答使用中文，短句、准确、必要时先调用工具。",
+            self.system_prompt,
             "## 工作区\n- 根目录：%s\n- 长期记忆：%s/memory/MEMORY.md\n- 自我认知：%s/memory/SELF.md\n- 近期语境：%s/memory/RECENT_CONTEXT.md"
             % (workspace_path, workspace_path, workspace_path, workspace_path),
-            "## 行为规范\n- 执行动作必须走工具；没有工具结果不得声称已完成。\n- 时间敏感、外部世界、版本、价格、新闻、状态类问题必须先核实。\n- 用户要求记住稳定偏好或事实时，调用 memorize。\n- 历史问题优先 recall_memory，必要时 search_messages 后 fetch_messages 回源。\n- 插件注入的上下文只作为系统候选上下文，不要复述其包装格式。",
+            "## 行为规范\n- 执行动作必须走工具；没有工具结果不得声称已完成。\n- 时间敏感、外部世界、版本、价格、新闻、状态类问题必须先核实。\n- 用户要求记住稳定偏好或事实时，调用 memorize。\n- 历史问题优先 recall_memory，必要时 search_messages 后 fetch_messages 回源。\n- 收到图片附件且主模型不能直接看图时，调用 vision 分析附件路径。\n- 插件注入的上下文只作为系统候选上下文，不要复述其包装格式。",
             "## 环境\n%s" % platform.machine(),
             "## Current Session\nChannel: %s\nChat ID: %s" % (channel, chat_id),
             "## Long-Term Memory\n%s" % self.memory.store.read_long_term().strip(),
@@ -111,4 +125,3 @@ class ContextBuilder:
         if extra_hints:
             sections.append("## Turn Hints\n" + "\n".join("- " + h for h in extra_hints if h.strip()))
         return "\n\n---\n\n".join([*system_sections_top, *sections, *system_sections_bottom])
-

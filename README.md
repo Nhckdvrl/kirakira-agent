@@ -1,118 +1,37 @@
-# kirakira-agent
+# Kirakira Agent
 
-A Python coding agent harness, built as a hands-on learning project.
+Kirakira Agent is a multi-channel AI agent runtime modeled after the passive
+reply architecture of `akashic-agent`. It includes Web, Telegram, QQ/OneBot,
+and CLI channels; an ordered message bus; concurrent session-aware turns;
+streaming OpenAI-compatible tool loops; persistent sessions and memory;
+plugins, MCP, skills, scheduling, and isolated subagents.
 
-Status: experimental and intentionally small.
-
-Kirakira Agent follows the harness engineering idea from `learn-claude-code`:
-the model decides, while the harness provides tools, context, observations, and
-execution boundaries.
-
-Chinese README: [README-cn.md](README-cn.md)
+The autonomous proactive/drift chain is intentionally out of scope. See the
+[detailed Chinese README](README-cn.md) and
+[project report](docs/PROJECT_REPORT.md) for architecture, configuration,
+verification results, and the exact Reference comparison.
 
 ## Quick Start
 
-```bash
-python3 -m kirakira_agent
-```
-
-Configure an OpenAI-compatible model service in `.env`:
+Python 3.11 or newer is required.
 
 ```bash
-OPENAI_COMPATIBLE_BASE_URL=http://localhost:8000/v1
-OPENAI_COMPATIBLE_API_KEY=not-needed-for-local
-MODEL_ID=qwen2.5-coder
+cp config.example.toml config.toml
+export DEEPSEEK_API_KEY=your-key
+python -m kirakira_agent
 ```
 
-DeepSeek example:
+Run all configured passive channels:
 
 ```bash
-OPENAI_COMPATIBLE_BASE_URL=https://api.deepseek.com
-OPENAI_COMPATIBLE_API_KEY=your-deepseek-api-key
-MODEL_ID=deepseek-v4-flash
+python -m kirakira_agent --serve
 ```
 
-DeepSeek V4 thinking mode is disabled by default to avoid the multi-turn tool
-calling requirement to pass `reasoning_content` back to the API. To enable it:
+Run the tests:
 
 ```bash
-OPENAI_COMPATIBLE_THINKING=enabled
+python -m unittest discover -s tests -v
 ```
 
-It works with services that expose `/v1/chat/completions` and support tool
-calling, such as DeepSeek, Qwen, GLM, vLLM, and LM Studio compatible servers.
-
-## CLI Commands
-
-- `/tools`: List available tools.
-- `/skills`: List loadable `skills/**/SKILL.md` files.
-- `/compact`: Compress the current conversation context.
-- `/exit`: Exit the REPL.
-
-## Passive Channels
-
-The passive runtime can also serve Web, Telegram, and QQ/OneBot channels.
-
-Web:
-
-```bash
-python3 -m kirakira_agent --serve --web
-# open http://127.0.0.1:8765
-```
-
-Telegram:
-
-```bash
-TELEGRAM_BOT_TOKEN=123456:abcdef python3 -m kirakira_agent --serve --telegram
-```
-
-Optional Telegram allow list:
-
-```bash
-TELEGRAM_ALLOW_FROM=123456789,alice
-```
-
-QQ via NapCat/OneBot HTTP:
-
-```bash
-python3 -m kirakira_agent --serve --qq
-```
-
-Configure NapCat/OneBot to POST events to:
-
-```text
-http://127.0.0.1:8766/qq/webhook
-```
-
-Common QQ environment variables:
-
-```bash
-QQ_BOT_UIN=12345
-ONEBOT_API_BASE_URL=http://127.0.0.1:3000
-QQ_GROUP_ALLOW=777,888
-QQ_REQUIRE_AT=true
-```
-
-## Built-in Tools
-
-- `bash`: Run shell commands in the workspace, with basic dangerous-command
-  blocking and timeouts.
-- `list_dir`: List workspace files and directories.
-- `read_file`: Read files inside the workspace.
-- `write_file`: Write files inside the workspace.
-- `edit_file`: Replace exact text in a workspace file.
-- `load_skill`: Load a skill by name.
-- `compact`: Trigger context compression.
-- `memorize`, `recall_memory`, `forget_memory`: Manage long-term memory.
-- `search_messages`, `fetch_messages`: Search and fetch persisted chat history.
-- `tool_search`: Search available tools.
-- `web_fetch`, `web_search`: Fetch URLs and search the web. `web_fetch`
-  blocks local/private addresses by default; set
-  `KIRAKIRA_ALLOW_PRIVATE_WEB_FETCH=true` only for trusted local tests.
-- `message_push`: Send a message to a channel/chat through the bus.
-
-## Development
-
-```bash
-python3 -m unittest discover -v
-```
+Runtime state is stored in `sessions/`, `memory/`, `uploads/`, and
+`.kirakira/`; `Reference/` and local secrets are ignored by Git.
