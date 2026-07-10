@@ -135,3 +135,33 @@ class TurnCommitted:
     assistant_reply: str
     tools_used: Tuple[str, ...]
 
+
+@dataclass(frozen=True)
+class TurnStarted:
+    session_key: str
+    channel: str
+    chat_id: str
+    content: str
+    timestamp: datetime
+
+
+@dataclass(frozen=True)
+class ToolCallStarted:
+    session_key: str
+    channel: str
+    chat_id: str
+    call_id: str
+    tool_name: str
+    arguments: JsonDict
+
+
+@dataclass(frozen=True)
+class ToolCallCompleted:
+    session_key: str
+    channel: str
+    chat_id: str
+    call_id: str
+    tool_name: str
+    arguments: JsonDict
+    result: str
+    status: str

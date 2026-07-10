@@ -93,11 +93,17 @@ QQ_REQUIRE_AT=true
 ## Built-in Tools
 
 - `bash`：在 workspace 内执行命令，带危险命令拦截和超时。
+- `list_dir`：列出 workspace 内文件和目录。
 - `read_file`：读取 workspace 内文件。
 - `write_file`：写入 workspace 内文件。
 - `edit_file`：精确替换文件内容。
 - `load_skill`：按名称加载 skill。
 - `compact`：触发上下文压缩。
+- `memorize`、`recall_memory`、`forget_memory`：管理长期记忆。
+- `search_messages`、`fetch_messages`：搜索和回源持久化对话历史。
+- `tool_search`：搜索可用工具。
+- `web_fetch`、`web_search`：抓取 URL 和搜索网页。
+- `message_push`：通过 bus 向指定 channel/chat 发送消息。
 
 ## Development
 

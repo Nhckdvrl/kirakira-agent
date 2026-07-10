@@ -280,6 +280,16 @@ memory/items.json
 
 这些工具对应了 akashic-agent prompt 里的历史检索协议与记忆纠错协议的最小可运行版本。
 
+### 7.6 新增被动研究与推送工具
+
+对照 akashic-agent 的非主动工具集，当前项目还补了：
+
+- `list_dir(path)`：列出 workspace 内目录
+- `tool_search(query, limit)`：搜索当前可用工具
+- `web_fetch(url, max_chars)`：抓取网页并转成可读文本
+- `web_search(query, limit)`：返回网页搜索结果标题与 URL
+- `message_push(channel, chat_id, message)`：通过 MessageBus 向指定 channel/chat 发送消息
+
 ## 8. ContextBuilder：prompt 构建
 
 `kirakira_agent.context_builder.ContextBuilder` 负责每轮 prompt。
@@ -333,6 +343,14 @@ memory/items.json
 8. 追加 tool result message
 9. 构造 `AfterStepCtx` fanout 给观察者
 10. 进入下一轮
+
+当前还会发出工具 lifecycle 事件：
+
+- `TurnStarted`
+- `ToolCallStarted`
+- `ToolCallCompleted`
+
+这些事件可被 channel 或插件观察，用来实现工具轨迹、UI 状态、日志、审计等能力。
 
 最大轮数由 `RuntimeConfig.max_iterations` 控制，默认从环境变量 `AGENT_MAX_ITERATIONS` 读取，不设置则为 10。
 
@@ -764,7 +782,7 @@ python3 -m unittest discover -v
 结果：
 
 ```text
-24 tests passed
+29 tests passed
 ```
 
 覆盖内容：
@@ -783,6 +801,13 @@ python3 -m unittest discover -v
 - Web channel HTTP 入站和 outbound 回复
 - QQ OneBot webhook 入站和 outbound API 回复
 - Telegram allow list 逻辑
+- `list_dir`
+- `web_fetch`
+- `tool_search`
+- `message_push`
+- `TurnStarted`
+- `ToolCallStarted`
+- `ToolCallCompleted`
 
 ### 17.2 Conda 环境下的真实功能测试
 
@@ -848,6 +873,12 @@ overall_ok = true
 5. 主动链路/proactive/drift 本轮没有实现，后续可以基于当前 session、memory、bus、outbound port 继续加。
 6. Session 当前是 JSON 文件，适合轻量开发；如果对话量增长，建议迁移 SQLite。
 7. Prompt 规则已覆盖核心行为，但还可以继续迁移 akashic-agent 更细的历史检索协议、记忆纠错协议和 channel-specific rendering policy。
+
+更完整的差异审计见：
+
+```text
+docs/DIFFERENCE_AUDIT.md
+```
 
 ## 19. 总结
 

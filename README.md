@@ -97,11 +97,17 @@ QQ_REQUIRE_AT=true
 
 - `bash`: Run shell commands in the workspace, with basic dangerous-command
   blocking and timeouts.
+- `list_dir`: List workspace files and directories.
 - `read_file`: Read files inside the workspace.
 - `write_file`: Write files inside the workspace.
 - `edit_file`: Replace exact text in a workspace file.
 - `load_skill`: Load a skill by name.
 - `compact`: Trigger context compression.
+- `memorize`, `recall_memory`, `forget_memory`: Manage long-term memory.
+- `search_messages`, `fetch_messages`: Search and fetch persisted chat history.
+- `tool_search`: Search available tools.
+- `web_fetch`, `web_search`: Fetch URLs and search the web.
+- `message_push`: Send a message to a channel/chat through the bus.
 
 ## Development
 
