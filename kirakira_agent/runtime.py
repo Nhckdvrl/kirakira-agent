@@ -25,6 +25,9 @@ from kirakira_agent.lifecycle import (
     BeforeTurnCtx,
     PromptRenderCtx,
     TurnCommitted,
+    TurnStarted,
+    ToolCallCompleted,
+    ToolCallStarted,
     TurnState,
 )
 from kirakira_agent.memory import MemoryRuntime
@@ -274,6 +277,16 @@ class DefaultReasoner:
             call_id=call.id,
             request_text=request_text,
         )
+        await self.event_bus.fanout(
+            ToolCallStarted(
+                session_key=session_key,
+                channel=channel,
+                chat_id=chat_id,
+                call_id=call.id,
+                tool_name=call.name,
+                arguments=dict(call.arguments),
+            )
+        )
 
         async def invoke(tool_name: str, arguments: JsonDict) -> str:
             result = await self.tools.execute_async(ToolCall(call.id, tool_name, arguments))
@@ -283,6 +296,18 @@ class DefaultReasoner:
         content = result.output
         if result.extra_messages:
             content += "\n\n" + "\n".join(result.extra_messages)
+        await self.event_bus.fanout(
+            ToolCallCompleted(
+                session_key=session_key,
+                channel=channel,
+                chat_id=chat_id,
+                call_id=call.id,
+                tool_name=call.name,
+                arguments=dict(result.final_arguments),
+                result=content,
+                status=result.status,
+            )
+        )
         return {"content": content, "status": result.status, "arguments": result.final_arguments}
 
     async def _after_step(
@@ -356,6 +381,15 @@ class PassiveTurnPipeline:
     async def run(self, msg: InboundMessage, key: str, *, dispatch_outbound: bool = True) -> OutboundMessage:
         session = self.session_manager.get_or_create(key)
         state = TurnState(msg=msg, session_key=key, dispatch_outbound=dispatch_outbound, session=session)
+        await self.event_bus.fanout(
+            TurnStarted(
+                session_key=key,
+                channel=msg.channel,
+                chat_id=msg.chat_id,
+                content=msg.content,
+                timestamp=msg.timestamp,
+            )
+        )
         history = session.get_history(max_messages=self.config.history_window)
         retrieved = "" if msg.metadata.get("skip_memory_retrieval") else self.memory.build_retrieval_block(msg.content)
         skill_mentions = self._collect_skill_mentions(msg.content)

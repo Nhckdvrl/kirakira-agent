@@ -132,7 +132,7 @@ async def build_runtime(
     event_bus = EventBus()
     session_manager = SessionManager(workdir)
     memory = MemoryRuntime(workdir, session_manager=session_manager)
-    registry = build_default_registry(workdir, memory=memory, session_manager=session_manager)
+    registry = build_default_registry(workdir, memory=memory, session_manager=session_manager, bus=bus)
     context = ContextBuilder(workdir, memory)
     config = RuntimeConfig(
         model=model,

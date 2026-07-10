@@ -15,6 +15,7 @@ from kirakira_agent.schema import ModelResponse, ToolCall
 from kirakira_agent.session import SessionManager
 from kirakira_agent.tool_hooks import HookOutcome
 from kirakira_agent.tools import build_default_registry
+from kirakira_agent.lifecycle import ToolCallCompleted, ToolCallStarted, TurnStarted
 
 
 class FakeModel:
@@ -187,6 +188,41 @@ class RuntimeTests(unittest.TestCase):
                 call = session.messages[-1]["tool_chain"][0]["calls"][0]
                 self.assertEqual(call["status"], "denied")
                 self.assertEqual(call["result"], "read_file denied")
+
+        asyncio.run(scenario())
+
+    def test_runtime_emits_turn_and_tool_lifecycle_events(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                workdir = Path(tmp)
+                (workdir / "README.md").write_text("hello")
+                model = FakeModel(
+                    [
+                        ModelResponse(tool_calls=[ToolCall("call_1", "read_file", {"path": "README.md"})]),
+                        ModelResponse(text="done"),
+                    ]
+                )
+                bus, loop, _sessions, _memory = build_test_runtime(workdir, model)
+                events = []
+                loop.pipeline.event_bus.on(TurnStarted, lambda event: events.append(("turn", event.session_key)))
+                loop.pipeline.event_bus.on(ToolCallStarted, lambda event: events.append(("tool_start", event.tool_name)))
+                loop.pipeline.event_bus.on(ToolCallCompleted, lambda event: events.append(("tool_done", event.tool_name, event.status)))
+
+                async def collect(_msg):
+                    loop.stop()
+                    bus.stop()
+
+                bus.subscribe_outbound("cli", collect)
+                tasks = [
+                    asyncio.create_task(loop.run()),
+                    asyncio.create_task(bus.dispatch_outbound()),
+                ]
+                await bus.publish_inbound(InboundMessage("cli", "tester", "chat", "read README"))
+                await asyncio.wait_for(asyncio.gather(*tasks), timeout=5)
+
+                self.assertIn(("turn", "cli:chat"), events)
+                self.assertIn(("tool_start", "read_file"), events)
+                self.assertIn(("tool_done", "read_file", "success"), events)
 
         asyncio.run(scenario())
 
