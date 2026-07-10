@@ -1,7 +1,8 @@
 """Kirakira Agent learning harness module."""
 
 from dataclasses import dataclass
-from typing import Callable, Dict, List
+import inspect
+from typing import Any, Callable, Dict, List, Optional
 
 from kirakira_agent.schema import JsonDict, ToolCall, ToolResult, ToolSpec
 
@@ -18,6 +19,7 @@ class Tool:
 class ToolRegistry:
     def __init__(self) -> None:
         self._tools: Dict[str, Tool] = {}
+        self._context: JsonDict = {}
 
     def register(self, spec: ToolSpec, handler: ToolHandler) -> None:
         if spec.name in self._tools:
@@ -33,12 +35,37 @@ class ToolRegistry:
     def has(self, name: str) -> bool:
         return name in self._tools
 
+    def unregister(self, name: str) -> None:
+        self._tools.pop(name, None)
+
+    def get_tool(self, name: str) -> Optional[Tool]:
+        return self._tools.get(name)
+
+    def set_context(self, **kwargs: Any) -> None:
+        self._context = dict(kwargs)
+
+    @property
+    def context(self) -> JsonDict:
+        return dict(self._context)
+
     def execute(self, call: ToolCall) -> ToolResult:
         tool = self._tools.get(call.name)
         if tool is None:
             return ToolResult(call.id, "Error: Unknown tool '%s'" % call.name, is_error=True)
         try:
             output = tool.handler(**call.arguments)
+            return ToolResult(call.id, str(output), is_error=False)
+        except Exception as exc:
+            return ToolResult(call.id, "Error: %s" % exc, is_error=True)
+
+    async def execute_async(self, call: ToolCall) -> ToolResult:
+        tool = self._tools.get(call.name)
+        if tool is None:
+            return ToolResult(call.id, "Error: Unknown tool '%s'" % call.name, is_error=True)
+        try:
+            output = tool.handler(**call.arguments)
+            if inspect.isawaitable(output):
+                output = await output
             return ToolResult(call.id, str(output), is_error=False)
         except Exception as exc:
             return ToolResult(call.id, "Error: %s" % exc, is_error=True)
