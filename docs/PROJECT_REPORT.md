@@ -369,20 +369,8 @@ API key 仅存在于单次测试进程环境，没有进入代码、配置、文
 
 后续若继续演进，优先级应是：可观测性指标和 trace API、A2A peer adapter、语义去重与 query rewrite、独立 Dashboard，而不是继续扩大核心 loop 的职责。
 
-## 15. 简历项目介绍
+## 15. 简历与面试材料
 
-### 精简版
+简历不应描述项目参考或复刻了哪个仓库，而应说明从 MVP 开始解决了哪些 Agent 工程问题。当前版本推荐围绕四条主线组织：Agent Runtime 与并发、ToolRegistry/ToolExecutor、Session/长期记忆、真实 Bug 与回归测试。
 
-**Kirakira Agent｜多渠道可扩展 AI Agent Runtime**
-
-参考 akashic-agent 重构并实现完整被动式 Agent 架构，打通 Web、Telegram、QQ/OneBot、CLI 到 MessageBus、会话隔离、长期记忆、流式 LLM Tool Loop、插件 Hook、MCP 和子 Agent 的端到端链路。实现跨会话并发/同会话串行、SSE 工具调用、DeepSeek reasoning 历史回放、FTS5 会话检索、语义+词法混合记忆、后台 consolidation、工具安全边界及 graceful shutdown；在 Python 3.12 conda 环境完成 83 项自动化测试，并使用 `deepseek-v4-flash` 在线验证真实工具循环与记忆抽取。
-
-### 要点版
-
-- 设计异步 MessageBus 与 session-aware AgentLoop，实现跨会话并发、同会话串行、消息保序、turn 中断和可恢复工具链持久化。
-- 实现 OpenAI-compatible SSE Tool Loop，支持 fragmented tool calls、DeepSeek `reasoning_content` 回放、schema 校验、重复调用保护、上下文裁剪与故障重试。
-- 构建 Markdown + JSON + SQLite FTS5 长期记忆体系，支持 source evidence、幂等强化、遗忘/撤销、可选 embedding 混合检索和异步 LLM consolidation。
-- 设计插件/工具扩展层，支持 7 阶段生命周期、pre/post/error Hook、descriptor/config/KV、stdio MCP 动态工具、deferred discovery 和隔离回滚。
-- 接入 Web、Telegram、QQ/OneBot 与 CLI，完善附件、流式编辑、群策略、鉴权、并发 request correlation 和优雅关机。
-
-建议在简历中同时附上 GitHub 链接，并将“83 项测试”和“DeepSeek 在线 tool loop”保留为可量化证据。
+完整的简历文案、工具执行调用链、记忆/RAG 取舍、面试追问、Bug 闭环，以及 LangSmith 和 100–200 用户后端化完成后的升级写法，见 `docs/RESUME_INTERVIEW_GUIDE.md`。
