@@ -260,3 +260,5 @@ mcp_servers.json              动态 MCP server 配置
 - `docs/PROJECT_REPORT.md`
 - `docs/DIFFERENCE_AUDIT.md`
 - `docs/REPLICATION_PLAN.md`
+- `docs/VERSION_EVOLUTION.md`：从 Function Calling MVP 到当前 Runtime 的工程演进
+- `docs/RESUME_INTERVIEW_GUIDE.md`：简历文案、面试追问、Bug 闭环和后续升级边界

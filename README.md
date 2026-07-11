@@ -9,7 +9,9 @@ plugins, MCP, skills, scheduling, and isolated subagents.
 The autonomous proactive/drift chain is intentionally out of scope. See the
 [detailed Chinese README](README-cn.md) and
 [project report](docs/PROJECT_REPORT.md) for architecture, configuration,
-verification results, and the exact Reference comparison.
+verification results, and the exact Reference comparison. The Chinese
+[version evolution roadmap](docs/VERSION_EVOLUTION.md) explains each upgrade
+stage and the proposed path from the current runtime to V1.0.
 
 ## Quick Start
 
