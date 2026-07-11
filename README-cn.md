@@ -260,3 +260,4 @@ mcp_servers.json              动态 MCP server 配置
 - `docs/PROJECT_REPORT.md`
 - `docs/DIFFERENCE_AUDIT.md`
 - `docs/REPLICATION_PLAN.md`
+- `docs/VERSION_EVOLUTION.md`：各阶段升级内容、当前提升空间和 V0.6-V1.0 路线图
