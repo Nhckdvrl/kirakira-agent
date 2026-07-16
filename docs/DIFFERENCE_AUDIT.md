@@ -141,9 +141,15 @@ profile extractor、procedure 冲突检测、dedup decider、图关系存储、�
 Kirakira 目前：Markdown + typed records + FTS + 可选 embedding + **RRF 多路融合 + 热度衰减 +
 注入预算**。
 
-**未跟进的三项都是 LLM 门控的**（query rewrite / HyDE / sufficiency）：每一项都要在每轮对话里
-多打一次模型。判断标准是"纯计算的先做，要多花模型调用的必须先有评测"——reference 自己也用
-配置门控它们，且本项目文档一开始就写明 HyDE 必须经评测再开。接缝已经留好（§4.3）。
+**未跟进的都是 LLM 门控的**（query rewrite / HyDE / sufficiency / dedup decider）：每一项都要在
+每轮对话里多打一次模型。判断标准是"纯计算的先做，要多花模型调用的必须先有评测"——reference
+自己也用配置门控它们，且本项目文档一开始就写明 HyDE 必须经评测再开。接缝已经留好（§4.3）。
+
+**其中 `dedup_decider` 不是可选项，是已知缺陷**（在线测试发现，见 §6.4）：我们的去重是精确
+字符串匹配，而 consolidation 每次都会改写措辞，导致同一事实被 `memorize` 和 consolidation
+各存一遍，注入块一半冗余。尝试用词法相似度阈值修复被实测否决——**否定句的相似度（0.833）
+比真重复（0.727～0.800）还高**，任何有效阈值都会把"CI 跑"和"CI 不跑"合并掉。这解释了
+reference 为什么要用 313 行 LLM 判定来做这件事。
 
 ### 4.5 Fail-loud 范围
 
@@ -210,6 +216,26 @@ upstream 同期给出的替代品（`agent/mcp/admin.py` + `agent/tools/workspac
 4. **per-plugin 代际**（§4.1）——当前规模不需要，插件变多再说。
 5. **结构化委派决策元数据**（§6.2）——只有在要做 trace/评测时才有价值。
 
+### 6.4 在线测试发现：同一事实被存两遍
+
+用真实 DeepSeek（`deepseek-v4-flash`）跑 6 轮"记住：…"后，`items.json` 里出现成对的重复：
+
+```text
+[procedure] 部署脚本在 scripts/rollout.sh，每次发版都跑它      source_ref=:0-5  ← consolidation
+[procedure] 用户的部署脚本在 scripts/rollout.sh，每次发版都跑它。 source_ref=:0    ← memorize 工具
+[event]     错误码 E4011 表示配额超限                          ← 同一事实，
+[procedure] 用户的错误码 E4011 表示配额超限。                    ← 类型还不一致
+```
+
+**根因**：`memorize()` 去重靠 `_normalize_content(a) == _normalize_content(b)` 精确匹配，而
+consolidation 的 LLM 必然改写措辞，永远匹配不上。`consolidate_turn` 里的
+`_last_assistant_used_memorize` 只守住"显式记忆规则"这条路径，守不住后台 LLM 抽取那条。
+
+**影响**：召回时两条都进注入块，1200 字符预算里一半是重复内容。
+
+**为什么没顺手修**：见 §4.4——词法阈值方案被实测否决，需要语义判定，归入 LLM 门控清单。
+`tests/test_retrieval.py` 里有两个用例锁住了现状和这个否决证据。
+
 ## 7. 审计证据
 
 - Python：`/home/xiang/.conda/envs/xingshu-vllm/bin/python` 3.12。
@@ -220,4 +246,14 @@ upstream 同期给出的替代品（`agent/mcp/admin.py` + `agent/tools/workspac
 - 真实 stdio MCP server 端到端：声明 → 连接 → 发布 generation → `/tools` 列出
   `mcp_fake__echo` / `mcp_fake__fail` → 干净关闭。
 - 全新 clone 按 README 操作可直接启动，运行时状态自动生成且不被 git 跟踪。
+- **真实模型在线验证**（DeepSeek `deepseek-v4-flash`，key 仅注入测试进程环境）：
+  - 基础响应、streaming（9 个 delta）、真实工具循环（`write_file` → `read_file`，文件确实落盘）、
+    session 工具链持久化。
+  - MCP 全链路：声明 → generation → 快照 → 模型自己 `tool_search` 解锁 → 调用 `mcp_fake__echo`
+    拿到回显。同时确认 MCP 工具**不在基础注册表**（快照专属设计生效）。
+  - agent 自助管理 MCP：模型调用 `workspace_mcp_apply` → 声明落盘 → 新代际发布 → 工具可用。
+  - 记忆：6 轮对话触发后台 consolidation，LLM 抽出 9 条带类型记录；RRF 对
+    `scripts/rollout.sh` / `E4011` / `PostgreSQL` 精确召回正确。
+  - context policy：128k 上下文派生出 `memory_window=20` / `max_tokens=4096`，与 1M 基准等比例一致。
+  - **发现缺陷**：见 §6.4。
 - `git ls-files` 无密钥形状字符串；`Reference/` 由 `.gitignore` 排除。

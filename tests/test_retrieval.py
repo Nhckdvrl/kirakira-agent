@@ -199,6 +199,48 @@ class RecallIntegrationTests(unittest.TestCase):
             self.assertEqual(len(hits), 1)
             self.assertIn("Orijen", hits[0].content)
 
+    def test_rephrased_fact_is_stored_twice_known_gap(self):
+        """已知缺陷：去重是精确匹配，consolidation 改写后的同一事实会被存两遍。
+
+        锁住现状，避免有人以为已经解决了。真正的修复需要语义去重（见下一个用例
+        为什么不能用词法阈值），归入 LLM 门控清单。
+        """
+
+        with tempfile.TemporaryDirectory() as tmp:
+            memory = self._memory(tmp)
+            memory.memorize("用户的部署脚本在 scripts/rollout.sh。", memory_type="procedure")
+            memory.memorize(
+                "部署脚本在 scripts/rollout.sh，每次发版都跑它", memory_type="procedure"
+            )
+
+            hits = memory.recall("scripts/rollout.sh", limit=5)
+            self.assertEqual(len(hits), 2)  # 同一事实，两条记录
+
+    def test_lexical_similarity_cannot_safely_dedupe_negation(self):
+        """不要用词法相似度做去重：否定句的相似度比真重复还高。
+
+        实测：
+            0.833  "CI 跑在 GitHub Actions 上"  vs  "CI 不跑在 GitHub Actions 上"   ← 否定
+            0.727  "错误码 E4011 表示配额超限"    vs  "用户的错误码 E4011 表示配额超限。" ← 真重复
+
+        任何抓得住真重复的阈值都会把否定句合并掉，让 agent 说反话。
+        """
+
+        from kirakira_agent.memory import _tokenize
+
+        def jaccard(a, b):
+            ta, tb = _tokenize(a), _tokenize(b)
+            return len(ta & tb) / max(1, len(ta | tb))
+
+        negation = jaccard("CI 跑在 GitHub Actions 上", "CI 不跑在 GitHub Actions 上")
+        true_dup = jaccard("错误码 E4011 表示配额超限", "用户的错误码 E4011 表示配额超限。")
+
+        self.assertGreater(
+            negation,
+            true_dup,
+            "若此断言失败，说明分词变了，可以重新评估词法去重是否安全",
+        )
+
     def test_build_retrieval_block_respects_budget(self):
         with tempfile.TemporaryDirectory() as tmp:
             memory = self._memory(tmp)

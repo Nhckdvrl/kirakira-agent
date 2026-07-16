@@ -69,7 +69,41 @@ RRF 下每条 lane 有自己的准入规则（词法要求 overlap > 0，向量�
 4. **注入有硬预算**（1200 字符 / 单行 180）。检索质量再好也不能吃光上下文。
 5. **热度随时间半衰**（alpha 0.20，半衰期 14 天）。否则一条被反复提到的旧记忆会永远压住新记忆。
 6. **删除 session 会撤销带 source_ref 的记忆**。不能"对话删了，事实还在"。
-7. **`memorize` 与 consolidation 之间靠 source/幂等去重**，同一来源重放不会翻倍。
+7. **去重只挡得住重放，挡不住改写**（见下节「已知缺陷」）。
+
+## 已知缺陷：同一事实会被存两遍
+
+**现状**：`memorize()` 的去重是**精确字符串匹配**（normalize 后相等）。它能挡住：
+
+- 同一条 `memorize` 重放（同 source_ref、同文本）→ 直接返回旧记录。
+- 逐字相同的内容 → 强化旧记录（`reinforcement += 1`）。
+
+它**挡不住改写**。而 consolidation 每次都会用 LLM 重新组织语言，所以：
+
+```text
+用户："记住：部署脚本在 scripts/rollout.sh"
+  ├─ memorize 工具      → "用户的部署脚本在 scripts/rollout.sh。"    source_ref=:0
+  └─ 后台 consolidation → "部署脚本在 scripts/rollout.sh，每次发版都跑它"  source_ref=:0-5
+```
+
+两条都留下了，类型有时还不一致（同一事实一条 `event` 一条 `procedure`）。后果是**注入块里
+一半是冗余**，白白吃掉 1200 字符预算。
+
+**为什么不用"词法相似度超过阈值就去重"**：实测过，不安全——
+
+```text
+否定句   0.833   CI 跑在 GitHub Actions 上   ||  CI 不跑在 GitHub Actions 上
+真重复   0.800   使用的数据库是 PostgreSQL 16 ||  用户使用的数据库是 PostgreSQL 16。
+真重复   0.727   错误码 E4011 表示配额超限    ||  用户的错误码 E4011 表示配额超限。
+```
+
+**否定句的相似度比真重复还高。** 任何能抓住真重复的阈值都会把「CI 跑」和「CI 不跑」判成
+同一条并丢掉一条——那不是冗余，是让 agent 斩钉截铁地说反话，比现在的 bug 严重得多。
+
+所以正确的去重**必须理解语义**（向量相似度或 LLM 判定）。reference 为此专门写了
+`memory2/dedup_decider.py`（313 行，LLM 判定）——那不是过度设计。
+
+这一项归入 LLM 门控清单，和 query rewrite / HyDE 一起等评测集。
 
 ## 失败会怎样
 
