@@ -533,12 +533,18 @@ class MemoryRuntime:
                 )
                 for message in selected
             )
+            # 把已记事实喂给同一次调用：抽取和去重合并成一次判断，不额外打模型。
+            # 词法阈值去重不安全（否定句相似度比真重复还高），只有语义判断做得了这件事。
+            known = self._known_memory_digest(session.key, selected)
             prompt = (
                 "从下面对话中提取可长期保留的信息。只把用户明确表达的稳定事实、偏好、"
                 "身份、反复可用的操作规则写入 memories；不要把 assistant 的建议当用户事实。"
                 "同时生成 1-3 条简短时间线摘要。仅返回 JSON："
                 '{"memories":[{"content":"...","memory_type":"identity|preference|procedure|event"}],'
-                '"history":["..."]}。没有可提取内容时数组留空。\n\n' + transcript
+                '"history":["..."]}。没有可提取内容时数组留空。'
+                + known
+                + "\n\n对话：\n"
+                + transcript
             )
             response = await asyncio.to_thread(
                 model_client.complete,
@@ -572,6 +578,67 @@ class MemoryRuntime:
             session.last_consolidated = end
             if self.session_manager is not None:
                 self.session_manager.save(session)
+
+    def _known_memory_digest(
+        self,
+        session_key: str,
+        selected: List[JsonDict],
+        limit: int = 30,
+    ) -> str:
+        """列出已记事实，让 consolidation 只抽新的。
+
+        为什么要有这个：`memorize` 的去重是精确字符串匹配，而 consolidation 的 LLM 每次都会
+        改写措辞，所以同一个事实会被存两遍（memorize 一条、consolidation 一条）。词法相似度
+        阈值修不了——实测否定句"CI 不跑在 X"和"CI 跑在 X"的相似度(0.833)比真重复(0.727)还高，
+        任何有效阈值都会把它们合并掉，让 agent 说反话。只有语义判断做得了，而 consolidation
+        本来就要打一次 LLM，所以把去重并进这次调用，零额外往返。
+
+        取两部分：本 session 已记的（`memorize` 刚写的，最可能被重复抽取），以及与本轮内容
+        词法相关的旧记忆（跨 session 复述的情况）。
+        """
+
+        query = " ".join(
+            str(message.get("content") or "")
+            for message in selected
+            if message.get("role") == "user"
+        )[:2000]
+
+        picked: List[MemoryRecord] = []
+        seen: set[str] = set()
+        with self._record_lock:
+            same_session = [
+                record
+                for record in self._records
+                if record.status == "active"
+                and record.source_ref.startswith("%s:" % session_key)
+            ]
+        for record in reversed(same_session):
+            if record.id not in seen:
+                seen.add(record.id)
+                picked.append(record)
+            if len(picked) >= limit:
+                break
+        if query.strip() and len(picked) < limit:
+            for record in self.recall(query, limit=limit - len(picked)):
+                if record.id not in seen:
+                    seen.add(record.id)
+                    picked.append(record)
+        if not picked:
+            return ""
+
+        lines = "\n".join(
+            "- [%s] %s" % (record.memory_type, record.content[:160])
+            for record in picked[:limit]
+        )
+        return (
+            "\n\n以下事实**已经记录过**，不要再抽取：\n"
+            + lines
+            + "\n规则：\n"
+            "- 只是换个说法表达上面某条事实 → 跳过，不要输出。\n"
+            "- 上面某条事实需要修正或补充细节 → 输出完整的新版本，并沿用它原来的 memory_type。\n"
+            "- 与上面某条**语义相反**（例如否定）→ 必须输出，这是修正，不是重复。\n"
+            "- 只输出上面没有的新信息。"
+        )
 
     @staticmethod
     def _parse_consolidation_json(text: str) -> Dict[str, Any]:

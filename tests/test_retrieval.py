@@ -199,22 +199,57 @@ class RecallIntegrationTests(unittest.TestCase):
             self.assertEqual(len(hits), 1)
             self.assertIn("Orijen", hits[0].content)
 
-    def test_rephrased_fact_is_stored_twice_known_gap(self):
-        """已知缺陷：去重是精确匹配，consolidation 改写后的同一事实会被存两遍。
+    def test_memorize_primitive_dedupes_only_exact_repeats(self):
+        """`memorize()` 是原语：只挡逐字重复，不做语义去重。
 
-        锁住现状，避免有人以为已经解决了。真正的修复需要语义去重（见下一个用例
-        为什么不能用词法阈值），归入 LLM 门控清单。
+        改写后的同一事实在这一层会产生两条记录——这是**有意的**，因为词法比对分不清
+        "改写"和"否定"（见下一个用例）。语义去重发生在 consolidation 那次 LLM 调用里，
+        由 `_known_memory_digest()` 把已记事实喂进 prompt。
         """
 
         with tempfile.TemporaryDirectory() as tmp:
             memory = self._memory(tmp)
             memory.memorize("用户的部署脚本在 scripts/rollout.sh。", memory_type="procedure")
+
+            # 逐字重复 → 强化旧记录，不新增
+            memory.memorize("用户的部署脚本在 scripts/rollout.sh。", memory_type="procedure")
+            self.assertEqual(len(memory.list_records()), 1)
+            self.assertEqual(memory.list_records()[0]["reinforcement"], 2)
+
+            # 改写 → 原语层留两条，交给 consolidation 去判
             memory.memorize(
                 "部署脚本在 scripts/rollout.sh，每次发版都跑它", memory_type="procedure"
             )
+            self.assertEqual(len(memory.list_records()), 2)
 
-            hits = memory.recall("scripts/rollout.sh", limit=5)
-            self.assertEqual(len(hits), 2)  # 同一事实，两条记录
+    def test_consolidation_prompt_lists_known_facts_and_protects_corrections(self):
+        """consolidation 的 prompt 必须带上已记事实，并且明确允许"语义相反"的更正。
+
+        少了前者就会重复抽取；少了后者，去重会把更正压掉，让 agent 卡在过时事实上——
+        那比冗余更糟。
+        """
+
+        with tempfile.TemporaryDirectory() as tmp:
+            memory = self._memory(tmp)
+            memory.memorize(
+                "CI 跑在 GitHub Actions 上。",
+                source_ref="direct:local:0",
+                memory_type="preference",
+            )
+
+            digest = memory._known_memory_digest(
+                "direct:local", [{"role": "user", "content": "CI 现在改成 GitLab 了"}]
+            )
+
+            self.assertIn("已经记录过", digest)
+            self.assertIn("CI 跑在 GitHub Actions 上。", digest)
+            self.assertIn("语义相反", digest)  # 更正必须能写进去
+            self.assertIn("沿用它原来的 memory_type", digest)
+
+    def test_known_digest_is_empty_when_nothing_recorded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            memory = self._memory(tmp)
+            self.assertEqual(memory._known_memory_digest("direct:local", []), "")
 
     def test_lexical_similarity_cannot_safely_dedupe_negation(self):
         """不要用词法相似度做去重：否定句的相似度比真重复还高。
