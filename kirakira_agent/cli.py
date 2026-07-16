@@ -20,7 +20,7 @@ from kirakira_agent.context_policy import recommended_context_settings
 from kirakira_agent.event_bus import EventBus
 from kirakira_agent.events import InboundMessage, OutboundMessage
 from kirakira_agent.memory import MemoryRuntime
-from kirakira_agent.mcp import McpCatalogPublisher, WorkspaceMcpWatcher
+from kirakira_agent.mcp import McpCatalogPublisher, WorkspaceMcpAdmin, WorkspaceMcpWatcher
 from kirakira_agent.models import OpenAICompatibleClient
 from kirakira_agent.plugins import PluginManager
 from kirakira_agent.runtime import (
@@ -236,6 +236,8 @@ async def build_runtime(
     # workspace MCP 由 mcp/servers/*.toml 声明并热重载；首轮 reconcile 失败不阻塞启动，
     # watcher 会在声明修好后自动重试。
     mcp_watcher = WorkspaceMcpWatcher(workdir / "mcp" / "servers", mcp_publisher)
+    # 让 agent 也能自己增删声明，走的仍是 watcher 那条 reconcile 路径。
+    WorkspaceMcpAdmin(workdir, mcp_watcher).register_tools(registry)
     try:
         await mcp_watcher.reconcile()
     except (OSError, ValueError, RuntimeError) as error:

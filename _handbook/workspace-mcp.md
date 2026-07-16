@@ -4,6 +4,10 @@
 与 `name` 一致。运行时按**内容 revision** 热重载，不再读取 `mcp_servers.json`，也不提供
 `mcp_add`、`mcp_remove`、`mcp_list` —— 这些工具已经删除。
 
+声明既可以人手写，也可以由 agent 通过 `workspace_mcp_apply` / `workspace_mcp_remove` /
+`workspace_mcp_status` 管理。两条路径写的是同一份文件、走同一条 reconcile，因此校验、换代和
+失败语义完全一致。
+
 ## 目录布局
 
 ```text
@@ -58,6 +62,25 @@ LOG_LEVEL = "INFO"
 | 内容改回与当前代际相同 | 不换代（revision 没变），这是预期行为 |
 
 **改配置文件不会搞挂正在跑的 agent。** 最坏情况是新配置没生效，旧的继续工作。
+
+## Agent 自助管理
+
+| 工具 | 作用 |
+| --- | --- |
+| `workspace_mcp_apply` | 新建或更新一个声明，立即校验并热发布 |
+| `workspace_mcp_remove` | 删除一个声明并排空它的进程 |
+| `workspace_mcp_status` | 列出声明与当前代际 |
+
+三个工具都是 deferred（模型需先 `tool_search` 解锁），且都不改 `config.toml`、不需要重启。
+
+约束：
+
+1. **写入即校验**：`apply` 写完声明后立刻 reconcile。发布失败会把声明文件**回滚到先前内容**
+   （新建的则删除），并抛出错误——不会留下一个坏声明卡住后续所有热重载。
+2. **每次修改留备份**：旧内容写入 `<workspace>/mcp/backups/<name>/<时间戳>.toml`。
+3. **`status` 只回显 env 的键名，不回显值**。那里通常是 API key，回显给模型等于把密钥写进
+   对话历史和长期记忆。
+4. **`effectiveFrom` 是 `next_turn`**：当前 turn 已经锁定了自己的快照，新工具从下一轮开始可见。
 
 ## 与被动 turn 的关系
 

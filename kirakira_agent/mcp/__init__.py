@@ -1,5 +1,6 @@
 """Model Context Protocol stdio client and declarative workspace servers."""
 
+from kirakira_agent.mcp.admin import WorkspaceMcpAdmin
 from kirakira_agent.mcp.client import McpClient, McpToolInfo
 from kirakira_agent.mcp.declarations import (
     WorkspaceMcpDeclarations,
@@ -16,6 +17,7 @@ __all__ = [
     "McpGenerationHost",
     "McpToolInfo",
     "PreparedMcpCatalog",
+    "WorkspaceMcpAdmin",
     "WorkspaceMcpDeclarations",
     "WorkspaceMcpWatcher",
     "declarations_input_revision",
