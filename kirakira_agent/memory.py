@@ -212,7 +212,7 @@ class MemoryRuntime:
                 content=content,
                 source_ref=source_ref,
                 memory_type=memory_type.strip() or "requested_memory",
-                embedding=self._embed_or_none(content),
+                embedding=self._embed_for_store(content),
             )
             self._records.append(record)
             self._save()
@@ -227,7 +227,7 @@ class MemoryRuntime:
         until: str = "",
     ) -> List[MemoryRecord]:
         q_tokens = _tokenize(query)
-        query_embedding = self._embed_or_none(query) if query.strip() else None
+        query_embedding = self._embed_for_query(query) if query.strip() else None
         allowed_types = {item for item in (memory_types or []) if item}
         since_dt = self._parse_optional_time(since)
         until_dt = self._parse_optional_time(until)
@@ -303,7 +303,7 @@ class MemoryRuntime:
                     if not value:
                         raise ValueError("memory content is empty")
                     record.content = value
-                    record.embedding = self._embed_or_none(value)
+                    record.embedding = self._embed_for_store(value)
                 if memory_type is not None:
                     record.memory_type = memory_type.strip() or record.memory_type
                 record.updated_at = _now()
@@ -568,14 +568,30 @@ class MemoryRuntime:
                     return True
         return False
 
-    def _embed_or_none(self, text: str) -> List[float] | None:
+    def _embed_for_query(self, text: str) -> List[float] | None:
+        """检索侧可以降级：拿不到向量就退回词法召回，本轮仍然有答案。"""
+
         if self.embedding_client is None or not text.strip():
             return None
         try:
             return self.embedding_client.embed(text)
         except Exception:
-            logger.exception("embedding failed; falling back to lexical memory")
+            logger.exception("embedding failed; falling back to lexical recall")
             return None
+
+    def _embed_for_store(self, text: str) -> List[float] | None:
+        """写入侧不能降级：配置了 embedding 却静默存入无向量记录，会让这条记忆此后
+        永远无法被语义召回，且索引里一部分有向量一部分没有，是不可见的数据损坏。"""
+
+        if self.embedding_client is None or not text.strip():
+            return None
+        try:
+            return self.embedding_client.embed(text)
+        except Exception as exc:
+            raise RuntimeError(
+                "embedding service failed while storing memory; refusing to write a "
+                "record that could never be recalled semantically"
+            ) from exc
 
     @staticmethod
     def _cosine(

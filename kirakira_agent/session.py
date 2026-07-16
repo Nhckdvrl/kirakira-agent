@@ -297,13 +297,17 @@ class SessionManager:
         sessions = list(self._cache.values())
         cached = {s.key for s in sessions}
         for path in sorted(self.session_dir.glob("*.json")):
+            # 损坏的 session 文件必须暴露：静默跳过会让管理接口少列一条会话，
+            # 用户看到的是“记录不见了”，而不是“这个文件坏了”。
             try:
                 data = json.loads(path.read_text(encoding="utf-8"))
-                key = str(data.get("key") or "")
-                if key and key not in cached:
-                    sessions.append(Session.from_json(data))
-            except Exception:
-                continue
+            except (OSError, ValueError) as exc:
+                raise RuntimeError("Session file is unreadable: %s" % path) from exc
+            key = str(data.get("key") or "")
+            if not key:
+                raise RuntimeError("Session file has no key: %s" % path)
+            if key not in cached:
+                sessions.append(Session.from_json(data))
         return sessions
 
     def _path(self, key: str) -> Path:

@@ -1,3 +1,8 @@
+[runtime]
+# 运行时可写状态的根目录：session、记忆、附件、插件数据、workspace MCP 都在这里。
+# 优先级：--workspace > KIRAKIRA_WORKSPACE > 本项 > 当前目录。~ 会在启动时展开。
+workspace = "."
+
 [llm.main]
 model = "deepseek-v4-flash"
 api_key = "${DEEPSEEK_API_KEY}"

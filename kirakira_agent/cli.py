@@ -189,9 +189,10 @@ async def build_runtime(
     enable_web: bool = False,
     enable_telegram: bool = False,
     enable_qq: bool = False,
+    config_path: Path | None = None,
 ) -> CoreRuntime:
     load_dotenv(workdir / ".env")
-    app_config = load_toml_config(workdir / "config.toml")
+    app_config = load_toml_config(config_path or workdir / "config.toml")
     model = os.getenv("MODEL_ID") or str(
         config_value(app_config, "llm", "main", "model", default="")
     )
@@ -483,12 +484,37 @@ async def runtime_serve(runtime: CoreRuntime) -> None:
         await runtime.stop_background(tasks)
 
 
+def resolve_workspace(
+    cli_workspace: str | None,
+    app_config: JsonDict,
+    *,
+    default: Path,
+) -> Path:
+    """按 --workspace > KIRAKIRA_WORKSPACE > config [runtime].workspace > 默认解析。
+
+    运行时可写状态（session、记忆、附件、插件数据、workspace MCP）全部落在这个根下，
+    不同 workspace 之间互不共享。
+    """
+
+    env_value = os.getenv("KIRAKIRA_WORKSPACE")
+    configured = str(config_value(app_config, "runtime", "workspace", default="") or "")
+    for candidate in (cli_workspace, env_value, configured):
+        if candidate is None:
+            continue
+        text = str(candidate).strip()
+        if not text:
+            continue
+        return Path(text).expanduser().resolve()
+    return default
+
+
 async def _main_async(args: argparse.Namespace, workdir: Path) -> None:
     runtime = await build_runtime(
         workdir,
         enable_web=args.web,
         enable_telegram=args.telegram,
         enable_qq=args.qq,
+        config_path=args.config_path,
     )
     if args.serve or args.web or args.telegram or args.qq:
         await runtime_serve(runtime)
@@ -502,6 +528,28 @@ def main() -> None:
     parser.add_argument("--web", action="store_true", help="Enable stdlib web channel.")
     parser.add_argument("--telegram", action="store_true", help="Enable Telegram Bot API channel.")
     parser.add_argument("--qq", action="store_true", help="Enable QQ OneBot webhook channel.")
+    parser.add_argument(
+        "--workspace",
+        default=None,
+        help=(
+            "Runtime state root (sessions, memory, plugin data, workspace MCP). "
+            "Overrides KIRAKIRA_WORKSPACE and config [runtime].workspace."
+        ),
+    )
+    parser.add_argument(
+        "--config",
+        default=None,
+        help="Path to config.toml. Defaults to ./config.toml.",
+    )
     args = parser.parse_args()
-    workdir = Path(os.getcwd()).resolve()
+    # config 先于 workspace 解析：workspace 可以写在 config 里，但 config 本身不住在
+    # workspace 内，否则会形成先有鸡还是先有蛋。
+    cwd = Path(os.getcwd()).resolve()
+    args.config_path = (
+        Path(args.config).expanduser().resolve() if args.config else cwd / "config.toml"
+    )
+    workdir = resolve_workspace(
+        args.workspace, load_toml_config(args.config_path), default=cwd
+    )
+    workdir.mkdir(parents=True, exist_ok=True)
     asyncio.run(_main_async(args, workdir))
