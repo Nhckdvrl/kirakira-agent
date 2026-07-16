@@ -15,6 +15,15 @@ from pathlib import Path
 from typing import Any, Dict, List
 from uuid import uuid4
 
+from kirakira_agent.retrieval import (
+    LEXICAL_RRF_WEIGHT,
+    RetrievalRequest,
+    RetrievalResult,
+    RetrievalTrace,
+    hotness_boost,
+    plan_injection,
+    rrf_fuse,
+)
 from kirakira_agent.session import Session, SessionManager
 from kirakira_agent.embeddings import EmbeddingClient
 
@@ -218,22 +227,20 @@ class MemoryRuntime:
             self._save()
             return record
 
-    def recall(
+    def candidates(
         self,
-        query: str,
-        limit: int = 5,
         memory_types: List[str] | None = None,
         since: str = "",
         until: str = "",
     ) -> List[MemoryRecord]:
-        q_tokens = _tokenize(query)
-        query_embedding = self._embed_for_query(query) if query.strip() else None
+        """按 type/时间过滤出候选集合；排序交给各 lane。"""
+
         allowed_types = {item for item in (memory_types or []) if item}
         since_dt = self._parse_optional_time(since)
         until_dt = self._parse_optional_time(until)
-        scored: List[tuple[float, MemoryRecord]] = []
         with self._record_lock:
             records = list(self._records)
+        selected: List[MemoryRecord] = []
         for record in records:
             if record.status != "active":
                 continue
@@ -244,26 +251,111 @@ class MemoryRuntime:
                 continue
             if until_dt and created and created > until_dt:
                 continue
+            selected.append(record)
+        return selected
+
+    def lexical_lane(
+        self, query: str, records: List[MemoryRecord]
+    ) -> List[MemoryRecord]:
+        """词法 lane：擅长变量名、命令、路径、错误码这类精确实体。"""
+
+        q_tokens = _tokenize(query)
+        needle = query.lower().strip()
+        scored: List[tuple[float, str, MemoryRecord]] = []
+        for record in records:
             tokens = _tokenize(record.content)
             overlap = len(q_tokens & tokens)
-            lexical = overlap / max(
-                1.0, math.sqrt(len(q_tokens) * max(1, len(tokens)))
-            )
+            score = overlap / max(1.0, math.sqrt(len(q_tokens) * max(1, len(tokens))))
+            # 整串命中是很强的信号，但只在本 lane 内部抬名次，不会跨 lane 污染分数。
+            if needle and needle in record.content.lower():
+                score += 1.0
+            if score <= 0:
+                continue
+            scored.append((score, record.created_at, record))
+        scored.sort(key=lambda item: (-item[0], item[1]), reverse=False)
+        scored.sort(key=lambda item: item[0], reverse=True)
+        return [record for _, _, record in scored]
+
+    def vector_lane(
+        self, query: str, records: List[MemoryRecord], *, threshold: float = 0.25
+    ) -> List[MemoryRecord]:
+        """语义 lane：擅长口语化表达和同义改写。向量不可用时返回空，退化为纯词法。"""
+
+        query_embedding = self._embed_for_query(query) if query.strip() else None
+        if query_embedding is None:
+            return []
+        scored: List[tuple[float, str, MemoryRecord]] = []
+        for record in records:
             semantic = self._cosine(query_embedding, record.embedding)
-            score = lexical if semantic is None else semantic * 0.75 + lexical * 0.25
-            if query.lower().strip() and query.lower().strip() in record.content.lower():
-                score += 2.0
-            score += min(0.25, math.log1p(max(1, record.reinforcement)) * 0.05)
-            if (
-                overlap > 0
-                or query.lower().strip() in record.content.lower()
-                or not q_tokens
-                or semantic is not None
-                and semantic >= 0.25
-            ):
-                scored.append((score, record))
-        scored.sort(key=lambda item: (item[0], item[1].created_at), reverse=True)
-        return [record for _, record in scored[: max(1, limit)]]
+            if semantic is None or semantic < threshold:
+                continue
+            scored.append((semantic, record.created_at, record))
+        scored.sort(key=lambda item: item[0], reverse=True)
+        return [record for _, _, record in scored]
+
+    def recall(
+        self,
+        query: str,
+        limit: int = 5,
+        memory_types: List[str] | None = None,
+        since: str = "",
+        until: str = "",
+    ) -> List[MemoryRecord]:
+        """多路召回 + RRF 融合。
+
+        不再用 `semantic * 0.75 + lexical * 0.25`：那是把尺度不可比的两个原始分数直接
+        相加。RRF 只看各 lane 内部的名次，因此 lane 之间不需要可比。
+        """
+
+        return self._recall_with_trace(query, limit, memory_types, since, until)[0]
+
+    def _recall_with_trace(
+        self,
+        query: str,
+        limit: int,
+        memory_types: List[str] | None,
+        since: str,
+        until: str,
+    ) -> tuple[List[MemoryRecord], RetrievalTrace]:
+        """召回并同时产出 trace。lane 只跑一次——vector lane 会打 embedding 接口，
+        为了记 trace 再跑一遍等于每轮多花一次网络往返。"""
+
+        trace = RetrievalTrace(used_vector=self.embedding_client is not None)
+        records = self.candidates(memory_types, since, until)
+        if not records:
+            return [], trace
+        if not query.strip():
+            # 无 query 时没有"相关性"可言，按时间倒序给最近的。
+            selected = sorted(records, key=lambda r: r.created_at, reverse=True)[
+                : max(1, limit)
+            ]
+            trace.fused = len(selected)
+            return selected, trace
+
+        lexical = self.lexical_lane(query, records)
+        vector = self.vector_lane(query, records)
+        trace.lanes = {"lexical": len(lexical), "vector": len(vector)}
+        fused = rrf_fuse(
+            [("vector", 1.0, vector), ("lexical", LEXICAL_RRF_WEIGHT, lexical)]
+        )
+        by_id = {record.id: record for record in records}
+        now = datetime.now().astimezone()
+        boosted: List[tuple[float, str, MemoryRecord]] = []
+        for record_id, score in fused:
+            record = by_id.get(record_id)
+            if record is None:
+                continue
+            # 强化次数的加成随时间半衰，陈年旧记忆不会永远压住新记忆。
+            score *= hotness_boost(
+                record.reinforcement,
+                self._parse_optional_time(record.updated_at),
+                now,
+            )
+            boosted.append((score, record.created_at, record))
+        boosted.sort(key=lambda item: (-item[0], item[1]))
+        selected = [record for _, _, record in boosted[: max(1, limit)]]
+        trace.fused = len(selected)
+        return selected, trace
 
     def forget(self, ids: List[str]) -> List[str]:
         with self._record_lock:
@@ -312,17 +404,25 @@ class MemoryRuntime:
             return False
 
     def build_retrieval_block(self, query: str, limit: int = 5) -> str:
-        records = self.recall(query, limit=limit)
-        if not records:
-            return ""
-        lines = ["## Retrieved Long-Term Memory"]
-        for record in records:
-            source = " source_ref=%s" % record.source_ref if record.source_ref else ""
-            lines.append(
-                "- [%s type=%s reinforced=%d]%s %s"
-                % (record.id, record.memory_type, record.reinforcement, source, record.content)
-            )
-        return "\n".join(lines)
+        return self.retrieve(RetrievalRequest(query=query, limit=limit)).block
+
+    def retrieve(self, request: RetrievalRequest) -> RetrievalResult:
+        """默认检索管线：多路召回 → RRF 融合 → 热度加权 → 注入预算。
+
+        实现 `MemoryRetrievalPipeline` 协议，因此可以整体替换成别的策略。
+        """
+
+        records, trace = self._recall_with_trace(
+            request.query,
+            request.limit,
+            list(request.memory_types) or None,
+            request.since,
+            request.until,
+        )
+        block, injected, truncated = plan_injection(records)
+        trace.injected = injected
+        trace.truncated = truncated
+        return RetrievalResult(block=block, records=records, trace=trace)
 
     def consolidate_turn(self, session: Session, user_content: str, assistant_reply: str) -> None:
         summary = "user: %s | assistant: %s" % (
