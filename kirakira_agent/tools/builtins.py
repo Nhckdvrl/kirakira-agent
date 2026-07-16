@@ -23,6 +23,7 @@ from kirakira_agent.bus import MessageBus
 from kirakira_agent.events import OutboundMessage
 from kirakira_agent.memory import MemoryRuntime
 from kirakira_agent.schema import ToolSpec
+from kirakira_agent.snapshot import SnapshotToolView, get_current_runtime_snapshot
 from kirakira_agent.session import SessionManager
 from kirakira_agent.skills import SkillLoader
 from kirakira_agent.tools.registry import ToolRegistry, object_schema
@@ -321,9 +322,12 @@ class WorkspaceTools:
     def compact(self) -> str:
         return "Compacting context."
 
-    def tool_search(self, query: str = "", limit: int = 20) -> str:
+    async def tool_search(self, query: str = "", limit: int = 20) -> str:
+        # 必须是 async：只有在 turn 自己的 task 里才能读到本轮锁定的快照，
+        # 而 MCP 工具只存在于快照中，不在基础注册表里。
         if self.registry is None:
             return "[]"
+        view = SnapshotToolView(self.registry, get_current_runtime_snapshot())
         query = query.strip()
         if not query:
             return json.dumps(
@@ -333,13 +337,13 @@ class WorkspaceTools:
         selected = []
         if query.lower().startswith("select:"):
             requested = [item.strip() for item in query[7:].split(",") if item.strip()]
-            selected = [name for name in requested if self.registry.has(name)]
-            missing = [name for name in requested if not self.registry.has(name)]
+            selected = [name for name in requested if view.has(name)]
+            missing = [name for name in requested if not view.has(name)]
             matched = [
                 {
                     "name": name,
-                    "description": self.registry.get_tool(name).spec.description,
-                    "input_schema": self.registry.get_tool(name).spec.input_schema,
+                    "description": view.get_tool(name).spec.description,
+                    "input_schema": view.get_tool(name).spec.input_schema,
                 }
                 for name in selected
             ]
@@ -350,7 +354,7 @@ class WorkspaceTools:
             )
         terms = [term.lower() for term in re.findall(r"[\w:-]+", query)]
         matches = []
-        for spec in self.registry.specs():
+        for spec in view.specs():
             haystack = ("%s %s" % (spec.name, spec.description)).lower()
             score = sum(1 for term in terms if term in haystack) if terms else 1
             if score:

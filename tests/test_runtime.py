@@ -17,9 +17,11 @@ from kirakira_agent.models.base import ContextLengthError
 from kirakira_agent.runtime import AgentLoop, DefaultReasoner, PassiveTurnPipeline, RuntimeConfig
 from kirakira_agent.schema import ModelResponse, ToolCall, ToolSpec
 from kirakira_agent.session import SessionManager
+from kirakira_agent.snapshot import RuntimeSnapshotStore, compile_snapshot
 from kirakira_agent.subagent import SubagentManager
 from kirakira_agent.tool_hooks import HookOutcome
 from kirakira_agent.tools import build_default_registry
+from kirakira_agent.tools.registry import Tool
 from kirakira_agent.lifecycle import StreamDeltaReady, ToolCallCompleted, ToolCallStarted, TurnStarted
 
 
@@ -33,7 +35,30 @@ class FakeModel:
         return self.responses.pop(0)
 
 
-def build_test_runtime(workdir, model):
+def _snapshot_tool(name, reply):
+    async def handler(**_kwargs):
+        return reply
+
+    return Tool(
+        spec=ToolSpec(name, "snapshot tool %s" % name, {"type": "object", "properties": {}}),
+        handler=handler,
+        deferred=True,
+    )
+
+
+def _tool_result_for(session_manager, session_key, tool_name):
+    """从已保存的 session tool chain 里取出某个工具的执行结果。"""
+
+    session = session_manager.get_or_create(session_key)
+    for message in session.messages:
+        for group in message.get("tool_chain") or []:
+            for call in group.get("calls") or []:
+                if call.get("name") == tool_name:
+                    return call.get("result")
+    raise AssertionError("tool %s was never called" % tool_name)
+
+
+def build_test_runtime(workdir, model, *, snapshot_store=None):
     bus = MessageBus()
     event_bus = EventBus()
     session_manager = SessionManager(workdir)
@@ -56,6 +81,7 @@ def build_test_runtime(workdir, model):
         tools=tools,
         reasoner=reasoner,
         config=config,
+        snapshot_store=snapshot_store,
     )
     return bus, AgentLoop(bus=bus, pipeline=pipeline), session_manager, memory
 
@@ -353,6 +379,87 @@ class RuntimeTests(unittest.TestCase):
                 self.assertIn(
                     "remote_demo", [spec.name for spec in model.calls[1]["tools"]]
                 )
+
+        asyncio.run(scenario())
+
+    def test_turn_pins_snapshot_tools_across_mid_turn_hot_reload(self):
+        """turn 中途换代时，本轮必须继续看到并调用它开始时锁定的那代工具。"""
+
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                store = RuntimeSnapshotStore()
+                gen1 = compile_snapshot(
+                    mcp_tools={"mcp_a__ping": _snapshot_tool("mcp_a__ping", "gen1-pong")},
+                    mcp_generation_id="gen1",
+                    revision="1",
+                )
+                await store.commit(store.publish(gen1))
+
+                swapped = asyncio.Event()
+
+                async def swap_generation(**_kwargs):
+                    # 模拟 watcher 在本轮工具调用之后立刻完成换代。
+                    await store.commit(
+                        store.publish(
+                            compile_snapshot(
+                                mcp_tools={
+                                    "mcp_b__ping": _snapshot_tool("mcp_b__ping", "gen2")
+                                },
+                                mcp_generation_id="gen2",
+                                revision="2",
+                            )
+                        )
+                    )
+                    swapped.set()
+                    return "swapped"
+
+                model = FakeModel(
+                    [
+                        ModelResponse(
+                            tool_calls=[ToolCall("s", "trigger_reload", {})]
+                        ),
+                        ModelResponse(
+                            tool_calls=[
+                                ToolCall("search", "tool_search", {"query": "select:mcp_a__ping"})
+                            ]
+                        ),
+                        ModelResponse(tool_calls=[ToolCall("p", "mcp_a__ping", {})]),
+                        ModelResponse(text="done"),
+                    ]
+                )
+                _bus, loop, _sessions, _memory = build_test_runtime(
+                    Path(tmp), model, snapshot_store=store
+                )
+                loop.pipeline.tools.register(
+                    ToolSpec(
+                        "trigger_reload",
+                        "swap the runtime snapshot mid-turn",
+                        {"type": "object", "properties": {}, "required": []},
+                    ),
+                    swap_generation,
+                )
+
+                outbound = await loop.pipeline.run(
+                    InboundMessage("cli", "tester", "chat", "ping"),
+                    "cli:chat",
+                    dispatch_outbound=False,
+                )
+
+                self.assertTrue(swapped.is_set())
+                self.assertEqual(outbound.content, "done")
+                # 换代后本轮 tool_search 仍然只看得到自己那一代的 MCP 工具。
+                search_result = json.loads(
+                    _tool_result_for(_sessions, "cli:chat", "tool_search")
+                )
+                self.assertEqual(search_result["unlocked"], ["mcp_a__ping"])
+                # 并且真的调用到了旧代际的实现，而不是报工具不存在。
+                self.assertEqual(
+                    _tool_result_for(_sessions, "cli:chat", "mcp_a__ping"), "gen1-pong"
+                )
+                # 全局 current 已经切到新代际。
+                self.assertEqual(store.current.mcp_tool_names, ("mcp_b__ping",))
+                # 本轮租约释放后，旧代际才允许排空。
+                self.assertEqual(gen1.state, "drained")
 
         asyncio.run(scenario())
 

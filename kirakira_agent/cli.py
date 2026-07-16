@@ -16,10 +16,11 @@ from kirakira_agent.channels.qq import QQChannel
 from kirakira_agent.channels.telegram import TelegramChannel
 from kirakira_agent.channels.web import WebChannel
 from kirakira_agent.context_builder import ContextBuilder
+from kirakira_agent.context_policy import recommended_context_settings
 from kirakira_agent.event_bus import EventBus
 from kirakira_agent.events import InboundMessage, OutboundMessage
 from kirakira_agent.memory import MemoryRuntime
-from kirakira_agent.mcp import McpServerRegistry
+from kirakira_agent.mcp import McpCatalogPublisher, WorkspaceMcpWatcher
 from kirakira_agent.models import OpenAICompatibleClient
 from kirakira_agent.plugins import PluginManager
 from kirakira_agent.runtime import (
@@ -31,6 +32,7 @@ from kirakira_agent.runtime import (
 )
 from kirakira_agent.schema import JsonDict
 from kirakira_agent.session import SessionManager
+from kirakira_agent.snapshot import RuntimeSnapshotStore
 from kirakira_agent.scheduler import SchedulerService
 from kirakira_agent.subagent import SubagentManager
 from kirakira_agent.skills import SkillLoader
@@ -226,13 +228,32 @@ async def build_runtime(
             ),
         )
     registry = build_default_registry(workdir, memory=memory, session_manager=session_manager, bus=bus)
-    mcp_registry = McpServerRegistry(workdir / "mcp_servers.json", registry)
-    await mcp_registry.load_and_connect_all()
+    # 能力快照：MCP 换代只切换 current 快照，在途 turn 用完旧租约后旧进程才断开。
+    snapshot_store = RuntimeSnapshotStore()
+    mcp_publisher = McpCatalogPublisher(snapshot_store)
+    snapshot_store.set_drain_handler(mcp_publisher.drain_snapshot)
+    # workspace MCP 由 mcp/servers/*.toml 声明并热重载；首轮 reconcile 失败不阻塞启动，
+    # watcher 会在声明修好后自动重试。
+    mcp_watcher = WorkspaceMcpWatcher(workdir / "mcp" / "servers", mcp_publisher)
+    try:
+        await mcp_watcher.reconcile()
+    except (OSError, ValueError, RuntimeError) as error:
+        mcp_watcher.last_error = str(error)
+        logging.getLogger(__name__).error("workspace MCP initial publish failed: %s", error)
     context = ContextBuilder(
         workdir,
         memory,
         system_prompt=str(
             config_value(app_config, "agent", "system_prompt", default="")
+        ),
+    )
+    # 未显式配置 memory_window / max_tokens 时，按模型真实 context_window 等比例派生。
+    derived = recommended_context_settings(
+        int(config_value(app_config, "llm", "main", "context_window", default=128_000)),
+        float(
+            config_value(
+                app_config, "agent", "context", "effective_context_percent", default=0.9
+            )
         ),
     )
     config = RuntimeConfig(
@@ -246,13 +267,25 @@ async def build_runtime(
         max_tokens=int(
             os.getenv(
                 "AGENT_MAX_TOKENS",
-                str(config_value(app_config, "agent", "max_tokens", default=8192)),
+                str(
+                    config_value(
+                        app_config, "agent", "max_tokens", default=derived.output_reserve
+                    )
+                ),
             )
         ),
         history_window=int(
             os.getenv(
                 "AGENT_HISTORY_WINDOW",
-                str(config_value(app_config, "agent", "context", "memory_window", default=40)),
+                str(
+                    config_value(
+                        app_config,
+                        "agent",
+                        "context",
+                        "memory_window",
+                        default=derived.memory_window,
+                    )
+                ),
             )
         ),
         model_timeout_seconds=float(os.getenv("AGENT_MODEL_TIMEOUT", "120")),
@@ -287,6 +320,7 @@ async def build_runtime(
         tools=registry,
         reasoner=reasoner,
         config=config,
+        snapshot_store=snapshot_store,
     )
     loop = AgentLoop(bus=bus, pipeline=pipeline)
     plugin_manager = PluginManager(
@@ -296,7 +330,7 @@ async def build_runtime(
         workspace=workdir,
         session_manager=session_manager,
         memory=memory,
-        mcp_registry=mcp_registry,
+        mcp_publisher=mcp_publisher,
         skill_loader=context.skills,
     )
     await plugin_manager.load_all()
@@ -347,7 +381,7 @@ async def build_runtime(
         loop=loop,
         channel_host=channel_host,
         plugin_manager=plugin_manager,
-        mcp_registry=mcp_registry,
+        mcp_watcher=mcp_watcher,
         scheduler=scheduler,
         subagents=subagents,
     )

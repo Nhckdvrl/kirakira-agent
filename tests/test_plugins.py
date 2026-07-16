@@ -13,20 +13,23 @@ from kirakira_agent.tool_hooks import HookContext, ToolExecutionRequest
 from kirakira_agent.tools.registry import ToolRegistry
 
 
-def write_manifest(root, payload):
-    manifest_dir = root / ".aka-plugin"
-    manifest_dir.mkdir(parents=True)
-    (manifest_dir / "plugin.json").write_text(
-        json.dumps(payload), encoding="utf-8"
-    )
+def write_enablement(workspace, body):
+    manifest_dir = workspace / ".kirakira"
+    manifest_dir.mkdir(parents=True, exist_ok=True)
+    (manifest_dir / "manifest.toml").write_text(body, encoding="utf-8")
 
 
-class FakeMcpRegistry:
+class FakeMcpPublisher:
     def __init__(self):
         self.configs = None
 
-    async def sync_plugin_servers(self, configs):
+    async def publish(self, configs, *, source="workspace"):
         self.configs = configs
+        self.source = source
+        return "gen-test"
+
+    async def shutdown(self):
+        return None
 
 
 class FakeSkillLoader:
@@ -87,7 +90,7 @@ class PluginTests(unittest.TestCase):
 
         asyncio.run(scenario())
 
-    def test_manifest_lifecycle_skills_and_mcp_are_assembled(self):
+    def test_programmatic_capabilities_are_assembled(self):
         async def scenario():
             with tempfile.TemporaryDirectory() as tmp:
                 workspace = Path(tmp)
@@ -96,46 +99,24 @@ class PluginTests(unittest.TestCase):
                 (root / "skills" / "hello" / "SKILL.md").write_text(
                     "---\nname: hello\ndescription: hi\n---\nbody", encoding="utf-8"
                 )
-                (root / "mcp").mkdir()
-                (root / "mcp" / "servers.json").write_text(
-                    json.dumps(
-                        {
-                            "servers": {
-                                "demo": {
-                                    "command": ["python", "./server.py"],
-                                    "env": {"TOKEN": "test"},
-                                }
-                            }
-                        }
-                    ),
-                    encoding="utf-8",
-                )
+                # 能力全部由 plugin.py 用代码声明，没有任何描述符文件。
                 (root / "plugin.py").write_text(
-                    "from kirakira_agent.plugins import Plugin\n"
+                    "from kirakira_agent.plugins import McpServerSpec, Plugin\n"
                     "class FullPlugin(Plugin):\n"
                     "    name = 'full'\n"
+                    "    version = '1.0.0'\n"
+                    "    @classmethod\n"
+                    "    def skill_roots(cls):\n"
+                    "        return ('skills',)\n"
+                    "    @classmethod\n"
+                    "    def mcp_servers(cls):\n"
+                    "        return [McpServerSpec('demo', ('python', './server.py'),"
+                    " {'TOKEN': 'test'})]\n"
                     "    async def initialize(self):\n"
                     "        self.context.kv_store.increment('starts')\n",
                     encoding="utf-8",
                 )
-                write_manifest(
-                    root,
-                    {
-                        "name": "full",
-                        "version": "1.0.0",
-                        "paths": {
-                            "skills": ["skills"],
-                            "mcp_servers": ["mcp/servers.json"],
-                        },
-                        "akashic": {
-                            "lifecycle": {
-                                "entry": "plugin.py",
-                                "class": "FullPlugin",
-                            }
-                        },
-                    },
-                )
-                mcp = FakeMcpRegistry()
+                mcp = FakeMcpPublisher()
                 skills = FakeSkillLoader()
                 manager = PluginManager(
                     [workspace / "plugins"],
@@ -144,7 +125,7 @@ class PluginTests(unittest.TestCase):
                     workspace=workspace,
                     session_manager=None,
                     memory=None,
-                    mcp_registry=mcp,
+                    mcp_publisher=mcp,
                     skill_loader=skills,
                 )
 
@@ -158,24 +139,74 @@ class PluginTests(unittest.TestCase):
                 self.assertEqual(
                     mcp.configs["demo"]["command"][1], str((root / "server.py").resolve())
                 )
+                self.assertEqual(mcp.configs["demo"]["env"]["TOKEN"], "test")
+                listed = json.loads(manager.list_plugins())["active"][0]
+                self.assertEqual(listed["version"], "1.0.0")
+                self.assertEqual(listed["mcp_servers"], ["demo"])
 
         asyncio.run(scenario())
 
-    def test_plugin_install_validates_manifest_and_requires_restart(self):
+    def test_manifest_disables_plugin(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                workspace = Path(tmp)
+                root = workspace / "plugins" / "off"
+                root.mkdir(parents=True)
+                root.joinpath("plugin.py").write_text(
+                    "from kirakira_agent.plugins import Plugin\n"
+                    "class Off(Plugin):\n"
+                    "    name = 'off'\n",
+                    encoding="utf-8",
+                )
+                write_enablement(workspace, '[plugins."off"]\nenabled = false\n')
+                manager = PluginManager(
+                    [workspace / "plugins"],
+                    event_bus=EventBus(),
+                    tool_registry=ToolRegistry(),
+                    workspace=workspace,
+                    session_manager=None,
+                    memory=None,
+                )
+
+                await manager.load_all()
+
+                self.assertEqual(manager.active, [])
+
+        asyncio.run(scenario())
+
+    def test_corrupt_manifest_fails_loud(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                workspace = Path(tmp)
+                (workspace / "plugins").mkdir()
+                write_enablement(workspace, '[plugins."x"]\nenabled = "yes"\n')
+                manager = PluginManager(
+                    [workspace / "plugins"],
+                    event_bus=EventBus(),
+                    tool_registry=ToolRegistry(),
+                    workspace=workspace,
+                    session_manager=None,
+                    memory=None,
+                )
+
+                with self.assertRaises(ValueError):
+                    await manager.load_all()
+
+        asyncio.run(scenario())
+
+    def test_plugin_install_requires_entrypoint_and_restart(self):
         async def scenario():
             with tempfile.TemporaryDirectory() as tmp:
                 workspace = Path(tmp) / "workspace"
-                source = Path(tmp) / "source"
+                source = Path(tmp) / "installed-demo"
                 workspace.mkdir()
                 (source / "skills" / "demo").mkdir(parents=True)
                 (source / "skills" / "demo" / "SKILL.md").write_text("demo")
-                write_manifest(
-                    source,
-                    {
-                        "name": "installed-demo",
-                        "version": "1.2.3",
-                        "paths": {"skills": ["skills"]},
-                    },
+                (source / "plugin.py").write_text(
+                    "from kirakira_agent.plugins import Plugin\n"
+                    "class Demo(Plugin):\n"
+                    "    name = 'installed-demo'\n",
+                    encoding="utf-8",
                 )
                 manager = PluginManager(
                     [workspace / ".kirakira" / "plugins"],
@@ -242,7 +273,7 @@ class PluginTests(unittest.TestCase):
 
         asyncio.run(scenario())
 
-    def test_manifest_rejects_path_traversal_without_stopping_other_plugins(self):
+    def test_declaration_rejects_path_traversal_without_stopping_other_plugins(self):
         async def scenario():
             with tempfile.TemporaryDirectory() as tmp:
                 workspace = Path(tmp)
@@ -250,12 +281,14 @@ class PluginTests(unittest.TestCase):
                 good = workspace / "plugins" / "good"
                 bad.mkdir(parents=True)
                 good.mkdir(parents=True)
-                write_manifest(
-                    bad,
-                    {
-                        "name": "bad",
-                        "akashic": {"lifecycle": {"entry": "../../outside.py"}},
-                    },
+                bad.joinpath("plugin.py").write_text(
+                    "from kirakira_agent.plugins import Plugin\n"
+                    "class Bad(Plugin):\n"
+                    "    name = 'bad'\n"
+                    "    @classmethod\n"
+                    "    def skill_roots(cls):\n"
+                    "        return ('../../outside',)\n",
+                    encoding="utf-8",
                 )
                 good.joinpath("plugin.py").write_text(
                     "from kirakira_agent.plugins import Plugin\nclass Good(Plugin):\n    pass\n",
