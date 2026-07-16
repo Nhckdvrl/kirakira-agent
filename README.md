@@ -1,39 +1,84 @@
 # Kirakira Agent
 
-Kirakira Agent is a multi-channel AI agent runtime modeled after the passive
-reply architecture of `akashic-agent`. It includes Web, Telegram, QQ/OneBot,
-and CLI channels; an ordered message bus; concurrent session-aware turns;
-streaming OpenAI-compatible tool loops; persistent sessions and memory;
-plugins, MCP, skills, scheduling, and isolated subagents.
+Kirakira Agent is a multi-channel AI agent runtime, built by working through the
+passive-reply architecture of [`akashic-agent`](https://github.com/kachofugetsu09/akashic-agent)
+from a minimal function-calling MVP upward. It has Web, Telegram, QQ/OneBot and
+CLI channels; an ordered message bus; session-aware concurrent turns; streaming
+OpenAI-compatible tool loops; persistent sessions and long-term memory; plugins,
+MCP, skills, scheduling and isolated subagents.
 
-The autonomous proactive/drift chain is intentionally out of scope. See the
-[detailed Chinese README](README-cn.md) and
-[project report](docs/PROJECT_REPORT.md) for architecture, configuration,
-verification results, and the exact Reference comparison. The Chinese
-[version evolution roadmap](docs/VERSION_EVOLUTION.md) explains each upgrade
-stage and the proposed path from the current runtime to V1.0.
+The autonomous proactive/drift chain is intentionally out of scope.
 
-## Quick Start
+> This is a learning project. The documentation is a first-class part of it: it
+> traces how each layer was driven into existence by a concrete problem, which is
+> the point of the exercise. Start with
+> [docs/VERSION_EVOLUTION.md](docs/VERSION_EVOLUTION.md).
 
-Python 3.11 or newer is required.
+## Quick start
+
+Python 3.11+. No third-party packages are needed to run the core runtime.
 
 ```bash
+cp .env.example .env          # put your API key here
 cp config.example.toml config.toml
-export DEEPSEEK_API_KEY=your-key
-python -m kirakira_agent
+python -m kirakira_agent      # CLI REPL
 ```
-
-Run all configured passive channels:
 
 ```bash
-python -m kirakira_agent --serve
+python -m kirakira_agent --serve             # run configured channels
+python -m kirakira_agent --workspace /tmp/ws # isolated runtime state
+python -m unittest discover -s tests         # 132 tests
 ```
 
-Run the tests:
+## Layout
 
-```bash
-python -m unittest discover -s tests -v
+```text
+kirakira_agent/          the runtime
+├── runtime.py           AgentLoop, PassiveTurnPipeline, DefaultReasoner
+├── snapshot.py          capability generations + per-turn leases
+├── session.py           JSON sessions + SQLite FTS index
+├── memory.py            markdown/typed memory + background consolidation
+├── context_policy.py    derives context window settings from the model
+├── tools/               registry, executor, built-in tools
+├── mcp/                 declarative workspace MCP (declarations/host/publisher/watcher)
+├── channels/            web, telegram, qq, host
+├── plugins.py           plugin loading and programmatic capability declaration
+└── ...
+
+_handbook/               contracts: what each subsystem is, its rules, how it fails
+docs/                    history and method: why it looks the way it does
+skills/                  built-in skills
+tests/                   132 tests, no network required
 ```
 
-Runtime state is stored in `sessions/`, `memory/`, `uploads/`, and
-`.kirakira/`; `Reference/` and local secrets are ignored by Git.
+Runtime state (`sessions/`, `memory/`, `uploads/`, `mcp/`, `.kirakira/`) lives
+under the workspace root and is gitignored. The workspace resolves as
+`--workspace` > `KIRAKIRA_WORKSPACE` > `config.toml [runtime].workspace` > cwd.
+
+## Documentation
+
+`_handbook/` describes **what is true now** — the contract for each subsystem.
+It changes in the same commit as the code it documents.
+
+| | |
+| --- | --- |
+| [workspace-mcp.md](_handbook/workspace-mcp.md) | declaring MCP servers; what happens when a declaration is wrong |
+| [snapshot-and-lease.md](_handbook/snapshot-and-lease.md) | why hot reload cannot break an in-flight turn |
+| [plugins.md](_handbook/plugins.md) | writing a plugin; declaring capabilities in code |
+
+`docs/` describes **how it got here** — history, and the reasoning worth reusing.
+
+| | |
+| --- | --- |
+| [VERSION_EVOLUTION.md](docs/VERSION_EVOLUTION.md) | MVP → current runtime, one problem at a time |
+| [ARCHITECTURE_LESSONS.md](docs/ARCHITECTURE_LESSONS.md) | transferable design judgement, from real decisions here |
+| [HANDBOOK_GUIDE.md](docs/HANDBOOK_GUIDE.md) | what a handbook is, why it works, how to write one |
+| [DIFFERENCE_AUDIT.md](docs/DIFFERENCE_AUDIT.md) | per-item diff against the reference, and what was deliberately skipped |
+| [PROJECT_REPORT.md](docs/PROJECT_REPORT.md) | code walkthrough and data flow |
+| [REPLICATION_PLAN.md](docs/REPLICATION_PLAN.md) | scope and completion checklist |
+
+[中文 README](README-cn.md) has the detailed configuration and channel setup.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
