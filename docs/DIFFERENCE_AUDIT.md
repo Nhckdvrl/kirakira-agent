@@ -13,10 +13,10 @@
 
 | | Reference | Kirakira |
 | --- | ---: | ---: |
-| Python 总行数 | ~153,000 | ~10,100 |
-| 被动链路相关行数（agent+bus+core+session+infra+bootstrap，含少量 proactive） | ~49,000 | ~10,100 |
-| 测试文件数 | 135 | 20 |
-| 测试项数 | — | 142 |
+| Python 总行数 | ~153,000 | ~10,400 |
+| 被动链路相关行数（agent+bus+core+session+infra+bootstrap，含少量 proactive） | ~49,000 | ~10,400 |
+| 测试文件数 | 135 | 21 |
+| 测试项数 | — | 163 |
 
 体量差 15 倍，但其中大部分是**被明确排除的范围**（`proactive_v2` 3.3k、`plugins/` 插件市场
 19.2k、`memory2` 5.6k、`eval` 2.3k、前端 Dashboard）以及 reference 更完整的代际/控制面机制。
@@ -36,11 +36,11 @@
 | `agent/turns/*` | pipeline 内联 | 行为覆盖，无独立 TurnResult/SideEffect 抽象 |
 | `agent/lifecycle/*`（2200 行） | `lifecycle.py` + pipeline | 7 个 phase ctx 已覆盖；无 slot DAG（§4.1） |
 | `agent/prompting/assembler.py`、`budget.py` | `context_builder.py` + `runtime._trim_context` | 行为覆盖，结构更轻（§4.2） |
-| `agent/retrieval/protocol.py`、`default_pipeline.py` | 直接调用 `memory.build_retrieval_block` | 行为覆盖，无可插拔 pipeline 接缝（§4.3） |
+| `agent/retrieval/protocol.py`、`default_pipeline.py` | `retrieval.py` | ✅ 已补接缝 + RRF 融合（§4.3） |
 | `agent/model_runtime/context_policy.py` | `context_policy.py` | ✅ 本轮补齐（含 #117 的 160 基准） |
 | `agent/model_runtime/*`（其余） | `models/openai_compatible.py` | 我们只有一类后端，无需统一（§5） |
 | `session/manager.py`、`store.py` | `session.py` | JSON canonical + SQLite FTS；#124 语义本就一致 |
-| `core/memory/*`、`memory2/*`（5.6k） | `memory.py`、`embeddings.py` | 核心行为覆盖，算法简化（§4.4） |
+| `core/memory/*`、`memory2/*`（5.6k） | `memory.py`、`embeddings.py`、`retrieval.py` | 核心行为覆盖 + RRF 融合；LLM 门控算法未做（§4.4） |
 
 ### 2.2 工具与扩展
 
@@ -117,20 +117,33 @@ Kirakira：`runtime._trim_context(messages, level)` 按 level 逐级 microcompac
 行为方向一致（先丢动态上下文再丢历史），但 reference 的分级是**按 prompt section 语义**，
 我们的是**按消息粒度**，可解释性更差。
 
-### 4.3 Retrieval 接缝
+### 4.3 Retrieval 接缝与融合（已补齐）
 
-Reference 有 `MemoryRetrievalPipeline` 协议 + `DefaultMemoryRetrievalPipeline`，被动 turn 依赖
-协议而非具体实现，因此可以整体替换检索策略。
+`retrieval.py` 提供 `MemoryRetrievalPipeline` 协议，并实现了 reference `memory2/retriever.py`
+的核心机制：
 
-Kirakira 的 pipeline 直接调 `memory.build_retrieval_block`。行为一样，但没有替换接缝。
-真要做多路召回 + RRF 时（见 `VERSION_EVOLUTION.md §5.5`），第一步就是补这个接缝。
+| 机制 | Reference | Kirakira |
+| --- | --- | --- |
+| RRF 融合 | `_rrf_merge`，k=60，keyword 权重 0.5 | `rrf_fuse`，同参数 |
+| 热度衰减 | alpha 0.20，半衰期 14 天 | `hotness_boost`，同参数 |
+| 注入预算 | max_chars 1200，line_max 180 | `plan_injection`，同参数 |
+| lane 划分 | vector + keyword | vector + lexical |
 
-### 4.4 记忆算法
+**这不只是对齐 reference，更是修掉了我们自己的一个真实缺陷**：原来的
+`semantic * 0.75 + lexical * 0.25` 把尺度不可比的原始分相加，导致每条记录都有非零分、
+`limit` 永远被无关记忆填满（详见 `VERSION_EVOLUTION.md §5.4`）。
 
-Reference 的 `memory2`/Akasha 有 LLM query rewrite、HyDE、sufficiency checker、profile
-extractor、procedure 冲突检测、热度排序、图关系存储。
+### 4.4 记忆算法：仍然简化的部分
 
-Kirakira：Markdown + typed records + FTS + 可选 embedding（语义 0.75 + 词法 0.25）。
+Reference 的 `memory2`（5.7k 行）还有 LLM query rewrite、HyDE、sufficiency checker、
+profile extractor、procedure 冲突检测、dedup decider、图关系存储、独立 SQLite 向量 store。
+
+Kirakira 目前：Markdown + typed records + FTS + 可选 embedding + **RRF 多路融合 + 热度衰减 +
+注入预算**。
+
+**未跟进的三项都是 LLM 门控的**（query rewrite / HyDE / sufficiency）：每一项都要在每轮对话里
+多打一次模型。判断标准是"纯计算的先做，要多花模型调用的必须先有评测"——reference 自己也用
+配置门控它们，且本项目文档一开始就写明 HyDE 必须经评测再开。接缝已经留好（§4.3）。
 
 ### 4.5 Fail-loud 范围
 
@@ -190,16 +203,18 @@ upstream 同期给出的替代品（`agent/mcp/admin.py` + `agent/tools/workspac
 
 ### 6.3 尚未闭合的真实差距（按值得做的程度排序）
 
-1. **Retrieval 接缝**（§4.3）——做多路召回前必须先补，成本低、收益明确。
+1. ~~**Retrieval 接缝 + RRF**~~ —— ✅ 已完成（§4.3）。
 2. **Context trim 按 section 分级**（§4.2）——可解释性更好，成本低。
-3. **per-plugin 代际**（§4.1）——当前规模不需要，插件变多再说。
-4. **结构化委派决策元数据**（§6.2）——只有在要做 trace/评测时才有价值。
+3. **评测集**——query rewrite / HyDE / sufficiency 都是 LLM 门控项，**没有评测集就没有理由
+   开启它们**。所以下一步不是继续抄算法，而是先能测量。见 `VERSION_EVOLUTION.md §10`。
+4. **per-plugin 代际**（§4.1）——当前规模不需要，插件变多再说。
+5. **结构化委派决策元数据**（§6.2）——只有在要做 trace/评测时才有价值。
 
 ## 7. 审计证据
 
 - Python：`/home/xiang/.conda/envs/xingshu-vllm/bin/python` 3.12。
-- `unittest discover -s tests`：**142 项通过**（本轮新增：context policy 8、snapshot 13、
-  workspace 6、fail-loud 5、mcp admin 10；MCP 由 2 项扩展到 16 项）。
+- `unittest discover -s tests`：**163 项通过**（本轮新增：context policy 8、snapshot 13、
+  workspace 6、fail-loud 5、mcp admin 10、retrieval 21；MCP 由 2 项扩展到 16 项）。
 - 关键回归 `test_turn_pins_snapshot_tools_across_mid_turn_hot_reload`：turn 中途换代后本轮仍
   调用到旧代际工具并拿到旧代际返回值，全局 current 已是新代际，旧代际在租约释放后 drained。
 - 真实 stdio MCP server 端到端：声明 → 连接 → 发布 generation → `/tools` 列出

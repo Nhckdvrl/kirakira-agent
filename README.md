@@ -38,6 +38,7 @@ kirakira_agent/          the runtime
 ├── snapshot.py          capability generations + per-turn leases
 ├── session.py           JSON sessions + SQLite FTS index
 ├── memory.py            markdown/typed memory + background consolidation
+├── retrieval.py         multi-lane recall, RRF fusion, hotness, inject budget
 ├── context_policy.py    derives context window settings from the model
 ├── tools/               registry, executor, built-in tools
 ├── mcp/                 declarative workspace MCP (declarations/host/publisher/watcher)
@@ -65,6 +66,7 @@ It changes in the same commit as the code it documents.
 | [workspace-mcp.md](_handbook/workspace-mcp.md) | declaring MCP servers; what happens when a declaration is wrong |
 | [snapshot-and-lease.md](_handbook/snapshot-and-lease.md) | why hot reload cannot break an in-flight turn |
 | [plugins.md](_handbook/plugins.md) | writing a plugin; declaring capabilities in code |
+| [memory.md](_handbook/memory.md) | session vs memory; why recall fuses by rank, not score |
 
 `docs/` describes **how it got here** — history, and the reasoning worth reusing.
 
