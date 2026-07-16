@@ -32,7 +32,7 @@ from kirakira_agent.runtime import (
 )
 from kirakira_agent.schema import JsonDict
 from kirakira_agent.session import SessionManager
-from kirakira_agent.snapshot import RuntimeSnapshotStore
+from kirakira_agent.snapshot import RuntimeSnapshotStore, SnapshotToolView
 from kirakira_agent.scheduler import SchedulerService
 from kirakira_agent.subagent import SubagentManager
 from kirakira_agent.skills import SkillLoader
@@ -449,7 +449,17 @@ async def runtime_repl(runtime: CoreRuntime, workdir: Path) -> None:
             if query in ("/exit", "exit", "q", "quit"):
                 break
             if query == "/tools":
-                print("\n".join(runtime.tools.names()))
+                # MCP 工具挂在当前快照上，不在基础注册表里。
+                print(
+                    "\n".join(
+                        SnapshotToolView(
+                            runtime.tools,
+                            runtime.pipeline.snapshot_store.current
+                            if runtime.pipeline.snapshot_store is not None
+                            else None,
+                        ).names()
+                    )
+                )
                 continue
             if query == "/skills":
                 runtime.context.skills.reload()

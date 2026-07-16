@@ -918,7 +918,11 @@ class PassiveTurnPipeline:
     def _core_command(self, content: str) -> str | None:
         command = content.strip().lower()
         if command == "/tools":
-            return "\n".join(self.tools.names())
+            # MCP 工具只挂在快照上，要连同当前代际一起列出，否则用户会以为没接上。
+            snapshot = (
+                self.snapshot_store.current if self.snapshot_store is not None else None
+            )
+            return "\n".join(SnapshotToolView(self.tools, snapshot).names())
         if command == "/skills":
             self.reasoner.context.skills.reload()
             return self.reasoner.context.skills.descriptions()
