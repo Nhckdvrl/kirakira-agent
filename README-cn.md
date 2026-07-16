@@ -46,10 +46,13 @@ Web / Telegram / QQ / CLI
 - 回复后的异步 LLM consolidation；显式“记住”与 `memorize` 调用具备幂等语义。
 - Lifecycle EventBus、7 个 turn phase 扩展点、工具开始/完成和 streaming 事件。
 - 插件工具、生命周期模块、`@tool`、`@on_tool_pre` 和 phase decorators。
-- `.aka-plugin/plugin.json`、插件 skills 软链接、插件 MCP 声明、插件配置与 KV 数据目录。
+- 插件用 `plugin.py` 程序化声明能力；`manifest.toml` 只管启停；skills 软链接、配置与 KV 数据目录。
 - `plugin_install`、`plugin_list`、`plugin_doctor`；安装后重启生效，不热执行新下载代码。
-- stdio MCP JSON-RPC client、并发请求关联、工具注册、动态增删和持久化。
+- stdio MCP JSON-RPC client、并发请求关联、声明式热重载、整批候选语义。
+- 运行时能力快照 + 每 turn 租约：热重载不会抽走在途 turn 的工具，旧 MCP 进程等租约排空才断开。
 - deferred MCP/plugin tools 与 `tool_search select:<name>` 解锁。
+- 按模型 `context_window` 派生 `memory_window` 与输出预留。
+- workspace 隔离：运行时状态按 `--workspace` / `KIRAKIRA_WORKSPACE` / config 解析。
 - inline/background `spawn` 子代理，独立 session、三类权限 profile、并发上限、list/cancel 和完成回注。
 - 后台 shell、`task_output`、`task_stop`，timeout、取消和 runtime 关机均清理进程组。
 - 用户请求创建的持久化 `schedule` / `list_schedules` / `cancel_schedule`。
@@ -200,9 +203,12 @@ VISION_API_KEY=your-key
 
 网络与消息：`web_fetch`、`web_search`、`message_push`。
 
-扩展：`mcp_add`、`mcp_remove`、`mcp_list`、`plugin_install`、`plugin_list`、`plugin_doctor`、`spawn`、`spawn_manage`。
+扩展：`plugin_install`、`plugin_list`、`plugin_doctor`、`spawn`、`spawn_manage`。
 
 调度：`schedule`、`list_schedules`、`cancel_schedule`。
+
+> MCP 不再有 `mcp_add` / `mcp_remove` / `mcp_list`。server 由 `<workspace>/mcp/servers/*.toml`
+> 声明并热重载，见 [_handbook/workspace-mcp.md](./_handbook/workspace-mcp.md)。
 
 ## 插件目录
 
@@ -213,19 +219,18 @@ VISION_API_KEY=your-key
 <workspace>/.kirakira/plugins/*
 ```
 
-兼容结构：
+插件结构（能力由 `plugin.py` 用代码声明，没有描述符文件）：
 
 ```text
 my-plugin/
-  .aka-plugin/plugin.json
-  plugin.py
-  skills/
-  mcp/servers.json
+  plugin.py                     必需：入口 + 能力声明
+  skills/                       可选：由 skill_roots() 声明
   config.toml
   config.local.toml
 ```
 
 插件运行数据写入 `.kirakira/plugin-data/<plugin-name>/`；该目录不会提交到 Git。
+完整契约见 [_handbook/plugins.md](./_handbook/plugins.md)。
 
 ## 数据目录
 
@@ -241,10 +246,14 @@ uploads/                      Channel 附件
 .kirakira/schedules.json      持久化定时消息
 .kirakira/shell-tasks/        后台 shell 临时日志
 .kirakira/subagent-runs/      后台子 Agent 结果
+.kirakira/manifest.toml       插件启停清单（只记 enabled）
 .kirakira/plugins/            安装的插件代码
 .kirakira/plugin-data/        插件运行数据
-mcp_servers.json              动态 MCP server 配置
+mcp/servers/*.toml            workspace MCP 声明（热重载）
 ```
+
+以上路径都相对 workspace 根解析。workspace 由 `--workspace` > `KIRAKIRA_WORKSPACE` >
+`config.toml` 的 `[runtime].workspace` > 当前目录决定；不同 workspace 之间不共享任何状态。
 
 ## 测试
 
@@ -253,12 +262,27 @@ mcp_servers.json              动态 MCP server 配置
 /home/xiang/.conda/envs/xingshu-vllm/bin/python -m unittest discover -s tests -v
 ```
 
-当前审计批次共 83 项测试通过，并已使用 `deepseek-v4-flash` 在线验证普通响应、SSE 工具循环和后台记忆 consolidation。API key 不进入仓库。
+当前 132 项测试通过，并已使用 `deepseek-v4-flash` 在线验证普通响应、SSE 工具循环和后台记忆 consolidation。API key 不进入仓库。
 
-更详细的代码串联、数据流和与 Reference 的差异见：
+## 文档
 
-- `docs/PROJECT_REPORT.md`
-- `docs/DIFFERENCE_AUDIT.md`
-- `docs/REPLICATION_PLAN.md`
-- `docs/VERSION_EVOLUTION.md`：从 Function Calling MVP 到当前 Runtime 的工程演进
-- `docs/RESUME_INTERVIEW_GUIDE.md`：简历文案、面试追问、Bug 闭环和后续升级边界
+`_handbook/` 是各子系统的**心智模型与契约**：描述现在是什么、规矩是什么、错了会怎样。
+它跟代码同一个 commit 更新。
+
+| 我想知道 | 看这里 |
+| --- | --- |
+| 怎么声明一个 MCP server、改坏了会怎样 | [_handbook/workspace-mcp.md](./_handbook/workspace-mcp.md) |
+| 热重载为什么不会打断正在跑的 turn | [_handbook/snapshot-and-lease.md](./_handbook/snapshot-and-lease.md) |
+| 怎么写插件、怎么声明能力 | [_handbook/plugins.md](./_handbook/plugins.md) |
+
+`docs/` 是**历史与方法论**：记录为什么变成今天这样。
+
+| 我想知道 | 看这里 |
+| --- | --- |
+| 从 MVP 一步步长成现在这样的过程 | [docs/VERSION_EVOLUTION.md](./docs/VERSION_EVOLUTION.md) |
+| 可迁移的架构判断（分层、声明式、代际、错误边界） | [docs/ARCHITECTURE_LESSONS.md](./docs/ARCHITECTURE_LESSONS.md) |
+| Handbook 是什么、为什么有用、怎么写 | [docs/HANDBOOK_GUIDE.md](./docs/HANDBOOK_GUIDE.md) |
+| 与 Reference 的逐项差异和有意未跟进项 | [docs/DIFFERENCE_AUDIT.md](./docs/DIFFERENCE_AUDIT.md) |
+| 代码串联与数据流 | [docs/PROJECT_REPORT.md](./docs/PROJECT_REPORT.md) |
+| 复刻范围与完成清单 | [docs/REPLICATION_PLAN.md](./docs/REPLICATION_PLAN.md) |
+| 简历文案与面试追问 | [docs/RESUME_INTERVIEW_GUIDE.md](./docs/RESUME_INTERVIEW_GUIDE.md) |

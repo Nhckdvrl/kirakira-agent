@@ -145,27 +145,28 @@ Agent 不再只是“模型说调用就调用”，而是在 schema、权限、H
 5. 每个 session 使用 5 项 LRU，避免已解锁工具无限增长。
 6. 模型绕过搜索直接调用隐藏工具时，Reasoner 拒绝执行并返回选择提示。
 
-### 4.3 MCP 动态注册
+### 4.3 MCP 接入：先用命令式注册
 
 MCP 接入不是另写一套执行器，而是适配到统一 Registry：
 
 ```text
-mcp_add
+mcp_add（模型调用的工具）
   -> 启动 stdio MCP server
   -> initialize
   -> tools/list
   -> 将远端 schema 转成 ToolSpec
-  -> 注册 McpToolWrapper 到 ToolRegistry（deferred）
+  -> 注册到 ToolRegistry（deferred）
 
 模型调用远端工具
-  -> ToolExecutor
-  -> ToolRegistry
-  -> McpToolWrapper
-  -> tools/call JSON-RPC
-  -> ToolResult
+  -> ToolExecutor -> ToolRegistry -> tools/call JSON-RPC -> ToolResult
 ```
 
 这样本地工具、插件工具和 MCP 工具共享 schema 校验、Hook、生命周期、错误语义和可见性策略。
+
+> **这一版后来被推翻了。** 命令式注册有三个洞：状态只存在于“谁调用过 mcp_add”，重启后要靠
+> `mcp_servers.json` 回放；一个 server 连不上时，前面已经连上的处于半完成状态；改配置要模型
+> 自己记得调 `mcp_remove` + `mcp_add`。第 8 节会讲我们怎么换成声明式，以及为什么这是同一类
+> 问题的通用解法。
 
 ### 4.4 插件与 Hook
 
@@ -178,6 +179,10 @@ mcp_add
 - 使用独立配置、KV 和 data dir。
 
 插件加载失败会撤销已经注册的资源，单个坏插件不会阻止 Runtime 启动。
+
+早期版本用描述符文件 `.aka-plugin/plugin.json` 声明这些能力（名字、lifecycle entry、skills
+路径、MCP 配置路径）。这一版同样在第 8 节被推翻：能力改为由插件根目录的 `plugin.py` 用代码
+声明，全局清单只保留“启用与否”。
 
 ### 4.5 下一步编排空间
 
@@ -316,9 +321,220 @@ Schedule 只执行用户明确创建的定时消息，不包含自主决策。�
 
 这已经是完整被动式 Agent Runtime，但还不是面向多租户和 SLA 的生产平台。
 
-## 8. 实际遇到并修复的 Bug
+## 8. 第六轮工程化：当运行时开始"边跑边改"
 
-### 8.1 Web 并发请求串回复
+前面五轮有一个共同的隐含假设：**能力集合在进程启动时确定，之后不变**。工具就在那儿，MCP
+连上了就一直连着。这一轮打破了这个假设，而它打破的方式很值得学——因为它不是"加一个功能"，
+而是发现了一整类之前看不见的 bug。
+
+这一轮的起点很朴素：把 reference 更新到最新，看看差在哪。结果发现 reference 把我们照抄过来的
+两个子系统整个推翻重做了。与其照抄新版本，不如先搞清楚**它为什么要推翻**。
+
+### 8.1 命令式 vs 声明式：MCP 的重做
+
+旧设计（我们抄来的那版）里，MCP server 靠模型调用 `mcp_add` / `mcp_remove` 来管理，配置落在
+`mcp_servers.json`。新设计把这些工具全删了，改成声明式：
+
+```text
+workspace/mcp/
+├── servers/
+│   └── fitbit.toml        ← 一个文件一个 server，文件名必须等于 name
+└── fitbit-mcp/
+    └── run_mcp.py
+```
+
+```toml
+schema_version = 1
+name = "fitbit"
+command = ["python", "run_mcp.py"]
+cwd = "../fitbit-mcp"
+watch_paths = ["../fitbit-mcp/run_mcp.py", "../fitbit-mcp/src"]
+```
+
+这个转变背后是一个通用的架构判断，值得单独记住：
+
+| | 命令式（旧） | 声明式（新） |
+| --- | --- | --- |
+| 真相在哪 | "谁调用过哪些命令"的累积结果 | 文件内容本身 |
+| 重启后 | 回放 json 才能恢复 | 读一遍文件即可 |
+| 改配置 | 记得先 remove 再 add | 改文件 |
+| 部分失败 | 前几个连上了，第四个炸了 → 半完成状态 | 整批拒绝，旧代际继续服务 |
+| 谁负责收敛 | 调用方 | watcher（对比期望与实际） |
+
+**命令式描述"怎么变"，声明式描述"应该是什么"。** 只要"应该是什么"能被完整写下来，声明式
+几乎总是更好：它天然幂等、天然可重启、天然可 diff。这是 Kubernetes、Terraform、Nix 共用的
+同一个思路，reference 只是把它用在了 MCP 上。
+
+我们的实现分三块，职责边界很清楚：
+
+```text
+declarations.py   只回答"期望状态是什么" —— 解析 + 校验 + 算内容 revision
+host.py           只回答"能不能连上" —— 整批连接，任一失败清理整批
+watcher.py        只回答"什么时候该换" —— 轮询 revision，串行发布
+```
+
+`revision` 是内容哈希，不是 mtime——`touch` 一下文件不会触发重连，真改了内容才会。watch_paths
+让 server 的源码变化也能触发换代（连 hash 都覆盖了目录下所有文件）。
+
+### 8.2 为什么"整批拒绝"比"尽力而为"好
+
+`host.prepare()` 里有个刻意的选择：任何一个 server 连不上，**已经连上的那些也全部断开**，
+整批候选作废。
+
+直觉上这很浪费——三个连上了，第四个坏了，为什么不留下那三个？
+
+因为"部分可用"是最难排查的状态。留下三个的话，模型会看到一个残缺的工具集，然后给出一个
+**看起来正常但其实基于不完整能力**的回答。用户不知道第四个 server 没连上，只觉得"agent 今天
+有点笨"。而整批拒绝 + 旧代际继续服务的结果是：要么全新，要么全旧，永远是一个自洽的集合。
+
+这就是 reference 那次 236 文件大重构（#111 "fail-loud runtime contracts"）的核心思想。它可以
+浓缩成一句话：
+
+> **能降级的地方降级，不能降级的地方必须报错。静默吞掉失败会制造"看起来正常、其实已经损坏"
+> 的状态，而这种状态的排查成本远高于当场崩溃。**
+
+我们没有照抄那 236 个文件（其中大半是我们不做的 proactive/dashboard），而是把这条规则用在
+自己的被动链路上。最能说明问题的是记忆的向量写入：
+
+```python
+def _embed_for_query(self, text):
+    # 检索侧可以降级：拿不到向量就退回词法召回，本轮仍然有答案。
+    except Exception:
+        logger.exception("embedding failed; falling back to lexical recall")
+        return None
+
+def _embed_for_store(self, text):
+    # 写入侧不能降级：静默存入无向量记录，会让这条记忆此后永远无法被语义召回。
+    except Exception as exc:
+        raise RuntimeError(...) from exc
+```
+
+同一个 `embed()` 调用，同一个异常，两个相反的处理。差别不在于"错误严不严重"，而在于
+**降级之后的状态是否还是自洽的**：
+
+- 查询失败 → 这一次答案差一点，下次向量服务恢复就好了。**没有留下痕迹。**
+- 写入失败 → 这条记忆永远缺向量，索引里一半有一半没有。**损坏被固化了。**
+
+判断准则：问"如果我在这里静默返回默认值，半年后谁会为此调试到凌晨三点？"
+
+### 8.3 代际快照与租约：本轮最重要的一课
+
+声明式热重载带来一个新问题，而这个问题在旧的命令式设计里同样存在、只是没人注意到。
+
+考虑这个时序：
+
+```text
+t0  turn 开始，模型准备调用 mcp_fitbit__today
+t1  你改了 fitbit.toml，watcher 决定换代
+t2  watcher 从 registry 里注销旧工具、断开旧进程
+t3  模型真的发出 mcp_fitbit__today 调用
+    → "Unknown tool"，或者更糟：拿着已经断开的连接去调用
+```
+
+只要工具挂在**共享可变**的注册表上，这个竞态就无法回避。加锁也没用——你不能让一个可能跑
+几十秒、十几轮工具调用的 turn 一直持着锁不放。
+
+reference 的解法是**把"当前能力"从一个可变对象变成一串不可变代际**：
+
+```text
+RuntimeSnapshotStore
+├── current              新 turn 用哪一代
+├── publish/commit       换代是事务：候选先就绪，再切 current，失败可回滚
+└── retire + drain       旧代际退休后，等最后一个租约释放才真正销毁资源
+
+RuntimeSnapshotLease
+└── turn 开始时取一份，整个 turn 都看同一份能力集合
+```
+
+关键在于：**换代只切换 `current` 指针，不动任何在途 turn 看到的东西。**
+
+- 新 turn → 立刻用新能力。
+- 在途 turn → 继续用它开始时锁定的那一代，包括那一代的 MCP 连接。
+- 旧进程 → 等最后一个租约释放（`lease_count` 归零）才断开。
+
+我们的实现里有一个具体决定：**MCP 工具不再进共享 ToolRegistry，只挂在快照上**。基础注册表
+只放启动即固定的内置/插件工具，会变的东西挂在快照。这样 `SnapshotToolView` 把两者组合成
+本轮的只读视图：
+
+```python
+tools = SnapshotToolView(self.tools, get_current_runtime_snapshot())
+```
+
+这行在 reasoner 每轮开头执行一次，之后整轮都用它。
+
+这个设计的正确性有一个测试专门盯着（`test_turn_pins_snapshot_tools_across_mid_turn_hot_reload`）：
+turn 中途真的换代，然后断言本轮仍然能调用旧代际的工具、拿到旧代际的返回值，而全局 `current`
+已经是新代际，并且旧代际在本轮租约释放后才 `drained`。
+
+### 8.4 ContextVar 绑定为什么要检查 owner task
+
+快照通过 ContextVar 绑定到当前 turn：
+
+```python
+def get_current_runtime_snapshot():
+    binding = _current_binding.get()
+    if (binding is None
+        or not binding.lease.active
+        or binding.owner_task is not asyncio.current_task()):
+        return None
+    return binding.lease.snapshot
+```
+
+`owner_task is not asyncio.current_task()` 这个检查容易被当成多余，但它防的是一个真实问题：
+ContextVar 会被 `asyncio.create_task()` 自动继承。如果父 turn 派生了一个后台子任务，子任务
+会"免费"看到父任务的快照——但它并没有自己的租约。于是父 turn 结束、租约释放、资源销毁之后，
+子任务还拿着一个已经 drained 的快照在跑。
+
+所以规矩是：**想跨任务用快照，必须自己 `fork()` 一份租约**，让 `lease_count` 如实反映真正
+还在用它的人数。租约计数是资源回收的唯一依据，任何"白嫖"都会让计数说谎。
+
+### 8.5 顺带修掉的一个真实回归
+
+把 MCP 工具移出共享注册表之后，跑起来发现 `/tools` 不再列出任何 MCP 工具了——因为它读的是
+基础注册表，而且它在任何 turn 之外执行，根本没有租约。
+
+这个 bug 很典型：**测试全绿，但产品坏了**。132 个测试没有一个覆盖"人在 REPL 里敲 /tools"。
+只有真的把进程跑起来、接上真实 stdio MCP server、敲一遍命令才会发现。修复本身是两行，但
+教训是：改动只要动了"谁能看见什么"，就必须真的去看一眼。
+
+### 8.6 派生优于硬编码：context policy
+
+同一轮里还有一个小改动，但体现同一种思路。原来的配置是：
+
+```toml
+[agent.context]
+memory_window = 40    # 为什么是 40？没人知道
+```
+
+现在改成从模型真实容量按 1M 基准等比例派生：
+
+```python
+memory_window = max(20, round(effective * 160 / reference_effective) 对齐到 4)
+output_reserve = max(4096, min(32768, ...))
+```
+
+换模型时只需要写 `context_window = 128000`，历史窗口和输出预留自动跟着走。**一个硬编码常数
+背后往往藏着一个没写下来的公式**；把公式写出来，常数就变成了它的一个取值。
+
+顺带一提，reference 在 #117 把基准从 640 调到 160——一个纯参数调整。这提醒我们：派生公式
+本身也是要调的，但调一个基准值比逐个模型改配置便宜得多。
+
+### 8.7 这一轮的收获
+
+```text
+命令式 → 声明式        真相放在内容里，让 watcher 负责收敛
+尽力而为 → 整批拒绝     宁可全旧，不要半新半旧
+静默降级 → 分情况       降级后状态自洽才能降级，否则必须报错
+共享可变 → 不可变代际   在途请求锁定一份，换代只切指针
+硬编码 → 派生           把常数背后的公式写出来
+```
+
+这五条没有一条是 agent 特有的。它们是并发系统、配置管理、资源生命周期里的通用模式，只是
+在这个项目里同时出现了。
+
+## 9. 实际遇到并修复的 Bug
+
+### 9.1 Web 并发请求串回复
 
 问题：同一 session 同时发送两个 HTTP 请求时，只按 chat id 等待 outbound，后返回的请求可能拿到前一个回复。
 
@@ -326,53 +542,53 @@ Schedule 只执行用户明确创建的定时消息，不包含自主决策。�
 
 验证：增加同 session 并发请求集成测试。
 
-### 8.2 Outbound 队列无法 graceful drain
+### 9.2 Outbound 队列无法 graceful drain
 
 问题：dispatch 后未在所有路径调用 `task_done()`，关机等待 queue join 可能永久卡住。
 
 修复：将完成标记放进 dispatch task 的 `finally`，并测试同 chat 顺序和跨 chat 并发。
 
-### 8.3 DeepSeek 工具历史协议错误
+### 9.3 DeepSeek 工具历史协议错误
 
 问题：DeepSeek thinking 模式下，包含工具调用的 assistant 消息需要回传对应 `reasoning_content`；丢失后续轮次可能被 API 拒绝或推理断裂。
 
 修复：每个 tool-chain group 持久化 reasoning，Session history reconstruction 原样恢复。
 
-### 8.4 Session 文件名碰撞
+### 9.4 Session 文件名碰撞
 
 问题：只替换特殊字符时，`a:b` 和 `a/b` 可能落到同一文件。
 
 修复：文件名使用可读前缀 + 原 key SHA-256 摘要，并兼容迁移旧文件。
 
-### 8.5 后台子任务在主循环关闭后回注
+### 9.5 后台子任务在主循环关闭后回注
 
 问题：关机先停止 AgentLoop，再等待 subagent 完成，会把 completion 写入无人消费的 inbound queue。
 
 修复：运行时关机先取消后台子任务，再关闭 Loop；用户 cancel 与 shutdown cancel 使用不同语义。
 
-### 8.6 SSRF 重定向绕过
+### 9.6 SSRF 重定向绕过
 
 问题：只校验初始 URL 时，公网地址可以 302 到 localhost 或私网。
 
 修复：自定义 redirect 处理，每一跳重新解析 DNS/IP，并限制响应大小和内容类型。
 
-### 8.7 插件初始化半成功
+### 9.7 插件初始化半成功
 
 问题：插件先注册工具后 initialize 报错，会留下半加载工具。
 
 修复：记录插件注册资源，失败时统一 rollback；坏插件错误隔离，不阻塞后续插件。
 
-### 8.8 删除 Session 后长期记忆仍存在
+### 9.8 删除 Session 后长期记忆仍存在
 
 问题：用户删除对话，但 consolidation 产生的记忆继续参与召回。
 
 修复：Memory 记录 source_ref，Session delete callback 将对应记录标记 forgotten 并重写托管 Markdown。
 
-## 9. 下一版：工具编排 + LangSmith 评测回归
+## 10. 下一版：工具编排 + LangSmith 评测回归
 
 下一版最重要的不是继续加普通工具，而是证明“工具选择更准、参数更稳、改动不会让旧场景退化”。
 
-### 9.1 Trace 接入
+### 10.1 Trace 接入
 
 将以下节点记录到 LangSmith 或兼容 trace runner：
 
@@ -386,7 +602,7 @@ Schedule 只执行用户明确创建的定时消息，不包含自主决策。�
 
 敏感字段必须脱敏，API key、完整私密附件和高风险工具参数不能原样上传。
 
-### 9.2 工具系统评测集
+### 10.2 工具系统评测集
 
 至少覆盖：
 
@@ -400,7 +616,7 @@ Schedule 只执行用户明确创建的定时消息，不包含自主决策。�
 - 高风险工具是否被 Hook 拦截。
 - 工具成功后最终回复是否忠于结果。
 
-### 9.3 记忆评测集
+### 10.3 记忆评测集
 
 - 应记住的稳定偏好是否写入。
 - 短期状态是否不会被误存为长期事实。
@@ -411,7 +627,7 @@ Schedule 只执行用户明确创建的定时消息，不包含自主决策。�
 - 无关问题是否不会注入噪声记忆。
 - consolidation 重放是否幂等。
 
-### 9.4 基线、回归与回滚
+### 10.4 基线、回归与回滚
 
 ```text
 固定 Dataset
@@ -425,7 +641,7 @@ Schedule 只执行用户明确创建的定时消息，不包含自主决策。�
 
 每次运行记录 commit SHA、模型、Prompt 版本、工具 schema 版本、memory strategy 和 evaluator 版本。回滚不是“凭感觉改回 Prompt”，而是回到最后一个通过 gate 的版本和配置。
 
-### 9.5 下一版验收指标
+### 10.5 下一版验收指标
 
 - 工具选择准确率。
 - 工具参数一次通过率。
@@ -437,11 +653,11 @@ Schedule 只执行用户明确创建的定时消息，不包含自主决策。�
 
 具体阈值应在第一批真实数据跑完后确定，不能在没有 baseline 时随意编百分比。
 
-## 10. 再下一版：100–200 用户的后端化
+## 11. 再下一版：100–200 用户的后端化
 
 这一层目前是设计方向，不应写进当前简历的“已完成”部分。
 
-### 10.1 服务拆分建议
+### 11.1 服务拆分建议
 
 ```text
 FastAPI / WebSocket / SSE Gateway
@@ -457,7 +673,7 @@ Worker：Agent Turn / Memory Consolidation / Embedding
 LLM、Tool/MCP、pgvector、对象存储
 ```
 
-### 10.2 多用户隔离
+### 11.2 多用户隔离
 
 - 所有业务表带 `tenant_id/user_id`。
 - Repository 查询默认注入用户作用域。
@@ -466,7 +682,7 @@ LLM、Tool/MCP、pgvector、对象存储
 - PostgreSQL 可增加 Row Level Security 作为第二层隔离。
 - Tool workspace、插件数据和附件路径按用户隔离。
 
-### 10.3 数据模型
+### 11.3 数据模型
 
 - `users`：身份、状态、配额。
 - `sessions`：channel、owner、metadata、version。
@@ -476,7 +692,7 @@ LLM、Tool/MCP、pgvector、对象存储
 - `memories`：type、summary、embedding、source、status、confidence。
 - `jobs`：schedule/subagent/consolidation 的统一状态机。
 
-### 10.4 Worker 与并发
+### 11.4 Worker 与并发
 
 - API 只负责提交 turn 和返回 turn id。
 - Worker 异步执行 AgentLoop。
@@ -485,7 +701,7 @@ LLM、Tool/MCP、pgvector、对象存储
 - 结果通过 SSE/WebSocket 或轮询回传。
 - Tool call 和 memory write 使用幂等 key。
 
-### 10.5 内容审查
+### 11.5 内容审查
 
 - 入站文本、附件和出站回复分别审查。
 - 高风险工具调用走 policy engine，而不是只审查最终文本。
@@ -493,7 +709,7 @@ LLM、Tool/MCP、pgvector、对象存储
 - 对误杀提供人工复核和申诉状态。
 - 管理后台展示用户、turn、tool call、memory、moderation 和 trace。
 
-### 10.6 什么时候可以写进简历
+### 11.6 什么时候可以写进简历
 
 至少完成：
 
@@ -505,7 +721,7 @@ LLM、Tool/MCP、pgvector、对象存储
 
 完成后再把简历前两条升级为“FastAPI + PostgreSQL + Worker”，否则面试追问很容易露出没有真正实现。
 
-## 11. 当前项目如何讲
+## 12. 当前项目如何讲
 
 项目主线应是：
 

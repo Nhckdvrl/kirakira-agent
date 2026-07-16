@@ -1,157 +1,137 @@
-# Kirakira Agent 与 akashic-agent 非主动链路差异审计
+# Kirakira Agent 与 akashic-agent 被动链路差异审计
+
+> 本轮审计基于 reference 更新到 `6a0616c`（2026-07-16，比上次审计前进 26 个 commit）后的源码。
+> 排除项仍然只有自主主动链路：`proactive_v2`、drift、sensor、energy、judge、presence，以及
+> 无人请求时的自主触达。Web、Telegram、QQ、用户创建的定时任务、用户 turn 派生的后台任务仍属
+> 被动链路范围。
 
 ## 1. 审计结论
 
-审计对象为本仓库与 `Reference/akashic-agent` 当前源码。排除项只包括自主主动链路：`proactive_v2`、drift、sensor、energy、judge、presence，以及无人请求时的自主触达。Web、Telegram、QQ、用户创建的定时任务、用户 turn 派生的后台任务仍属于被动链路范围。
+Kirakira 覆盖 Reference 被动主链路的关键行为：统一 Channel、MessageBus、会话并发控制、生命周期
+phase、streaming tool loop、session、长期记忆、插件、MCP、技能、后台 shell、subagent、调度和
+graceful shutdown。
 
-当前 Kirakira 已覆盖 Reference 被动主链路的关键行为：统一 Channel、MessageBus、会话并发控制、生命周期 phase、streaming tool loop、session、长期记忆、插件、MCP、技能、后台 shell、subagent、调度和 graceful shutdown。它不是 Reference 的逐文件拷贝，部分专用子系统使用更轻的实现，差异见第 4 节。
+本轮的重要发现是：**Reference 把我们此前照抄的两个子系统整个推翻重做了**，我们跟进了这两处
+重做，并补上了它们共同依赖的代际快照机制。详见第 3 节。
 
-## 2. 逐模块映射
+## 2. Reference 更新带来的差异（本轮处理）
 
-| Reference | Kirakira | 状态 |
+26 个新 commit 中与被动链路相关的有 11 个。分类与处置：
+
+| Reference 变更 | 性质 | 我们的处置 |
 | --- | --- | --- |
-| `bus/events.py` | `kirakira_agent/events.py` | 已覆盖 |
-| `bus/queue.py` | `kirakira_agent/bus.py` | 已覆盖并测试并发/顺序 |
-| `bus/event_bus.py`、`events_lifecycle.py` | `event_bus.py`、`lifecycle.py` | 已覆盖主要被动事件 |
-| `agent/looping/*` | `runtime.AgentLoop` | 已覆盖被动消费、串行化、中断 |
-| `agent/core/passive_turn.py` | `runtime.DefaultReasoner` | 已覆盖 streaming tool loop 与 retry |
-| `agent/turns/*`、`lifecycle/phases/*` | `PassiveTurnPipeline` + phase ctx | 已覆盖 turn 处理阶段 |
-| `agent/prompting/*` | `context_builder.py` + reasoner trim | 行为覆盖，结构更轻 |
-| `session/manager.py`、`store.py` | `session.py` | JSON canonical + SQLite FTS |
-| `core/memory/*`、`memory2/*` | `memory.py`、`embeddings.py` | 核心行为覆盖，算法简化 |
-| `agent/tools/*` | `tools/builtins.py` | 常用被动工具已覆盖 |
-| `agent/tool_hooks/*` | `tool_hooks.py` | pre/post/error hook 已覆盖 |
-| `agent/mcp/*` | `mcp/client.py`、`mcp/registry.py` | stdio MCP 已覆盖 |
-| `agent/plugins/*` | `plugins.py`、`plugin_manifest.py`、`plugin_decorators.py` | 核心插件合同已覆盖 |
-| `agent/background/*`、`tools/spawn.py` | `subagent.py` | inline/background 与管理面已覆盖 |
-| `agent/scheduler.py`、`tools/schedule.py` | `scheduler.py` | 用户显式调度已覆盖 |
-| `infra/channels/web_chat_channel.py` | `channels/web.py` | 已覆盖，transport 不同 |
-| `infra/channels/telegram_channel.py` | `channels/telegram.py` | 已覆盖 Bot API 行为 |
-| `infra/channels/qq_channel.py` | `channels/qq.py` | 已覆盖 OneBot HTTP 行为 |
-| `bootstrap/channel_host.py` | `channels/host.py` | 已覆盖启停和失败回滚 |
-| `bootstrap/app.py`、`wiring.py` | `cli.build_runtime`、`CoreRuntime` | 已覆盖核心装配 |
+| #120/#123 MCP registry → 声明式热重载 | 子系统重做 | ✅ 已跟进重做 |
+| #104 插件描述符 → 程序化能力声明 | 子系统重做 | ✅ 已跟进重做 |
+| #105/#119 插件代际 + RuntimeSnapshot + lease | 新架构 | ✅ 已按比例实现 |
+| #117/#116 context policy 派生（640 → 160） | 参数与派生 | ✅ 已跟进 |
+| #127 workspace 状态隔离 | 装配 | ✅ 已跟进 |
+| #111 fail-loud runtime contracts（236 文件） | 全仓原则 | ⚠️ 择要应用，见 3.5 |
+| #124 session 裁剪保留历史 | 修复 | ✅ 本就一致，见 3.6 |
+| #106 只启用一个 Memory Engine | 修复 | N/A：我们只有一个引擎 |
+| #121 supervised restart | 运维 | ❌ 未做，见第 5 节 |
+| #118 TUI IPC → app server | 控制面 | ❌ 未做，见第 5 节 |
+| #126 rolling backup | 运维脚本 | ❌ 未做，见第 5 节 |
 
-## 3. 已补齐的高风险差异
+## 3. 本轮补齐的差异
 
-### 3.1 MessageBus 与 AgentLoop
+### 3.1 MCP：命令式 registry → 声明式热重载
 
-- inbound 消息入队时登记 passive pending，处理完成必定 `task_done`。
-- 同 session 通过独立 lock 串行；不同 session 的 turn task 并发。
-- outbound 为每个 `(channel, chat_id)` 分配 ticket，同 chat 保序、跨 chat 并发。
-- subscriber 失败会重试一次，单个 callback 失败不破坏 dispatch loop。
-- `/stop` 取消 active task；取消时保存用户消息、已完成工具链、partial thinking/reply 和 `[interrupted]` 标记。
-- runtime 关机顺序覆盖 subagent、loop、scheduler、bus、channels、shell、plugins、MCP、memory worker、event bus 和 session index。
+Reference 删除了 `mcp_add`/`mcp_remove`/`mcp_list` 与 `mcp_servers.json`。我们同步删除，改为：
 
-### 3.2 Reasoner 与 Provider
+- `workspace/mcp/servers/*.toml`，一文件一 server，文件名必须等于 `name`。
+- 严格解析：未知字段、`schema_version != 1`、空 command、非法 env、重名一律拒绝。
+- `cwd` 与 `watch_paths` 相对声明文件解析，最终必须落在 `workspace/mcp/` 安全根内，越界拒绝。
+- revision 取规范化声明 + watch 内容哈希（长度分帧编码，避免路径与内容拼接碰撞），与 mtime 无关。
+- watcher 轮询输入指纹；声明非法时指纹只覆盖原始文件，修好后自动恢复。
+- 整批候选语义：任一声明非法或任一 server 连不上，整批作废，旧代际继续服务。
+- 删除全部声明会原子发布空代际并排空旧进程。
 
-- 支持普通 chat completion 和 SSE，累积正文、`reasoning_content`、分片 tool call id/name/arguments。
-- DeepSeek thinking history 会将每组工具调用时的 reasoning 原样回传。
-- tool schema 在执行前检查 required、类型和 enum；错误作为 tool result 返回模型。
-- deferred tool 默认不暴露，模型需经 `tool_search` 解锁；每个 session 保存 5 项 LRU。
-- 未注册工具、未解锁工具和 turn metadata 禁用工具都不会执行。
-- 连续重复相同 tool signature 达阈值后停止执行，转入阶段总结。
-- 达最大 iteration 后额外请求一次不带工具的总结，避免只返回机械错误。
-- 处理模型超时、空响应、429/5xx、context length 和 content safety。
-- context retry 先缩减动态上下文与历史，再返回明确降级文本。
+### 3.2 插件：描述符文件 → 程序化能力声明
 
-### 3.3 Session 与历史
+`.aka-plugin/plugin.json` 在 Reference 中已不存在。我们同步：
 
-- session 文件名为可读前缀加 SHA-256 短摘要，避免 `a:b` 与 `a/b` 清洗后碰撞。
-- 写入采用同目录临时文件和 `os.replace`，异常时不破坏旧 session。
-- 兼容旧安全文件名并按真实 key 校验迁移。
-- history 从 user boundary 开始，不产生孤立 assistant/tool message。
-- 每个 tool call group 重建 assistant tool_calls、reasoning 和逐 call tool result。
-- tool result 回放有长度上限，防止历史无限膨胀。
-- SQLite FTS5 trigram 仅作索引，JSON session 仍是事实源；索引可重建。
-- session 删除触发 memory source undo，避免已删除对话继续污染长期记忆。
+- 插件根目录 `plugin.py` 是唯一入口，也是发现插件的唯一标志。
+- 能力由代码声明：`skill_roots()`、`mcp_servers() -> list[McpServerSpec]`、phase 模块、装饰器工具。
+- `manifest.toml` 只记录 `plugin_id` + `enabled`；清单损坏时 fail loud，不静默当作全部启用。
+- 声明路径在插件自己的加载边界内校验，越界插件失败但不牵连其他插件。
+- `plugin_install` 不导入 `plugin.py`：身份取来源目录名，不热执行刚下载的代码。
 
-### 3.4 Memory
+### 3.3 RuntimeSnapshot 与租约（被动链路核心）
 
-- `MEMORY.md` 由托管 block 与人工区组成；forget 会同步重写托管 block，而不删除人工内容。
-- `items.json` 记录 id、type、source_ref、status、reinforcement、时间和可选 embedding。
-- exact duplicate 强化旧记录；同 source 重放保持幂等。
-- 中文 bigram、英文 token 和 substring 共同参与词法召回。
-- 配置 embedding 后以语义 0.75 + 词法 0.25 混合评分；服务失败自动回退词法。
-- recall 支持 memory type、since、until 过滤。
-- 每轮同步更新 recent/history；达到窗口后异步调用 LLM 生成结构化 memories/history。
-- 回复先返回；同 session 下一轮会等待上一轮 consolidation，超时后取消，避免读写竞态。
-- consolidation、memorize 工具和显式记忆规则之间通过 source/idempotency 避免重复。
+这是本轮最重要的补齐，它让热重载对被动 turn 安全：
 
-### 3.5 Plugin、Hook 与 MCP
+- `RuntimeSnapshotStore` 持有 current，publish/commit/rollback 构成换代事务。
+- 一个被动 turn 开始时取一份租约，整轮看同一份能力集合。
+- 换代只切换 current；在途 turn 继续使用它锁定的那一代，包括那一代的 MCP 连接。
+- 旧代际退休后，等最后一个租约释放（`lease_count` 归零）才断开进程（drain）。
+- MCP 工具挂在快照上而非共享 ToolRegistry，`SnapshotToolView` 组合基础注册表与本轮快照。
+- ContextVar 绑定校验 owner task：子任务必须 `fork()` 自己的租约，不能白嫖父任务的。
+- `tool_search` 改为 async，以便在 turn 自己的 task 内读到本轮快照。
 
-- 支持 `.aka-plugin/plugin.json`，安全解析 lifecycle、skills 和 MCP 路径，拒绝目录穿越。
-- 支持 `plugin.py` 类、entry、装饰器工具和 7 个 phase decorator。
-- 插件有 `config.toml`、`config.local.toml`、可选 ConfigModel、原子 JSON KV 和独立 data dir。
-- 插件 initialize 失败会撤销已注册工具、hooks、skills 和 MCP；坏插件不阻塞好插件。
-- terminate 按加载逆序且幂等。
-- pre hook 可改参数或 deny；pre hook 异常 fail-closed，post hook 异常隔离。
-- MCP client 有 initialize handshake、并发 pending request、stderr drain、timeout、server error 和 disconnect 处理。
-- MCP registry 能动态 add/remove/list、持久化 server 配置，并将远端工具注册为 deferred tool。
-- `plugin_install` 只接受本地目录或 HTTPS Git URL，校验 manifest 后要求重启，不热执行刚下载代码。
+### 3.4 Context policy 派生
 
-### 3.6 工具与后台任务
+`memory_window` 与 `output_reserve` 不再是硬编码常数，改为按模型 `context_window` 对 1M 基准
+等比例派生（基准 memory_window 已同步 Reference #117 的 160）。显式配置仍然优先。
 
-- 文件工具限制工作区边界，原子写入，编辑时拒绝默认替换多个匹配，文本读取检测 NUL 二进制。
-- shell 拒绝明显破坏性命令，使用独立进程组；timeout、turn cancellation 和 runtime shutdown 都会清理进程树。
-- 长 shell 可显式后台运行，也可在前台阈值后自动转后台；`task_output` 支持 block/offset，`task_stop` 停止并清理日志。
-- `web_fetch` 拒绝私网、loopback、link-local、reserved、multicast，且每次 redirect 重新校验；限制响应类型和 5 MB。
-- vision 校验 PNG/JPEG/GIF/WebP magic bytes、单次总大小和路径边界。
-- subagent 有独立 session、iteration 上限和 profile 权限；禁止递归 spawn、发消息、改 MCP/插件、创建 schedule。
-- background subagent 上限为 3，提供 list/cancel，完成、失败、取消均回注原 session。
-- schedule 只由用户 turn 显式创建，持久化 fire time/interval/status，不包含自主判断。
+### 3.5 Fail-loud（择要应用）
 
-### 3.7 Channels
+Reference #111 是 236 文件、18k 行的全仓收紧，其中大半属于我们不做的 proactive/dashboard/
+peer-agent。我们提取其原则并应用于自己的被动链路：
 
-Web：
+- **memory**：向量检索失败可降级为词法召回（有日志）；向量**写入**失败必须报错，否则会写入
+  永远无法被语义召回的记录，并让索引半有半无。
+- **session**：列会话时遇到损坏文件报错，与 `get_or_create` 的既有语义一致，不再静默跳过。
+- **mcp client**：拒绝非对象 result 与非数组 content，不把畸形结构拼成看似正常的文本。
+- **plugin manifest**：清单结构非法直接失败。
 
-- 每个请求生成 correlation id，同 session 并发 HTTP 请求不会串回复。
-- `/stop`/`/interrupt` 可取消 turn。
-- 校验 body、session id 和附件路径。
-- 提供 session/memory list、patch、delete 管理 API。
-- `/events` 长轮询接收 schedule、subagent、message_push 等非请求绑定消息。
+判断准则：降级后状态自洽 → 可降级；降级会固化损坏 → 必须报错。
 
-Telegram：
+### 3.6 已经一致、无需改动
 
-- long polling offset、allow list、文本/图片/文档入站、20 MB 限制和 reply context。
-- 4096 字符友好分片、429 `retry_after`、出站文件。
-- 监听 stream lifecycle，先 send 占位消息，再 edit live content，最终 edit 定稿。
-
-QQ/OneBot：
-
-- HTTP webhook token 鉴权、自消息忽略、消息去重。
-- 私聊 allow list、群 allow list、逐群 require_at/allow_from。
-- group session 中保留发送者身份，解析 structured/CQ 图片并下载。
-- 出站文本、图片、文件和 OneBot retcode/status 校验。
+- **#124 session 裁剪保留历史**：Reference 修复的是"裁剪运行时上下文时误删了 sessions.db 历史"。
+  我们的 session 从一开始就是完整历史 + 取窗口切片（`session.py` 的 `messages[-max_messages:]`），
+  与 Reference 修复后的语义一致。
 
 ## 4. 保留的实现差异
 
-这些不是“主链路缺失”，但仍是与 Reference 不同的专用实现：
+这些不是"主链路缺失"，而是与 Reference 不同的专用实现：
 
-1. **高级记忆算法**：Reference 的 `default_memory`/`memory2`/Akasha 还有 LLM query rewrite、HyDE、sufficiency checker、procedure rule conflict、profile extractor、热度排序和图关系存储。Kirakira 当前提供稳定的 Markdown + typed records + FTS + optional embeddings，尚未移植这些实验性算法。
-2. **A2A Peer Agent**：Reference 可按配置冷启动外部 A2A 服务并轮询远端任务。Kirakira 已有本地 subagent 和 MCP，但没有独立 A2A process manager/poller。
-3. **前端 Dashboard**：Reference 带 React Dashboard、插件面板和更多诊断视图。Kirakira Web 侧提供 chat、session/memory 管理 API 和轻量页面，没有复制其前端工程。
-4. **Transport**：Reference Web 主要使用 FastAPI/WebSocket，Telegram/QQ 使用更重的 SDK；Kirakira 使用标准库 HTTP、Telegram Bot API 和 OneBot HTTP，功能路径相同但 UI/transport 不逐行一致。
-5. **Phase slot DAG**：Reference phase module 可声明 slot import/export 和依赖顺序。Kirakira phase module 为显式顺序链，context 可变并可 abort，扩展能力足够，但没有通用 slot dependency resolver。
-6. **Plugin jobs**：Reference 插件可声明 interval/event background job。interval job 会形成无人消息时的后台执行，和本项目排除的主动自治边界重叠；Kirakira 保留 event/lifecycle handler 和用户 schedule，没有复制 interval plugin runner。
-7. **安装向导和 TUI**：Reference 有 Click setup wizard、独立 IPC TUI。Kirakira 使用 `config.example.toml`、环境变量和本进程 REPL，部署步骤更直接但交互体验较轻。
+1. **高级记忆算法**：Reference 的 `memory2`/Akasha 还有 LLM query rewrite、HyDE、sufficiency
+   checker、profile extractor、图关系存储。Kirakira 提供 Markdown + typed records + FTS +
+   optional embeddings。
+2. **代际粒度**：Reference 的快照按 plugin generation 组织，每个插件有独立代际、skill catalog
+   和 MCP catalog，并有 published_pending/committed/aborted 完整状态机与发布后验收回滚。
+   Kirakira 的快照是单一代际（phase 模块 + MCP catalog），够用且语义相同，但没有 per-plugin 代际。
+3. **A2A Peer Agent**：Reference 可冷启动外部 A2A 服务并轮询远端任务；Kirakira 只有本地 subagent 和 MCP。
+4. **前端 Dashboard**：Reference 带 React Dashboard 与插件面板样式契约。
+5. **Transport**：Reference 用 FastAPI/WebSocket 与更重的 SDK；Kirakira 用标准库 HTTP、
+   Telegram Bot API 和 OneBot HTTP，功能路径相同。
+6. **Phase slot DAG**：Reference phase module 可声明 slot 依赖并拓扑排序；Kirakira 是显式顺序链。
+7. **Plugin jobs**：Reference 插件可声明 interval job，与我们排除的主动自治边界重叠。
+8. **安装向导**：Reference 有 Click setup wizard；Kirakira 用 `config.example.toml` + 环境变量。
 
-## 5. 明确排除的 Reference 代码
+## 5. 已知未跟进项（有意）
 
-- `proactive_v2/**`
-- `agent/core/proactive_*`、`drift_turn.py`
-- `bootstrap/proactive.py`
+- **#121 supervised agent restart**：进程级监督重启，属运维形态而非被动链路语义。
+- **#118 app server 控制面**：Reference 用它替换 TUI IPC；Kirakira 只有本进程 REPL。
+- **#126 rolling backup**：独立运维脚本 + systemd timer。
+- **#116 Codex backend 统一**：Reference 统一了 Codex 与 API-compatible 两类后端；Kirakira
+  只有 OpenAI-compatible 一类，统一无对象。
+
+## 6. 明确排除的 Reference 代码
+
+- `proactive_v2/**`、`agent/core/proactive_*`、`drift_turn.py`、`bootstrap/proactive.py`
 - proactive source、feedback、presence、energy、judge、sensor、anyaction、quota
 - drift skills 自动选择和空闲执行
 - 仅服务于 proactive/drift 的 memory optimizer、prompt 和脚本
 
-## 6. 审计证据
+## 7. 审计证据
 
 - conda Python：`/home/xiang/.conda/envs/xingshu-vllm/bin/python`，Python 3.12。
-- `compileall`：通过。
-- `unittest discover -s tests -v`：83 项通过。
-- `git diff --check`：通过。
-- DeepSeek 普通响应：`deepseek-v4-flash` 返回 `ONLINE_OK`。
-- DeepSeek streaming tool loop：41 个 stream delta，`write_file`、`read_file` 均 success，session 保存 2 组 tool chain。
-- DeepSeek consolidation：`last_consolidated=6`，生成 2 条可检索记录并写入 HISTORY。
-
-密钥仅注入单次测试进程环境，没有写入 tracked 文件。Reference 目录由 `.gitignore` 排除。
+- `unittest discover -s tests`：132 项通过（本轮新增 context policy 8、snapshot 13、
+  workspace 6、fail-loud 5，MCP 由 2 项扩展到 16 项）。
+- 关键回归用例 `test_turn_pins_snapshot_tools_across_mid_turn_hot_reload`：turn 中途换代后，
+  本轮仍调用到旧代际工具并拿到旧代际返回值，全局 current 已是新代际，旧代际在租约释放后 drained。
+- 真实 stdio MCP server 端到端验证：声明 → 连接 → 发布 generation `f130447a65ec` →
+  `/tools` 列出 `mcp_fake__echo` / `mcp_fake__fail` → 干净关闭。
+- Reference 目录由 `.gitignore` 排除，未提交。
