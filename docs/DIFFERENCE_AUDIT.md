@@ -1,157 +1,208 @@
-# Kirakira Agent 与 akashic-agent 非主动链路差异审计
+# Kirakira Agent 与 akashic-agent 差距审计
 
-## 1. 审计结论
+> 审计基准：reference `6a0616c`（2026-07-16）对比本仓库 `3d0876d`。
+>
+> **排除范围**：只排除自主主动链路——`proactive_v2`、drift、sensor、energy、judge、presence，
+> 以及无人请求时的自主触达。Web、Telegram、QQ、用户创建的定时任务、用户 turn 派生的后台任务
+> 都属于被动链路，在审计范围内。
+>
+> **本文档的规矩**：每一条状态都必须是**核对过代码**得出的，不能靠印象。上一版审计因为凭印象
+> 写，把 #123 标成"已跟进"，实际上根本没做（见 §6）。
 
-审计对象为本仓库与 `Reference/akashic-agent` 当前源码。排除项只包括自主主动链路：`proactive_v2`、drift、sensor、energy、judge、presence，以及无人请求时的自主触达。Web、Telegram、QQ、用户创建的定时任务、用户 turn 派生的后台任务仍属于被动链路范围。
+## 1. 体量对照
 
-当前 Kirakira 已覆盖 Reference 被动主链路的关键行为：统一 Channel、MessageBus、会话并发控制、生命周期 phase、streaming tool loop、session、长期记忆、插件、MCP、技能、后台 shell、subagent、调度和 graceful shutdown。它不是 Reference 的逐文件拷贝，部分专用子系统使用更轻的实现，差异见第 4 节。
+| | Reference | Kirakira |
+| --- | ---: | ---: |
+| Python 总行数 | ~153,000 | ~10,100 |
+| 被动链路相关行数（agent+bus+core+session+infra+bootstrap，含少量 proactive） | ~49,000 | ~10,100 |
+| 测试文件数 | 135 | 20 |
+| 测试项数 | — | 142 |
+
+体量差 15 倍，但其中大部分是**被明确排除的范围**（`proactive_v2` 3.3k、`plugins/` 插件市场
+19.2k、`memory2` 5.6k、`eval` 2.3k、前端 Dashboard）以及 reference 更完整的代际/控制面机制。
+被动主链路的**行为**覆盖度远高于行数比暗示的程度，但**结构粒度**确实更粗（见 §4）。
 
 ## 2. 逐模块映射
 
+### 2.1 被动主链路（核心）
+
 | Reference | Kirakira | 状态 |
 | --- | --- | --- |
-| `bus/events.py` | `kirakira_agent/events.py` | 已覆盖 |
-| `bus/queue.py` | `kirakira_agent/bus.py` | 已覆盖并测试并发/顺序 |
-| `bus/event_bus.py`、`events_lifecycle.py` | `event_bus.py`、`lifecycle.py` | 已覆盖主要被动事件 |
-| `agent/looping/*` | `runtime.AgentLoop` | 已覆盖被动消费、串行化、中断 |
-| `agent/core/passive_turn.py` | `runtime.DefaultReasoner` | 已覆盖 streaming tool loop 与 retry |
-| `agent/turns/*`、`lifecycle/phases/*` | `PassiveTurnPipeline` + phase ctx | 已覆盖 turn 处理阶段 |
-| `agent/prompting/*` | `context_builder.py` + reasoner trim | 行为覆盖，结构更轻 |
-| `session/manager.py`、`store.py` | `session.py` | JSON canonical + SQLite FTS |
-| `core/memory/*`、`memory2/*` | `memory.py`、`embeddings.py` | 核心行为覆盖，算法简化 |
-| `agent/tools/*` | `tools/builtins.py` | 常用被动工具已覆盖 |
+| `bus/events.py`、`events_lifecycle.py` | `events.py`、`lifecycle.py` | 已覆盖 |
+| `bus/queue.py` | `bus.py` | 已覆盖，并测试并发/顺序 |
+| `bus/event_bus.py` | `event_bus.py` | 已覆盖（ordered intercept + fanout observer） |
+| `agent/looping/*`（1211 行） | `runtime.AgentLoop` | 已覆盖被动消费、串行化、中断 |
+| `agent/core/passive_turn.py`（2255 行） | `runtime.PassiveTurnPipeline` + `DefaultReasoner` | 已覆盖 streaming tool loop 与 retry |
+| `agent/turns/*` | pipeline 内联 | 行为覆盖，无独立 TurnResult/SideEffect 抽象 |
+| `agent/lifecycle/*`（2200 行） | `lifecycle.py` + pipeline | 7 个 phase ctx 已覆盖；无 slot DAG（§4.1） |
+| `agent/prompting/assembler.py`、`budget.py` | `context_builder.py` + `runtime._trim_context` | 行为覆盖，结构更轻（§4.2） |
+| `agent/retrieval/protocol.py`、`default_pipeline.py` | 直接调用 `memory.build_retrieval_block` | 行为覆盖，无可插拔 pipeline 接缝（§4.3） |
+| `agent/model_runtime/context_policy.py` | `context_policy.py` | ✅ 本轮补齐（含 #117 的 160 基准） |
+| `agent/model_runtime/*`（其余） | `models/openai_compatible.py` | 我们只有一类后端，无需统一（§5） |
+| `session/manager.py`、`store.py` | `session.py` | JSON canonical + SQLite FTS；#124 语义本就一致 |
+| `core/memory/*`、`memory2/*`（5.6k） | `memory.py`、`embeddings.py` | 核心行为覆盖，算法简化（§4.4） |
+
+### 2.2 工具与扩展
+
+| Reference | Kirakira | 状态 |
+| --- | --- | --- |
+| `agent/tools/registry.py`、`base.py` | `tools/registry.py` | 已覆盖 |
 | `agent/tool_hooks/*` | `tool_hooks.py` | pre/post/error hook 已覆盖 |
-| `agent/mcp/*` | `mcp/client.py`、`mcp/registry.py` | stdio MCP 已覆盖 |
-| `agent/plugins/*` | `plugins.py`、`plugin_manifest.py`、`plugin_decorators.py` | 核心插件合同已覆盖 |
-| `agent/background/*`、`tools/spawn.py` | `subagent.py` | inline/background 与管理面已覆盖 |
-| `agent/scheduler.py`、`tools/schedule.py` | `scheduler.py` | 用户显式调度已覆盖 |
+| `agent/tools/{filesystem,shell,web_fetch,web_search,vision,tool_search}.py` | `tools/builtins.py` | 已覆盖 |
+| `agent/tools/{memorize,recall_memory,forget_memory,message_lookup,message_push,schedule}.py` | `tools/builtins.py`、`scheduler.py` | 已覆盖 |
+| `agent/tools/spawn.py`、`agent/background/*` | `subagent.py` | 已覆盖 inline/background、profile、并发上限 3 |
+| `agent/policies/delegation.py` | `subagent.py` 的 `_MAX_BACKGROUND_JOBS = 3` | 行为等价（§6.2） |
+| `agent/policies/history_route.py` | 无 | **不需要**：upstream 死代码（§6.2） |
+| `agent/mcp/client.py` | `mcp/client.py` | 已覆盖，并已收紧结果结构校验 |
+| `agent/mcp/declarations.py`、`host.py`、`generation.py`、`watcher.py` | `mcp/declarations.py`、`host.py`、`publisher.py`、`watcher.py` | ✅ 本轮补齐 |
+| `agent/mcp/admin.py`、`agent/tools/workspace_mcp.py` | `mcp/admin.py` | ✅ 本轮补齐（§6.1） |
+| `agent/plugins/*`（7950 行） | `plugins.py`、`plugin_manifest.py`、`plugin_decorators.py` | 核心合同覆盖；代际粒度更粗（§4.1） |
+| `agent/plugins/snapshot.py` | `snapshot.py` | ✅ 本轮补齐；单一代际而非 per-plugin（§4.1） |
+| `agent/skills.py` | `skills.py` | 已覆盖 |
+| `agent/tools/agent_restart.py`、`agent/restart.py` | 无 | 有意未做（§5） |
+
+### 2.3 渠道与装配
+
+| Reference | Kirakira | 状态 |
+| --- | --- | --- |
+| `infra/channels/contract.py`、`base.py` | `channels/contract.py`、`base.py` | 已覆盖 |
 | `infra/channels/web_chat_channel.py` | `channels/web.py` | 已覆盖，transport 不同 |
 | `infra/channels/telegram_channel.py` | `channels/telegram.py` | 已覆盖 Bot API 行为 |
-| `infra/channels/qq_channel.py` | `channels/qq.py` | 已覆盖 OneBot HTTP 行为 |
-| `bootstrap/channel_host.py` | `channels/host.py` | 已覆盖启停和失败回滚 |
-| `bootstrap/app.py`、`wiring.py` | `cli.build_runtime`、`CoreRuntime` | 已覆盖核心装配 |
+| `infra/channels/qq_channel.py`、`group_filter.py` | `channels/qq.py` | 已覆盖 OneBot HTTP 行为 |
+| `bootstrap/channel_host.py` | `channels/host.py` | 已覆盖启停与失败回滚 |
+| `bootstrap/app.py`、`wiring.py`（6.5k） | `cli.build_runtime`、`CoreRuntime` | 已覆盖核心装配 |
+| `infra/persistence/json_store.py` | 各模块内联 `_atomic_write` | 行为覆盖，未抽公共模块 |
+| `agent/control/*`、`infra/control/*`（1748+ 行） | 无 | 有意未做（§5） |
+| `agent/peer_agent/*`（1094 行） | 无 | 有意未做（§5） |
+| `frontend/`（React Dashboard） | 无 | 有意未做（§5） |
 
-## 3. 已补齐的高风险差异
+## 3. 本轮（reference 更新 26 个 commit 后）的处置
 
-### 3.1 MessageBus 与 AgentLoop
+| Reference 变更 | 性质 | 处置 |
+| --- | --- | --- |
+| #120 MCP registry → 声明式热重载 | 子系统重做 | ✅ 已重做 |
+| #123 agent 自助管理 workspace MCP | 新能力 | ✅ 已补（本次审计才发现漏了，§6.1） |
+| #104 插件描述符 → 程序化能力声明 | 子系统重做 | ✅ 已重做 |
+| #105/#119 代际 + RuntimeSnapshot + lease | 新架构 | ✅ 已按比例实现 |
+| #117/#116 context policy 派生（640 → 160） | 参数与派生 | ✅ 已跟进 |
+| #127 workspace 状态隔离 | 装配 | ✅ 已跟进 |
+| #111 fail-loud contracts（236 文件） | 全仓原则 | ⚠️ 择要应用（§4.5） |
+| #124 session 裁剪保留历史 | 修复 | ✅ 本就一致（已核对 `session.py` 切片语义） |
+| #106 只启用一个 Memory Engine | 修复 | N/A：我们只有一个引擎 |
+| #121 supervised restart | 运维 | ❌ 有意未做（§5） |
+| #118 TUI IPC → app server | 控制面 | ❌ 有意未做（§5） |
+| #126 rolling backup | 运维脚本 | ❌ 有意未做（§5） |
 
-- inbound 消息入队时登记 passive pending，处理完成必定 `task_done`。
-- 同 session 通过独立 lock 串行；不同 session 的 turn task 并发。
-- outbound 为每个 `(channel, chat_id)` 分配 ticket，同 chat 保序、跨 chat 并发。
-- subscriber 失败会重试一次，单个 callback 失败不破坏 dispatch loop。
-- `/stop` 取消 active task；取消时保存用户消息、已完成工具链、partial thinking/reply 和 `[interrupted]` 标记。
-- runtime 关机顺序覆盖 subagent、loop、scheduler、bus、channels、shell、plugins、MCP、memory worker、event bus 和 session index。
+## 4. 保留的实现差异（不是"缺失"，是更轻的实现）
 
-### 3.2 Reasoner 与 Provider
+### 4.1 代际粒度
 
-- 支持普通 chat completion 和 SSE，累积正文、`reasoning_content`、分片 tool call id/name/arguments。
-- DeepSeek thinking history 会将每组工具调用时的 reasoning 原样回传。
-- tool schema 在执行前检查 required、类型和 enum；错误作为 tool result 返回模型。
-- deferred tool 默认不暴露，模型需经 `tool_search` 解锁；每个 session 保存 5 项 LRU。
-- 未注册工具、未解锁工具和 turn metadata 禁用工具都不会执行。
-- 连续重复相同 tool signature 达阈值后停止执行，转入阶段总结。
-- 达最大 iteration 后额外请求一次不带工具的总结，避免只返回机械错误。
-- 处理模型超时、空响应、429/5xx、context length 和 content safety。
-- context retry 先缩减动态上下文与历史，再返回明确降级文本。
+Reference 的 `RuntimeSnapshot` 按 **per-plugin generation** 组织：每个插件有独立代际、独立
+skill catalog、独立 MCP catalog，状态机是 `compiled → published_pending → committed/aborted →
+retired`，还有发布后验收与回滚、`quiesce`、`fork_lease`、slot 拓扑排序。
 
-### 3.3 Session 与历史
+Kirakira 的快照是**单一代际**（phase 模块 + MCP catalog + hooks），状态机是
+`compiled → published → retired → drained`。语义相同（换代不影响在途 turn、租约排空才回收），
+但做不到"只换某一个插件的代际而不动其他插件"。
 
-- session 文件名为可读前缀加 SHA-256 短摘要，避免 `a:b` 与 `a/b` 清洗后碰撞。
-- 写入采用同目录临时文件和 `os.replace`，异常时不破坏旧 session。
-- 兼容旧安全文件名并按真实 key 校验迁移。
-- history 从 user boundary 开始，不产生孤立 assistant/tool message。
-- 每个 tool call group 重建 assistant tool_calls、reasoning 和逐 call tool result。
-- tool result 回放有长度上限，防止历史无限膨胀。
-- SQLite FTS5 trigram 仅作索引，JSON session 仍是事实源；索引可重建。
-- session 删除触发 memory source undo，避免已删除对话继续污染长期记忆。
+对当前规模够用；插件多到需要独立换代时再拆。
 
-### 3.4 Memory
+### 4.2 Context trim
 
-- `MEMORY.md` 由托管 block 与人工区组成；forget 会同步重写托管 block，而不删除人工内容。
-- `items.json` 记录 id、type、source_ref、status、reinforcement、时间和可选 embedding。
-- exact duplicate 强化旧记录；同 source 重放保持幂等。
-- 中文 bigram、英文 token 和 substring 共同参与词法召回。
-- 配置 embedding 后以语义 0.75 + 词法 0.25 混合评分；服务失败自动回退词法。
-- recall 支持 memory type、since、until 过滤。
-- 每轮同步更新 recent/history；达到窗口后异步调用 LLM 生成结构化 memories/history。
-- 回复先返回；同 session 下一轮会等待上一轮 consolidation，超时后取消，避免读写竞态。
-- consolidation、memorize 工具和显式记忆规则之间通过 source/idempotency 避免重复。
+Reference：`prompting/budget.py` 定义具名 `ContextTrimPlan`，按 `drop_sections` 分级丢弃
+（`skills_catalog` → `memes` → `long_term_memory` → `retrieved_memory`）。
 
-### 3.5 Plugin、Hook 与 MCP
+Kirakira：`runtime._trim_context(messages, level)` 按 level 逐级 microcompact。
 
-- 支持 `.aka-plugin/plugin.json`，安全解析 lifecycle、skills 和 MCP 路径，拒绝目录穿越。
-- 支持 `plugin.py` 类、entry、装饰器工具和 7 个 phase decorator。
-- 插件有 `config.toml`、`config.local.toml`、可选 ConfigModel、原子 JSON KV 和独立 data dir。
-- 插件 initialize 失败会撤销已注册工具、hooks、skills 和 MCP；坏插件不阻塞好插件。
-- terminate 按加载逆序且幂等。
-- pre hook 可改参数或 deny；pre hook 异常 fail-closed，post hook 异常隔离。
-- MCP client 有 initialize handshake、并发 pending request、stderr drain、timeout、server error 和 disconnect 处理。
-- MCP registry 能动态 add/remove/list、持久化 server 配置，并将远端工具注册为 deferred tool。
-- `plugin_install` 只接受本地目录或 HTTPS Git URL，校验 manifest 后要求重启，不热执行刚下载代码。
+行为方向一致（先丢动态上下文再丢历史），但 reference 的分级是**按 prompt section 语义**，
+我们的是**按消息粒度**，可解释性更差。
 
-### 3.6 工具与后台任务
+### 4.3 Retrieval 接缝
 
-- 文件工具限制工作区边界，原子写入，编辑时拒绝默认替换多个匹配，文本读取检测 NUL 二进制。
-- shell 拒绝明显破坏性命令，使用独立进程组；timeout、turn cancellation 和 runtime shutdown 都会清理进程树。
-- 长 shell 可显式后台运行，也可在前台阈值后自动转后台；`task_output` 支持 block/offset，`task_stop` 停止并清理日志。
-- `web_fetch` 拒绝私网、loopback、link-local、reserved、multicast，且每次 redirect 重新校验；限制响应类型和 5 MB。
-- vision 校验 PNG/JPEG/GIF/WebP magic bytes、单次总大小和路径边界。
-- subagent 有独立 session、iteration 上限和 profile 权限；禁止递归 spawn、发消息、改 MCP/插件、创建 schedule。
-- background subagent 上限为 3，提供 list/cancel，完成、失败、取消均回注原 session。
-- schedule 只由用户 turn 显式创建，持久化 fire time/interval/status，不包含自主判断。
+Reference 有 `MemoryRetrievalPipeline` 协议 + `DefaultMemoryRetrievalPipeline`，被动 turn 依赖
+协议而非具体实现，因此可以整体替换检索策略。
 
-### 3.7 Channels
+Kirakira 的 pipeline 直接调 `memory.build_retrieval_block`。行为一样，但没有替换接缝。
+真要做多路召回 + RRF 时（见 `VERSION_EVOLUTION.md §5.5`），第一步就是补这个接缝。
 
-Web：
+### 4.4 记忆算法
 
-- 每个请求生成 correlation id，同 session 并发 HTTP 请求不会串回复。
-- `/stop`/`/interrupt` 可取消 turn。
-- 校验 body、session id 和附件路径。
-- 提供 session/memory list、patch、delete 管理 API。
-- `/events` 长轮询接收 schedule、subagent、message_push 等非请求绑定消息。
+Reference 的 `memory2`/Akasha 有 LLM query rewrite、HyDE、sufficiency checker、profile
+extractor、procedure 冲突检测、热度排序、图关系存储。
 
-Telegram：
+Kirakira：Markdown + typed records + FTS + 可选 embedding（语义 0.75 + 词法 0.25）。
 
-- long polling offset、allow list、文本/图片/文档入站、20 MB 限制和 reply context。
-- 4096 字符友好分片、429 `retry_after`、出站文件。
-- 监听 stream lifecycle，先 send 占位消息，再 edit live content，最终 edit 定稿。
+### 4.5 Fail-loud 范围
 
-QQ/OneBot：
+Reference #111 是 236 文件、18k 行的全仓收紧，其中大半覆盖我们排除的 proactive/dashboard/
+peer-agent。我们提取原则应用于自己的被动链路（memory 写入、session 列举、MCP 结果结构、
+plugin manifest），共 4 处 + 5 个测试。**原则一致，覆盖面按范围裁剪。**
 
-- HTTP webhook token 鉴权、自消息忽略、消息去重。
-- 私聊 allow list、群 allow list、逐群 require_at/allow_from。
-- group session 中保留发送者身份，解析 structured/CQ 图片并下载。
-- 出站文本、图片、文件和 OneBot retcode/status 校验。
+### 4.6 其他
 
-## 4. 保留的实现差异
+- **Phase slot DAG**：Reference phase module 可声明 slot import/export 并拓扑排序；我们是显式顺序链。
+- **Transport**：Reference 用 FastAPI/WebSocket 与更重的 SDK；我们用标准库 HTTP + Bot API + OneBot HTTP。
+- **持久化抽象**：Reference 有 `infra/persistence/json_store.py` 统一原子写；我们各模块内联。
+- **安装向导**：Reference 有 Click setup wizard；我们用 `config.example.toml` + 环境变量。
+- **Plugin jobs**：Reference 插件可声明 interval job，与排除的主动自治边界重叠。
 
-这些不是“主链路缺失”，但仍是与 Reference 不同的专用实现：
+## 5. 有意未跟进（记录，不是遗忘）
 
-1. **高级记忆算法**：Reference 的 `default_memory`/`memory2`/Akasha 还有 LLM query rewrite、HyDE、sufficiency checker、procedure rule conflict、profile extractor、热度排序和图关系存储。Kirakira 当前提供稳定的 Markdown + typed records + FTS + optional embeddings，尚未移植这些实验性算法。
-2. **A2A Peer Agent**：Reference 可按配置冷启动外部 A2A 服务并轮询远端任务。Kirakira 已有本地 subagent 和 MCP，但没有独立 A2A process manager/poller。
-3. **前端 Dashboard**：Reference 带 React Dashboard、插件面板和更多诊断视图。Kirakira Web 侧提供 chat、session/memory 管理 API 和轻量页面，没有复制其前端工程。
-4. **Transport**：Reference Web 主要使用 FastAPI/WebSocket，Telegram/QQ 使用更重的 SDK；Kirakira 使用标准库 HTTP、Telegram Bot API 和 OneBot HTTP，功能路径相同但 UI/transport 不逐行一致。
-5. **Phase slot DAG**：Reference phase module 可声明 slot import/export 和依赖顺序。Kirakira phase module 为显式顺序链，context 可变并可 abort，扩展能力足够，但没有通用 slot dependency resolver。
-6. **Plugin jobs**：Reference 插件可声明 interval/event background job。interval job 会形成无人消息时的后台执行，和本项目排除的主动自治边界重叠；Kirakira 保留 event/lifecycle handler 和用户 schedule，没有复制 interval plugin runner。
-7. **安装向导和 TUI**：Reference 有 Click setup wizard、独立 IPC TUI。Kirakira 使用 `config.example.toml`、环境变量和本进程 REPL，部署步骤更直接但交互体验较轻。
+| 项 | 为什么不做 |
+| --- | --- |
+| `agent/control/*` + app server（#118） | 控制面形态，不影响被动链路语义；我们只有本进程 REPL |
+| supervised restart（#121） | 进程监督属运维形态 |
+| rolling backup（#126） | 独立运维脚本 + systemd timer |
+| Codex backend 统一（#116） | 我们只有 OpenAI-compatible 一类后端，统一无对象 |
+| `agent/peer_agent/*` | A2A 外部 agent 进程管理与轮询，超出被动链路 |
+| `frontend/` Dashboard | 前端工程 |
+| `plugins/` 插件市场（19.2k） | 具体插件实现，不是 runtime |
 
-## 5. 明确排除的 Reference 代码
+## 6. 本次审计发现的错误与真实差距
 
-- `proactive_v2/**`
-- `agent/core/proactive_*`、`drift_turn.py`
-- `bootstrap/proactive.py`
-- proactive source、feedback、presence、energy、judge、sensor、anyaction、quota
-- drift skills 自动选择和空闲执行
-- 仅服务于 proactive/drift 的 memory optimizer、prompt 和脚本
+### 6.1 已修复：agent 无法自助管理 MCP
 
-## 6. 审计证据
+**上一版审计把 #120/#123 合并标成"✅ 已跟进重做"，但只做了 #120。**
 
-- conda Python：`/home/xiang/.conda/envs/xingshu-vllm/bin/python`，Python 3.12。
-- `compileall`：通过。
-- `unittest discover -s tests -v`：83 项通过。
-- `git diff --check`：通过。
-- DeepSeek 普通响应：`deepseek-v4-flash` 返回 `ONLINE_OK`。
-- DeepSeek streaming tool loop：41 个 stream delta，`write_file`、`read_file` 均 success，session 保存 2 组 tool chain。
-- DeepSeek consolidation：`last_consolidated=6`，生成 2 条可检索记录并写入 HISTORY。
+后果是一个**能力回归**：我们跟随 upstream 删掉了 `mcp_add`/`mcp_remove`/`mcp_list`，却没有补上
+upstream 同期给出的替代品（`agent/mcp/admin.py` + `agent/tools/workspace_mcp.py`）。于是 agent
+完全失去了配置 MCP 的能力——比旧版还弱，只有人手改文件才行。
 
-密钥仅注入单次测试进程环境，没有写入 tracked 文件。Reference 目录由 `.gitignore` 排除。
+已补 `mcp/admin.py`，提供 `workspace_mcp_apply` / `workspace_mcp_remove` /
+`workspace_mcp_status`，与人手改文件走同一条 reconcile；发布失败回滚声明、每次修改留备份、
+`status` 只回显 env 键名不回显值。10 个测试。
+
+**教训**：审计表里合并条目（"#120/#123"）会掩盖漏项。一个 commit 一行。
+
+### 6.2 核对后确认"不是差距"的项
+
+这两项如果只看文件名会误判成缺失，核对代码后确认不需要：
+
+- **`agent/policies/history_route.py`**（意图路由）：`HistoryRoutePolicy` 类**在整个 reference
+  里从未被实例化**，只有 `policies/__init__.py` 导出它。是 upstream 的死代码。
+- **`agent/policies/delegation.py`**（委派决策）：类型签名看着很重（`heuristic|llm|manual_rule`、
+  confidence、reason_code），但实现的 docstring 写得很清楚："限制并发委派数量，其余决策交由
+  模型指引"——实际只做并发上限 3。我们 `subagent.py` 的 `_MAX_BACKGROUND_JOBS = 3` 行为等价，
+  差的只是结构化决策元数据。
+
+**方法论**：判断差距要看**调用点**，不能看文件名或类型声明。reference 里有 aspirational
+的类型脚手架（Literal 列了 llm/manual_rule，实现里根本没有）。
+
+### 6.3 尚未闭合的真实差距（按值得做的程度排序）
+
+1. **Retrieval 接缝**（§4.3）——做多路召回前必须先补，成本低、收益明确。
+2. **Context trim 按 section 分级**（§4.2）——可解释性更好，成本低。
+3. **per-plugin 代际**（§4.1）——当前规模不需要，插件变多再说。
+4. **结构化委派决策元数据**（§6.2）——只有在要做 trace/评测时才有价值。
+
+## 7. 审计证据
+
+- Python：`/home/xiang/.conda/envs/xingshu-vllm/bin/python` 3.12。
+- `unittest discover -s tests`：**142 项通过**（本轮新增：context policy 8、snapshot 13、
+  workspace 6、fail-loud 5、mcp admin 10；MCP 由 2 项扩展到 16 项）。
+- 关键回归 `test_turn_pins_snapshot_tools_across_mid_turn_hot_reload`：turn 中途换代后本轮仍
+  调用到旧代际工具并拿到旧代际返回值，全局 current 已是新代际，旧代际在租约释放后 drained。
+- 真实 stdio MCP server 端到端：声明 → 连接 → 发布 generation → `/tools` 列出
+  `mcp_fake__echo` / `mcp_fake__fail` → 干净关闭。
+- 全新 clone 按 README 操作可直接启动，运行时状态自动生成且不被 git 跟踪。
+- `git ls-files` 无密钥形状字符串；`Reference/` 由 `.gitignore` 排除。

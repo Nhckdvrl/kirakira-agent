@@ -11,7 +11,7 @@ import os
 import re
 import shutil
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
@@ -19,9 +19,13 @@ from uuid import uuid4
 from kirakira_agent.event_bus import EventBus
 from kirakira_agent.config import load_toml_config
 from kirakira_agent.plugin_manifest import (
-    PluginDescriptor,
+    MANIFEST_NAME,
     discover_plugin_roots,
-    load_plugin_descriptor,
+    is_enabled,
+    load_manifest,
+    normalize_command_item,
+    resolve_skill_roots,
+    safe_child,
 )
 from kirakira_agent.plugin_decorators import (
     get_bindings,
@@ -40,6 +44,15 @@ from kirakira_agent.tool_hooks import HookContext, HookOutcome, ToolHook
 from kirakira_agent.tools.registry import ToolRegistry, object_schema
 
 logger = logging.getLogger(__name__)
+
+
+def _source_plugin_name(source: str) -> str:
+    """插件身份取来源目录名/仓库名；目录名必须与插件 name 一致。"""
+
+    text = source.strip().rstrip("/")
+    if text.endswith(".git"):
+        text = text[: -len(".git")]
+    return Path(text).name
 
 
 class PluginKVStore:
@@ -106,8 +119,15 @@ class PluginContext:
 class ActivePlugin:
     plugin_id: str
     root: Path
-    descriptor: Optional[PluginDescriptor]
     instance: Optional["Plugin"]
+
+    @property
+    def version(self) -> str:
+        return str(getattr(self.instance, "version", "") or "")
+
+    @property
+    def desc(self) -> str:
+        return str(getattr(self.instance, "desc", "") or "")
 
 
 class DecoratedToolHook:
@@ -142,8 +162,21 @@ class DecoratedToolHook:
         return HookOutcome()
 
 
+@dataclass(frozen=True)
+class McpServerSpec:
+    """插件用代码声明的 MCP server；path 一律相对插件根解析。"""
+
+    name: str
+    command: tuple[str, ...]
+    env: Dict[str, str] = field(default_factory=dict)
+    cwd: str = "."
+
+
 class Plugin:
+    api_version: int = 1
     name: str = ""
+    version: str = ""
+    desc: str = ""
     ConfigModel: Any = None
 
     async def initialize(self) -> None:
@@ -151,6 +184,14 @@ class Plugin:
 
     async def terminate(self) -> None:
         return None
+
+    @classmethod
+    def skill_roots(cls) -> tuple[str, ...]:
+        return ()
+
+    @classmethod
+    def mcp_servers(cls) -> List[McpServerSpec]:
+        return []
 
     def before_turn_modules(self) -> List[object]:
         return []
@@ -193,7 +234,7 @@ class PluginManager:
         workspace: Path,
         session_manager: Any,
     memory: Any,
-        mcp_registry: Any = None,
+        mcp_publisher: Any = None,
         skill_loader: Any = None,
     ) -> None:
         self.plugin_dirs = plugin_dirs
@@ -202,7 +243,7 @@ class PluginManager:
         self.workspace = workspace
         self.session_manager = session_manager
         self.memory = memory
-        self.mcp_registry = mcp_registry
+        self.mcp_publisher = mcp_publisher
         self.skill_loader = skill_loader
         self.instances: List[Plugin] = []
         self.active: List[ActivePlugin] = []
@@ -213,25 +254,24 @@ class PluginManager:
         self._register_management_tools()
 
     async def load_all(self) -> None:
+        # 清单只决定启停；损坏时整体失败，不静默退化成“全部启用”。
+        manifest = load_manifest(self.workspace / ".kirakira" / MANIFEST_NAME)
         seen_names: set[str] = set()
         for root in discover_plugin_roots(self.plugin_dirs):
             try:
-                descriptor = load_plugin_descriptor(root)
-                name = descriptor.name if descriptor else root.name
+                plugin = self._load_one(root / "plugin.py")
+                if plugin is None:
+                    raise ValueError("plugin.py declares no Plugin subclass")
+                name = str(getattr(plugin, "name", "") or root.name).strip()
                 if name in seen_names:
                     logger.warning("duplicate plugin name skipped: %s", name)
                     continue
                 seen_names.add(name)
-                entry = descriptor.lifecycle_entry if descriptor else root / "plugin.py"
-                plugin = None
-                if entry is not None and entry.is_file():
-                    plugin = self._load_one(
-                        entry,
-                        descriptor.lifecycle_class if descriptor else "",
-                    )
-                if plugin is not None:
-                    await self._initialize_plugin(name, root, plugin)
-                self.active.append(ActivePlugin(name, root, descriptor, plugin))
+                if not is_enabled(manifest, name):
+                    logger.info("plugin disabled by manifest: %s", name)
+                    continue
+                await self._initialize_plugin(name, root, plugin)
+                self.active.append(ActivePlugin(name, root, plugin))
             except Exception as exc:
                 self.errors[root.name] = str(exc)
                 logger.exception("plugin failed to load: %s", root)
@@ -242,8 +282,9 @@ class PluginManager:
             )
         if self.skill_loader is not None:
             self.skill_loader.reload()
-        if self.mcp_registry is not None:
-            await self.mcp_registry.sync_plugin_servers(self.mcp_servers)
+        if self.mcp_publisher is not None:
+            # 插件 MCP 与 workspace MCP 共用换代语义：整批发布，失败保持旧代际。
+            await self.mcp_publisher.publish(self.mcp_servers, source="plugins")
 
     async def terminate_all(self) -> None:
         if self._terminated:
@@ -254,6 +295,8 @@ class PluginManager:
                 await plugin.terminate()
             except Exception:
                 logger.exception("plugin terminate failed: %s", plugin.name or type(plugin).__name__)
+        if self.mcp_publisher is not None:
+            await self.mcp_publisher.shutdown()
 
     @property
     def tool_hooks(self) -> List[ToolHook]:
@@ -307,22 +350,45 @@ class PluginManager:
 
     @property
     def mcp_servers(self) -> Dict[str, Dict[str, Any]]:
+        """把各插件代码声明的 MCP server 规范化成 publisher 需要的 spec。"""
+
         merged: Dict[str, Dict[str, Any]] = {}
         for record in self.active:
-            if record.descriptor is None:
+            if record.instance is None:
                 continue
-            for name, config in record.descriptor.mcp_servers.items():
-                if name in merged:
-                    logger.warning("duplicate plugin MCP server skipped: %s", name)
+            for spec in record.instance.mcp_servers():
+                if spec.name in merged:
+                    logger.warning("duplicate plugin MCP server skipped: %s", spec.name)
                     continue
-                normalized = dict(config)
-                env = dict(normalized.get("env") or {})
-                data_dir = self.workspace / ".kirakira" / "plugin-data" / record.plugin_id
+                if not spec.command:
+                    raise ValueError("plugin MCP server has no command: %s" % spec.name)
+                data_dir = self.plugin_data_dir(record.plugin_id)
+                env = dict(spec.env)
                 env.setdefault("KIRAKIRA_PLUGIN_DATA_DIR", str(data_dir))
-                env.setdefault("AKA_PLUGIN_DATA_DIR", str(data_dir))
-                normalized["env"] = env
-                merged[name] = normalized
+                merged[spec.name] = {
+                    "command": [
+                        normalize_command_item(record.root, item)
+                        for item in spec.command
+                    ],
+                    "cwd": str(safe_child(record.root, spec.cwd or ".")),
+                    "env": env,
+                }
         return merged
+
+    def plugin_data_dir(self, plugin_id: str) -> Path:
+        return self.workspace / ".kirakira" / "plugin-data" / plugin_id
+
+    @staticmethod
+    def _validate_declarations(root: Path, plugin: Plugin) -> None:
+        """在插件自己的加载边界内校验声明路径，越界立即失败。"""
+
+        resolve_skill_roots(root, plugin.skill_roots())
+        for spec in plugin.mcp_servers():
+            if not spec.command:
+                raise ValueError("plugin MCP server has no command: %s" % spec.name)
+            safe_child(root, spec.cwd or ".")
+            for item in spec.command:
+                normalize_command_item(root, item)
 
     @property
     def channels(self) -> List[object]:
@@ -332,7 +398,9 @@ class PluginManager:
         return channels
 
     async def _initialize_plugin(self, name: str, root: Path, plugin: Plugin) -> None:
-        data_dir = self.workspace / ".kirakira" / "plugin-data" / name
+        # 能力声明在这里就校验，坏插件在自己的 try 内失败，不牵连其他插件。
+        self._validate_declarations(root, plugin)
+        data_dir = self.plugin_data_dir(name)
         context = PluginContext(
             event_bus=self.event_bus,
             tool_registry=self.tool_registry,
@@ -441,7 +509,8 @@ class PluginManager:
         expected: Dict[str, Path] = {}
         plugin_roots = {record.root.resolve() for record in self.active}
         for record in self.active:
-            roots = list(record.descriptor.skill_roots) if record.descriptor else []
+            declared = record.instance.skill_roots() if record.instance else ()
+            roots = list(resolve_skill_roots(record.root, declared))
             fallback = record.root / "skills"
             if not roots and fallback.is_dir():
                 roots.append(fallback)
@@ -474,7 +543,7 @@ class PluginManager:
             if managed:
                 link.unlink()
 
-    def _load_one(self, path: Path, class_name: str = "") -> Plugin | None:
+    def _load_one(self, path: Path) -> Plugin | None:
         module_name = "kirakira_plugin_%s" % path.parent.name.replace("-", "_")
         spec = importlib.util.spec_from_file_location(
             module_name,
@@ -489,11 +558,6 @@ class PluginManager:
         factory = getattr(module, "create_plugin", None)
         if callable(factory):
             return factory()
-        if class_name:
-            value = getattr(module, class_name, None)
-            if not isinstance(value, type) or not issubclass(value, Plugin):
-                raise TypeError("Plugin class not found: %s" % class_name)
-            return value()
         for value in module.__dict__.values():
             if isinstance(value, type) and issubclass(value, Plugin) and value is not Plugin:
                 return value()
@@ -535,16 +599,21 @@ class PluginManager:
                     {
                         "name": record.plugin_id,
                         "root": str(record.root),
-                        "version": record.descriptor.version
-                        if record.descriptor
-                        else "",
+                        "version": record.version,
+                        "desc": record.desc,
                         "lifecycle": record.instance is not None,
-                        "skills": len(record.descriptor.skill_roots)
-                        if record.descriptor
-                        else 0,
-                        "mcp_servers": sorted(record.descriptor.mcp_servers)
-                        if record.descriptor
-                        else [],
+                        "skills": len(
+                            resolve_skill_roots(
+                                record.root,
+                                record.instance.skill_roots() if record.instance else (),
+                            )
+                        ),
+                        "mcp_servers": sorted(
+                            spec.name
+                            for spec in (
+                                record.instance.mcp_servers() if record.instance else []
+                            )
+                        ),
                     }
                     for record in self.active
                 ],
@@ -555,44 +624,30 @@ class PluginManager:
         )
 
     def doctor(self, name: str = "") -> str:
+        """检查已发现插件的结构，以及已加载插件用代码声明的能力。"""
+
+        loaded = {record.root: record for record in self.active}
         reports = []
         for root in discover_plugin_roots(self.plugin_dirs):
-            if name and root.name != name:
-                descriptor = None
-                try:
-                    descriptor = load_plugin_descriptor(root)
-                except Exception:
-                    pass
-                if descriptor is None or descriptor.name != name:
-                    continue
-            errors = []
-            warnings = []
-            descriptor = None
-            try:
-                descriptor = load_plugin_descriptor(root)
-            except Exception as exc:
-                errors.append(str(exc))
-            if descriptor is None:
-                warnings.append("legacy plugin without .aka-plugin/plugin.json")
-                if not (root / "plugin.py").is_file():
-                    errors.append("plugin.py is missing")
+            record = loaded.get(root)
+            plugin_name = record.plugin_id if record else root.name
+            if name and name not in (plugin_name, root.name):
+                continue
+            errors: List[str] = []
+            warnings: List[str] = []
+            if not (root / "plugin.py").is_file():
+                errors.append("plugin.py is missing")
+            if root.name in self.errors:
+                errors.append(self.errors[root.name])
+            # 能力声明只有在插件已加载时才可信；未加载的插件不在这里执行其代码。
+            if record is None or record.instance is None:
+                warnings.append("plugin is not loaded; capability checks skipped")
             else:
-                for skill_root in descriptor.skill_roots:
-                    candidates = (
-                        [skill_root]
-                        if (skill_root / "SKILL.md").is_file()
-                        else [item for item in skill_root.iterdir() if item.is_dir()]
-                    )
-                    for candidate in candidates:
-                        if not (candidate / "SKILL.md").is_file():
-                            warnings.append("skill has no SKILL.md: %s" % candidate)
-                for server_name, config in descriptor.mcp_servers.items():
-                    command = list(config.get("command") or [])
-                    if not command:
-                        errors.append("MCP server has no command: %s" % server_name)
+                errors.extend(self._check_declared_skills(record, warnings))
+                errors.extend(self._check_declared_mcp(record))
             reports.append(
                 {
-                    "name": descriptor.name if descriptor else root.name,
+                    "name": plugin_name,
                     "root": str(root),
                     "ok": not errors,
                     "errors": errors,
@@ -600,6 +655,37 @@ class PluginManager:
                 }
             )
         return json.dumps({"plugins": reports}, ensure_ascii=False, indent=2)
+
+    def _check_declared_skills(
+        self, record: ActivePlugin, warnings: List[str]
+    ) -> List[str]:
+        assert record.instance is not None
+        try:
+            roots = resolve_skill_roots(record.root, record.instance.skill_roots())
+        except ValueError as exc:
+            return [str(exc)]
+        for skill_root in roots:
+            candidates = (
+                [skill_root]
+                if (skill_root / "SKILL.md").is_file()
+                else [item for item in skill_root.iterdir() if item.is_dir()]
+            )
+            for candidate in candidates:
+                if not (candidate / "SKILL.md").is_file():
+                    warnings.append("skill has no SKILL.md: %s" % candidate)
+        return []
+
+    def _check_declared_mcp(self, record: ActivePlugin) -> List[str]:
+        assert record.instance is not None
+        errors: List[str] = []
+        for spec in record.instance.mcp_servers():
+            if not spec.command:
+                errors.append("MCP server has no command: %s" % spec.name)
+            try:
+                safe_child(record.root, spec.cwd or ".")
+            except ValueError as exc:
+                errors.append(str(exc))
+        return errors
 
     async def install(self, source: str) -> str:
         source = source.strip()
@@ -636,21 +722,22 @@ class PluginManager:
                     return "Error: plugin clone failed: %s" % output.decode(
                         "utf-8", errors="replace"
                     )[-2000:]
-            descriptor = load_plugin_descriptor(staging)
-            if descriptor is None:
-                return "Error: plugin must contain .aka-plugin/plugin.json"
-            if not re.fullmatch(r"[A-Za-z0-9_.-]+", descriptor.name):
-                return "Error: invalid plugin name: %s" % descriptor.name
-            target = install_root / descriptor.name
+            # 插件身份来自来源目录名：安装期不导入 plugin.py，绝不热执行刚下载的代码。
+            if not (staging / "plugin.py").is_file():
+                return "Error: plugin must contain plugin.py at its root"
+            plugin_name = _source_plugin_name(source)
+            if not re.fullmatch(r"[A-Za-z0-9_.-]+", plugin_name):
+                return "Error: invalid plugin name: %s" % plugin_name
+            target = install_root / plugin_name
             if target.exists():
-                return "Error: plugin %r is already installed" % descriptor.name
+                return "Error: plugin %r is already installed" % plugin_name
             git_dir = staging / ".git"
             if git_dir.exists():
                 await asyncio.to_thread(shutil.rmtree, git_dir)
             os.replace(staging, target)
             return (
-                "Installed plugin %r version %s at %s. Restart kirakira-agent to activate it."
-                % (descriptor.name, descriptor.version or "unknown", target)
+                "Installed plugin %r at %s. Restart kirakira-agent to activate it."
+                % (plugin_name, target)
             )
         finally:
             if staging.exists():

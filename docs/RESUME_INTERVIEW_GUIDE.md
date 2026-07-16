@@ -19,9 +19,10 @@
 从最小 Function Calling MVP 逐步搭建可长期运行的 Agent Runtime，完成模型推理、工具执行、会话状态、长期记忆和多渠道接入的端到端闭环；支持 Web、Telegram、QQ/OneBot 与 CLI，已使用 DeepSeek 在线验证真实多轮工具调用和后台记忆抽取。
 
 - **Agent Loop 与并发编排：** 设计 `MessageBus -> AgentLoop -> PassiveTurnPipeline -> Reasoner` 执行链，同 session 串行避免历史交叉写入、跨 session 并行提升吞吐；实现 SSE 增量事件、同 chat 回复保序、turn 中断及 partial tool-chain 持久化，并统一管理 Channel、MCP、后台任务和 memory worker 的优雅关机。
-- **Function Calling 与工具系统：** 抽象 ToolRegistry/ToolExecutor，统一工具 schema 暴露、参数校验、异步执行、超时和错误语义；支持 pre/post/error Hook、deferred tool discovery 与 session LRU，接入 stdio MCP 动态注册远端工具，并对文件路径、Shell 进程组及 `web_fetch` SSRF 建立执行边界。
+- **Function Calling 与工具系统：** 抽象 ToolRegistry/ToolExecutor，统一工具 schema 暴露、参数校验、异步执行、超时和错误语义；支持 pre/post/error Hook、deferred tool discovery 与 session LRU，接入 stdio MCP 远端工具，并对文件路径、Shell 进程组及 `web_fetch` SSRF 建立执行边界。
+- **热重载与代际快照：** 将 MCP 从命令式注册重构为声明式热重载（内容 revision 驱动、整批候选语义、失败保持旧代际服务）；引入 RuntimeSnapshot + 每 turn 租约，解决"turn 执行期间工具被换掉"的竞态——换代只切 current 指针，在途 turn 继续使用其锁定的代际，旧 MCP 进程等租约计数归零后才断开。
 - **会话与长期记忆：** 使用原子 JSON 保存 session 和完整 reasoning/tool history，以 SQLite FTS5 建立可重建的消息索引；设计 typed memory、source evidence、强化/遗忘和 session 删除撤销，结合中文词法与可选 embedding 混合召回，并在回复后异步 consolidation，避免记忆抽取阻塞用户响应。
-- **扩展与可靠性：** 实现插件 descriptor/config/KV、生命周期模块、工具 Hook、inline/background subagent 和显式调度；针对 Web 并发串回复、DeepSeek reasoning 回放、session 文件名碰撞、MCP/插件半加载、重定向 SSRF 和后台任务关机竞态补充回归测试，当前 83 项自动化测试通过。
+- **扩展与可靠性：** 实现插件程序化能力声明、config/KV、生命周期模块、工具 Hook、inline/background subagent 和显式调度；针对 Web 并发串回复、DeepSeek reasoning 回放、session 文件名碰撞、MCP/插件半加载、重定向 SSRF 和后台任务关机竞态补充回归测试；建立 fail-loud 边界（向量检索可降级、向量写入必须报错），当前 132 项自动化测试通过。
 
 ### 2.2 一页简历压缩版
 

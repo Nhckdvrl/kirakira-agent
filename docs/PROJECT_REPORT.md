@@ -69,8 +69,10 @@ kirakira_agent/
   context_builder.py        system prompt、时间、记忆、skills、附件
   tool_hooks.py             pre/post/error 工具 hook executor
   plugins.py                插件加载、回滚、配置、KV 和管理工具
-  plugin_manifest.py        .aka-plugin descriptor 安全解析
+  plugin_manifest.py        插件发现与启停清单（manifest.toml）
   plugin_decorators.py      tool/hook/phase decorators
+  snapshot.py               运行时能力代际快照、租约与组合工具视图
+  context_policy.py         按模型 context_window 派生历史窗口与输出预留
   scheduler.py              用户显式定时消息
   subagent.py               inline/background 子 Agent
   channels/
@@ -81,7 +83,10 @@ kirakira_agent/
     qq.py                   QQ OneBot HTTP
   mcp/
     client.py               stdio JSON-RPC MCP client
-    registry.py             server/tool 动态注册和持久化
+    declarations.py         servers/*.toml 严格解析与内容 revision
+    host.py                 按代际连接整批候选 server
+    publisher.py            把 catalog 编译进快照并原子换代
+    watcher.py              轮询 revision，串行发布变化
   models/
     openai_compatible.py    chat completion、SSE、retry、DeepSeek 兼容
   tools/
@@ -256,14 +261,9 @@ memory/items.json         类型化记忆事实源
 
 ## 9. 插件与 MCP
 
-插件扫描 `<workspace>/.kirakira/plugins` 和 `<workspace>/plugins`。兼容 `.aka-plugin/plugin.json`，可声明：
+插件扫描 `<workspace>/.kirakira/plugins` 和 `<workspace>/plugins`，以根目录 `plugin.py` 为唯一标志。能力由代码声明（`skill_roots()`、`mcp_servers()`、phase 方法、decorators）；`.kirakira/manifest.toml` 只记录 `plugin_id` + `enabled`，清单损坏时 fail loud。
 
-- lifecycle class/entry。
-- skills roots。
-- MCP servers。
-- config schema 和本地覆盖配置。
-
-`PluginContext` 提供 workspace、session、memory、event bus、tool registry、独立 data dir 和原子 KV。插件可通过类方法或 decorators 注册工具、hook 和 phase module。
+`PluginContext` 提供 workspace、session、memory、event bus、tool registry、独立 data dir 和原子 KV。
 
 MCP client 使用 Content-Length framed stdio JSON-RPC：
 
@@ -271,8 +271,11 @@ MCP client 使用 Content-Length framed stdio JSON-RPC：
 - request id -> Future 并发关联。
 - `tools/list` 和 `tools/call`。
 - timeout、server error、stderr drain、异常退出。
+- 拒绝非对象 result 与非数组 content。
 
-MCP 远端工具默认 deferred，避免一次将大量 schema 塞入 prompt。模型用 `tool_search select:name` 解锁后才可调用。
+workspace MCP 由 `<workspace>/mcp/servers/*.toml` 声明，watcher 按内容 revision 热重载；插件 MCP 走同一个 publisher，只是 source 不同。两者共用整批候选语义：任一声明非法或任一 server 连不上，整批作废，旧代际继续服务。
+
+MCP 工具挂在运行时快照上而非共享 ToolRegistry，因此换代不会影响在途 turn；旧代际的进程等最后一个租约释放后才断开。远端工具默认 deferred，模型用 `tool_search select:name` 解锁后才可调用。契约见 [_handbook/workspace-mcp.md](../_handbook/workspace-mcp.md) 与 [_handbook/snapshot-and-lease.md](../_handbook/snapshot-and-lease.md)。
 
 ## 10. Subagent 与显式调度
 

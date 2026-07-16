@@ -105,13 +105,26 @@ class McpClient:
             timeout=timeout,
         )
         if "error" in response:
-            error = response.get("error") or {}
+            error = response.get("error")
+            # JSON-RPC error 必须是对象；不是就原样上报，不假装它是一条 message。
             message = error.get("message", error) if isinstance(error, dict) else error
             return "Error: MCP %s/%s: %s" % (self.name, tool_name, message)
-        result = response.get("result") or {}
-        content = result.get("content", []) if isinstance(result, dict) else result
+        # 协议要求 result 是对象且 content 是数组。不符合就直接判错，
+        # 而不是把畸形结构硬塞给 _content_text 拼出一段看起来正常的文本。
+        result = response.get("result")
+        if not isinstance(result, dict):
+            return "Error: MCP %s/%s returned a non-object result" % (
+                self.name,
+                tool_name,
+            )
+        content = result.get("content", [])
+        if not isinstance(content, list):
+            return "Error: MCP %s/%s returned a non-list content field" % (
+                self.name,
+                tool_name,
+            )
         text = self._content_text(content)
-        if isinstance(result, dict) and result.get("isError"):
+        if result.get("isError"):
             return "Error: MCP %s/%s: %s" % (self.name, tool_name, text)
         return text
 

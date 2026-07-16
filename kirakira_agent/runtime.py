@@ -37,6 +37,13 @@ from kirakira_agent.memory import MemoryRuntime
 from kirakira_agent.models.base import ContentSafetyError, ContextLengthError, ModelClient
 from kirakira_agent.schema import ModelResponse, ToolCall, ToolResult, assistant_message_from_response, tool_result_message
 from kirakira_agent.session import SessionManager
+from kirakira_agent.snapshot import (
+    RuntimeSnapshotStore,
+    SnapshotToolView,
+    bind_runtime_snapshot,
+    get_current_runtime_snapshot,
+    reset_runtime_snapshot,
+)
 from kirakira_agent.tool_hooks import ToolExecutionRequest, ToolExecutor, ToolHook
 from kirakira_agent.tools.registry import ToolRegistry
 from kirakira_agent.channels.host import ChannelHost
@@ -177,6 +184,8 @@ class DefaultReasoner:
         tool_chain: List[JsonDict] = []
         final_reply = ""
         final_thinking = ""
+        # 整轮只解析一次工具视图：本 turn 看到的 MCP 工具由 turn 开始时锁定的快照决定。
+        tools = SnapshotToolView(self.tools, get_current_runtime_snapshot())
         disabled = set(disabled_tools or ())
         unlocked = set(self._unlocked_tools.get(session_key, {}).keys())
         repeated_calls: Dict[str, int] = {}
@@ -190,7 +199,7 @@ class DefaultReasoner:
         while iteration_limit <= 0 or iteration < iteration_limit:
             visible_specs = [
                 spec
-                for spec in self.tools.visible_specs(unlocked)
+                for spec in tools.visible_specs(unlocked)
                 if spec.name not in disabled
             ]
             visible_names = tuple(spec.name for spec in visible_specs)
@@ -287,7 +296,7 @@ class DefaultReasoner:
                         chat_id,
                         "Error: Tool '%s' is disabled for this turn" % call.name,
                     )
-                elif self.tools.is_deferred(call.name) and call.name not in unlocked:
+                elif tools.is_deferred(call.name) and call.name not in unlocked:
                     result = await self._deny_tool(
                         call,
                         session_key,
@@ -306,7 +315,7 @@ class DefaultReasoner:
                     )
                 else:
                     result = await self._execute_tool(
-                        call, session_key, channel, chat_id, request_text
+                        call, session_key, channel, chat_id, request_text, tools
                     )
                 tools_used.append(call.name)
                 group["calls"].append(
@@ -330,7 +339,7 @@ class DefaultReasoner:
                 if call.name == "tool_search" and result["status"] == "success":
                     unlocked.update(self._unlocked_from_search(result["content"]))
                     self._remember_unlocked(session_key, unlocked)
-                elif result["status"] == "success" and self.tools.is_deferred(call.name):
+                elif result["status"] == "success" and tools.is_deferred(call.name):
                     unlocked.add(call.name)
                     self._remember_unlocked(session_key, unlocked)
             tool_chain.append(group)
@@ -513,6 +522,7 @@ class DefaultReasoner:
         channel: str,
         chat_id: str,
         request_text: str,
+        tools: Any = None,
     ) -> JsonDict:
         request = ToolExecutionRequest(
             session_key=session_key,
@@ -534,8 +544,10 @@ class DefaultReasoner:
             )
         )
 
+        registry = tools if tools is not None else self.tools
+
         async def invoke(tool_name: str, arguments: JsonDict) -> ToolResult:
-            return await self.tools.execute_async(ToolCall(call.id, tool_name, arguments))
+            return await registry.execute_async(ToolCall(call.id, tool_name, arguments))
 
         result = await self._tool_executor.execute(request, invoke)
         content = result.output
@@ -633,6 +645,7 @@ class PassiveTurnPipeline:
         tools: ToolRegistry,
         reasoner: DefaultReasoner,
         config: RuntimeConfig,
+        snapshot_store: RuntimeSnapshotStore | None = None,
     ) -> None:
         self.bus = bus
         self.event_bus = event_bus
@@ -641,6 +654,7 @@ class PassiveTurnPipeline:
         self.tools = tools
         self.reasoner = reasoner
         self.config = config
+        self.snapshot_store = snapshot_store
         self._before_turn_modules: List[object] = []
         self._before_reasoning_modules: List[object] = []
         self._after_reasoning_modules: List[object] = []
@@ -659,6 +673,19 @@ class PassiveTurnPipeline:
         self._after_turn_modules.extend(modules)
 
     async def run(self, msg: InboundMessage, key: str, *, dispatch_outbound: bool = True) -> OutboundMessage:
+        """整个 turn 锁定一份能力快照，热重载不会在 turn 中途抽走工具。"""
+
+        if self.snapshot_store is None or self.snapshot_store.current is None:
+            return await self._run_turn(msg, key, dispatch_outbound=dispatch_outbound)
+        lease = self.snapshot_store.lease()
+        token = bind_runtime_snapshot(lease)
+        try:
+            return await self._run_turn(msg, key, dispatch_outbound=dispatch_outbound)
+        finally:
+            reset_runtime_snapshot(token)
+            await lease.release()
+
+    async def _run_turn(self, msg: InboundMessage, key: str, *, dispatch_outbound: bool = True) -> OutboundMessage:
         session = self.session_manager.get_or_create(key)
         state = TurnState(msg=msg, session_key=key, dispatch_outbound=dispatch_outbound, session=session)
         await self.event_bus.fanout(
@@ -891,7 +918,11 @@ class PassiveTurnPipeline:
     def _core_command(self, content: str) -> str | None:
         command = content.strip().lower()
         if command == "/tools":
-            return "\n".join(self.tools.names())
+            # MCP 工具只挂在快照上，要连同当前代际一起列出，否则用户会以为没接上。
+            snapshot = (
+                self.snapshot_store.current if self.snapshot_store is not None else None
+            )
+            return "\n".join(SnapshotToolView(self.tools, snapshot).names())
         if command == "/skills":
             self.reasoner.context.skills.reload()
             return self.reasoner.context.skills.descriptions()
@@ -1055,7 +1086,7 @@ class CoreRuntime:
     loop: AgentLoop
     channel_host: ChannelHost | None = None
     plugin_manager: Any | None = None
-    mcp_registry: Any | None = None
+    mcp_watcher: Any | None = None
     scheduler: Any | None = None
     subagents: Any | None = None
 
@@ -1105,6 +1136,10 @@ class CoreRuntime:
             await self.channel_host.start_all()
         if self.scheduler is not None:
             tasks.append(asyncio.create_task(self.scheduler.run(), name="scheduler"))
+        if self.mcp_watcher is not None:
+            tasks.append(
+                asyncio.create_task(self.mcp_watcher.run(), name="workspace_mcp_watcher")
+            )
         return tasks
 
     async def stop_background(self, tasks: list[asyncio.Task[Any]]) -> None:
@@ -1113,6 +1148,8 @@ class CoreRuntime:
         await self.loop.shutdown()
         if self.scheduler is not None:
             self.scheduler.stop()
+        if self.mcp_watcher is not None:
+            self.mcp_watcher.stop()
         drained = await self.bus.drain(timeout=10.0)
         if not drained:
             logger.warning("outbound queue did not drain before shutdown")
@@ -1126,8 +1163,8 @@ class CoreRuntime:
         await asyncio.gather(*tasks, return_exceptions=True)
         if self.plugin_manager is not None:
             await self.plugin_manager.terminate_all()
-        if self.mcp_registry is not None:
-            await self.mcp_registry.shutdown()
+        if self.mcp_watcher is not None:
+            await self.mcp_watcher.shutdown()
         await self.memory.shutdown()
         await self.event_bus.shutdown()
         self.session_manager.close()

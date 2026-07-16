@@ -67,8 +67,9 @@ Channel -> InboundMessage -> MessageBus -> AgentLoop
 - [x] web search、vision、message push。
 - [x] memory/history 工具。
 - [x] stdio MCP JSON-RPC 并发 client。
-- [x] MCP initialize/list/call、动态 add/remove/list 和配置持久化。
-- [x] 插件 descriptor、config、KV、skills、MCP、channels。
+- [x] MCP initialize/list/call；声明式 `mcp/servers/*.toml` 热重载与整批候选语义。
+- [x] 运行时能力快照与每 turn 租约：热重载不影响在途 turn，旧代际租约排空后才回收。
+- [x] 插件程序化能力声明（`plugin.py`）、启停清单、config、KV、skills、MCP、channels。
 - [x] `@tool`、`@on_tool_pre` 和 7 phase decorators。
 - [x] 插件加载失败回滚、错误隔离和反向 terminate。
 - [x] plugin install/list/doctor，安装后重启生效。

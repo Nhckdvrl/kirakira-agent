@@ -1,16 +1,24 @@
+[runtime]
+# 运行时可写状态的根目录：session、记忆、附件、插件数据、workspace MCP 都在这里。
+# 优先级：--workspace > KIRAKIRA_WORKSPACE > 本项 > 当前目录。~ 会在启动时展开。
+workspace = "."
+
 [llm.main]
 model = "deepseek-v4-flash"
 api_key = "${DEEPSEEK_API_KEY}"
 base_url = "https://api.deepseek.com/v1"
 enable_thinking = false
+# 模型真实上下文容量。memory_window 与 max_tokens 未显式配置时按它等比例派生。
+context_window = 128000
 
 [agent]
-max_tokens = 8192
 max_iterations = 40
 system_prompt = "你是 Kirakira。使用与用户相同的语言回答；执行前核实，完成后给出可验证结果。"
 
-[agent.context]
-memory_window = 40
+# 可选：显式覆盖派生值。留空则由 context_window 决定。
+# [agent.context]
+# effective_context_percent = 0.9
+# memory_window = 40
 
 # 可选：配置后启用语义+词法混合记忆检索；不配置则使用纯词法检索。
 [memory.embedding]

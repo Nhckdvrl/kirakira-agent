@@ -1,13 +1,23 @@
-.DS_Store
-.transcripts/
+# Local secrets and config — copy the .example files and edit those.
+.env
+config.toml
+
+# Reference checkout used only for auditing; not part of this project.
 Reference/
+
+# Runtime workspace state. All of this is created by the agent at run time
+# under the workspace root (see [runtime].workspace in config.example.toml).
+# None of it belongs in the repository.
 sessions/
+memory/
 uploads/
+mcp/
+.kirakira/
+
+# Python
 __pycache__/
 *.pyc
-memory/items.json
-memory/HISTORY.md
-memory/PENDING.md
-.kirakira/
-mcp_servers.json
-config.toml
+
+# Editor / OS
+.DS_Store
+.transcripts/
