@@ -2,8 +2,10 @@
 
 import asyncio
 import argparse
+import importlib.util
 import os
 import logging
+import sys
 from pathlib import Path
 from typing import List
 
@@ -18,7 +20,6 @@ from kirakira_agent.channels.web import WebChannel
 from kirakira_agent.context_builder import ContextBuilder
 from kirakira_agent.context_policy import recommended_context_settings
 from kirakira_agent.event_bus import EventBus
-from kirakira_agent.events import InboundMessage, OutboundMessage
 from kirakira_agent.memory import MemoryRuntime
 from kirakira_agent.mcp import McpCatalogPublisher, WorkspaceMcpAdmin, WorkspaceMcpWatcher
 from kirakira_agent.models import OpenAICompatibleClient
@@ -32,7 +33,7 @@ from kirakira_agent.runtime import (
 )
 from kirakira_agent.schema import JsonDict
 from kirakira_agent.session import SessionManager
-from kirakira_agent.snapshot import RuntimeSnapshotStore, SnapshotToolView
+from kirakira_agent.snapshot import RuntimeSnapshotStore
 from kirakira_agent.scheduler import SchedulerService
 from kirakira_agent.subagent import SubagentManager
 from kirakira_agent.skills import SkillLoader
@@ -433,55 +434,14 @@ def repl(agent: Agent, workdir: Path) -> None:
         print_response_text(response.text)
 
 
-async def runtime_repl(runtime: CoreRuntime, workdir: Path) -> None:
-    queue: asyncio.Queue[OutboundMessage] = asyncio.Queue()
+async def runtime_repl(
+    runtime: CoreRuntime, workdir: Path, session_id: str | None = None
+) -> None:
+    """Backward-compatible name for the line-oriented streaming client."""
 
-    async def on_outbound(msg: OutboundMessage) -> None:
-        await queue.put(msg)
+    from kirakira_agent.tui.plain import runtime_plain_repl
 
-    runtime.bus.subscribe_outbound("cli", on_outbound)
-    tasks = await runtime.start_background(start_channels=False)
-    print("kirakira-agent ready. /tools /skills /memory /exit")
-    try:
-        while True:
-            query = await asyncio.to_thread(input, "kirakira >> ")
-            query = query.strip()
-            if not query:
-                continue
-            if query in ("/exit", "exit", "q", "quit"):
-                break
-            if query == "/tools":
-                # MCP 工具挂在当前快照上，不在基础注册表里。
-                print(
-                    "\n".join(
-                        SnapshotToolView(
-                            runtime.tools,
-                            runtime.pipeline.snapshot_store.current
-                            if runtime.pipeline.snapshot_store is not None
-                            else None,
-                        ).names()
-                    )
-                )
-                continue
-            if query == "/skills":
-                runtime.context.skills.reload()
-                print(runtime.context.skills.descriptions())
-                continue
-            if query == "/memory":
-                print(runtime.memory.store.read_long_term())
-                continue
-            await runtime.bus.publish_inbound(
-                InboundMessage(
-                    channel="cli",
-                    sender="local",
-                    chat_id="local",
-                    content=query,
-                )
-            )
-            outbound = await queue.get()
-            print_response_text(outbound.content)
-    finally:
-        await runtime.stop_background(tasks)
+    await runtime_plain_repl(runtime, workdir, session_id=session_id)
 
 
 async def runtime_serve(runtime: CoreRuntime) -> None:
@@ -531,7 +491,47 @@ async def _main_async(args: argparse.Namespace, workdir: Path) -> None:
     if args.serve or args.web or args.telegram or args.qq:
         await runtime_serve(runtime)
     else:
-        await runtime_repl(runtime, workdir)
+        mode = choose_cli_mode(force_tui=args.tui, force_plain=args.plain)
+        if mode == "tui":
+            try:
+                from kirakira_agent.tui.app import runtime_tui
+            except ModuleNotFoundError as exc:
+                if exc.name != "textual":
+                    raise
+                print(
+                    "Textual 未安装，自动回退到 plain 流式模式。"
+                    "安装项目依赖后可使用全屏 TUI。",
+                    file=sys.stderr,
+                )
+                await runtime_repl(runtime, workdir, session_id=args.session)
+            else:
+                await runtime_tui(runtime, workdir, session_id=args.session)
+        else:
+            await runtime_repl(runtime, workdir, session_id=args.session)
+
+
+def choose_cli_mode(
+    *,
+    force_tui: bool = False,
+    force_plain: bool = False,
+    stdin_isatty: bool | None = None,
+    stdout_isatty: bool | None = None,
+    textual_available: bool | None = None,
+) -> str:
+    """Select a UI without importing optional TUI dependencies in scripts/CI."""
+
+    if force_plain:
+        return "plain"
+    if force_tui:
+        return "tui"
+    stdin_tty = sys.stdin.isatty() if stdin_isatty is None else stdin_isatty
+    stdout_tty = sys.stdout.isatty() if stdout_isatty is None else stdout_isatty
+    available = (
+        importlib.util.find_spec("textual") is not None
+        if textual_available is None
+        else textual_available
+    )
+    return "tui" if stdin_tty and stdout_tty and available else "plain"
 
 
 def main() -> None:
@@ -540,6 +540,25 @@ def main() -> None:
     parser.add_argument("--web", action="store_true", help="Enable stdlib web channel.")
     parser.add_argument("--telegram", action="store_true", help="Enable Telegram Bot API channel.")
     parser.add_argument("--qq", action="store_true", help="Enable QQ OneBot webhook channel.")
+    ui_group = parser.add_mutually_exclusive_group()
+    ui_group.add_argument(
+        "--tui",
+        action="store_true",
+        help="Force the full-screen Textual client for local interaction.",
+    )
+    ui_group.add_argument(
+        "--plain",
+        action="store_true",
+        help="Use the line-oriented streaming client (also selected for pipes/CI).",
+    )
+    parser.add_argument(
+        "--session",
+        default=None,
+        help=(
+            "Named local conversation to resume. Without this flag, each launch "
+            "starts a fresh empty conversation."
+        ),
+    )
     parser.add_argument(
         "--workspace",
         default=None,

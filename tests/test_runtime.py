@@ -22,7 +22,13 @@ from kirakira_agent.subagent import SubagentManager
 from kirakira_agent.tool_hooks import HookOutcome
 from kirakira_agent.tools import build_default_registry
 from kirakira_agent.tools.registry import Tool
-from kirakira_agent.lifecycle import StreamDeltaReady, ToolCallCompleted, ToolCallStarted, TurnStarted
+from kirakira_agent.lifecycle import (
+    StreamDeltaReady,
+    ToolCallCompleted,
+    ToolCallStarted,
+    TurnFinished,
+    TurnStarted,
+)
 
 
 class FakeModel:
@@ -875,6 +881,142 @@ class RuntimeTests(unittest.TestCase):
                 self.assertIn(("turn", "cli:chat"), events)
                 self.assertIn(("tool_start", "read_file"), events)
                 self.assertIn(("tool_done", "read_file", "success"), events)
+
+        asyncio.run(scenario())
+
+    def test_lifecycle_contract_correlates_iterations_and_finishes_authoritatively(self):
+        class StreamingToolModel:
+            def __init__(self):
+                self.responses = [
+                    (
+                        [("checking", "thinking")],
+                        ModelResponse(
+                            text="checking",
+                            tool_calls=[
+                                ToolCall(
+                                    "call_1", "read_file", {"path": "README.md"}
+                                )
+                            ],
+                        ),
+                    ),
+                    (
+                        [("final ", ""), ("answer", "")],
+                        ModelResponse(text="final answer"),
+                    ),
+                ]
+
+            def complete_stream(
+                self, messages, tools, system, model, max_tokens, on_delta
+            ):
+                deltas, response = self.responses.pop(0)
+                for content, reasoning in deltas:
+                    on_delta(content, reasoning)
+                return response
+
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                workdir = Path(tmp)
+                (workdir / "README.md").write_text("hello")
+                _bus, loop, _sessions, _memory = build_test_runtime(
+                    workdir, StreamingToolModel()
+                )
+                lifecycle = []
+                event_bus = loop.pipeline.event_bus
+                event_bus.on(
+                    StreamDeltaReady,
+                    lambda event: lifecycle.append(
+                        ("delta", event.iteration, event.content_delta)
+                    ),
+                )
+                event_bus.on(
+                    ToolCallStarted,
+                    lambda event: lifecycle.append(
+                        ("tool_start", event.iteration, event.call_id)
+                    ),
+                )
+                event_bus.on(
+                    ToolCallCompleted,
+                    lambda event: lifecycle.append(
+                        ("tool_done", event.iteration, event.call_id)
+                    ),
+                )
+                event_bus.on(
+                    TurnFinished,
+                    lambda event: lifecycle.append(("finished", event)),
+                )
+
+                outbound = await loop.pipeline.run(
+                    InboundMessage("cli", "tester", "chat", "read README"),
+                    "cli:chat",
+                    dispatch_outbound=False,
+                )
+
+                self.assertEqual(outbound.content, "final answer")
+                self.assertIn(("tool_start", 0, "call_1"), lifecycle)
+                self.assertIn(("tool_done", 0, "call_1"), lifecycle)
+                self.assertIn(("delta", 1, "final "), lifecycle)
+                finished = next(item[1] for item in lifecycle if item[0] == "finished")
+                self.assertEqual(finished.status, "success")
+                self.assertIs(finished.outbound, outbound)
+                self.assertEqual(finished.outbound.content, "final answer")
+                self.assertFalse(finished.will_dispatch)
+                self.assertGreaterEqual(finished.duration_seconds, 0)
+
+        asyncio.run(scenario())
+
+    def test_lifecycle_contract_emits_error_and_interrupt_terminal_states(self):
+        class FailingModel:
+            def complete(self, messages, tools, system, model, max_tokens):
+                raise RuntimeError("model unavailable")
+
+        class SlowModel:
+            def __init__(self):
+                self.started = threading.Event()
+
+            def complete(self, messages, tools, system, model, max_tokens):
+                self.started.set()
+                time.sleep(0.1)
+                return ModelResponse(text="late")
+
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                _bus, failing_loop, _sessions, _memory = build_test_runtime(
+                    Path(tmp), FailingModel()
+                )
+                failed = []
+                failing_loop.pipeline.event_bus.on(TurnFinished, failed.append)
+                with self.assertRaisesRegex(RuntimeError, "model unavailable"):
+                    await failing_loop.pipeline.run(
+                        InboundMessage("cli", "tester", "error", "hello"),
+                        "cli:error",
+                        dispatch_outbound=False,
+                    )
+                self.assertEqual(len(failed), 1)
+                self.assertEqual(failed[0].status, "error")
+                self.assertEqual(failed[0].error, "model unavailable")
+                self.assertIsNone(failed[0].outbound)
+
+            with tempfile.TemporaryDirectory() as tmp:
+                slow_model = SlowModel()
+                _bus, slow_loop, _sessions, _memory = build_test_runtime(
+                    Path(tmp), slow_model
+                )
+                interrupted = []
+                slow_loop.pipeline.event_bus.on(TurnFinished, interrupted.append)
+                task = asyncio.create_task(
+                    slow_loop.pipeline.run(
+                        InboundMessage("cli", "tester", "interrupt", "hello"),
+                        "cli:interrupt",
+                        dispatch_outbound=False,
+                    )
+                )
+                await asyncio.to_thread(slow_model.started.wait, 1)
+                task.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await task
+                self.assertEqual(len(interrupted), 1)
+                self.assertEqual(interrupted[0].status, "interrupted")
+                self.assertIsNone(interrupted[0].outbound)
 
         asyncio.run(scenario())
 

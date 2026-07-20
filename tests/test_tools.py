@@ -2,13 +2,17 @@
 
 import tempfile
 import unittest
+from unittest import mock
 import asyncio
+import gzip
 import json
 import os
 import socket
 import threading
 import time
 import urllib.parse
+import urllib.error
+import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -243,6 +247,200 @@ class ToolTests(unittest.TestCase):
             text = tools.web_fetch("http://127.0.0.1:9/")
 
         self.assertIn("Refusing to fetch private/local address", text)
+
+    def test_web_fetch_returns_source_metadata_and_decodes_compression(self):
+        html_body = (
+            '<html><head><title>市场日报</title>'
+            '<meta property="article:published_time" content="2026-07-20T09:30:00+08:00">'
+            '</head><body><p>指数上涨，来源可核验。</p></body></html>'
+        ).encode("utf-8")
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *_args):
+                return
+
+            def do_GET(self):
+                if self.path == "/gzip":
+                    body = gzip.compress(html_body)
+                    encoding = "gzip"
+                else:
+                    body = zlib.compress(html_body)
+                    encoding = "deflate"
+                self.send_response(200)
+                self.send_header("content-type", "text/html; charset=utf-8")
+                self.send_header("content-encoding", encoding)
+                self.send_header("content-length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        sock = socket.socket()
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+        sock.close()
+        server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(
+                os.environ, {"KIRAKIRA_ALLOW_PRIVATE_WEB_FETCH": "true"}
+            ):
+                tools = WorkspaceTools(Path(tmp), SkillLoader(Path(tmp) / "skills"))
+                for path in ("gzip", "deflate"):
+                    with self.subTest(path=path):
+                        payload = json.loads(
+                            tools.web_fetch("http://127.0.0.1:%d/%s" % (port, path))
+                        )
+                        self.assertEqual(payload["source"]["title"], "市场日报")
+                        self.assertEqual(
+                            payload["source"]["published_at"],
+                            "2026-07-20T09:30:00+08:00",
+                        )
+                        self.assertEqual(
+                            payload["source"]["url"],
+                            "http://127.0.0.1:%d/%s" % (port, path),
+                        )
+                        self.assertIn("指数上涨", payload["content"])
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=3)
+
+    def test_web_fetch_honors_declared_charset_and_rejects_garbled_text(self):
+        chinese = "中文编码内容".encode("gb18030")
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *_args):
+                return
+
+            def do_GET(self):
+                if self.path == "/garbled":
+                    body = ("\ufffd" * 100).encode("utf-8")
+                    content_type = "text/plain; charset=utf-8"
+                else:
+                    body = chinese
+                    content_type = "text/plain; charset=gb18030"
+                self.send_response(200)
+                self.send_header("content-type", content_type)
+                self.send_header("content-length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        sock = socket.socket()
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+        sock.close()
+        server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(
+                os.environ, {"KIRAKIRA_ALLOW_PRIVATE_WEB_FETCH": "true"}
+            ):
+                tools = WorkspaceTools(Path(tmp), SkillLoader(Path(tmp) / "skills"))
+                decoded = json.loads(
+                    tools.web_fetch("http://127.0.0.1:%d/encoded" % port)
+                )
+                self.assertEqual(decoded["content"], "中文编码内容")
+                self.assertEqual(decoded["source"]["charset"], "gb18030")
+                error = tools.web_fetch("http://127.0.0.1:%d/garbled" % port)
+                self.assertTrue(error.startswith("Error:"), error)
+                self.assertIn("garbled", error)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=3)
+
+    def test_web_fetch_http_errors_are_tool_errors(self):
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *_args):
+                return
+
+            def do_GET(self):
+                self.send_error(403 if self.path == "/forbidden" else 404)
+
+        sock = socket.socket()
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+        sock.close()
+        server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(
+                os.environ, {"KIRAKIRA_ALLOW_PRIVATE_WEB_FETCH": "true"}
+            ):
+                registry = build_default_registry(Path(tmp))
+                for path, code in (("forbidden", "403"), ("missing", "404")):
+                    with self.subTest(path=path):
+                        result = registry.execute(
+                            ToolCall(
+                                path,
+                                "web_fetch",
+                                {"url": "http://127.0.0.1:%d/%s" % (port, path)},
+                            )
+                        )
+                        self.assertTrue(result.is_error)
+                        self.assertIn(code, result.content)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=3)
+
+    def test_web_search_no_results_and_network_failures_are_tool_errors(self):
+        class EmptyResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return b"<html><body>No result links</body></html>"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            registry = build_default_registry(Path(tmp))
+            with mock.patch("urllib.request.urlopen", return_value=EmptyResponse()):
+                empty = registry.execute(
+                    ToolCall("empty", "web_search", {"query": "missing topic"})
+                )
+            with mock.patch(
+                "urllib.request.urlopen",
+                side_effect=urllib.error.URLError("offline"),
+            ):
+                failed = registry.execute(
+                    ToolCall("failed", "web_search", {"query": "latest news"})
+                )
+
+        self.assertTrue(empty.is_error)
+        self.assertIn("no structured results", empty.content)
+        self.assertTrue(failed.is_error)
+        self.assertIn("Web search failed", failed.content)
+
+    def test_web_search_preserves_result_title_and_url(self):
+        target = "https://example.com/news?id=7"
+        redirect = "//duckduckgo.com/l/?" + urllib.parse.urlencode({"uddg": target})
+        body = (
+            '<a href="%s" rel="nofollow" class="result__a">Verified &amp; Dated Report</a>'
+            % redirect.replace("&", "&amp;")
+        ).encode("utf-8")
+
+        class SearchResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return body
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tools = WorkspaceTools(Path(tmp), SkillLoader(Path(tmp) / "skills"))
+            with mock.patch("urllib.request.urlopen", return_value=SearchResponse()):
+                results = json.loads(tools.web_search("market report"))
+
+        self.assertEqual(results[0]["title"], "Verified & Dated Report")
+        self.assertEqual(results[0]["url"], target)
 
     def test_message_push_publishes_outbound(self):
         async def scenario():

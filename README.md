@@ -16,18 +16,22 @@ The autonomous proactive/drift chain is intentionally out of scope.
 
 ## Quick start
 
-Python 3.11+. No third-party packages are needed to run the core runtime.
+Python 3.11+. The core runtime uses the standard library; the full-screen terminal
+client uses Textual and is installed with the project.
 
 ```bash
 cp .env.example .env          # put your API key here
 cp config.example.toml config.toml
-python -m kirakira_agent      # CLI REPL
+python -m kirakira_agent      # streaming full-screen TUI on an interactive terminal
 ```
 
 ```bash
+python -m kirakira_agent --tui               # force the full-screen client
+python -m kirakira_agent --plain             # streaming line-oriented fallback
+python -m kirakira_agent --session research  # create or resume a named local chat
 python -m kirakira_agent --serve             # run configured channels
 python -m kirakira_agent --workspace /tmp/ws # isolated runtime state
-python -m unittest discover -s tests         # 132 tests
+python -m unittest discover -s tests
 ```
 
 ## Layout
@@ -49,12 +53,15 @@ kirakira_agent/          the runtime
 _handbook/               contracts: what each subsystem is, its rules, how it fails
 docs/                    history and method: why it looks the way it does
 skills/                  built-in skills
-tests/                   132 tests, no network required
+tests/                   offline regression suite
 ```
 
 Runtime state (`sessions/`, `memory/`, `uploads/`, `mcp/`, `.kirakira/`) lives
 under the workspace root and is gitignored. The workspace resolves as
 `--workspace` > `KIRAKIRA_WORKSPACE` > `config.toml [runtime].workspace` > cwd.
+Each launch starts a fresh empty local chat unless `--session <name>` is given.
+Inside the TUI, `/sessions` opens a keyboard picker for saved chats and
+`/session <name>` switches or creates one; `/clear` only clears the view.
 
 ## Documentation
 
