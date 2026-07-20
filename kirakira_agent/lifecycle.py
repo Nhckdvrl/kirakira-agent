@@ -153,6 +153,9 @@ class ToolCallStarted:
     call_id: str
     tool_name: str
     arguments: JsonDict
+    # The model iteration which produced this call.  Kept optional at the end
+    # so integrations constructing lifecycle events positionally remain valid.
+    iteration: int = 0
 
 
 @dataclass(frozen=True)
@@ -165,6 +168,7 @@ class ToolCallCompleted:
     arguments: JsonDict
     result: str
     status: str
+    iteration: int = 0
 
 
 @dataclass(frozen=True)
@@ -175,3 +179,25 @@ class StreamDeltaReady:
     iteration: int
     content_delta: str = ""
     reasoning_delta: str = ""
+
+
+@dataclass(frozen=True)
+class TurnFinished:
+    """Authoritative terminal event for every started turn.
+
+    Consumers which render streaming output should treat ``outbound`` as the
+    final, authoritative representation of the assistant message rather than
+    appending it to previously received :class:`StreamDeltaReady` fragments.
+    ``outbound`` is absent for failed and interrupted turns.
+    """
+
+    session_key: str
+    channel: str
+    chat_id: str
+    status: str
+    started_at: datetime
+    finished_at: datetime
+    duration_seconds: float
+    will_dispatch: bool
+    outbound: Optional[OutboundMessage] = None
+    error: str = ""

@@ -66,7 +66,7 @@ Web / Telegram / QQ / CLI
 ## 环境要求
 
 - Python 3.11+
-- 不依赖第三方 Python 包即可运行核心 Runtime。
+- 核心 Runtime 只使用标准库；全屏终端界面使用 Textual，安装项目时会自动安装。
 - Telegram、QQ、MCP 等能力通过 HTTP API 或 stdio 协议接入。
 
 推荐使用现有 conda 环境：
@@ -119,10 +119,29 @@ OPENAI_COMPATIBLE_THINKING=enabled
 
 ## 启动
 
-本地 CLI：
+本地 CLI 默认在交互终端启动全屏 TUI，并实时展示模型增量、推理片段、工具状态和耗时：
 
 ```bash
 python -m kirakira_agent
+```
+
+也可以显式选择界面：
+
+```bash
+python -m kirakira_agent --tui    # 强制全屏 TUI
+python -m kirakira_agent --plain  # 流式纯文本，适合日志、管道和不支持全屏的终端
+python -m kirakira_agent --session research  # 直接继续名为 research 的本地对话
+```
+
+不带 `--session` 启动时，每次都会进入一个全新的空白对话；发送第一条消息后自动保存到 workspace 的 `sessions/` 目录。TUI 中输入 `/sessions` 会打开历史选择器，使用 `↑` / `↓` 和 `Enter` 即可恢复；也可以输入 `/session <名称>` 或下次用相同的 `--session <名称>` 直接续接。`/clear` 和 `Ctrl+L` 只清空屏幕，不删除历史。
+
+TUI 快捷键：`Enter` 发送，`↑` / `↓` 浏览输入历史，`Ctrl+C` 中断当前 turn（空闲时退出），`Ctrl+L` 清空当前视图，`Ctrl+Q` 退出。tmux 只负责保活和重新连接，界面本身由项目内的 Textual 客户端实现。
+
+在 tmux 中后台启动并重新进入：
+
+```bash
+tmux new-session -d -s kirakira-cli 'python -m kirakira_agent --tui'
+tmux attach -t kirakira-cli
 ```
 
 按配置启动所有 Channel：

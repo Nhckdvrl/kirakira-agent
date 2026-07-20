@@ -108,7 +108,7 @@ class ContextBuilder:
             self.system_prompt,
             "## 工作区\n- 根目录：%s\n- 长期记忆：%s/memory/MEMORY.md\n- 自我认知：%s/memory/SELF.md\n- 近期语境：%s/memory/RECENT_CONTEXT.md"
             % (workspace_path, workspace_path, workspace_path, workspace_path),
-            "## 行为规范\n- 执行动作必须走工具；没有工具结果不得声称已完成。\n- 时间敏感、外部世界、版本、价格、新闻、状态类问题必须先核实。\n- 用户要求记住稳定偏好或事实时，调用 memorize。\n- 历史问题优先 recall_memory，必要时 search_messages 后 fetch_messages 回源。\n- 收到图片附件且主模型不能直接看图时，调用 vision 分析附件路径。\n- 插件注入的上下文只作为系统候选上下文，不要复述其包装格式。",
+            "## 行为规范\n- 执行动作必须走工具；没有工具结果不得声称已完成。\n- 时间敏感、外部世界、版本、价格、新闻、状态类问题必须先核实。此类回答必须注明信息对应的日期/时间，并提供可核验的来源 URL。\n- 新闻、价格、市场行情等易变事实应尽量用至少两个独立可靠来源交叉验证；若只有单一来源、工具失败或数据缺失，必须明确说明证据限制，不得把推测写成事实，也不得补造具体数字、日期或引用。\n- 工具返回 Error 时不得将其视作证据；搜索摘要仅用于发现来源，关键结论应通过 web_fetch 或其他一手数据源核验。\n- 用户要求记住稳定偏好或事实时，调用 memorize。\n- 历史问题优先 recall_memory，必要时 search_messages 后 fetch_messages 回源。\n- 收到图片附件且主模型不能直接看图时，调用 vision 分析附件路径。\n- 插件注入的上下文只作为系统候选上下文，不要复述其包装格式。",
             "## 环境\n%s" % platform.machine(),
             "## Current Session\nChannel: %s\nChat ID: %s" % (channel, chat_id),
             "## Long-Term Memory\n%s" % self.memory.store.read_long_term().strip(),

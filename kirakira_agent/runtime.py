@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import asyncio
 from collections import OrderedDict
+from datetime import datetime
 import inspect
 import json
 import logging
 import re
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -27,6 +29,7 @@ from kirakira_agent.lifecycle import (
     BeforeTurnCtx,
     PromptRenderCtx,
     TurnCommitted,
+    TurnFinished,
     TurnStarted,
     ToolCallCompleted,
     ToolCallStarted,
@@ -294,6 +297,7 @@ class DefaultReasoner:
                         session_key,
                         channel,
                         chat_id,
+                        iteration,
                         "Error: Tool '%s' is disabled for this turn" % call.name,
                     )
                 elif tools.is_deferred(call.name) and call.name not in unlocked:
@@ -302,6 +306,7 @@ class DefaultReasoner:
                         session_key,
                         channel,
                         chat_id,
+                        iteration,
                         "Error: Deferred tool '%s' is not loaded; call tool_search with select:%s"
                         % (call.name, call.name),
                     )
@@ -311,11 +316,18 @@ class DefaultReasoner:
                         session_key,
                         channel,
                         chat_id,
+                        iteration,
                         "Error: Repeated identical tool call blocked by loop guard",
                     )
                 else:
                     result = await self._execute_tool(
-                        call, session_key, channel, chat_id, request_text, tools
+                        call,
+                        session_key,
+                        channel,
+                        chat_id,
+                        request_text,
+                        iteration,
+                        tools,
                     )
                 tools_used.append(call.name)
                 group["calls"].append(
@@ -522,6 +534,7 @@ class DefaultReasoner:
         channel: str,
         chat_id: str,
         request_text: str,
+        iteration: int,
         tools: Any = None,
     ) -> JsonDict:
         request = ToolExecutionRequest(
@@ -541,6 +554,7 @@ class DefaultReasoner:
                 call_id=call.id,
                 tool_name=call.name,
                 arguments=dict(call.arguments),
+                iteration=iteration,
             )
         )
 
@@ -563,6 +577,7 @@ class DefaultReasoner:
                 arguments=dict(result.final_arguments),
                 result=content,
                 status=result.status,
+                iteration=iteration,
             )
         )
         return {"content": content, "status": result.status, "arguments": result.final_arguments}
@@ -573,6 +588,7 @@ class DefaultReasoner:
         session_key: str,
         channel: str,
         chat_id: str,
+        iteration: int,
         reason: str,
     ) -> JsonDict:
         started = ToolCallStarted(
@@ -582,6 +598,7 @@ class DefaultReasoner:
             call_id=call.id,
             tool_name=call.name,
             arguments=dict(call.arguments),
+            iteration=iteration,
         )
         await self.event_bus.fanout(started)
         await self.event_bus.fanout(
@@ -594,6 +611,7 @@ class DefaultReasoner:
                 arguments=dict(call.arguments),
                 result=reason,
                 status="denied",
+                iteration=iteration,
             )
         )
         return {
@@ -674,16 +692,81 @@ class PassiveTurnPipeline:
 
     async def run(self, msg: InboundMessage, key: str, *, dispatch_outbound: bool = True) -> OutboundMessage:
         """整个 turn 锁定一份能力快照，热重载不会在 turn 中途抽走工具。"""
-
-        if self.snapshot_store is None or self.snapshot_store.current is None:
-            return await self._run_turn(msg, key, dispatch_outbound=dispatch_outbound)
-        lease = self.snapshot_store.lease()
-        token = bind_runtime_snapshot(lease)
+        started_at = datetime.now().astimezone()
+        started_clock = time.perf_counter()
         try:
-            return await self._run_turn(msg, key, dispatch_outbound=dispatch_outbound)
-        finally:
-            reset_runtime_snapshot(token)
-            await lease.release()
+            if self.snapshot_store is None or self.snapshot_store.current is None:
+                outbound = await self._run_turn(
+                    msg, key, dispatch_outbound=dispatch_outbound
+                )
+            else:
+                lease = self.snapshot_store.lease()
+                token = bind_runtime_snapshot(lease)
+                try:
+                    outbound = await self._run_turn(
+                        msg, key, dispatch_outbound=dispatch_outbound
+                    )
+                finally:
+                    reset_runtime_snapshot(token)
+                    await lease.release()
+        except asyncio.CancelledError:
+            await self._finish_turn(
+                msg,
+                key,
+                status="interrupted",
+                started_at=started_at,
+                started_clock=started_clock,
+                dispatch_outbound=dispatch_outbound,
+            )
+            raise
+        except Exception as exc:
+            await self._finish_turn(
+                msg,
+                key,
+                status="error",
+                started_at=started_at,
+                started_clock=started_clock,
+                dispatch_outbound=dispatch_outbound,
+                error=str(exc),
+            )
+            raise
+        await self._finish_turn(
+            msg,
+            key,
+            status="success",
+            started_at=started_at,
+            started_clock=started_clock,
+            dispatch_outbound=dispatch_outbound,
+            outbound=outbound,
+        )
+        return outbound
+
+    async def _finish_turn(
+        self,
+        msg: InboundMessage,
+        key: str,
+        *,
+        status: str,
+        started_at: datetime,
+        started_clock: float,
+        dispatch_outbound: bool,
+        outbound: OutboundMessage | None = None,
+        error: str = "",
+    ) -> None:
+        await self.event_bus.fanout(
+            TurnFinished(
+                session_key=key,
+                channel=msg.channel,
+                chat_id=msg.chat_id,
+                status=status,
+                started_at=started_at,
+                finished_at=datetime.now().astimezone(),
+                duration_seconds=max(0.0, time.perf_counter() - started_clock),
+                will_dispatch=dispatch_outbound,
+                outbound=outbound,
+                error=error,
+            )
+        )
 
     async def _run_turn(self, msg: InboundMessage, key: str, *, dispatch_outbound: bool = True) -> OutboundMessage:
         session = self.session_manager.get_or_create(key)

@@ -9,6 +9,36 @@ from pathlib import Path
 
 
 class CliTests(unittest.TestCase):
+    def test_cli_mode_selection(self):
+        from kirakira_agent.cli import choose_cli_mode
+
+        self.assertEqual(
+            choose_cli_mode(
+                stdin_isatty=True,
+                stdout_isatty=True,
+                textual_available=True,
+            ),
+            "tui",
+        )
+        self.assertEqual(
+            choose_cli_mode(
+                stdin_isatty=False,
+                stdout_isatty=True,
+                textual_available=True,
+            ),
+            "plain",
+        )
+        self.assertEqual(
+            choose_cli_mode(
+                force_plain=True,
+                stdin_isatty=True,
+                stdout_isatty=True,
+                textual_available=True,
+            ),
+            "plain",
+        )
+        self.assertEqual(choose_cli_mode(force_tui=True), "tui")
+
     def test_cli_reports_missing_env(self):
         with tempfile.TemporaryDirectory() as tmp:
             env = os.environ.copy()

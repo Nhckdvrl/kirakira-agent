@@ -13,10 +13,10 @@
 
 | | Reference | Kirakira |
 | --- | ---: | ---: |
-| Python 总行数 | ~153,000 | ~10,100 |
-| 被动链路相关行数（agent+bus+core+session+infra+bootstrap，含少量 proactive） | ~49,000 | ~10,100 |
-| 测试文件数 | 135 | 20 |
-| 测试项数 | — | 142 |
+| Python 总行数 | ~153,000 | ~10,400 |
+| 被动链路相关行数（agent+bus+core+session+infra+bootstrap，含少量 proactive） | ~49,000 | ~10,400 |
+| 测试文件数 | 135 | 21 |
+| 测试项数 | — | 163 |
 
 体量差 15 倍，但其中大部分是**被明确排除的范围**（`proactive_v2` 3.3k、`plugins/` 插件市场
 19.2k、`memory2` 5.6k、`eval` 2.3k、前端 Dashboard）以及 reference 更完整的代际/控制面机制。
@@ -36,11 +36,11 @@
 | `agent/turns/*` | pipeline 内联 | 行为覆盖，无独立 TurnResult/SideEffect 抽象 |
 | `agent/lifecycle/*`（2200 行） | `lifecycle.py` + pipeline | 7 个 phase ctx 已覆盖；无 slot DAG（§4.1） |
 | `agent/prompting/assembler.py`、`budget.py` | `context_builder.py` + `runtime._trim_context` | 行为覆盖，结构更轻（§4.2） |
-| `agent/retrieval/protocol.py`、`default_pipeline.py` | 直接调用 `memory.build_retrieval_block` | 行为覆盖，无可插拔 pipeline 接缝（§4.3） |
+| `agent/retrieval/protocol.py`、`default_pipeline.py` | `retrieval.py` | ✅ 已补接缝 + RRF 融合（§4.3） |
 | `agent/model_runtime/context_policy.py` | `context_policy.py` | ✅ 本轮补齐（含 #117 的 160 基准） |
 | `agent/model_runtime/*`（其余） | `models/openai_compatible.py` | 我们只有一类后端，无需统一（§5） |
 | `session/manager.py`、`store.py` | `session.py` | JSON canonical + SQLite FTS；#124 语义本就一致 |
-| `core/memory/*`、`memory2/*`（5.6k） | `memory.py`、`embeddings.py` | 核心行为覆盖，算法简化（§4.4） |
+| `core/memory/*`、`memory2/*`（5.6k） | `memory.py`、`embeddings.py`、`retrieval.py` | 核心行为覆盖 + RRF 融合；LLM 门控算法未做（§4.4） |
 
 ### 2.2 工具与扩展
 
@@ -117,20 +117,38 @@ Kirakira：`runtime._trim_context(messages, level)` 按 level 逐级 microcompac
 行为方向一致（先丢动态上下文再丢历史），但 reference 的分级是**按 prompt section 语义**，
 我们的是**按消息粒度**，可解释性更差。
 
-### 4.3 Retrieval 接缝
+### 4.3 Retrieval 接缝与融合（已补齐）
 
-Reference 有 `MemoryRetrievalPipeline` 协议 + `DefaultMemoryRetrievalPipeline`，被动 turn 依赖
-协议而非具体实现，因此可以整体替换检索策略。
+`retrieval.py` 提供 `MemoryRetrievalPipeline` 协议，并实现了 reference `memory2/retriever.py`
+的核心机制：
 
-Kirakira 的 pipeline 直接调 `memory.build_retrieval_block`。行为一样，但没有替换接缝。
-真要做多路召回 + RRF 时（见 `VERSION_EVOLUTION.md §5.5`），第一步就是补这个接缝。
+| 机制 | Reference | Kirakira |
+| --- | --- | --- |
+| RRF 融合 | `_rrf_merge`，k=60，keyword 权重 0.5 | `rrf_fuse`，同参数 |
+| 热度衰减 | alpha 0.20，半衰期 14 天 | `hotness_boost`，同参数 |
+| 注入预算 | max_chars 1200，line_max 180 | `plan_injection`，同参数 |
+| lane 划分 | vector + keyword | vector + lexical |
 
-### 4.4 记忆算法
+**这不只是对齐 reference，更是修掉了我们自己的一个真实缺陷**：原来的
+`semantic * 0.75 + lexical * 0.25` 把尺度不可比的原始分相加，导致每条记录都有非零分、
+`limit` 永远被无关记忆填满（详见 `VERSION_EVOLUTION.md §5.4`）。
 
-Reference 的 `memory2`/Akasha 有 LLM query rewrite、HyDE、sufficiency checker、profile
-extractor、procedure 冲突检测、热度排序、图关系存储。
+### 4.4 记忆算法：仍然简化的部分
 
-Kirakira：Markdown + typed records + FTS + 可选 embedding（语义 0.75 + 词法 0.25）。
+Reference 的 `memory2`（5.7k 行）还有 LLM query rewrite、HyDE、sufficiency checker、
+profile extractor、procedure 冲突检测、dedup decider、图关系存储、独立 SQLite 向量 store。
+
+Kirakira 目前：Markdown + typed records + FTS + 可选 embedding + **RRF 多路融合 + 热度衰减 +
+注入预算**。
+
+**未跟进的都是 LLM 门控的**（query rewrite / HyDE / sufficiency / dedup decider）：每一项都要在
+每轮对话里多打一次模型。判断标准是"纯计算的先做，要多花模型调用的必须先有评测"——reference
+自己也用配置门控它们，且本项目文档一开始就写明 HyDE 必须经评测再开。接缝已经留好（§4.3）。
+
+**`dedup_decider` 已经用更省的方式做了**（在线测试发现缺陷后修复，见 §6.4）：reference 为去重
+单独多打一次模型；我们把已记事实喂进 consolidation **本来就要打的那次调用**，抽取与去重合并
+为一次判断，零额外往返。在线验证：同一组对话记录数从 9（含 3 对重复）降到 6，且更正/否定
+仍能覆盖旧事实。
 
 ### 4.5 Fail-loud 范围
 
@@ -190,19 +208,69 @@ upstream 同期给出的替代品（`agent/mcp/admin.py` + `agent/tools/workspac
 
 ### 6.3 尚未闭合的真实差距（按值得做的程度排序）
 
-1. **Retrieval 接缝**（§4.3）——做多路召回前必须先补，成本低、收益明确。
+1. ~~**Retrieval 接缝 + RRF**~~ —— ✅ 已完成（§4.3）。
 2. **Context trim 按 section 分级**（§4.2）——可解释性更好，成本低。
-3. **per-plugin 代际**（§4.1）——当前规模不需要，插件变多再说。
-4. **结构化委派决策元数据**（§6.2）——只有在要做 trace/评测时才有价值。
+3. **评测集**——query rewrite / HyDE / sufficiency 都是 LLM 门控项，**没有评测集就没有理由
+   开启它们**。所以下一步不是继续抄算法，而是先能测量。见 `VERSION_EVOLUTION.md §10`。
+4. **per-plugin 代际**（§4.1）——当前规模不需要，插件变多再说。
+5. **结构化委派决策元数据**（§6.2）——只有在要做 trace/评测时才有价值。
+
+### 6.4 在线测试发现并已修复：同一事实被存两遍
+
+用真实 DeepSeek（`deepseek-v4-flash`）跑 6 轮"记住：…"后，`items.json` 里出现成对的重复：
+
+```text
+[procedure] 部署脚本在 scripts/rollout.sh，每次发版都跑它      source_ref=:0-5  ← consolidation
+[procedure] 用户的部署脚本在 scripts/rollout.sh，每次发版都跑它。 source_ref=:0    ← memorize 工具
+[event]     错误码 E4011 表示配额超限                          ← 同一事实，
+[procedure] 用户的错误码 E4011 表示配额超限。                    ← 类型还不一致
+```
+
+**根因**：`memorize()` 去重靠 `_normalize_content(a) == _normalize_content(b)` 精确匹配，而
+consolidation 的 LLM 必然改写措辞，永远匹配不上。`consolidate_turn` 里的
+`_last_assistant_used_memorize` 只守住"显式记忆规则"这条路径，守不住后台 LLM 抽取那条。
+
+**影响**：召回时两条都进注入块，1200 字符预算里一半是重复内容。
+
+**词法阈值方案被实测否决**：否定句相似度（0.833）比真重复（0.727～0.800）还高，任何有效阈值
+都会把"CI 跑"和"CI 不跑"合并掉，让 agent 说反话——比冗余严重得多。去重必须理解语义。
+
+**修复**：consolidation 本来就要打一次 LLM，所以把已记事实喂进**同一次调用**
+（`_known_memory_digest()`），抽取与去重合并为一次判断，**零额外往返**。reference 用独立的
+`dedup_decider.py`（313 行）多打一次模型，我们并进已有调用，代价更低。
+
+prompt 里显式保留了安全网："与上面某条**语义相反**（例如否定）→ 必须输出，这是修正，
+不是重复"——去重绝不能压掉更正。
+
+**在线验证**（同一组 6 轮"记住：…"）：
+
+| | 修复前 | 修复后 |
+| --- | ---: | ---: |
+| 记录条数 | 9（含 3 对重复） | **6** |
+| `scripts/rollout.sh` 召回 | 2 条（重复） | **1 条** |
+| `E4011` 召回 | 2 条（重复） | **1 条** |
+
+更正安全性另测：连说"CI 改成 GitLab""不喜欢猫了改养狗""PostgreSQL 16 升到 17"，
+三条更正**全部写入且旧事实被替换**，没有被去重压掉。
 
 ## 7. 审计证据
 
 - Python：`/home/xiang/.conda/envs/xingshu-vllm/bin/python` 3.12。
-- `unittest discover -s tests`：**142 项通过**（本轮新增：context policy 8、snapshot 13、
-  workspace 6、fail-loud 5、mcp admin 10；MCP 由 2 项扩展到 16 项）。
+- `unittest discover -s tests`：**163 项通过**（本轮新增：context policy 8、snapshot 13、
+  workspace 6、fail-loud 5、mcp admin 10、retrieval 21；MCP 由 2 项扩展到 16 项）。
 - 关键回归 `test_turn_pins_snapshot_tools_across_mid_turn_hot_reload`：turn 中途换代后本轮仍
   调用到旧代际工具并拿到旧代际返回值，全局 current 已是新代际，旧代际在租约释放后 drained。
 - 真实 stdio MCP server 端到端：声明 → 连接 → 发布 generation → `/tools` 列出
   `mcp_fake__echo` / `mcp_fake__fail` → 干净关闭。
 - 全新 clone 按 README 操作可直接启动，运行时状态自动生成且不被 git 跟踪。
+- **真实模型在线验证**（DeepSeek `deepseek-v4-flash`，key 仅注入测试进程环境）：
+  - 基础响应、streaming（9 个 delta）、真实工具循环（`write_file` → `read_file`，文件确实落盘）、
+    session 工具链持久化。
+  - MCP 全链路：声明 → generation → 快照 → 模型自己 `tool_search` 解锁 → 调用 `mcp_fake__echo`
+    拿到回显。同时确认 MCP 工具**不在基础注册表**（快照专属设计生效）。
+  - agent 自助管理 MCP：模型调用 `workspace_mcp_apply` → 声明落盘 → 新代际发布 → 工具可用。
+  - 记忆：6 轮对话触发后台 consolidation，LLM 抽出 9 条带类型记录；RRF 对
+    `scripts/rollout.sh` / `E4011` / `PostgreSQL` 精确召回正确。
+  - context policy：128k 上下文派生出 `memory_window=20` / `max_tokens=4096`，与 1M 基准等比例一致。
+  - **发现缺陷**：见 §6.4。
 - `git ls-files` 无密钥形状字符串；`Reference/` 由 `.gitignore` 排除。
