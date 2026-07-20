@@ -7,7 +7,9 @@
 from __future__ import annotations
 
 import math
+import json
 from dataclasses import dataclass
+from typing import Any
 
 _REFERENCE_CONTEXT_WINDOW = 1_000_000
 _REFERENCE_EFFECTIVE_CONTEXT_PERCENT = 0.9
@@ -82,3 +84,55 @@ def build_runtime_context_budget(
     if output >= effective:
         raise ValueError("max_output_tokens must be smaller than effective context")
     return ContextBudget(effective, effective - output, output)
+
+
+def estimate_context_tokens(
+    messages: list[dict[str, Any]],
+    tools: list[Any],
+    *,
+    system_prompt: str = "",
+) -> int:
+    """Conservative provider-facing estimate including schemas and image blocks."""
+
+    text_chars = len(system_prompt)
+    schemas = []
+    for tool in tools:
+        if hasattr(tool, "name"):
+            schemas.append(
+                {
+                    "name": getattr(tool, "name", ""),
+                    "description": getattr(tool, "description", ""),
+                    "parameters": getattr(tool, "input_schema", {}),
+                }
+            )
+        else:
+            schemas.append(tool)
+    text_chars += len(json.dumps(schemas, ensure_ascii=False, default=str))
+    image_tokens = 0
+    for message in messages:
+        content = message.get("content")
+        if isinstance(content, list):
+            for block in content:
+                if isinstance(block, dict) and block.get("type") in {
+                    "image_url",
+                    "input_image",
+                }:
+                    detail = block.get("detail")
+                    image = block.get("image_url")
+                    if isinstance(image, dict):
+                        detail = image.get("detail", detail)
+                    image_tokens += 1024 if detail == "low" else 8192
+                else:
+                    text_chars += len(
+                        json.dumps(block, ensure_ascii=False, default=str)
+                    )
+        elif content is not None:
+            text_chars += len(str(content))
+        text_chars += len(
+            json.dumps(
+                {key: value for key, value in message.items() if key != "content"},
+                ensure_ascii=False,
+                default=str,
+            )
+        )
+    return max(1, text_chars // 3 + image_tokens)

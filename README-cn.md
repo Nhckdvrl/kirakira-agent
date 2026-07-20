@@ -51,7 +51,8 @@ Web / Telegram / QQ / CLI
 - stdio MCP JSON-RPC client、并发请求关联、声明式热重载、整批候选语义。
 - 运行时能力快照 + 每 turn 租约：热重载不会抽走在途 turn 的工具，旧 MCP 进程等租约排空才断开。
 - deferred MCP/plugin tools 与 `tool_search select:<name>` 解锁。
-- 按模型 `context_window` 派生 `memory_window` 与输出预留。
+- 按模型 `context_window` 派生 `memory_window` 与输出预留；预算覆盖 system、历史、工具 schema 与图片。
+- Reference 风格的具名 PromptBlock、动态 Context Frame、静态块缓存和语义化降级重试；每轮 trace 会保存到 session。
 - workspace 隔离：运行时状态按 `--workspace` / `KIRAKIRA_WORKSPACE` / config 解析。
 - inline/background `spawn` 子代理，独立 session、三类权限 profile、并发上限、list/cancel 和完成回注。
 - 后台 shell、`task_output`、`task_stop`，timeout、取消和 runtime 关机均清理进程组。
@@ -92,10 +93,15 @@ model = "deepseek-v4-flash"
 api_key = "${DEEPSEEK_API_KEY}"
 base_url = "https://api.deepseek.com/v1"
 enable_thinking = false
+context_window = 128000  # 以模型供应商公布的容量为准
 
 [agent]
 max_tokens = 8192
 max_iterations = 40
+
+[agent.context]
+effective_context_percent = 0.9
+# memory_window 不写时按 context_window 派生；只有明确要覆盖策略时才填写。
 
 [channels.chat]
 enabled = true
@@ -134,6 +140,13 @@ python -m kirakira_agent --session research  # 直接继续名为 research 的�
 ```
 
 不带 `--session` 启动时，每次都会进入一个全新的空白对话；发送第一条消息后自动保存到 workspace 的 `sessions/` 目录。TUI 中输入 `/sessions` 会打开历史选择器，使用 `↑` / `↓` 和 `Enter` 即可恢复；也可以输入 `/session <名称>` 或下次用相同的 `--session <名称>` 直接续接。`/clear` 和 `Ctrl+L` 只清空屏幕，不删除历史。
+
+每轮开始时，TUI 会显示类似 `Context · full · 3.1k tokens` 的状态；Plain CLI 会显示
+`context full · 3106/891808 tokens · 0 history`。如果超出模型输入预算，会看到
+`trim_skills_catalog`、`trim_recent_context` 等具名重试，而不是静默截断。完整 attempt、section、
+缓存命中、模型实际 usage 和下一轮 history baseline 会保存到 assistant 消息的 `context_trace`
+与 session metadata 的 `context_budget`。具体合同见
+[_handbook/context-management.md](./_handbook/context-management.md)。
 
 TUI 快捷键：`Enter` 发送，`↑` / `↓` 浏览输入历史，`Ctrl+C` 中断当前 turn（空闲时退出），`Ctrl+L` 清空当前视图，`Ctrl+Q` 退出。tmux 只负责保活和重新连接，界面本身由项目内的 Textual 客户端实现。
 
@@ -281,7 +294,7 @@ mcp/servers/*.toml            workspace MCP 声明（热重载）
 /home/xiang/.conda/envs/xingshu-vllm/bin/python -m unittest discover -s tests -v
 ```
 
-当前 132 项测试通过，并已使用 `deepseek-v4-flash` 在线验证普通响应、SSE 工具循环和后台记忆 consolidation。API key 不进入仓库。
+当前自动化测试共 186 项：183 项通过、3 项按环境条件跳过。另已使用 `deepseek-v4-flash` 在线验证普通响应、SSE 工具循环、后台记忆 consolidation，以及 context 估算/实际 usage/下一轮 baseline 的完整观测链。API key 不进入仓库。
 
 ## 文档
 
@@ -293,6 +306,9 @@ mcp/servers/*.toml            workspace MCP 声明（热重载）
 | 怎么声明一个 MCP server、改坏了会怎样 | [_handbook/workspace-mcp.md](./_handbook/workspace-mcp.md) |
 | 热重载为什么不会打断正在跑的 turn | [_handbook/snapshot-and-lease.md](./_handbook/snapshot-and-lease.md) |
 | 怎么写插件、怎么声明能力 | [_handbook/plugins.md](./_handbook/plugins.md) |
+| Prompt 怎么分块、超限如何降级、trace 在哪里 | [_handbook/context-management.md](./_handbook/context-management.md) |
+| Session 与长期记忆为什么分开 | [_handbook/memory.md](./_handbook/memory.md) |
+| TUI 是否基于 tmux、流式终态和历史 Session 怎么工作 | [_handbook/cli-and-sessions.md](./_handbook/cli-and-sessions.md) |
 
 `docs/` 是**历史与方法论**：记录为什么变成今天这样。
 

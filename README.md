@@ -44,6 +44,7 @@ kirakira_agent/          the runtime
 ├── memory.py            markdown/typed memory + background consolidation
 ├── retrieval.py         multi-lane recall, RRF fusion, hotness, inject budget
 ├── context_policy.py    derives context window settings from the model
+├── prompting/           named prompt blocks, context frames, trim plans
 ├── tools/               registry, executor, built-in tools
 ├── mcp/                 declarative workspace MCP (declarations/host/publisher/watcher)
 ├── channels/            web, telegram, qq, host
@@ -62,6 +63,24 @@ under the workspace root and is gitignored. The workspace resolves as
 Each launch starts a fresh empty local chat unless `--session <name>` is given.
 Inside the TUI, `/sessions` opens a keyboard picker for saved chats and
 `/session <name>` switches or creates one; `/clear` only clears the view.
+During a turn the clients show the selected context plan, estimated/input-budget
+tokens and history size. Named prompt sections are re-rendered under pressure;
+the complete retry/section/cache/model-usage trace is stored with the assistant
+session message, while `metadata.context_budget` stores the next-turn baseline.
+
+For DeepSeek, set its advertised capacity explicitly so the runtime and provider
+share one budget:
+
+```toml
+[llm.main]
+model = "deepseek-v4-flash"
+base_url = "https://api.deepseek.com/v1"
+api_key = "${DEEPSEEK_API_KEY}"
+context_window = 128000  # set this to the capacity documented by your provider
+
+[agent.context]
+effective_context_percent = 0.9
+```
 
 ## Documentation
 
@@ -74,6 +93,8 @@ It changes in the same commit as the code it documents.
 | [snapshot-and-lease.md](_handbook/snapshot-and-lease.md) | why hot reload cannot break an in-flight turn |
 | [plugins.md](_handbook/plugins.md) | writing a plugin; declaring capabilities in code |
 | [memory.md](_handbook/memory.md) | session vs memory; why recall fuses by rank, not score |
+| [context-management.md](_handbook/context-management.md) | prompt blocks, token budget, semantic retries and traces |
+| [cli-and-sessions.md](_handbook/cli-and-sessions.md) | TUI ownership, streaming finality and saved-session behavior |
 
 `docs/` describes **how it got here** — history, and the reasoning worth reusing.
 

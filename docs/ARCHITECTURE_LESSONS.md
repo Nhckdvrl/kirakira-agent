@@ -314,6 +314,26 @@ memory_window = 按 1M 基准等比例缩放(context_window)，对齐到 4，下
 顺带一个真实数据点：Reference 在 #117 里把基准从 640 调到 160。如果当初是每个模型硬编码，
 这次调整要改 N 处；有了派生公式，只改一个基准值。**派生的收益不在第一次写，而在第 N 次改。**
 
+### 6.1 上下文降级为什么要按语义，而不是按字符串
+
+旧实现遇到 context overflow 时对 messages 做 microcompact。它能变短，却回答不了三个问题：
+
+1. 丢掉的是 skills 目录、检索记忆还是用户历史？
+2. 为什么先丢这一部分？
+3. 下一次模型或插件变更后，裁剪结果还能不能复现？
+
+现在 prompt 先被拆成具名 block，再由 `ContextTrimPlan` 表达降级顺序。每个 attempt 都从原始 turn
+输入重新执行 hooks 和 render，记录 disabled sections、history window、section estimate/cache hit。
+这不是为了“类型更多”，而是把不可解释的字符串操作变成可审计的策略决策。
+
+预算也分两层：Runtime 提前估算并给 UI/插件可观察事件；Provider 在网络请求前根据最终 messages
+和实际暴露的 tool schemas 再预检。只有第一层会漏掉 ReAct 中途解锁的工具，只有第二层又无法解释
+是哪个 section 把请求推过阈值。两层职责不同，不能互相替代。
+
+这里仍有真实 tradeoff：外层 retry 会重新执行 Reasoner；如果 overflow 发生在有副作用的工具之后，
+模型可能再次选择该工具。因此工具幂等性仍是合同的一部分。所谓“完整上下文管理”不是宣称没有风险，
+而是让预算、丢弃顺序、重试和剩余风险都有明确记录。
+
 ---
 
 ## 7. 装配与依赖注入：为什么 build_runtime 那么长

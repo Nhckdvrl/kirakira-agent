@@ -16,7 +16,10 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from kirakira_agent.bus import MessageBus
 from kirakira_agent.context_builder import ContextBuilder
-from kirakira_agent.context import microcompact
+from kirakira_agent.context_policy import (
+    build_runtime_context_budget,
+    estimate_context_tokens,
+)
 from kirakira_agent.event_bus import EventBus
 from kirakira_agent.events import InboundMessage, OutboundMessage
 from kirakira_agent.lifecycle import (
@@ -27,6 +30,8 @@ from kirakira_agent.lifecycle import (
     BeforeReasoningCtx,
     BeforeStepCtx,
     BeforeTurnCtx,
+    ContextBudgetUpdated,
+    ContextPrepared,
     PromptRenderCtx,
     TurnCommitted,
     TurnFinished,
@@ -50,6 +55,13 @@ from kirakira_agent.snapshot import (
 from kirakira_agent.tool_hooks import ToolExecutionRequest, ToolExecutor, ToolHook
 from kirakira_agent.tools.registry import ToolRegistry
 from kirakira_agent.channels.host import ChannelHost
+from kirakira_agent.prompting import (
+    DEFAULT_CONTEXT_TRIM_PLANS,
+    PromptSectionRender,
+    build_context_frame_content,
+    build_context_frame_message,
+)
+from kirakira_agent.retrieval import RetrievalRequest
 
 logger = logging.getLogger(__name__)
 JsonDict = Dict[str, Any]
@@ -58,6 +70,8 @@ JsonDict = Dict[str, Any]
 @dataclass
 class RuntimeConfig:
     model: str
+    context_window: int = 0
+    effective_context_percent: float = 0.9
     max_iterations: int = 10
     max_tokens: int = 8192
     history_window: int = 40
@@ -72,6 +86,7 @@ class ReasonerResult:
     tools_used: List[str] = field(default_factory=list)
     tool_chain: List[JsonDict] = field(default_factory=list)
     thinking: str = ""
+    context_trace: JsonDict = field(default_factory=dict)
 
 
 async def _run_plugin_modules(modules: List[object], ctx: Any) -> Any:
@@ -135,42 +150,131 @@ class DefaultReasoner:
         disabled_tools: Optional[set[str]] = None,
         max_iterations_override: Optional[int] = None,
     ) -> ReasonerResult:
-        render_ctx = PromptRenderCtx(
-            session_key=session_key,
-            channel=msg.context_channel,
-            chat_id=msg.context_chat_id,
-            content=msg.content,
-            media=msg.media,
-            timestamp=msg.timestamp,
-            history=history,
-            skill_names=skill_names,
-            retrieved_memory_block=retrieved_memory_block,
-            extra_hints=list(extra_hints or []),
-        )
-        render_ctx = await self.event_bus.emit(render_ctx)
-        render_ctx = await _run_plugin_modules(self._prompt_render_modules, render_ctx)
-        messages = self.context.render(
-            channel=render_ctx.channel,
-            chat_id=render_ctx.chat_id,
-            content=render_ctx.content,
-            media=render_ctx.media,
-            timestamp=render_ctx.timestamp,
-            history=render_ctx.history,
-            retrieved_memory_block=render_ctx.retrieved_memory_block,
-            skill_names=render_ctx.skill_names,
-            extra_hints=render_ctx.extra_hints,
-            system_sections_top=render_ctx.system_sections_top,
-            system_sections_bottom=render_ctx.system_sections_bottom,
-        )
-        return await self.run(
-            messages,
-            session_key=session_key,
-            channel=msg.channel,
-            chat_id=msg.chat_id,
-            request_text=msg.content,
-            disabled_tools=disabled_tools,
-            max_iterations_override=max_iterations_override,
-        )
+        source_history = list(history)
+        attempts = self._build_attempt_plans(len(source_history))
+        retry_trace: JsonDict = {"attempts": [], "selected_plan": None}
+        tools = SnapshotToolView(self.tools, get_current_runtime_snapshot())
+        disabled = set(disabled_tools or ())
+        unlocked = set(self._unlocked_tools.get(session_key, {}).keys())
+        visible_specs = [
+            spec
+            for spec in tools.visible_specs(unlocked)
+            if spec.name not in disabled
+        ]
+        for attempt, plan in enumerate(attempts):
+            history_for_attempt = self._slice_history(
+                source_history, int(plan["history_window"])
+            )
+            render_ctx = PromptRenderCtx(
+                session_key=session_key,
+                channel=msg.context_channel,
+                chat_id=msg.context_chat_id,
+                content=msg.content,
+                media=msg.media,
+                timestamp=msg.timestamp,
+                history=history_for_attempt,
+                skill_names=skill_names,
+                retrieved_memory_block=retrieved_memory_block,
+                extra_hints=list(extra_hints or []),
+                disabled_sections=set(plan["disabled_sections"]),
+                turn_injection_prompt=self._build_deferred_tools_hint(
+                    tools, unlocked
+                ),
+            )
+            render_ctx = await self.event_bus.emit(render_ctx)
+            render_ctx = await _run_plugin_modules(
+                self._prompt_render_modules, render_ctx
+            )
+            rendered = self.context.render(
+                channel=render_ctx.channel,
+                chat_id=render_ctx.chat_id,
+                content=render_ctx.content,
+                media=render_ctx.media,
+                timestamp=render_ctx.timestamp,
+                history=render_ctx.history,
+                retrieved_memory_block=render_ctx.retrieved_memory_block,
+                skill_names=render_ctx.skill_names,
+                extra_hints=render_ctx.extra_hints,
+                system_sections_top=render_ctx.system_sections_top,
+                system_sections_bottom=render_ctx.system_sections_bottom,
+                disabled_sections=render_ctx.disabled_sections,
+                turn_injection_prompt=render_ctx.turn_injection_prompt,
+            )
+            estimated = estimate_context_tokens(rendered.messages, visible_specs)
+            input_budget = 0
+            if self.config.context_window:
+                input_budget = build_runtime_context_budget(
+                    self.config.context_window,
+                    self.config.effective_context_percent,
+                    self.config.max_tokens,
+                ).input_budget
+            sections = tuple(
+                {
+                    "name": item.name,
+                    "chars": item.chars,
+                    "est_tokens": item.est_tokens,
+                    "is_static": item.is_static,
+                    "cache_hit": item.cache_hit,
+                }
+                for item in rendered.debug_breakdown
+            )
+            attempt_trace = {
+                "name": plan["name"],
+                "history_window": plan["history_window"],
+                "history_messages": len(history_for_attempt),
+                "disabled_sections": sorted(render_ctx.disabled_sections),
+                "estimated_tokens": estimated,
+                "input_budget": input_budget,
+                "sections": list(sections),
+            }
+            retry_trace["attempts"].append(attempt_trace)
+            await self.event_bus.fanout(
+                ContextPrepared(
+                    session_key=session_key,
+                    channel=msg.channel,
+                    chat_id=msg.chat_id,
+                    attempt=attempt,
+                    plan_name=str(plan["name"]),
+                    history_messages=len(history_for_attempt),
+                    disabled_sections=tuple(sorted(render_ctx.disabled_sections)),
+                    estimated_tokens=estimated,
+                    input_budget=input_budget,
+                    context_frame_chars=len(rendered.context_frame),
+                    sections=sections,
+                )
+            )
+            try:
+                result = await self.run(
+                    rendered.messages,
+                    session_key=session_key,
+                    channel=msg.channel,
+                    chat_id=msg.chat_id,
+                    request_text=msg.content,
+                    disabled_tools=disabled_tools,
+                    max_iterations_override=max_iterations_override,
+                )
+            except (ContextLengthError, ContentSafetyError) as exc:
+                attempt_trace["error"] = type(exc).__name__
+                if attempt + 1 < len(attempts):
+                    continue
+                reply = (
+                    "上下文过长，已尝试分级精简但仍无法处理；请新建会话或缩小请求。"
+                    if isinstance(exc, ContextLengthError)
+                    else "当前上下文触发了内容安全限制，无法继续处理。"
+                )
+                retry_trace["selected_plan"] = plan["name"]
+                retry_trace["trimmed_sections"] = sorted(
+                    render_ctx.disabled_sections
+                )
+                return ReasonerResult(reply=reply, context_trace=retry_trace)
+            retry_trace["selected_plan"] = plan["name"]
+            retry_trace["trimmed_sections"] = sorted(render_ctx.disabled_sections)
+            retry_trace["react_stats"] = dict(
+                result.context_trace.get("react_stats") or {}
+            )
+            result.context_trace = retry_trace
+            return result
+        return ReasonerResult("上下文准备失败。", context_trace=retry_trace)
 
     async def run(
         self,
@@ -192,6 +296,8 @@ class DefaultReasoner:
         disabled = set(disabled_tools or ())
         unlocked = set(self._unlocked_tools.get(session_key, {}).keys())
         repeated_calls: Dict[str, int] = {}
+        react_input_samples: List[int] = []
+        model_usages: List[JsonDict] = []
         empty_thinking_retry_used = False
         iteration = 0
         iteration_limit = (
@@ -211,7 +317,7 @@ class DefaultReasoner:
                 channel=channel,
                 chat_id=chat_id,
                 iteration=iteration,
-                input_tokens_estimate=max(1, len(json.dumps(messages, ensure_ascii=False)) // 3),
+                input_tokens_estimate=estimate_context_tokens(messages, visible_specs),
                 visible_tool_names=visible_names,
             )
             before_step = await self.event_bus.emit(before_step)
@@ -225,35 +331,30 @@ class DefaultReasoner:
                 )
             if before_step.extra_hints:
                 messages.append(
-                    {
-                        "role": "user",
-                        "content": "<system-reminder>%s</system-reminder>"
-                        % "\n".join(before_step.extra_hints),
-                    }
+                    build_context_frame_message(
+                        build_context_frame_content(
+                            [
+                                PromptSectionRender(
+                                    "plugin_hints",
+                                    "\n".join(before_step.extra_hints),
+                                    False,
+                                )
+                            ]
+                        )
+                    )
                 )
 
-            response = None
-            for retry in range(3):
-                try:
-                    response = await self._complete_model(
-                        messages,
-                        visible_specs,
-                        session_key=session_key,
-                        channel=channel,
-                        chat_id=chat_id,
-                        iteration=iteration,
-                    )
-                    break
-                except ContextLengthError:
-                    if retry >= 2:
-                        raise
-                    messages = self._trim_context(messages, retry)
-                except ContentSafetyError:
-                    if retry >= 2:
-                        raise
-                    messages = self._trim_context(messages, retry + 1)
-            if response is None:
-                raise RuntimeError("Model did not return a response")
+            react_input_samples.append(before_step.input_tokens_estimate)
+            response = await self._complete_model(
+                messages,
+                visible_specs,
+                session_key=session_key,
+                channel=channel,
+                chat_id=chat_id,
+                iteration=iteration,
+            )
+            if response.usage:
+                model_usages.append(dict(response.usage))
             final_reply = response.text or ""
             final_thinking = response.reasoning_content or final_thinking
             messages.append(assistant_message_from_response(response))
@@ -278,6 +379,11 @@ class DefaultReasoner:
                     tools_used,
                     tool_chain,
                     final_thinking,
+                    context_trace={
+                        "react_stats": self._react_stats(
+                            react_input_samples, model_usages
+                        )
+                    },
                 )
 
             group = {
@@ -394,6 +500,8 @@ class DefaultReasoner:
                 )
                 summary_reply = summary.text.strip()
                 final_thinking = summary.reasoning_content or final_thinking
+                if summary.usage:
+                    model_usages.append(dict(summary.usage))
             except Exception:
                 logger.exception("failed to generate tool-budget summary")
         return ReasonerResult(
@@ -403,7 +511,25 @@ class DefaultReasoner:
             tools_used=tools_used,
             tool_chain=tool_chain,
             thinking=final_thinking,
+            context_trace={
+                "react_stats": self._react_stats(react_input_samples, model_usages)
+            },
         )
+
+    @staticmethod
+    def _react_stats(input_samples: List[int], usages: List[JsonDict]) -> JsonDict:
+        totals: JsonDict = {}
+        for usage in usages:
+            for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
+                value = usage.get(key)
+                if isinstance(value, (int, float)):
+                    totals[key] = int(totals.get(key, 0)) + int(value)
+        return {
+            "request_count": len(input_samples),
+            "input_token_estimates": list(input_samples),
+            "max_input_tokens_estimate": max(input_samples, default=0),
+            "model_usage": totals,
+        }
 
     @staticmethod
     def _unlocked_from_search(content: str) -> set[str]:
@@ -425,37 +551,66 @@ class DefaultReasoner:
                 lru.popitem(last=False)
 
     @staticmethod
-    def _trim_context(messages: List[JsonDict], level: int) -> List[JsonDict]:
-        trimmed = [dict(message) for message in messages]
-        microcompact(trimmed, keep_tool_results=1)
-        if level <= 0:
-            return trimmed
-        system = [message for message in trimmed if message.get("role") == "system"]
-        conversation = [
-            message for message in trimmed if message.get("role") != "system"
-        ]
-        keep = max(4, len(conversation) // (2 if level == 1 else 4))
-        tail = conversation[-keep:]
+    def _slice_history(history: List[JsonDict], window: int) -> List[JsonDict]:
+        if window <= 0:
+            return []
+        selected = list(history if window >= len(history) else history[-window:])
         first_user = next(
             (
                 index
-                for index, message in enumerate(tail)
+                for index, message in enumerate(selected)
                 if message.get("role") == "user"
             ),
             None,
         )
-        if first_user is not None:
-            tail = tail[first_user:]
-        if level >= 2:
-            for message in system:
-                content = str(message.get("content") or "")
-                if len(content) > 16000:
-                    message["content"] = (
-                        content[:8000]
-                        + "\n\n[system context trimmed after provider overflow]\n\n"
-                        + content[-8000:]
-                    )
-        return [*system, *tail]
+        return selected[first_user:] if first_user is not None else []
+
+    @staticmethod
+    def _build_attempt_plans(total_history: int) -> List[JsonDict]:
+        attempts: List[JsonDict] = []
+        seen: set[Tuple[Tuple[str, ...], int]] = set()
+        for trim_plan in DEFAULT_CONTEXT_TRIM_PLANS:
+            disabled = set(trim_plan.drop_sections)
+            key = (tuple(sorted(disabled)), total_history)
+            if key not in seen:
+                seen.add(key)
+                attempts.append(
+                    {
+                        "name": trim_plan.name,
+                        "disabled_sections": disabled,
+                        "history_window": total_history,
+                    }
+                )
+        final_disabled = set(DEFAULT_CONTEXT_TRIM_PLANS[-1].drop_sections)
+        for ratio in (0.5, 0.0):
+            window = int(total_history * ratio)
+            key = (tuple(sorted(final_disabled)), window)
+            if key not in seen:
+                seen.add(key)
+                attempts.append(
+                    {
+                        "name": "trim_retrieved_memory_history_%d" % int(ratio * 100),
+                        "disabled_sections": set(final_disabled),
+                        "history_window": window,
+                    }
+                )
+        return attempts
+
+    @staticmethod
+    def _build_deferred_tools_hint(tools: Any, unlocked: set[str]) -> str:
+        names = [
+            name
+            for name in tools.names()
+            if tools.is_deferred(name) and name not in unlocked
+        ]
+        if not names:
+            return ""
+        return (
+            "【未加载工具目录（知道名字但 schema 未暴露）】\n"
+            + ", ".join(names)
+            + "\n加载方式：已知名字时调用 tool_search(query=\"select:工具名\")；"
+            "按能力查找时调用 tool_search(query=\"关键词\")。"
+        )
 
     async def _complete_model(
         self,
@@ -804,12 +959,41 @@ class PassiveTurnPipeline:
                 return await self._dispatch_if_needed(state, core_reply)
 
         await self.memory.wait_for_session(key)
-        history = session.get_history(max_messages=self.config.history_window)
-        retrieved = (
-            ""
-            if msg.metadata.get("skip_memory_retrieval")
-            else await asyncio.to_thread(self.memory.build_retrieval_block, msg.content)
+        guard_reply = await self._guard_memory_context(session, key)
+        if guard_reply:
+            return await self._dispatch_if_needed(state, guard_reply)
+        history = session.get_history(
+            max_messages=self.config.history_window,
+            start_index=session.last_consolidated,
         )
+        retrieval_result = (
+            None
+            if msg.metadata.get("skip_memory_retrieval")
+            else await asyncio.to_thread(
+                self.memory.retrieve,
+                RetrievalRequest(
+                    query=msg.content,
+                    session_key=key,
+                    channel=msg.context_channel,
+                    chat_id=msg.context_chat_id,
+                    history=session.get_history(
+                        max_messages=max(1, len(session.messages))
+                    ),
+                    session_metadata=dict(session.metadata),
+                    timestamp=msg.timestamp,
+                ),
+            )
+        )
+        retrieved = retrieval_result.block if retrieval_result is not None else ""
+        if retrieval_result is not None and retrieval_result.trace is not None:
+            trace = retrieval_result.trace
+            state.extra_metadata["retrieval_trace"] = {
+                "lanes": dict(trace.lanes),
+                "fused": trace.fused,
+                "injected": trace.injected,
+                "used_vector": trace.used_vector,
+                "truncated": trace.truncated,
+            }
         skill_mentions = self._collect_skill_mentions(msg.content)
         if before_turn is None:
             before_turn = BeforeTurnCtx(
@@ -869,6 +1053,7 @@ class PassiveTurnPipeline:
                 extra_hints=before_reasoning.extra_hints,
                 disabled_tools=self._disabled_tools(msg),
             )
+            state.extra_metadata["context_trace"] = dict(turn.context_trace)
         finally:
             self.tools.reset_context(context_token)
         after_ctx = AfterReasoningCtx(
@@ -896,6 +1081,28 @@ class PassiveTurnPipeline:
         )
         result = AfterReasoningResult(ctx=after_ctx, outbound=outbound)
         return await self._commit_and_dispatch(state, result)
+
+    async def _guard_memory_context(self, session: Any, session_key: str) -> str:
+        total = len(session.messages)
+        last = max(0, min(int(session.last_consolidated or 0), total))
+        pending = total - last
+        minimum_new = max(5, self.config.history_window // 2)
+        threshold = self.config.history_window + minimum_new
+        if pending < threshold:
+            return ""
+        before = int(session.last_consolidated or 0)
+        self.memory.schedule_consolidation(
+            session,
+            model_client=self.reasoner.model_client,
+            model=self.config.model,
+        )
+        await self.memory.wait_for_session(session_key)
+        if int(session.last_consolidated or 0) > before:
+            return ""
+        return (
+            "当前会话尚未归档的上下文已达到安全阈值，自动 consolidation 未能推进。"
+            "为避免静默丢失历史，本轮已停止；请稍后重试或新建会话。"
+        )
 
     async def _commit_and_dispatch(self, state: TurnState, result: AfterReasoningResult) -> OutboundMessage:
         session = state.session
@@ -941,7 +1148,43 @@ class PassiveTurnPipeline:
                 msg.content,
                 result.outbound.content,
             )
+        context_trace = dict(state.extra_metadata.get("context_trace") or {})
+        attempts = list(context_trace.get("attempts") or [])
+        selected_plan = str(context_trace.get("selected_plan") or "")
+        selected_attempt = next(
+            (
+                item
+                for item in reversed(attempts)
+                if str(item.get("name") or "") == selected_plan
+            ),
+            attempts[-1] if attempts else {},
+        )
+        history = session.get_history(
+            max_messages=self.config.history_window,
+            start_index=session.last_consolidated,
+        )
+        post_reply_budget = {
+            "history_messages": len(history),
+            "history_tokens_estimate": estimate_context_tokens(history, []),
+            "selected_plan": selected_plan,
+            "last_prompt_tokens_estimate": int(
+                selected_attempt.get("estimated_tokens") or 0
+            ),
+            "input_budget": int(selected_attempt.get("input_budget") or 0),
+            "model_usage": dict(
+                (context_trace.get("react_stats") or {}).get("model_usage") or {}
+            ),
+        }
+        session.metadata["context_budget"] = post_reply_budget
         self.session_manager.save(session)
+        await self.event_bus.fanout(
+            ContextBudgetUpdated(
+                session_key=state.session_key,
+                channel=msg.channel,
+                chat_id=msg.chat_id,
+                **post_reply_budget,
+            )
+        )
         committed = TurnCommitted(
             session_key=state.session_key,
             channel=msg.channel,

@@ -67,6 +67,8 @@ compiled ──publish──> published ──(新代际发布)──> retired �
 5. **同一时刻只有一个发布事务**：`publish` 时已有 pending 事务会直接抛错，不排队。
 6. **会变的东西挂快照，不变的挂注册表**：MCP 工具挂快照；内置工具挂基础 ToolRegistry。
    往共享注册表里注册"会被热替换的东西"，就是把竞态请回来了。
+7. **工具可见性也是上下文预算的一部分**：turn 开始的 `ContextPrepared` 使用当前可见 schema，
+   `tool_search` 解锁后 Provider 会按新 schema 再预检。不能只在快照发布时计算一次 token 后永久复用。
 
 ## 谁持有租约
 

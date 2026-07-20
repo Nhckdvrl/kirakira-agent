@@ -7,6 +7,8 @@ from pathlib import Path
 
 from kirakira_agent.events import InboundMessage, OutboundMessage
 from kirakira_agent.lifecycle import (
+    ContextBudgetUpdated,
+    ContextPrepared,
     StreamDeltaReady,
     ToolCallCompleted,
     ToolCallStarted,
@@ -53,6 +55,32 @@ async def runtime_plain_repl(
                 printed_by_iteration.get(event.iteration, "") + event.content_delta
             )
             line_open = True
+
+    async def on_context(event: ContextPrepared) -> None:
+        if not state.apply(event):
+            return
+        budget = "/%d" % event.input_budget if event.input_budget else ""
+        print(
+            "  · context %s · %d%s tokens · %d history"
+            % (
+                event.plan_name,
+                event.estimated_tokens,
+                budget,
+                event.history_messages,
+            ),
+            flush=True,
+        )
+
+    async def on_context_budget(event: ContextBudgetUpdated) -> None:
+        if not state.apply(event):
+            return
+        actual = event.model_usage.get("total_tokens")
+        actual_text = " · %s actual" % actual if actual else ""
+        print(
+            "  · next context %d history tokens%s"
+            % (event.history_tokens_estimate, actual_text),
+            flush=True,
+        )
 
     async def on_tool_started(event: ToolCallStarted) -> None:
         nonlocal line_open
@@ -102,6 +130,8 @@ async def runtime_plain_repl(
     runtime.bus.subscribe_outbound("cli", on_outbound)
     runtime.event_bus.on(TurnStarted, on_started)
     runtime.event_bus.on(StreamDeltaReady, on_delta)
+    runtime.event_bus.on(ContextPrepared, on_context)
+    runtime.event_bus.on(ContextBudgetUpdated, on_context_budget)
     runtime.event_bus.on(ToolCallStarted, on_tool_started)
     runtime.event_bus.on(ToolCallCompleted, on_tool_completed)
     runtime.event_bus.on(TurnFinished, on_finished)
@@ -135,6 +165,8 @@ async def runtime_plain_repl(
         runtime.bus.unsubscribe_outbound("cli", on_outbound)
         runtime.event_bus.off(TurnStarted, on_started)
         runtime.event_bus.off(StreamDeltaReady, on_delta)
+        runtime.event_bus.off(ContextPrepared, on_context)
+        runtime.event_bus.off(ContextBudgetUpdated, on_context_budget)
         runtime.event_bus.off(ToolCallStarted, on_tool_started)
         runtime.event_bus.off(ToolCallCompleted, on_tool_completed)
         runtime.event_bus.off(TurnFinished, on_finished)

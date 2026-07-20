@@ -35,6 +35,7 @@ class ModelResponse:
     tool_calls: List[ToolCall] = field(default_factory=list)
     stop_reason: str = "end_turn"
     raw: Optional[JsonDict] = None
+    usage: JsonDict = field(default_factory=dict)
 
     @property
     def has_tool_calls(self) -> bool:

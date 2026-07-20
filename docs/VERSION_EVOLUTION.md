@@ -17,6 +17,8 @@ MVP：模型能调用一个工具
   ↓
 系统可扩展：Plugin、Subagent、Schedule
   ↓
+上下文可治理：PromptBlock、预算预检、语义降级、trace
+  ↓
 当前：完整被动式 Agent Runtime
   ↓
 下一版：评测驱动的工具编排与回归体系
@@ -364,8 +366,9 @@ Schedule 只执行用户明确创建的定时消息，不包含自主决策。�
 - ToolRegistry、ToolExecutor、Hook、deferred discovery 和 MCP。
 - Session、FTS 消息搜索、长期记忆和后台 consolidation。
 - Plugin、Subagent、Schedule 和 graceful shutdown。
-- 83 项自动化测试。
-- DeepSeek 在线普通响应、真实工具调用和记忆抽取验证。
+- PromptBlock、Context Frame、Provider 预算预检、语义降级与持久化 context trace。
+- 自动化测试共 186 项：183 项通过，3 项按环境条件跳过。
+- DeepSeek 在线普通响应、真实工具调用、记忆抽取和 context usage/baseline 验证。
 
 这已经是完整被动式 Agent Runtime，但还不是面向多租户和 SLA 的生产平台。
 
@@ -632,11 +635,85 @@ output_reserve = max(4096, min(32768, ...))
 
 修复：Memory 记录 source_ref，Session delete callback 将对应记录标记 forgotten 并重写托管 Markdown。
 
-## 10. 下一版：工具编排 + LangSmith 评测回归
+## 10. 上下文从“拼得出来”到“可治理”
+
+### 10.1 旧实现为什么不够
+
+原来的 ContextBuilder 能把 identity、memory、skills、history 和当前消息拼进请求，overflow 时再对
+messages 做 microcompact。问题不是不能运行，而是**没有决策结构**：稳定提示和逐轮检索混在一起，
+工具 schema/图片没有进入统一预算，裁剪后无法回答丢了什么，Provider 报错也只能盲目缩历史。
+
+长上下文模型把这个问题藏得更深：1M window 下平时不爆，不代表工具解锁、图片或一次巨大 tool
+result 后仍安全；等线上偶发时又没有 trace 可以复盘。
+
+### 10.2 PromptBlock 与 Context Frame
+
+迁移后的装配链是：
+
+```text
+PromptBlock(priority, label, static/cache signature)
+  -> SystemPromptBuilder
+  -> PromptAssembler
+      stable system
+      + history
+      + dynamic Context Frame
+      + current user
+```
+
+`identity/behavior_rules/skills_catalog/self_model/long_term_memory/session_context` 进入稳定 system；
+`recent_context/active_skills/retrieved_memory/turn_injection/plugin_hints` 进入带系统标记的动态 frame。
+Frame 明确声明“不是用户陈述”，解决了检索记忆、skill 指令和插件 hint 身份混淆的问题。稳定 block
+按 workspace + 内容签名缓存，动态 block 每轮重建。
+
+### 10.3 预算必须看到 Provider 真正看到的东西
+
+统一输入预算：
+
+```text
+input_budget = floor(context_window × effective_context_percent) - max_tokens
+estimate = system + messages + tool schemas + image allowance
+```
+
+Runtime 在 render 后和每个 ReAct step 估算，发出 `ContextPrepared`；OpenAI-compatible client 在
+构造最终 payload 时再次预检。第二层尤其重要，因为 `tool_search` 可能在中途解锁新的 schema。
+估算器是保守 chars/3，不是假装精确 tokenizer；Provider `usage` 会另外采集并作为实际值保存。
+
+### 10.4 语义降级与历史安全线
+
+错误重试不再修改上一次渲染结果，而是依次重新 render：
+
+```text
+full
+→ drop skills_catalog
+→ drop recent_context
+→ drop long_term_memory
+→ drop retrieved_memory
+→ history 50%
+→ history 0
+```
+
+每次历史切片回到 user boundary。正常历史从 `last_consolidated` 开始；未归档区达到安全阈值时，
+下一轮先推进 consolidation，游标不前进则明确阻断，避免“为了能请求模型”而静默忘掉消息。
+长 tool result 改为保留头尾，并标出总行数和省略字符数，末尾错误不再因只截头部而消失。
+
+### 10.5 可观察性与在线验收
+
+assistant message 的 `context_trace` 保存 attempt、disabled sections、history window、每个 block 的
+chars/estimate/static/cache hit、ReAct request 数和模型 usage；session metadata 的
+`context_budget` 保存下一轮 history baseline。TUI/Plain CLI 在执行中直接显示计划与预算。
+
+真实 DeepSeek 冒烟结果：`full` 计划估算 3106/891808 input tokens，Provider 报告
+3195 prompt + 15 completion = 3210 total，回复后 history baseline 22 tokens；完整 trace 成功落盘。
+
+仍需正视一个边界：overflow 如果发生在有副作用的工具之后，外层 plan retry 会重新运行 Reasoner，
+可能再次选择工具。因此外部工具仍需幂等；将来做跨 attempt tool-result replay 必须有专门评测，
+不能为了省一次调用破坏上下文一致性。
+
+## 11. 下一版：工具编排 + LangSmith 评测回归
 
 下一版最重要的不是继续加普通工具，而是证明“工具选择更准、参数更稳、改动不会让旧场景退化”。
 
-### 10.1 Trace 接入
+### 11.1 Trace 接入
 
 将以下节点记录到 LangSmith 或兼容 trace runner：
 
@@ -650,7 +727,7 @@ output_reserve = max(4096, min(32768, ...))
 
 敏感字段必须脱敏，API key、完整私密附件和高风险工具参数不能原样上传。
 
-### 10.2 工具系统评测集
+### 11.2 工具系统评测集
 
 至少覆盖：
 
@@ -664,7 +741,7 @@ output_reserve = max(4096, min(32768, ...))
 - 高风险工具是否被 Hook 拦截。
 - 工具成功后最终回复是否忠于结果。
 
-### 10.3 记忆评测集
+### 11.3 记忆评测集
 
 - 应记住的稳定偏好是否写入。
 - 短期状态是否不会被误存为长期事实。
@@ -675,7 +752,7 @@ output_reserve = max(4096, min(32768, ...))
 - 无关问题是否不会注入噪声记忆。
 - consolidation 重放是否幂等。
 
-### 10.4 基线、回归与回滚
+### 11.4 基线、回归与回滚
 
 ```text
 固定 Dataset
@@ -689,7 +766,7 @@ output_reserve = max(4096, min(32768, ...))
 
 每次运行记录 commit SHA、模型、Prompt 版本、工具 schema 版本、memory strategy 和 evaluator 版本。回滚不是“凭感觉改回 Prompt”，而是回到最后一个通过 gate 的版本和配置。
 
-### 10.5 下一版验收指标
+### 11.5 下一版验收指标
 
 - 工具选择准确率。
 - 工具参数一次通过率。
@@ -701,11 +778,11 @@ output_reserve = max(4096, min(32768, ...))
 
 具体阈值应在第一批真实数据跑完后确定，不能在没有 baseline 时随意编百分比。
 
-## 11. 再下一版：100–200 用户的后端化
+## 12. 再下一版：100–200 用户的后端化
 
 这一层目前是设计方向，不应写进当前简历的“已完成”部分。
 
-### 11.1 服务拆分建议
+### 12.1 服务拆分建议
 
 ```text
 FastAPI / WebSocket / SSE Gateway
@@ -721,7 +798,7 @@ Worker：Agent Turn / Memory Consolidation / Embedding
 LLM、Tool/MCP、pgvector、对象存储
 ```
 
-### 11.2 多用户隔离
+### 12.2 多用户隔离
 
 - 所有业务表带 `tenant_id/user_id`。
 - Repository 查询默认注入用户作用域。
@@ -730,7 +807,7 @@ LLM、Tool/MCP、pgvector、对象存储
 - PostgreSQL 可增加 Row Level Security 作为第二层隔离。
 - Tool workspace、插件数据和附件路径按用户隔离。
 
-### 11.3 数据模型
+### 12.3 数据模型
 
 - `users`：身份、状态、配额。
 - `sessions`：channel、owner、metadata、version。
@@ -740,7 +817,7 @@ LLM、Tool/MCP、pgvector、对象存储
 - `memories`：type、summary、embedding、source、status、confidence。
 - `jobs`：schedule/subagent/consolidation 的统一状态机。
 
-### 11.4 Worker 与并发
+### 12.4 Worker 与并发
 
 - API 只负责提交 turn 和返回 turn id。
 - Worker 异步执行 AgentLoop。
@@ -749,7 +826,7 @@ LLM、Tool/MCP、pgvector、对象存储
 - 结果通过 SSE/WebSocket 或轮询回传。
 - Tool call 和 memory write 使用幂等 key。
 
-### 11.5 内容审查
+### 12.5 内容审查
 
 - 入站文本、附件和出站回复分别审查。
 - 高风险工具调用走 policy engine，而不是只审查最终文本。
@@ -757,7 +834,7 @@ LLM、Tool/MCP、pgvector、对象存储
 - 对误杀提供人工复核和申诉状态。
 - 管理后台展示用户、turn、tool call、memory、moderation 和 trace。
 
-### 11.6 什么时候可以写进简历
+### 12.6 什么时候可以写进简历
 
 至少完成：
 
@@ -769,7 +846,7 @@ LLM、Tool/MCP、pgvector、对象存储
 
 完成后再把简历前两条升级为“FastAPI + PostgreSQL + Worker”，否则面试追问很容易露出没有真正实现。
 
-## 12. 当前项目如何讲
+## 13. 当前项目如何讲
 
 项目主线应是：
 
@@ -779,6 +856,7 @@ LLM、Tool/MCP、pgvector、对象存储
 4. 长对话引入 Session、历史搜索、结构化长期记忆和异步 consolidation。
 5. 多入口引入 MessageBus、同 session 串行和跨 session 并发。
 6. 通过真实 Bug 补齐 correlation、reasoning 回放、SSRF、rollback 和 graceful shutdown。
-7. 下一版用 LangSmith/eval 把经验固化为可回归的工程指标。
+7. 把 Prompt 拆成具名 block，用 Provider 预检、语义降级和 trace 管理长上下文。
+8. 下一版用 LangSmith/eval 把经验固化为可回归的工程指标。
 
 这条演进链比“参考了哪个项目”更能说明你真正理解并解决了 Agent 工程问题。

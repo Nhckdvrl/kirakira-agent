@@ -40,6 +40,12 @@ class RetrievalRequest:
     memory_types: List[str] = field(default_factory=list)
     since: str = ""
     until: str = ""
+    session_key: str = ""
+    channel: str = ""
+    chat_id: str = ""
+    history: List[Dict[str, Any]] = field(default_factory=list)
+    session_metadata: Dict[str, Any] = field(default_factory=dict)
+    timestamp: Optional[datetime] = None
 
 
 @dataclass

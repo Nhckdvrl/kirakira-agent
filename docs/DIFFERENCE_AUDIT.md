@@ -1,6 +1,7 @@
 # Kirakira Agent 与 akashic-agent 差距审计
 
-> 审计基准：reference `6a0616c`（2026-07-16）对比本仓库 `3d0876d`。
+> 审计基准：reference `6a0616c`（2026-07-16）；Kirakira 的 context 子系统于
+> 2026-07-21 再次逐调用点对齐。旧 commit 只用于说明最初审计起点，本文状态以当前工作树为准。
 >
 > **排除范围**：只排除自主主动链路——`proactive_v2`、drift、sensor、energy、judge、presence，
 > 以及无人请求时的自主触达。Web、Telegram、QQ、用户创建的定时任务、用户 turn 派生的后台任务
@@ -13,12 +14,12 @@
 
 | | Reference | Kirakira |
 | --- | ---: | ---: |
-| Python 总行数 | ~153,000 | ~10,400 |
-| 被动链路相关行数（agent+bus+core+session+infra+bootstrap，含少量 proactive） | ~49,000 | ~10,400 |
-| 测试文件数 | 135 | 21 |
-| 测试项数 | — | 163 |
+| Python 总行数 | ~153,000 | ~12,700 |
+| 被动链路相关行数（agent+bus+core+session+infra+bootstrap，含少量 proactive） | ~49,000 | ~12,700 |
+| 测试文件数 | 135 | 24 |
+| 测试项数 | — | 186（183 通过、3 条件跳过） |
 
-体量差 15 倍，但其中大部分是**被明确排除的范围**（`proactive_v2` 3.3k、`plugins/` 插件市场
+体量差约 12 倍，但其中大部分是**被明确排除的范围**（`proactive_v2` 3.3k、`plugins/` 插件市场
 19.2k、`memory2` 5.6k、`eval` 2.3k、前端 Dashboard）以及 reference 更完整的代际/控制面机制。
 被动主链路的**行为**覆盖度远高于行数比暗示的程度，但**结构粒度**确实更粗（见 §4）。
 
@@ -35,7 +36,7 @@
 | `agent/core/passive_turn.py`（2255 行） | `runtime.PassiveTurnPipeline` + `DefaultReasoner` | 已覆盖 streaming tool loop 与 retry |
 | `agent/turns/*` | pipeline 内联 | 行为覆盖，无独立 TurnResult/SideEffect 抽象 |
 | `agent/lifecycle/*`（2200 行） | `lifecycle.py` + pipeline | 7 个 phase ctx 已覆盖；无 slot DAG（§4.1） |
-| `agent/prompting/assembler.py`、`budget.py` | `context_builder.py` + `runtime._trim_context` | 行为覆盖，结构更轻（§4.2） |
+| `agent/prompting/assembler.py`、`budget.py`、prompt blocks | `prompting/{blocks,assembler,budget}.py` + `context_builder.py` | ✅ 结构与关键合同已迁移（§4.2） |
 | `agent/retrieval/protocol.py`、`default_pipeline.py` | `retrieval.py` | ✅ 已补接缝 + RRF 融合（§4.3） |
 | `agent/model_runtime/context_policy.py` | `context_policy.py` | ✅ 本轮补齐（含 #117 的 160 基准） |
 | `agent/model_runtime/*`（其余） | `models/openai_compatible.py` | 我们只有一类后端，无需统一（§5） |
@@ -107,15 +108,16 @@ Kirakira 的快照是**单一代际**（phase 模块 + MCP catalog + hooks），
 
 对当前规模够用；插件多到需要独立换代时再拆。
 
-### 4.2 Context trim
+### 4.2 Context trim（已完整迁移）
 
-Reference：`prompting/budget.py` 定义具名 `ContextTrimPlan`，按 `drop_sections` 分级丢弃
-（`skills_catalog` → `memes` → `long_term_memory` → `retrieved_memory`）。
+Kirakira 现在与 Reference 一样使用 `PromptBlock` + 具名 `ContextTrimPlan`：稳定 system block
+与逐轮动态 Context Frame 分离，静态块按签名缓存；超限时重新 render，并依次移除
+`skills_catalog` → `recent_context` → `long_term_memory` → `retrieved_memory`，最后才把历史窗口
+缩到 50% / 0。Provider 预检同时计算 system、消息、工具 schema 和图片成本。
 
-Kirakira：`runtime._trim_context(messages, level)` 按 level 逐级 microcompact。
-
-行为方向一致（先丢动态上下文再丢历史），但 reference 的分级是**按 prompt section 语义**，
-我们的是**按消息粒度**，可解释性更差。
+每次尝试都会产生 `ContextPrepared`，并把 section 字符数、估算 token、缓存命中、裁剪计划、
+实际模型 usage 和下一轮 history baseline 写进 session trace。历史从 `last_consolidated` 开始，
+未归档消息达到安全阈值时先强制 consolidation；失败则阻断本轮，不再静默遗忘。
 
 ### 4.3 Retrieval 接缝与融合（已补齐）
 
@@ -209,9 +211,9 @@ upstream 同期给出的替代品（`agent/mcp/admin.py` + `agent/tools/workspac
 ### 6.3 尚未闭合的真实差距（按值得做的程度排序）
 
 1. ~~**Retrieval 接缝 + RRF**~~ —— ✅ 已完成（§4.3）。
-2. **Context trim 按 section 分级**（§4.2）——可解释性更好，成本低。
+2. ~~**Context trim 按 section 分级**~~ —— ✅ 已完成（§4.2）。
 3. **评测集**——query rewrite / HyDE / sufficiency 都是 LLM 门控项，**没有评测集就没有理由
-   开启它们**。所以下一步不是继续抄算法，而是先能测量。见 `VERSION_EVOLUTION.md §10`。
+   开启它们**。所以下一步不是继续抄算法，而是先能测量。见 `VERSION_EVOLUTION.md §11`。
 4. **per-plugin 代际**（§4.1）——当前规模不需要，插件变多再说。
 5. **结构化委派决策元数据**（§6.2）——只有在要做 trace/评测时才有价值。
 
@@ -256,8 +258,9 @@ prompt 里显式保留了安全网："与上面某条**语义相反**（例如�
 ## 7. 审计证据
 
 - Python：`/home/xiang/.conda/envs/xingshu-vllm/bin/python` 3.12。
-- `unittest discover -s tests`：**163 项通过**（本轮新增：context policy 8、snapshot 13、
-  workspace 6、fail-loud 5、mcp admin 10、retrieval 21；MCP 由 2 项扩展到 16 项）。
+- `unittest discover -s tests`：**共 186 项，183 项通过、3 项条件跳过**。除原有 context policy、snapshot、
+  workspace、fail-loud、MCP、retrieval 回归外，新增 prompt assembly/cache、always-on skill、
+  Provider preflight、语义 retry trace、post-reply budget 与 TUI state 合同。
 - 关键回归 `test_turn_pins_snapshot_tools_across_mid_turn_hot_reload`：turn 中途换代后本轮仍
   调用到旧代际工具并拿到旧代际返回值，全局 current 已是新代际，旧代际在租约释放后 drained。
 - 真实 stdio MCP server 端到端：声明 → 连接 → 发布 generation → `/tools` 列出
@@ -272,5 +275,8 @@ prompt 里显式保留了安全网："与上面某条**语义相反**（例如�
   - 记忆：6 轮对话触发后台 consolidation，LLM 抽出 9 条带类型记录；RRF 对
     `scripts/rollout.sh` / `E4011` / `PostgreSQL` 精确召回正确。
   - context policy：128k 上下文派生出 `memory_window=20` / `max_tokens=4096`，与 1M 基准等比例一致。
+  - context 全链路：1M DeepSeek 配置下估算 `3106/891808` input tokens，Provider 报告
+    `3195 prompt + 15 completion = 3210 total`，回复后 baseline 为 22 history tokens；session 中
+    `selected_plan=full`、section breakdown、cache/usage 与 retry attempts 均可回查。
   - **发现缺陷**：见 §6.4。
 - `git ls-files` 无密钥形状字符串；`Reference/` 由 `.gitignore` 排除。

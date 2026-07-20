@@ -13,6 +13,7 @@
 ```text
 Channel -> InboundMessage -> MessageBus -> AgentLoop
         -> memory retrieval -> lifecycle phases -> prompt render
+        -> named PromptBlocks + dynamic Context Frame + provider preflight
         -> streaming LLM tool loop -> hooks/tools/MCP/plugins
         -> session commit -> OutboundMessage -> Channel
         -> background memory consolidation
@@ -40,6 +41,9 @@ Channel -> InboundMessage -> MessageBus -> AgentLoop
 - [x] 重复工具调用保护和最大迭代阶段总结。
 - [x] 空回复重试、模型超时、429/5xx 重试。
 - [x] context length/content safety 分级裁剪重试。
+- [x] 具名 PromptBlock、稳定 system/dynamic Context Frame 分离与静态 block cache。
+- [x] system/messages/tool schema/image 的统一输入估算与 Provider 请求前预检。
+- [x] `ContextPrepared` / `ContextBudgetUpdated`、section breakdown、retry trace 和实际模型 usage。
 - [x] deferred tools、`tool_search` 解锁和 session LRU。
 
 ### Session 与记忆
@@ -47,6 +51,8 @@ Channel -> InboundMessage -> MessageBus -> AgentLoop
 - [x] JSON canonical session 存储和原子写入。
 - [x] 哈希安全文件名和旧文件迁移。
 - [x] tool/reasoning history 无损重建。
+- [x] 历史从 `last_consolidated` 开始；过量未归档消息先强制 consolidation，失败时明确阻断。
+- [x] 工具长结果头尾保留、总行数和省略量标记；历史裁剪保持 user/tool-call 边界。
 - [x] SQLite FTS5 trigram 消息索引与 JSON 回源。
 - [x] session list/search/fetch/delete。
 - [x] Markdown 长期记忆和类型化 `items.json`。
@@ -57,6 +63,7 @@ Channel -> InboundMessage -> MessageBus -> AgentLoop
 - [x] memory type/time filter。
 - [x] 回复后异步 LLM consolidation；同 session 下一轮等待收口。
 - [x] MEMORY/SELF/RECENT_CONTEXT/HISTORY/PENDING 文件初始化。
+- [x] 完整 `RetrievalRequest` 携带 history、session/channel metadata 与时间。
 
 ### 工具、MCP、插件与子任务
 
@@ -79,7 +86,7 @@ Channel -> InboundMessage -> MessageBus -> AgentLoop
 
 ### Channels
 
-- [x] CLI REPL。
+- [x] Textual TUI + streaming Plain CLI；默认新建空 Session，`/sessions` 恢复历史。
 - [x] Web chat、并发 request correlation 和 unsolicited event long poll。
 - [x] Web session/memory 管理 API。
 - [x] Telegram long polling、allow list、附件、分片、429 retry。
@@ -91,10 +98,11 @@ Channel -> InboundMessage -> MessageBus -> AgentLoop
 ### 质量与交付
 
 - [x] `Reference/`、本地配置、运行数据和密钥进入 `.gitignore`。
-- [x] 使用现有 conda 环境运行 compileall 和 83 项自动化测试。
+- [x] 使用现有 conda 环境运行 compileall 和 186 项自动化测试（183 通过、3 项条件跳过）。
 - [x] 使用 `deepseek-v4-flash` 在线验证普通响应。
 - [x] 在线验证 SSE + write/read tool loop + session tool chain。
 - [x] 在线验证后台 LLM memory consolidation。
+- [x] 在线验证 context 预检估算、Provider usage 与下一轮 baseline trace。
 - [x] 中文 README、差异审计和项目报告重写。
 - [ ] 可选增强：A2A Peer Agent 冷启动/轮询。
 - [ ] 可选增强：独立 React Dashboard 和 WebSocket transport。
