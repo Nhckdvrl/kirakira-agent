@@ -2,8 +2,10 @@ import unittest
 
 from kirakira_agent.context_policy import (
     build_runtime_context_budget,
+    estimate_context_tokens,
     recommended_context_settings,
 )
+from kirakira_agent.schema import ToolSpec
 
 
 class RecommendedContextSettingsTest(unittest.TestCase):
@@ -50,6 +52,26 @@ class RuntimeContextBudgetTest(unittest.TestCase):
     def test_rejects_non_positive_output(self) -> None:
         with self.assertRaises(ValueError):
             build_runtime_context_budget(10_000, 0.9, 0)
+
+    def test_estimate_includes_tool_schemas_and_images(self) -> None:
+        base = estimate_context_tokens([{"role": "user", "content": "hello"}], [])
+        with_tool = estimate_context_tokens(
+            [{"role": "user", "content": "hello"}],
+            [ToolSpec("search", "x" * 300, {"type": "object"})],
+        )
+        with_image = estimate_context_tokens(
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image_url", "image_url": {"url": "x", "detail": "low"}}
+                    ],
+                }
+            ],
+            [],
+        )
+        self.assertGreater(with_tool, base)
+        self.assertGreaterEqual(with_image, 1024)
 
 
 if __name__ == "__main__":

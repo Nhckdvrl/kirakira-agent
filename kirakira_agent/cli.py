@@ -56,6 +56,18 @@ def build_agent(workdir: Path) -> Agent:
         thinking_enabled=config_value(
             app_config, "llm", "main", "enable_thinking"
         ),
+        context_window=int(
+            config_value(app_config, "llm", "main", "context_window", default=0)
+        ),
+        effective_context_percent=float(
+            config_value(
+                app_config,
+                "agent",
+                "context",
+                "effective_context_percent",
+                default=0.9,
+            )
+        ),
     )
     registry = build_default_registry(workdir)
     skills = SkillLoader(workdir / "skills")
@@ -207,6 +219,18 @@ async def build_runtime(
         thinking_enabled=config_value(
             app_config, "llm", "main", "enable_thinking"
         ),
+        context_window=int(
+            config_value(app_config, "llm", "main", "context_window", default=0)
+        ),
+        effective_context_percent=float(
+            config_value(
+                app_config,
+                "agent",
+                "context",
+                "effective_context_percent",
+                default=0.9,
+            )
+        ),
     )
     bus = MessageBus()
     event_bus = EventBus()
@@ -262,6 +286,18 @@ async def build_runtime(
     )
     config = RuntimeConfig(
         model=model,
+        context_window=int(
+            config_value(app_config, "llm", "main", "context_window", default=0)
+        ),
+        effective_context_percent=float(
+            config_value(
+                app_config,
+                "agent",
+                "context",
+                "effective_context_percent",
+                default=0.9,
+            )
+        ),
         max_iterations=int(
             os.getenv(
                 "AGENT_MAX_ITERATIONS",

@@ -9,6 +9,8 @@ from typing import Any
 from uuid import uuid4
 
 from kirakira_agent.lifecycle import (
+    ContextBudgetUpdated,
+    ContextPrepared,
     StreamDeltaReady,
     ToolCallCompleted,
     ToolCallStarted,
@@ -57,6 +59,13 @@ class TurnViewState:
     final_thinking: str = ""
     duration_seconds: float = 0.0
     error: str = ""
+    context_plan: str = ""
+    context_estimated_tokens: int = 0
+    context_input_budget: int = 0
+    context_history_messages: int = 0
+    context_sections: list[dict[str, Any]] = field(default_factory=list)
+    next_history_tokens: int = 0
+    model_usage: dict[str, Any] = field(default_factory=dict)
 
     def reset(self, content: str = "") -> None:
         self.active = True
@@ -69,6 +78,13 @@ class TurnViewState:
         self.final_thinking = ""
         self.duration_seconds = 0.0
         self.error = ""
+        self.context_plan = ""
+        self.context_estimated_tokens = 0
+        self.context_input_budget = 0
+        self.context_history_messages = 0
+        self.context_sections.clear()
+        self.next_history_tokens = 0
+        self.model_usage.clear()
 
     def apply(self, event: object) -> bool:
         if getattr(event, "session_key", self.session_key) != self.session_key:
@@ -80,6 +96,17 @@ class TurnViewState:
             step = self.steps.setdefault(event.iteration, StepView(event.iteration))
             step.content += event.content_delta
             step.reasoning += event.reasoning_delta
+            return True
+        if isinstance(event, ContextPrepared):
+            self.context_plan = event.plan_name
+            self.context_estimated_tokens = event.estimated_tokens
+            self.context_input_budget = event.input_budget
+            self.context_history_messages = event.history_messages
+            self.context_sections = [dict(item) for item in event.sections]
+            return True
+        if isinstance(event, ContextBudgetUpdated):
+            self.next_history_tokens = event.history_tokens_estimate
+            self.model_usage = dict(event.model_usage)
             return True
         if isinstance(event, ToolCallStarted):
             iteration = int(event.iteration)
@@ -142,6 +169,21 @@ class TurnViewState:
 
     def process_text(self, *, result_limit: int = 240) -> str:
         rows: list[str] = []
+        if self.context_plan:
+            budget = (
+                "/%s" % self._compact_number(self.context_input_budget)
+                if self.context_input_budget
+                else ""
+            )
+            rows.append(
+                "  context   %s · %s%s tokens · %d history"
+                % (
+                    self.context_plan,
+                    self._compact_number(self.context_estimated_tokens),
+                    budget,
+                    self.context_history_messages,
+                )
+            )
         latest = self.latest_iteration
         for iteration in sorted(self.steps):
             step = self.steps[iteration]
@@ -166,6 +208,14 @@ class TurnViewState:
         if self.status == "error" and self.error:
             rows.append("  ✗ " + self._one_line(self.error, 400))
         return "\n".join(rows)
+
+    @staticmethod
+    def _compact_number(value: int) -> str:
+        if value >= 1_000_000:
+            return "%.1fm" % (value / 1_000_000)
+        if value >= 1_000:
+            return "%.1fk" % (value / 1_000)
+        return str(value)
 
     @staticmethod
     def _one_line(value: str, limit: int) -> str:

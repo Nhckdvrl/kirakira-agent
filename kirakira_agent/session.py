@@ -33,8 +33,18 @@ def _truncate_tool_result(value: object, limit: int = 10000) -> str:
     text = value if isinstance(value, str) else str(value)
     if len(text) <= limit:
         return text
-    keep = max(0, limit - 40)
-    return text[:keep] + "\n... (%d characters truncated)" % (len(text) - keep)
+    omitted = max(0, len(text) - limit)
+    while True:
+        marker = "…%d chars truncated…" % omitted
+        keep = max(0, limit - len(marker))
+        actual = len(text) - keep
+        if actual == omitted:
+            break
+        omitted = actual
+    head = keep // 2
+    tail = keep - head
+    clipped = text[:head] + marker + (text[-tail:] if tail else "")
+    return "Total output lines: %d\n\n%s" % (len(text.splitlines()), clipped)
 
 
 @dataclass
@@ -65,8 +75,23 @@ class Session:
         self.messages.append(msg)
         self.updated_at = datetime.now().astimezone().isoformat()
 
-    def get_history(self, max_messages: int = 80) -> List[JsonDict]:
-        selected = self.messages[-max_messages:] if max_messages > 0 else []
+    def get_history(
+        self,
+        max_messages: int = 80,
+        *,
+        start_index: int | None = None,
+    ) -> List[JsonDict]:
+        if max_messages <= 0:
+            selected = []
+        elif start_index is not None:
+            start = max(0, min(int(start_index), len(self.messages)))
+            if start >= len(self.messages):
+                return []
+            while start > 0 and self.messages[start].get("role") != "user":
+                start -= 1
+            selected = self.messages[start:]
+        else:
+            selected = self.messages[-max_messages:]
         first_user = next(
             (index for index, msg in enumerate(selected) if msg.get("role") == "user"),
             None,

@@ -4,7 +4,7 @@
 
 - 简历写自己解决的问题和做出的工程取舍，不写“参考某某项目实现”。
 - 只写代码中已经存在、自己能够沿调用链讲清楚的能力。
-- LangSmith、RRF、BM25、HyDE、FastAPI、PostgreSQL、pgvector、Redis 和压测在落地前只能写进后续规划。
+- LangSmith、BM25、HyDE、FastAPI、PostgreSQL、pgvector、Redis 和压测在落地前只能写进后续规划；RRF 已落地并有回归，必须和尚未实现的 BM25/HyDE 分开描述。
 - 每条项目亮点都要能回答：为什么做、调用链是什么、遇到什么 Bug、怎么测试、有什么 tradeoff。
 - 不用“大幅提升”“显著降低”等无法证明的词；有 baseline 后再写具体百分比。
 
@@ -22,16 +22,17 @@
 - **Function Calling 与工具系统：** 抽象 ToolRegistry/ToolExecutor，统一工具 schema 暴露、参数校验、异步执行、超时和错误语义；支持 pre/post/error Hook、deferred tool discovery 与 session LRU，接入 stdio MCP 远端工具，并对文件路径、Shell 进程组及 `web_fetch` SSRF 建立执行边界。
 - **热重载与代际快照：** 将 MCP 从命令式注册重构为声明式热重载（内容 revision 驱动、整批候选语义、失败保持旧代际服务）；引入 RuntimeSnapshot + 每 turn 租约，解决"turn 执行期间工具被换掉"的竞态——换代只切 current 指针，在途 turn 继续使用其锁定的代际，旧 MCP 进程等租约计数归零后才断开。
 - **会话与长期记忆：** 使用原子 JSON 保存 session 和完整 reasoning/tool history，以 SQLite FTS5 建立可重建的消息索引；设计 typed memory、source evidence、强化/遗忘和 session 删除撤销，结合中文词法与可选 embedding 混合召回，并在回复后异步 consolidation，避免记忆抽取阻塞用户响应。
-- **扩展与可靠性：** 实现插件程序化能力声明、config/KV、生命周期模块、工具 Hook、inline/background subagent 和显式调度；针对 Web 并发串回复、DeepSeek reasoning 回放、session 文件名碰撞、MCP/插件半加载、重定向 SSRF 和后台任务关机竞态补充回归测试；建立 fail-loud 边界（向量检索可降级、向量写入必须报错），当前 132 项自动化测试通过。
+- **上下文治理：** 将 Prompt 拆为具名 block，分离稳定 system 与逐轮 Context Frame；统一预算 system/messages/tool schema/image，并在 Provider 请求前预检，按语义 section 逐级重渲染；持久化 retry plan、section/cache、模型实际 usage 和下一轮 baseline，避免长对话静默丢历史。
+- **扩展与可靠性：** 实现插件程序化能力声明、config/KV、生命周期模块、工具 Hook、inline/background subagent 和显式调度；针对 Web 并发串回复、DeepSeek reasoning 回放、session 文件名碰撞、MCP/插件半加载、重定向 SSRF 和后台任务关机竞态补充回归测试；建立 fail-loud 边界（向量检索可降级、向量写入必须报错），当前自动化测试共 186 项（183 通过、3 项按环境条件跳过）。
 
 ### 2.2 一页简历压缩版
 
 **Kirakira Agent｜长期对话 Agent Runtime**
 
 - 从 Function Calling MVP 搭建 `MessageBus -> AgentLoop -> ToolExecutor` 异步执行链，实现同会话串行、跨会话并发、SSE 流式事件、turn 中断和完整工具链持久化。
-- 设计 ToolRegistry/ToolExecutor，支持 schema 校验、Hook、延迟工具发现、动态 MCP 注册及文件/Shell/网络安全边界，控制工具 schema 膨胀并在产生副作用前拦截错误参数。
-- 构建 Session + 长期记忆系统，使用 JSON/SQLite FTS5 管理对话与历史回源，结合词法和可选向量召回、source evidence、遗忘撤销和异步 consolidation 支持长期对话。
-- 接入 Web、Telegram、QQ/OneBot、插件与后台子 Agent，修复并回归验证并发串回复、reasoning 协议、SSRF、资源泄漏等问题；83 项测试通过，并完成 DeepSeek 在线工具循环与记忆抽取验证。
+- 设计 ToolRegistry/ToolExecutor，支持 schema 校验、Hook、延迟工具发现、声明式 MCP 热重载及文件/Shell/网络安全边界，控制工具 schema 膨胀并在产生副作用前拦截错误参数。
+- 构建 Session + 长期记忆系统，使用 JSON/SQLite FTS5 管理对话与历史回源，结合 lexical/vector 多路召回、RRF、热度半衰、source evidence、遗忘撤销和异步 consolidation 支持长期对话。
+- 实现具名 PromptBlock、Context Frame、Provider 预算预检和可解释降级 trace；接入 Web、Telegram、QQ/OneBot、插件与后台子 Agent，自动化测试共 186 项（183 通过、3 跳过），并完成 DeepSeek 在线工具循环、记忆抽取与 context usage 验证。
 
 ### 2.3 为什么这样写
 
@@ -49,7 +50,7 @@
 - FastAPI 分层 API 和 Worker 消费链路。
 - PostgreSQL 多租户表结构。
 - Redis 分布式锁、队列和限流。
-- pgvector、BM25、RRF、HyDE。
+- pgvector、BM25、HyDE、query rewrite（RRF 已完成）。
 - LangSmith trace/eval 回归。
 - 内容审查和后台管理系统。
 - 100–200 用户并发压测。
@@ -94,6 +95,14 @@ Registry 负责目录、schema 和 dispatch；Executor 负责一次调用的策�
 
 核心工具 always-on，其他工具 deferred。模型先调用 `tool_search`，选中后才在下一轮暴露 schema；session 只保留有限 LRU。MCP 远端工具也进入同一套 deferred registry。
 
+### 问：长上下文怎么管理，为什么不是直接截断？
+
+Prompt 先拆成稳定 system block 与动态 Context Frame，预算同时覆盖消息、工具 schema 和图片。
+超限时每次重新经过 prompt hooks，并按 `skills catalog → recent context → long-term memory →
+retrieved memory → history` 降级；历史只从 user boundary 切。Provider 在网络请求前做最终预检，
+每次 attempt、section/cache、实际 token usage 和下一轮 baseline 都写进 session trace。未归档历史过多时
+先强制 consolidation，游标不前进就明确阻断，不能静默遗忘。
+
 ### 问：MCP 工具为什么不单独执行？
 
 MCP 只是远端工具协议。`tools/list` 转成 ToolSpec，`tools/call` 包成 handler，再注册进统一 Registry，这样 MCP 工具同样经过可见性、Hook、schema、timeout 和 lifecycle。
@@ -118,11 +127,16 @@ MCP 只是远端工具协议。`tools/list` 转成 ToolSpec，`tools/call` 包�
 
 ### 问：当前检索是什么？
 
-必须如实回答：当前是中文 bigram/英文 token/substring 词法评分，加可选 embedding cosine，配置 embedding 时以固定权重混合，并支持 type/time filter。还没有 BM25、RRF、HyDE 和 query rewrite。
+必须如实回答：当前用中文 bigram/英文 token/substring 形成 lexical lane，可选 embedding cosine
+形成 vector lane；两路先各自准入和排序，再用 RRF（k=60，lexical 权重 0.5）融合，并叠加
+reinforcement + 14 天半衰的 hotness，最后受 type/time 与 1200 字符注入预算约束。还没有 BM25、
+HyDE 和 query rewrite。
 
-### 问：为什么未来考虑 RRF？
+### 问：为什么用 RRF？
 
-cosine 与 BM25/keyword 原始分数尺度不同，直接加权需要反复标定。RRF 只依赖各 lane 排名，更适合融合 vector、keyword 和辅助 query。但是否优于当前方案必须通过固定数据集评测。
+cosine 与 keyword overlap 的原始分数尺度不同，直接加权没有统一含义。RRF 只依赖各 lane 内部名次，
+不要求跨 lane 分数可比；同时每条 lane 先做准入，避免无关记录因为“排在末尾”仍被塞满 limit。
+当前实现已有代码级回归；是否增加 BM25、query rewrite 或 HyDE 仍必须通过固定数据集评测。
 
 ## 6. 高频追问：并发和一致性
 
@@ -189,7 +203,8 @@ cosine 与 BM25/keyword 原始分数尺度不同，直接加权需要反复标�
 
 **混合记忆检索：** 将长期记忆检索拆分为 vector、BM25/keyword 与 auxiliary query 多路召回，使用 RRF 融合不同分数空间，并结合 type/time/source/confidence rerank；通过固定记忆数据集评估 query rewrite/HyDE 对召回率和噪声注入的影响。
 
-只有实现 BM25/RRF 和评测后再使用这条。
+只有实现 BM25、auxiliary query/rerank 并完成固定数据集评测后再使用这条；其中 RRF 已经完成，
+不能把整条未来方案笼统写成“已实现”。
 
 ### 8.3 后端化完成后可增加的两条
 
@@ -201,6 +216,6 @@ cosine 与 BM25/keyword 原始分数尺度不同，直接加权需要反复标�
 
 ## 9. 项目介绍口述版
 
-“这个项目最开始只是一个 Function Calling MVP，模型返回工具名和参数，我执行后把结果回填。工具一多，我先解决参数校验、异常、超时和上下文串线，把执行拆成 ToolRegistry 和 ToolExecutor，再加入 Hook、延迟工具发现和 MCP。之后为了支持长期对话，我把原始 Session 和长期记忆拆开：Session 保存完整 tool history，长期记忆在回复后异步抽取，并保留 source 以支持遗忘和撤销。多渠道接入后，我用 MessageBus 和 session lock 保证同会话串行、跨会话并发，也处理了 streaming、取消和优雅关机。现在下一步不是继续堆工具，而是用 LangSmith/eval 建立工具选择与记忆质量的回归基线，再决定是否引入 BM25、RRF 和 HyDE。”
+“这个项目最开始只是一个 Function Calling MVP，模型返回工具名和参数，我执行后把结果回填。工具一多，我先解决参数校验、异常、超时和上下文串线，把执行拆成 ToolRegistry 和 ToolExecutor，再加入 Hook、延迟工具发现和 MCP。之后为了支持长期对话，我把原始 Session 和长期记忆拆开：Session 保存完整 tool history，长期记忆在回复后异步抽取，并保留 source 以支持遗忘和撤销；检索用 lexical/vector 多路召回与 RRF 融合。长上下文再拆为具名 PromptBlock，并用 Provider 预检、语义降级和 trace 避免静默截断。多渠道接入后，我用 MessageBus 和 session lock 保证同会话串行、跨 session 并发，也处理了 streaming、取消和优雅关机。下一步是用 LangSmith/eval 建立工具、记忆和 context budget 的回归基线，再评估 BM25、query rewrite 和 HyDE。”
 
 这段口述能自然引出工具系统、记忆、并发、Bug 和下一版评测，不需要提任何参考项目。

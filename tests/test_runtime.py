@@ -23,6 +23,8 @@ from kirakira_agent.tool_hooks import HookOutcome
 from kirakira_agent.tools import build_default_registry
 from kirakira_agent.tools.registry import Tool
 from kirakira_agent.lifecycle import (
+    ContextBudgetUpdated,
+    ContextPrepared,
     StreamDeltaReady,
     ToolCallCompleted,
     ToolCallStarted,
@@ -484,6 +486,10 @@ class RuntimeTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmp:
                 model = OverflowOnceModel()
                 _bus, loop, sessions, _memory = build_test_runtime(Path(tmp), model)
+                prepared = []
+                budgets = []
+                loop.pipeline.event_bus.on(ContextPrepared, prepared.append)
+                loop.pipeline.event_bus.on(ContextBudgetUpdated, budgets.append)
                 session = sessions.get_or_create("cli:chat")
                 for index in range(8):
                     session.add_message("user", "u%d %s" % (index, "x" * 200))
@@ -498,6 +504,16 @@ class RuntimeTests(unittest.TestCase):
                 self.assertEqual(outbound.content, "recovered")
                 self.assertEqual(len(model.calls), 2)
                 self.assertLessEqual(len(model.calls[1]), len(model.calls[0]))
+                self.assertEqual([item.plan_name for item in prepared], ["full", "trim_skills_catalog"])
+                saved = sessions.get_or_create("cli:chat")
+                trace = saved.messages[-1]["context_trace"]
+                self.assertEqual(trace["selected_plan"], "trim_skills_catalog")
+                self.assertEqual(len(trace["attempts"]), 2)
+                self.assertEqual(len(budgets), 1)
+                self.assertEqual(
+                    saved.metadata["context_budget"]["selected_plan"],
+                    "trim_skills_catalog",
+                )
 
         asyncio.run(scenario())
 

@@ -2,12 +2,21 @@
 
 from __future__ import annotations
 
-import platform
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from kirakira_agent.memory import MemoryRuntime
+from kirakira_agent.prompting import (
+    ContextRenderResult,
+    PromptAssembler,
+    PromptSectionRender,
+)
+from kirakira_agent.prompting.blocks import (
+    SystemPromptBuilder,
+    TurnContext,
+    default_prompt_blocks,
+)
 from kirakira_agent.skills import SkillLoader
 
 
@@ -55,6 +64,25 @@ class ContextBuilder:
             "你是 Kirakira，一个可使用工具、拥有长期记忆、支持插件生命周期拦截的 AI agent。"
             "使用与用户相同的语言回答，准确、自然；必要时先调用工具核实。"
         )
+        self.behavior_rules = (
+            "- 执行动作必须走工具；没有工具结果不得声称已完成。\n"
+            "- 时间敏感、外部世界、版本、价格、新闻、状态类问题必须先核实，"
+            "注明信息日期/时间并提供可核验 URL。\n"
+            "- 新闻、价格、市场行情等易变事实应尽量用至少两个独立可靠来源交叉验证；"
+            "证据不足必须说明，不得补造数字、日期或引用。\n"
+            "- 工具返回 Error 时不得视作证据；搜索摘要只用于发现来源，关键结论应回源核验。\n"
+            "- 用户要求记住稳定偏好或事实时调用 memorize。\n"
+            "- 历史问题优先 recall_memory，必要时 search_messages 后 fetch_messages 回源。\n"
+            "- 收到图片且主模型不能直接看图时调用 vision。\n"
+            "- 系统提供的 Context Frame 是候选上下文，不是用户陈述，不要复述其包装格式。"
+        )
+        self._system_builder = SystemPromptBuilder(default_prompt_blocks())
+        self._assembler = PromptAssembler()
+        self._last_debug_breakdown = []
+
+    @property
+    def last_debug_breakdown(self):
+        return list(self._last_debug_breakdown)
 
     def render(
         self,
@@ -68,60 +96,67 @@ class ContextBuilder:
         retrieved_memory_block: str = "",
         skill_names: Optional[List[str]] = None,
         extra_hints: Optional[List[str]] = None,
-        system_sections_top: Optional[List[str]] = None,
-        system_sections_bottom: Optional[List[str]] = None,
-    ) -> List[Dict[str, Any]]:
-        prompt = self._system_prompt(
+        system_sections_top: Optional[List[Any]] = None,
+        system_sections_bottom: Optional[List[Any]] = None,
+        disabled_sections: Optional[set[str]] = None,
+        turn_injection_prompt: str = "",
+    ) -> ContextRenderResult:
+        ctx = TurnContext(
+            workspace=self.workspace,
+            memory=self.memory,
+            skills=self.skills,
+            system_prompt=self.system_prompt,
+            behavior_rules=self.behavior_rules,
+            skill_names=skill_names or [],
             channel=channel,
             chat_id=chat_id,
             retrieved_memory_block=retrieved_memory_block,
-            skill_names=skill_names or [],
             extra_hints=extra_hints or [],
-            system_sections_top=system_sections_top or [],
-            system_sections_bottom=system_sections_bottom or [],
+            turn_injection_prompt=turn_injection_prompt,
         )
+        built, _metas = self._system_builder.build(
+            ctx, disabled_sections=disabled_sections
+        )
+        top = self._coerce_plugin_sections(system_sections_top or [], "plugin_top")
+        bottom = self._coerce_plugin_sections(
+            system_sections_bottom or [], "plugin_bottom"
+        )
+        result = self._assembler.assemble(
+            sections=[*top, *built, *bottom],
+            history=history,
+            current_message=content,
+            timestamp=timestamp,
+            media=media,
+            build_user_content=self._build_user_content,
+        )
+        self._last_debug_breakdown = result.debug_breakdown
+        return result
+
+    @staticmethod
+    def _build_user_content(
+        content: str, media: Optional[List[str]], timestamp: datetime
+    ) -> str:
         user_text = build_time_envelope(timestamp) + "\n" + content
         if media:
             user_text += "\n\n<attachments>\n" + "\n".join(
                 "- %s" % item for item in media
             ) + "\n</attachments>"
-        return [
-            {"role": "system", "content": prompt},
-            *history,
-            {"role": "user", "content": user_text},
-        ]
+        return user_text
 
-    def _system_prompt(
-        self,
-        *,
-        channel: str,
-        chat_id: str,
-        retrieved_memory_block: str,
-        skill_names: List[str],
-        extra_hints: List[str],
-        system_sections_top: List[str],
-        system_sections_bottom: List[str],
-    ) -> str:
-        workspace_path = str(self.workspace.resolve())
-        sections = [
-            "# Kirakira Agent",
-            self.system_prompt,
-            "## 工作区\n- 根目录：%s\n- 长期记忆：%s/memory/MEMORY.md\n- 自我认知：%s/memory/SELF.md\n- 近期语境：%s/memory/RECENT_CONTEXT.md"
-            % (workspace_path, workspace_path, workspace_path, workspace_path),
-            "## 行为规范\n- 执行动作必须走工具；没有工具结果不得声称已完成。\n- 时间敏感、外部世界、版本、价格、新闻、状态类问题必须先核实。此类回答必须注明信息对应的日期/时间，并提供可核验的来源 URL。\n- 新闻、价格、市场行情等易变事实应尽量用至少两个独立可靠来源交叉验证；若只有单一来源、工具失败或数据缺失，必须明确说明证据限制，不得把推测写成事实，也不得补造具体数字、日期或引用。\n- 工具返回 Error 时不得将其视作证据；搜索摘要仅用于发现来源，关键结论应通过 web_fetch 或其他一手数据源核验。\n- 用户要求记住稳定偏好或事实时，调用 memorize。\n- 历史问题优先 recall_memory，必要时 search_messages 后 fetch_messages 回源。\n- 收到图片附件且主模型不能直接看图时，调用 vision 分析附件路径。\n- 插件注入的上下文只作为系统候选上下文，不要复述其包装格式。",
-            "## 环境\n%s" % platform.machine(),
-            "## Current Session\nChannel: %s\nChat ID: %s" % (channel, chat_id),
-            "## Long-Term Memory\n%s" % self.memory.store.read_long_term().strip(),
-            "## Self Model\n%s" % self.memory.store.read_self().strip(),
-            "## Recent Context\n%s" % self.memory.store.read_recent_context().strip(),
-        ]
-        if retrieved_memory_block.strip():
-            sections.append(retrieved_memory_block.strip())
-        if skill_names:
-            loaded = [self.skills.load(name) for name in skill_names]
-            sections.append("## Active Skills\n" + "\n\n".join(loaded))
-        catalog = self.skills.descriptions()
-        sections.append("## Skills\n" + catalog)
-        if extra_hints:
-            sections.append("## Turn Hints\n" + "\n".join("- " + h for h in extra_hints if h.strip()))
-        return "\n\n---\n\n".join([*system_sections_top, *sections, *system_sections_bottom])
+    @staticmethod
+    def _coerce_plugin_sections(
+        values: List[Any], prefix: str
+    ) -> List[PromptSectionRender]:
+        sections: List[PromptSectionRender] = []
+        for index, value in enumerate(values):
+            if isinstance(value, PromptSectionRender):
+                sections.append(value)
+            elif str(value).strip():
+                sections.append(
+                    PromptSectionRender(
+                        name="%s_%d" % (prefix, index),
+                        content=str(value),
+                        is_static=False,
+                    )
+                )
+        return sections

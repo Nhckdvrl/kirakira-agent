@@ -24,10 +24,21 @@ class SkillLoader:
                 "description": meta.get("description", "-"),
                 "body": body,
                 "path": str(path),
+                "always": str(
+                    meta.get("always", meta.get("always_on", "false"))
+                ).lower()
+                in {"1", "true", "yes", "on"},
             }
 
     def names(self) -> List[str]:
         return sorted(self._skills.keys())
+
+    def always_names(self) -> List[str]:
+        """Return skills whose frontmatter opts into every context frame."""
+
+        return sorted(
+            name for name, skill in self._skills.items() if skill.get("always")
+        )
 
     def descriptions(self) -> str:
         if not self._skills:

@@ -31,7 +31,11 @@ Web / Telegram / QQ / CLI
      +--------+---------+
               |
               v
-       ContextBuilder
+ Context store + retrieval request
+              |
+              v
+ PromptBlock -> PromptAssembler
+ stable system + dynamic Context Frame
               |
               v
  DefaultReasoner streaming loop
@@ -61,18 +65,22 @@ kirakira_agent/
   runtime.py                DefaultReasoner、Pipeline、AgentLoop、CoreRuntime
   events.py                 Channel/Bus 消息合同
   bus.py                    队列、ChatLane、dispatch 和 graceful drain
-  lifecycle.py              7 phase ctx 与 turn/tool/stream 事件
+  lifecycle.py              7 phase ctx 与 turn/tool/stream/context 事件
   event_bus.py              ordered interception 和 fanout observer
   session.py                JSON session、FTS 索引、history reconstruction
   memory.py                 Markdown/typed memory 与后台 consolidation
   embeddings.py             OpenAI-compatible embedding client
-  context_builder.py        system prompt、时间、记忆、skills、附件
+  context_builder.py        PromptBlock 与消息装配入口
+  prompting/
+    blocks.py               具名 block、优先级、静态 section cache
+    assembler.py            stable system + dynamic Context Frame
+    budget.py               具名语义裁剪计划
   tool_hooks.py             pre/post/error 工具 hook executor
   plugins.py                插件加载、回滚、配置、KV 和管理工具
   plugin_manifest.py        插件发现与启停清单（manifest.toml）
   plugin_decorators.py      tool/hook/phase decorators
   snapshot.py               运行时能力代际快照、租约与组合工具视图
-  context_policy.py         按模型 context_window 派生历史窗口与输出预留
+  context_policy.py         派生窗口、输入预算与 provider-facing token 估算
   scheduler.py              用户显式定时消息
   subagent.py               inline/background 子 Agent
   channels/
@@ -126,9 +134,9 @@ Channel 不构建 prompt、不调用模型、不直接写 session，因此 Web�
 
 普通消息执行：
 
-1. 等待同 session 上一轮 memory consolidation。
-2. 从 Session 重建模型历史。
-3. 执行长期记忆召回。
+1. 等待同 session 上一轮 memory consolidation，并检查未归档区安全阈值。
+2. 从 `last_consolidated` 开始重建模型历史，tool result 过长时保留头尾与总行数。
+3. 用当前消息、完整候选历史、session/channel metadata 构造 `RetrievalRequest` 并执行长期记忆召回。
 4. 识别 `$skill-name`。
 5. 依次执行 EventBus handler 和插件 BeforeTurn modules。
 
@@ -138,18 +146,24 @@ Channel 不构建 prompt、不调用模型、不直接写 session，因此 Web�
 
 Pipeline 使用 `ContextVar` 绑定当前 `session_key/channel/chat_id/timestamp`。这个上下文只在当前 async task 中可见，避免并发 turn 的工具路由串线。
 
-`ContextBuilder` 组装：
+Prompt 不再由一个函数拼成长字符串，而是分为具名 block：
 
-- Agent 身份和行为规则。
-- workspace、memory、self、recent context 路径和内容。
-- 当前 channel/chat。
-- 带时区的今天/昨天/明天时间信封。
-- 检索得到的长期记忆。
-- skills catalog 和本轮激活的 skill 全文。
-- 插件 top/bottom sections 与 turn hints。
-- 用户附件路径和视觉工具提示。
+- stable system：`identity`、`behavior_rules`、`skills_catalog`、`self_model`、
+  `long_term_memory`、`session_context`；静态 block 按 workspace + 内容签名缓存。
+- dynamic Context Frame：`recent_context`、`active_skills`、`retrieved_memory`、
+  `turn_injection`、`plugin_hints`；它位于历史之后、当前用户消息之前，并明确标记为系统候选上下文，
+  不是用户陈述。
+- current user：带时区的今天/昨天/明天信封、用户原文和附件引用。
 
-`PromptRenderCtx` 允许插件在最终请求模型前修改 messages、system prompt、可见工具和 hints。
+Skill 正文由 `$skill-name` 显式激活；frontmatter 写 `always: true` 的 skill 每轮自动进入
+`active_skills`。`PromptRenderCtx` 允许插件增加具名 top/bottom section、禁用 section、追加
+turn injection/hint 或调整历史；每个 retry plan 都会重新执行 prompt hooks 并重新 render。
+
+输入预算统一计算 system、messages、工具 schema 和图片，公式为
+`floor(context_window × effective_context_percent) - max_tokens`。超限时按
+`skills_catalog → recent_context → long_term_memory → retrieved_memory → history 50% → history 0`
+重新渲染；历史切片始终回退到 user boundary。Runtime 发出 `ContextPrepared`，Provider 在真正发
+HTTP 请求前再预检一次，以覆盖 ReAct 中途解锁的新工具 schema。
 
 ## 5. LLM Tool Loop
 
@@ -157,12 +171,12 @@ Pipeline 使用 `ContextVar` 绑定当前 `session_key/channel/chat_id/timestamp
 
 每轮步骤：
 
-1. 根据 always-on、deferred LRU 和 disabled set 计算工具 schema。
+1. 根据 always-on、deferred LRU 和 disabled set 计算工具 schema，并发出带输入估算的 BeforeStep。
 2. 调用 OpenAI-compatible client；启用 stream 时解析 SSE。
 3. 将正文和 reasoning 增量发布为 `StreamDeltaReady`。
 4. 没有 tool call 时返回最终回复。
 5. 有 tool call 时写入 assistant tool-call message。
-6. 对每个 call 发出 BeforeStep、ToolCallStarted。
+6. 对每个 call 发出 ToolCallStarted。
 7. ToolExecutor 执行 pre hooks、真实工具、post hooks。
 8. 写入 tool result，发出 ToolCallCompleted、AfterStep。
 9. 下一 iteration 将完整 tool history 再交给模型。
@@ -178,6 +192,11 @@ Pipeline 使用 `ContextVar` 绑定当前 `session_key/channel/chat_id/timestamp
 - 达 iteration 上限时再请求一次无工具阶段总结。
 
 DeepSeek thinking 模式下，每个包含工具调用的 assistant message 都保存并回放 `reasoning_content`，符合其多轮工具协议。
+
+每次模型响应还会采集 provider `prompt_tokens/completion_tokens/total_tokens`。最终
+`context_trace` 保存所有 attempt、section chars/token estimate、cache hit、选中计划、ReAct
+request 数和实际 usage；commit 后再计算下一轮 history baseline，写入 session metadata 并发出
+`ContextBudgetUpdated`。
 
 ## 6. 工具体系
 
@@ -228,6 +247,7 @@ Session JSON 是事实源，保存：
 - interrupted/partial_reply。
 - channel/chat/username/last_sender/turn count/tool count。
 - `last_consolidated`。
+- assistant 消息级 `context_trace` 与 session 级 `context_budget`。
 
 文件名采用可读 key 加 hash，写入为原子 replace。`get_history()` 从 user boundary 开始，将持久化 tool chain 重新展开为 OpenAI-compatible assistant/tool message 序列。
 
@@ -250,12 +270,11 @@ memory/items.json         类型化记忆事实源
 
 召回流程：
 
-1. 中文 bigram、英文 token、substring 计算词法分。
-2. 若配置 embedding，则请求 `/embeddings` 并计算 cosine。
-3. 按 0.75 semantic + 0.25 lexical 混合。
-4. 叠加 exact substring 与 reinforcement 权重。
-5. 应用 type/since/until 过滤。
-6. 生成带 id/type/source 的 retrieved block 注入 prompt。
+1. 中文 bigram、英文 token、substring 形成 lexical lane；不匹配的记录不入选。
+2. 若配置 embedding，则请求 `/embeddings` 并以 cosine 阈值形成 vector lane；查询失败可降级到 lexical。
+3. 使用 RRF（`k=60`，lexical lane 权重 0.5）按各 lane 的名次融合，而不是相加尺度不可比的原始分。
+4. 用 reinforcement + 14 天半衰的 hotness 乘数调整融合结果。
+5. 应用 type/since/until 过滤，并在 1200 chars / 单行 180 chars 注入预算内生成 retrieved block。
 
 回复后先同步更新 RECENT_CONTEXT/HISTORY，再调度后台 LLM consolidation。达到窗口后，模型只抽取用户明确表达的稳定身份、偏好、流程和事件；assistant 建议不会作为用户事实。结果使用 JSON parser、source_ref 和 dedup 写入。
 
@@ -292,6 +311,15 @@ Scheduler 只处理用户明确创建的 fire time/interval，不执行自主判
 
 ## 11. Channel 细节
 
+### CLI / TUI
+
+交互终端默认启动项目自有的 Textual TUI；tmux 只用于保活，不参与界面实现。每次无 `--session`
+启动都会生成新的空白本地 Session，`/sessions` 用键盘选择并恢复历史，`/session <name>` 直接切换或
+创建命名 Session。TUI 和 `--plain` 共用 `TurnViewState`：stream delta 是 draft，
+`TurnFinished.outbound` 是唯一权威终态并替换 draft，避免把最终全文重复追加到流式前缀。
+
+完整界面与 Session 合同见 [_handbook/cli-and-sessions.md](../_handbook/cli-and-sessions.md)。
+
 ### Web
 
 标准库 ThreadingHTTPServer 提供 chat 页面、消息 API、`/events` 长轮询、interrupt，以及 session/memory 管理端点。每次请求携带 client request id，解决同 session 并发 HTTP 请求拿错回复的问题。
@@ -314,10 +342,14 @@ model = "deepseek-v4-flash"
 api_key = "${DEEPSEEK_API_KEY}"
 base_url = "https://api.deepseek.com/v1"
 enable_thinking = false
+context_window = 1000000
 
 [agent]
 max_iterations = 40
 max_tokens = 8192
+
+[agent.context]
+effective_context_percent = 0.9
 
 [channels.chat]
 enabled = true
@@ -345,7 +377,7 @@ Python 3.12
 自动化结果：
 
 - `compileall` 通过。
-- 83 项 unittest 全部通过。
+- unittest 共运行 186 项：183 项通过，3 项按可选环境条件跳过。
 - `git diff --check` 通过。
 - fake MCP stdio server 完成 initialize/list/call/error/disconnect 集成测试。
 - Web/Telegram/QQ 均有本地协议级集成测试。
@@ -359,6 +391,8 @@ DeepSeek 在线结果：
 5. session 保存 2 组 tool chain 和完整最终回复。
 6. 在线 consolidation 将 10 条消息推进至 `last_consolidated=6`。
 7. 生成 2 条可检索长期记忆，并写入 HISTORY。
+8. Context 在线冒烟：预检估算 3106 tokens、Provider 实际 3210 tokens、下一轮 history baseline
+   22 tokens；选中计划、section breakdown 与 usage 均持久化成功。
 
 API key 仅存在于单次测试进程环境，没有进入代码、配置、文档或 Git。
 
@@ -370,10 +404,12 @@ API key 仅存在于单次测试进程环境，没有进入代码、配置、文
 - 没有复制 React Dashboard 和 WebSocket transport；现有 Web API 已覆盖 chat/session/memory 管理。
 - 没有逐项移植 Akasha graph/default_memory 的 HyDE、query rewrite、procedure conflict 和 profile extraction；当前采用更易维护的 Markdown + typed records + optional hybrid retrieval。
 
-后续若继续演进，优先级应是：可观测性指标和 trace API、A2A peer adapter、语义去重与 query rewrite、独立 Dashboard，而不是继续扩大核心 loop 的职责。
+后续若继续演进，优先级应是：把现有 session context trace 暴露为查询/评测 API、建立固定评测集、
+A2A peer adapter、对 query rewrite/HyDE 做门控实验，以及独立 Dashboard，而不是继续扩大核心 loop
+的职责。语义去重已并入 consolidation 的既有模型调用，不再需要单独增加一次 LLM 往返。
 
 ## 15. 简历与面试材料
 
-简历不应描述项目参考或复刻了哪个仓库，而应说明从 MVP 开始解决了哪些 Agent 工程问题。当前版本推荐围绕四条主线组织：Agent Runtime 与并发、ToolRegistry/ToolExecutor、Session/长期记忆、真实 Bug 与回归测试。
+简历不应描述项目参考或复刻了哪个仓库，而应说明从 MVP 开始解决了哪些 Agent 工程问题。当前版本推荐围绕五条主线组织：Agent Runtime 与并发、ToolRegistry/ToolExecutor、Session/长期记忆、上下文治理与可观测性、真实 Bug 与回归测试。
 
 完整的简历文案、工具执行调用链、记忆/RAG 取舍、面试追问、Bug 闭环，以及 LangSmith 和 100–200 用户后端化完成后的升级写法，见 `docs/RESUME_INTERVIEW_GUIDE.md`。

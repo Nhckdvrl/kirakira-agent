@@ -8,6 +8,10 @@ import urllib.request
 from typing import Any, Callable, Dict, List, Optional
 
 from kirakira_agent.schema import JsonDict, ModelResponse, ToolCall, ToolSpec
+from kirakira_agent.context_policy import (
+    build_runtime_context_budget,
+    estimate_context_tokens,
+)
 from kirakira_agent.models.base import ContentSafetyError, ContextLengthError
 
 
@@ -20,13 +24,21 @@ class OpenAICompatibleClient:
         api_key: Optional[str] = None,
         timeout: int = 120,
         thinking_enabled: Optional[bool] = None,
+        context_window: int = 0,
+        effective_context_percent: float = 0.9,
     ) -> None:
         self.base_url = (base_url or os.getenv("OPENAI_COMPATIBLE_BASE_URL") or "").rstrip("/")
         self.api_key = api_key if api_key is not None else os.getenv("OPENAI_COMPATIBLE_API_KEY", "")
         self.timeout = timeout
         self.thinking_enabled = thinking_enabled
+        self.context_window = int(context_window)
+        self.effective_context_percent = float(effective_context_percent)
         if not self.base_url:
             raise ValueError("OPENAI_COMPATIBLE_BASE_URL is required")
+        if self.context_window < 0:
+            raise ValueError("context_window must not be negative")
+        if not 0 < self.effective_context_percent <= 1:
+            raise ValueError("effective_context_percent must be within (0, 1]")
 
     def complete(
         self,
@@ -112,6 +124,14 @@ class OpenAICompatibleClient:
             tool_calls=calls,
             stop_reason="tool_use" if calls or finish_reason == "tool_calls" else "end_turn",
             raw={"stream_chunks": chunks[-20:]},
+            usage=next(
+                (
+                    dict(chunk.get("usage") or {})
+                    for chunk in reversed(chunks)
+                    if chunk.get("usage")
+                ),
+                {},
+            ),
         )
 
     def parse_response(self, payload: JsonDict) -> ModelResponse:
@@ -152,6 +172,7 @@ class OpenAICompatibleClient:
             tool_calls=tool_calls,
             stop_reason=stop_reason,
             raw=payload,
+            usage=dict(payload.get("usage") or {}),
         )
 
     def _headers(self) -> Dict[str, str]:
@@ -168,6 +189,7 @@ class OpenAICompatibleClient:
         model: str,
         max_tokens: int,
     ) -> Dict[str, Any]:
+        self._enforce_context_budget(messages, tools, system, max_tokens)
         payload: Dict[str, Any] = {
             "model": model,
             "messages": self._to_openai_messages(messages, system),
@@ -180,6 +202,31 @@ class OpenAICompatibleClient:
             payload["tools"] = [self._to_openai_tool(tool) for tool in tools]
             payload["tool_choice"] = "auto"
         return payload
+
+    def _enforce_context_budget(
+        self,
+        messages: List[JsonDict],
+        tools: List[ToolSpec],
+        system: str,
+        max_tokens: int,
+    ) -> None:
+        if not self.context_window:
+            return
+        budget = build_runtime_context_budget(
+            self.context_window,
+            self.effective_context_percent,
+            max_tokens,
+        )
+        estimated = estimate_context_tokens(
+            messages,
+            tools,
+            system_prompt=system,
+        )
+        if estimated > budget.input_budget:
+            raise ContextLengthError(
+                "Model context estimate exceeds budget: estimated=%d budget=%d quality=approximate"
+                % (estimated, budget.input_budget)
+            )
 
     def _open(self, payload: Dict[str, Any]):
         request = urllib.request.Request(

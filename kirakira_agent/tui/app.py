@@ -18,6 +18,8 @@ from textual.widgets.option_list import Option
 
 from kirakira_agent.events import InboundMessage, OutboundMessage
 from kirakira_agent.lifecycle import (
+    ContextBudgetUpdated,
+    ContextPrepared,
     StreamDeltaReady,
     ToolCallCompleted,
     ToolCallStarted,
@@ -320,6 +322,8 @@ class KirakiraTui(App[None]):
         self.runtime.bus.subscribe_outbound("cli", self._on_outbound)
         self.runtime.event_bus.on(TurnStarted, self._on_turn_started)
         self.runtime.event_bus.on(StreamDeltaReady, self._on_stream_delta)
+        self.runtime.event_bus.on(ContextPrepared, self._on_context_prepared)
+        self.runtime.event_bus.on(ContextBudgetUpdated, self._on_context_budget_updated)
         self.runtime.event_bus.on(ToolCallStarted, self._on_tool_started)
         self.runtime.event_bus.on(ToolCallCompleted, self._on_tool_completed)
         self.runtime.event_bus.on(TurnFinished, self._on_turn_finished)
@@ -331,6 +335,8 @@ class KirakiraTui(App[None]):
         self.runtime.bus.unsubscribe_outbound("cli", self._on_outbound)
         self.runtime.event_bus.off(TurnStarted, self._on_turn_started)
         self.runtime.event_bus.off(StreamDeltaReady, self._on_stream_delta)
+        self.runtime.event_bus.off(ContextPrepared, self._on_context_prepared)
+        self.runtime.event_bus.off(ContextBudgetUpdated, self._on_context_budget_updated)
         self.runtime.event_bus.off(ToolCallStarted, self._on_tool_started)
         self.runtime.event_bus.off(ToolCallCompleted, self._on_tool_completed)
         self.runtime.event_bus.off(TurnFinished, self._on_turn_finished)
@@ -428,6 +434,18 @@ class KirakiraTui(App[None]):
             self.query_one("#turn-status", Static).update(
                 "◌ Streaming · iteration %d" % (event.iteration + 1)
             )
+            self._render_turn()
+
+    async def _on_context_prepared(self, event: ContextPrepared) -> None:
+        if self.state.apply(event):
+            self.query_one("#turn-status", Static).update(
+                "◌ Context · %s · %s tokens"
+                % (event.plan_name, self.state._compact_number(event.estimated_tokens))
+            )
+            self._render_turn()
+
+    async def _on_context_budget_updated(self, event: ContextBudgetUpdated) -> None:
+        if self.state.apply(event):
             self._render_turn()
 
     async def _on_tool_started(self, event: ToolCallStarted) -> None:

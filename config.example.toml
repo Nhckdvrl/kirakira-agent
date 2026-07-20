@@ -19,6 +19,8 @@ system_prompt = "你是 Kirakira。使用与用户相同的语言回答；执行
 # [agent.context]
 # effective_context_percent = 0.9
 # memory_window = 40
+# 超限时会依次移除 skills catalog、recent context、长期记忆、检索记忆，最后缩短历史；
+# 每次尝试的 section/token 明细会写进 session 消息的 context_trace。
 
 # 可选：配置后启用语义+词法混合记忆检索；不配置则使用纯词法检索。
 [memory.embedding]

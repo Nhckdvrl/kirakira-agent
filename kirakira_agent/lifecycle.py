@@ -63,8 +63,40 @@ class PromptRenderCtx:
     skill_names: Optional[List[str]]
     retrieved_memory_block: str
     extra_hints: List[str] = field(default_factory=list)
-    system_sections_top: List[str] = field(default_factory=list)
-    system_sections_bottom: List[str] = field(default_factory=list)
+    system_sections_top: List[Any] = field(default_factory=list)
+    system_sections_bottom: List[Any] = field(default_factory=list)
+    disabled_sections: set[str] = field(default_factory=set)
+    turn_injection_prompt: str = ""
+
+
+@dataclass(frozen=True)
+class ContextPrepared:
+    session_key: str
+    channel: str
+    chat_id: str
+    attempt: int
+    plan_name: str
+    history_messages: int
+    disabled_sections: Tuple[str, ...]
+    estimated_tokens: int
+    input_budget: int
+    context_frame_chars: int
+    sections: Tuple[JsonDict, ...]
+
+
+@dataclass(frozen=True)
+class ContextBudgetUpdated:
+    """Post-commit context baseline for the next turn."""
+
+    session_key: str
+    channel: str
+    chat_id: str
+    history_messages: int
+    history_tokens_estimate: int
+    selected_plan: str
+    last_prompt_tokens_estimate: int
+    input_budget: int
+    model_usage: JsonDict
 
 
 @dataclass

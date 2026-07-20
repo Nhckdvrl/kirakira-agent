@@ -5,10 +5,27 @@ import os
 import unittest
 
 from kirakira_agent.models.openai_compatible import OpenAICompatibleClient
+from kirakira_agent.models.base import ContextLengthError
 from kirakira_agent.schema import ModelResponse, ToolCall, ToolResult, ToolSpec, assistant_message_from_response, tool_result_message
 
 
 class OpenAICompatibleTests(unittest.TestCase):
+    def test_preflight_rejects_oversized_context_before_network(self):
+        client = OpenAICompatibleClient(
+            base_url="http://example.test/v1",
+            api_key="",
+            context_window=100,
+            effective_context_percent=0.9,
+        )
+        with self.assertRaises(ContextLengthError):
+            client._build_payload(
+                [{"role": "user", "content": "x" * 300}],
+                [],
+                "",
+                "model",
+                20,
+            )
+
     def test_stream_parser_accumulates_text_reasoning_and_fragmented_tool_call(self):
         class FakeResponse:
             def __enter__(self):

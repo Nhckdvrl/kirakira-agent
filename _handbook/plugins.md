@@ -107,6 +107,17 @@ phase 装饰器：`@on_before_turn`、`@on_before_reasoning`、`@on_prompt_rende
 `@on_before_step`、`@on_after_step`、`@on_after_reasoning`、`@on_after_turn`，
 都支持 `priority`（大的先跑）。
 
+`on_prompt_render` 不应再把所有内容拼进一个匿名字符串。它可以向
+`system_sections_top/system_sections_bottom` 加 `PromptSectionRender(name, content, is_static)`，
+通过 `disabled_sections` 禁用具名 core section，或用 `turn_injection_prompt/extra_hints` 加逐轮内容。
+逐轮 hint 会进入 Context Frame；top/bottom section 进入 system。插件 section 的 `is_static` 当前用于
+trace/观测，core cache 只负责内建 PromptBlock；插件若要缓存渲染结果必须自己按稳定签名管理，不能把
+每轮时间戳伪装成 static。每个 context retry 都会重新调用 phase，插件逻辑必须幂等，不能在 prompt
+hook 中执行外部副作用。
+
+`ContextPrepared` 与 `ContextBudgetUpdated` 是 observer 事件，适合做本地指标或 trace；observer 失败
+会记录日志但不阻断回复。不要在 observer 中改写 turn，它不是 intercept phase。
+
 ## 配置与数据
 
 - `config.toml` / `config.local.toml`：插件配置，可选用 `ConfigModel` 校验。
