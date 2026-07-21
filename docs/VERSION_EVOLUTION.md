@@ -19,6 +19,8 @@ MVP：模型能调用一个工具
   ↓
 上下文可治理：PromptBlock、预算预检、语义降级、trace
   ↓
+追平 reference：对齐工具、全量搬 memory2、按运行时分层搬 skill
+  ↓
 当前：完整被动式 Agent Runtime
   ↓
 下一版：评测驱动的工具编排与回归体系
@@ -709,7 +711,127 @@ chars/estimate/static/cache hit、ReAct request 数和模型 usage；session met
 可能再次选择工具。因此外部工具仍需幂等；将来做跨 attempt tool-result replay 必须有专门评测，
 不能为了省一次调用破坏上下文一致性。
 
-## 11. 下一版：工具编排 + LangSmith 评测回归
+## 11. 第七轮工程化：把 reference 追平，以及"照抄"和"照着做"的区别
+
+前六轮里，我们和 reference 的关系一直是"读懂它的设计，用在自己的被动链路上"。这一轮把关系
+说得更清楚了：**跟着 reference 走，不等于把 reference 的文件拷过来**。同一句"按 reference 来"，
+在工具、记忆、skill 三条线上,分别逼出了三种不同的"照着做"。
+
+判断标准始终是同一条，和第 8 节一脉相承：
+
+> 一个能力只有当它背后的运行时真的存在、真的自洽时才算数。跑得起来不等于对，拷过来不等于
+> 接上了。
+
+### 11.1 工具追平：一个"跑得起来"的工具是怎么烂掉的
+
+`web_search` 原来打 DuckDuckGo 的 HTML 端点。它写出来的那天是好的，测试也过，然后在没有任何
+代码改动的情况下**悄悄坏掉了**——DDG 现在对这个端点返回反爬页面。没有报错、没有异常，只是
+每次搜索都拿回一段"请证明你是人类"。这正是第 8.2 节那句话的翻版：**看起来正常、其实已经损坏**，
+而且这次连崩溃都没有，纯靠人去用才发现"检索模块表现很差"。
+
+修复不是去和反爬斗智，而是回到 reference：它用 Exa 的公开 MCP 端点（`https://mcp.exa.ai/mcp`，
+JSON-RPC + SSE，无需 key）。我们照它的做法把 `web_search` 重写成打这个端点。这一轮顺带把另外
+三个工具也对齐到 reference 的实际行为：
+
+```text
+web_search   DDG 反爬 HTML  →  Exa 公开 MCP（keyless，JSON-RPC over SSE）
+web_fetch    只有纯文本      →  format=markdown（html2text）/ plain（lxml），保留 SSRF/大小/charset 治理
+vision       朴素 base64     →  Pillow 编码（EXIF 转正、RGB 归一、4096 缩边、JPEG 质量回退），带数据 URI 预算上限
+tool_search  英文分词        →  CJK bigram 归一 + 字段加权打分，中文查询也能命中
+```
+
+这一步的收获不在某个工具本身，而在于：**"这段代码当初能跑"不是它现在还对的证据**。外部依赖
+会在你背后变。对齐 reference 的价值，一半是拿到更好的实现，另一半是拿到一个还在被维护、
+不会悄悄烂掉的依赖。
+
+### 11.2 长期记忆：全量搬一套子系统意味着搬它的"持久状态"
+
+reference 的记忆早已从我们抄来的那版演进成独立的 `memory2`（结构化 SQLite store、memorizer、
+retriever、embedder、post-response worker、consolidation）。这次的要求很直接：**整套搬过来，
+然后做兼容**——不是挑几个函数,是把 `memory2/` 和 `coremem/` 整个 vendored 进来。
+
+"做兼容"落在两处：
+
+- 内部 import 全部改写到 `kirakira_agent.*` 命名空间。
+- 外部依赖（httpx、原子写）路由到 `kirakira_agent/_compat/` 下的 shim（`net_http.py` 的
+  `HttpRequester`/`RequestBudget`，`json_store.py` 的 `atomic_write_text`），逻辑保持原样。
+
+但真正的教训不在搬代码，而在**搬状态**。`memory.py` 里把 `MemoryStore2`（`memory2.db`）接成了
+记忆的持久后端：`memorize()` 两个返回点都 `_mirror_to_store2`，让新事实同时进托管 Markdown 和
+store2。看起来接完了——直到线上出现一个很典型的 bug：
+
+> 用户让 agent 删记忆，agent 回"已经全部清除干净了"，但 `memory2.db` 里那两条还是 active。
+
+根因是 `forget()` 只改了托管区，没有传播到 store2。两个存储各说各话，而对用户可见的那句"清除
+干净了"是基于其中一个的——另一个默默地把被删的事实继续参与召回。这是"半成品"最阴险的形态:
+**主路径看着对，副本在背后漂移**。
+
+修复分两层，且刻意都做上：
+
+```text
+forget()  →  _forget_in_store2(type, content)   把删除同步到 store2（标记 superseded）
+启动时     →  _reconcile_store2_forgotten()       扫一遍 forgotten 记录，自愈历史漂移
+```
+
+第二层（启动自愈）是关键：它承认"两个存储可能已经不一致"这个现实，而不是假设"从此以后都会
+同步"。**接一个持久后端，不只是让写入两边都落，还要让它能从过去的不一致里恢复。** 只做第一层，
+历史上已经漂移的数据永远错下去。
+
+### 11.3 Skills：一个 SKILL.md 只有当它的运行时存在时才算"能力"
+
+最后一条线是把 `skills/` 对齐 reference。这里最先要纠正的是"对齐"这个词本身。
+
+原来仓库里有三个 skill（`python-coding`、`repo-navigation`、`test-debugging`）——它们是**自研的
+开发助手**，reference 里根本没有。reference 的九个 skill 是另一套：跑外部 CLI 的、管 MCP 的、
+管插件的、调 Codex 的、以及几个依赖 akashic 独有子系统的。所以"对齐"不是改几行，是**换一整套，
+并且判断哪些换得动**。
+
+先把加载器补齐到 reference 语义（`kirakira_agent/skills.py`）：YAML frontmatter、
+`metadata.akashic.requires` 的 bins/env 可用性门控、`when_to_use`。有了门控，`summarize` 这种
+依赖外部 CLI 的 skill 在缺 `summarize` 命令时会**自动标记不可用、不进候选清单**，而不是让模型
+选中一个跑不了的工具。为此加了 PyYAML 依赖。
+
+然后按能力把九个 skill 分三层处理：
+
+```text
+Tier 1  能力已存在        weather / summarize（照抄）
+                          skill-creater / manage-workspace-mcp（改工具名、路径）
+Tier 2  补几个工具再搬      plugin-system  ← 补 plugin_enable/disable/uninstall 三个工具
+                          codex-delegate ← shell→bash、run_in_background→mode、gate on codex bin
+Tier 3  缺整套子系统       akashic-call / create-drift-skill / create-proactive-source  ← 不搬
+```
+
+Tier 2 的 `plugin-system` 逼出一个诚实的差异：**kirakira 的插件模型和 akashic 不一样**——
+workspace 内安装、无 marketplace、无热重载、改动全部要重启。把 akashic 的 SKILL.md 照抄过来会
+教模型去调不存在的命令、找不存在的路径。所以这个 skill 是照 kirakira 的真实模型重写的，同时
+把缺的三个管理工具（`plugin_enable`/`plugin_disable`/`plugin_uninstall`，写 `.kirakira/manifest.toml`）
+补上，让文档描述的能力真的存在。
+
+Tier 3 是这一轮最重要的判断，也是第 8.2 节那条规则在 skill 上的直接应用。这三个 skill 都是
+**薄薄一层文档，底下压着一整套 kirakira 没有的运行时**：`akashic-call` 要外部调用 gateway，
+`create-drift-skill` 要 Drift 空闲运行时，`create-proactive-source` 要 proactive-sources 运行时。
+只把 SKILL.md 拷过来，会得到三个**在清单里看着可用、选中后什么都做不了**的假 skill。
+
+> 这正是"看起来正常、其实已经损坏"的 skill 版本。一个 skill 不是一份文档，是"文档 + 它假设
+> 存在的运行时"。运行时不在，skill 就不算数。
+
+所以它们被**明确推迟**：要搬，得先像 `memory2` 那样把对应运行时端口过来，每个都是一次独立的
+子系统 port，而不是一次文件拷贝。宁可少三个 skill，也不要三个骗人的 skill。
+
+### 11.4 这一轮的收获
+
+```text
+跑得起来 ≠ 还对          外部依赖会在背后烂掉，对齐 reference 也是在换一个还被维护的依赖
+搬代码 ≠ 搬状态          接持久后端要让写入两边落，还要能从历史不一致里自愈
+照抄 ≠ 照着做            reference 的模型和你的不一样时，重写文档去描述你的真实模型
+文档 ≠ 能力              SKILL.md 背后的运行时不存在，这个 skill 就是假的，宁缺毋滥
+```
+
+三条线不同，判断准则是同一条：**能力以运行时为准，不以代码或文档为准。** 这和第 8 节"宁可全旧
+不要半新"、"降级后自洽才能降级"是同一种洁癖——只是从 MCP、记忆写入，延伸到了工具、记忆删除
+和 skill。
+
+## 12. 下一版：工具编排 + LangSmith 评测回归
 
 下一版最重要的不是继续加普通工具，而是证明“工具选择更准、参数更稳、改动不会让旧场景退化”。
 
@@ -778,7 +900,7 @@ chars/estimate/static/cache hit、ReAct request 数和模型 usage；session met
 
 具体阈值应在第一批真实数据跑完后确定，不能在没有 baseline 时随意编百分比。
 
-## 12. 再下一版：100–200 用户的后端化
+## 13. 再下一版：100–200 用户的后端化
 
 这一层目前是设计方向，不应写进当前简历的“已完成”部分。
 
@@ -846,7 +968,7 @@ LLM、Tool/MCP、pgvector、对象存储
 
 完成后再把简历前两条升级为“FastAPI + PostgreSQL + Worker”，否则面试追问很容易露出没有真正实现。
 
-## 13. 当前项目如何讲
+## 14. 当前项目如何讲
 
 项目主线应是：
 
@@ -857,6 +979,8 @@ LLM、Tool/MCP、pgvector、对象存储
 5. 多入口引入 MessageBus、同 session 串行和跨 session 并发。
 6. 通过真实 Bug 补齐 correlation、reasoning 回放、SSRF、rollback 和 graceful shutdown。
 7. 把 Prompt 拆成具名 block，用 Provider 预检、语义降级和 trace 管理长上下文。
-8. 下一版用 LangSmith/eval 把经验固化为可回归的工程指标。
+8. 追平 reference：对齐工具行为、全量搬 memory2 并接成持久后端、按运行时能力分层搬 skill——
+   在这一轮里把"能力以运行时为准"从架构原则贯彻到工具、记忆删除和 skill。
+9. 下一版用 LangSmith/eval 把经验固化为可回归的工程指标。
 
 这条演进链比“参考了哪个项目”更能说明你真正理解并解决了 Agent 工程问题。
