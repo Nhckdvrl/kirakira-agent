@@ -20,6 +20,7 @@ from kirakira_agent.event_bus import EventBus
 from kirakira_agent.config import load_toml_config
 from kirakira_agent.plugin_manifest import (
     MANIFEST_NAME,
+    PluginEnablement,
     discover_plugin_roots,
     is_enabled,
     load_manifest,
@@ -590,6 +591,86 @@ class PluginManager:
             ),
             self.install,
             deferred=True,
+        )
+        self.tool_registry.register(
+            ToolSpec(
+                "plugin_enable",
+                "Enable an installed plugin in the manifest. Restart is required to load it.",
+                object_schema({"name": {"type": "string"}}, ["name"]),
+            ),
+            self.enable_plugin,
+            deferred=True,
+        )
+        self.tool_registry.register(
+            ToolSpec(
+                "plugin_disable",
+                "Disable an installed plugin in the manifest. Restart is required to unload it.",
+                object_schema({"name": {"type": "string"}}, ["name"]),
+            ),
+            self.disable_plugin,
+            deferred=True,
+        )
+        self.tool_registry.register(
+            ToolSpec(
+                "plugin_uninstall",
+                "Remove an installed plugin directory and its manifest entry. Plugin data is preserved. Restart is required.",
+                object_schema({"name": {"type": "string"}}, ["name"]),
+            ),
+            self.uninstall,
+            deferred=True,
+        )
+
+    def _manifest_path(self) -> Path:
+        return self.workspace / ".kirakira" / MANIFEST_NAME
+
+    @staticmethod
+    def _valid_plugin_id(plugin_id: str) -> bool:
+        return bool(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._@-]*", plugin_id))
+
+    def _write_manifest(self, manifest: Dict[str, PluginEnablement]) -> None:
+        path = self._manifest_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        lines: List[str] = []
+        for plugin_id in sorted(manifest):
+            # 插件 id 允许 . @ -，会破坏 TOML 裸键，统一用带引号的点号键段。
+            lines.append("[plugins.%s]" % json.dumps(plugin_id))
+            lines.append("enabled = %s" % ("true" if manifest[plugin_id].enabled else "false"))
+            lines.append("")
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text("\n".join(lines), encoding="utf-8")
+        os.replace(tmp, path)
+
+    def _set_enabled(self, name: str, enabled: bool) -> str:
+        name = name.strip()
+        if not self._valid_plugin_id(name):
+            return "Error: invalid plugin name: %r" % name
+        manifest = load_manifest(self._manifest_path())
+        manifest[name] = PluginEnablement(name, enabled)
+        self._write_manifest(manifest)
+        verb = "enabled" if enabled else "disabled"
+        return "Plugin %r %s in manifest. Restart kirakira-agent to apply." % (name, verb)
+
+    def enable_plugin(self, name: str) -> str:
+        return self._set_enabled(name, True)
+
+    def disable_plugin(self, name: str) -> str:
+        return self._set_enabled(name, False)
+
+    async def uninstall(self, name: str) -> str:
+        name = name.strip()
+        if not re.fullmatch(r"[A-Za-z0-9_.-]+", name):
+            return "Error: invalid plugin name: %r" % name
+        target = self.workspace / ".kirakira" / "plugins" / name
+        if not target.is_dir():
+            return "Error: plugin %r is not installed" % name
+        await asyncio.to_thread(shutil.rmtree, target)
+        manifest = load_manifest(self._manifest_path())
+        if name in manifest:
+            del manifest[name]
+            self._write_manifest(manifest)
+        return (
+            "Uninstalled plugin %r. Data under .kirakira/plugin-data/%s is preserved. "
+            "Restart kirakira-agent to apply." % (name, name)
         )
 
     def list_plugins(self) -> str:
