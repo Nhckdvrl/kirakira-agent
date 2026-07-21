@@ -1,6 +1,6 @@
 # Kirakira Agent
 
-Kirakira Agent 是一个参考 `akashic-agent` 被动回复架构实现的多渠道 AI Agent Runtime。它不再只是一个最小 tool-calling demo，而是一套可持续扩展的运行时：统一接入 Web、Telegram、QQ/OneBot，经过消息总线、会话隔离、长期记忆、生命周期插件和多轮工具循环后回复用户。
+Kirakira Agent 目前是一个被动回复架构实现的多渠道 AI Agent Runtime。它不再只是一个最小 tool-calling demo，而是一套可持续扩展的运行时：统一接入 Web、Telegram、QQ/OneBot，经过消息总线、会话隔离、长期记忆、生命周期插件和多轮工具循环后回复用户。
 
 本项目明确不包含 `proactive_v2`、drift、自主传感器、自主判断后主动触达等主动链路。用户明确创建的定时消息、当前 turn 触发的子代理和 `message_push` 属于被动请求产生的副作用，仍在实现范围内。
 
