@@ -70,7 +70,159 @@ def truncate(text: str, limit: int = OUTPUT_LIMIT) -> str:
     return text[:limit] + "\n... (%d characters truncated)" % (len(text) - limit)
 
 
+def _html_to_markdown(raw_html: str) -> str:
+    """HTML → Markdown（参考 akashic-agent web_fetch，html2text 实现）。"""
+    import html2text
+
+    converter = html2text.HTML2Text()
+    converter.ignore_links = False
+    converter.ignore_images = False
+    converter.body_width = 0  # 禁止自动折行
+    converter.unicode_snob = True  # 保留 Unicode 字符
+    converter.protect_links = True  # 防止链接被转义
+    return converter.handle(raw_html).strip()
+
+
+_VL_MAX_FILE_BYTES = 20 * 1024 * 1024  # 单张原始文件上限
+_VL_MAX_DATA_URI_BYTES = 8 * 1024 * 1024  # base64 编码后 data URI 上限
+_VL_MAX_EDGE = 4096  # 最长边像素上限，超限自动缩放
+
+
+def _encode_image_data_uri(raw: bytes, mime: str) -> str:
+    """读取图片并编码为 data URI，大图自动缩放压缩（参考 akashic-agent vision）。
+
+    超限时抛 ValueError，带可操作的错误信息。
+    """
+    import io
+
+    if len(raw) > _VL_MAX_FILE_BYTES:
+        raise ValueError(
+            "图片文件过大（%.1fMB），上限为 %.0fMB。请压缩或裁剪后重试。"
+            % (len(raw) / 1024 / 1024, _VL_MAX_FILE_BYTES / 1024 / 1024)
+        )
+    try:
+        from PIL import Image, ImageOps
+    except ModuleNotFoundError as exc:
+        raise ValueError("当前环境未安装 Pillow，无法处理图片。") from exc
+
+    try:
+        with Image.open(io.BytesIO(raw)) as probe:
+            probe.verify()
+    except Exception as exc:  # noqa: BLE001 - Pillow 各种解码异常统一归一
+        raise ValueError("图片文件无法解码或已损坏。请确认这是有效图片。") from exc
+
+    with Image.open(io.BytesIO(raw)) as img:
+        img = ImageOps.exif_transpose(img)
+        if img.mode not in ("RGB", "L"):
+            canvas = Image.new("RGB", img.size, (255, 255, 255))
+            alpha = img.getchannel("A") if "A" in img.getbands() else None
+            canvas.paste(img.convert("RGB"), mask=alpha)
+            img = canvas
+        elif img.mode == "L":
+            img = img.convert("RGB")
+
+        raw_b64_len = len(base64.b64encode(raw).decode())
+        if max(img.size) > _VL_MAX_EDGE or raw_b64_len > _VL_MAX_DATA_URI_BYTES:
+            img.thumbnail((_VL_MAX_EDGE, _VL_MAX_EDGE))
+
+        # 原图已在预算内：无损保留原格式（JPEG 高质量 / PNG）。
+        if raw_b64_len <= _VL_MAX_DATA_URI_BYTES and max(img.size) <= _VL_MAX_EDGE:
+            buf = io.BytesIO()
+            if mime == "image/jpeg":
+                img.save(buf, format="JPEG", quality=95, optimize=True)
+                clean_mime = "image/jpeg"
+            else:
+                img.save(buf, format="PNG", optimize=True)
+                clean_mime = "image/png"
+            clean_b64 = base64.b64encode(buf.getvalue()).decode()
+            if len(clean_b64) <= _VL_MAX_DATA_URI_BYTES:
+                return "data:%s;base64,%s" % (clean_mime, clean_b64)
+
+        best: bytes | None = None
+        for quality in (85, 75, 65, 55, 45):
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=quality, optimize=True)
+            candidate = buf.getvalue()
+            best = candidate
+            candidate_b64 = base64.b64encode(candidate).decode()
+            if len(candidate_b64) <= _VL_MAX_DATA_URI_BYTES:
+                return "data:image/jpeg;base64,%s" % candidate_b64
+
+    if best is None:
+        raise ValueError("图片压缩失败")
+    raise ValueError(
+        "图片压缩后仍然过大（%.1fMB base64），上限 %.0fMB。请继续压缩或裁剪。"
+        % (
+            len(base64.b64encode(best).decode()) / 1024 / 1024,
+            _VL_MAX_DATA_URI_BYTES / 1024 / 1024,
+        )
+    )
+
+
+def _html_to_plain_text(raw_html: str) -> str:
+    """HTML → 纯文本（参考 akashic-agent web_fetch，lxml 抽正文并合并空白）。"""
+    from lxml import html as lxml_html
+    from lxml.etree import ParserError
+
+    try:
+        doc = lxml_html.fromstring(raw_html)
+    except (ParserError, ValueError):
+        return raw_html
+    for tag in ("script", "style", "noscript", "iframe", "object", "embed"):
+        for element in doc.xpath("//%s" % tag):
+            parent = element.getparent()
+            if parent is not None:
+                parent.remove(element)
+    return " ".join(doc.text_content().split())
+
+
+def _toolsearch_normalize(query: str) -> set[str]:
+    """把 query 归一化为搜索词集合（参考 akashic-agent search_backend）。
+
+    lowercase 整串 + 空格切词 + CJK/非 CJK 边界切词 + CJK bigram/单字，
+    让中文查询能命中工具 name/description，无需外部分词库。
+    """
+    query_lower = query.lower().strip()
+    tokens: set[str] = {query_lower}
+    for part in query_lower.split():
+        tokens.add(part)
+    for segment in re.split(r"([一-鿿]+)", query_lower):
+        segment = segment.strip()
+        if segment:
+            tokens.add(segment)
+    cjk = [c for c in query_lower if "一" <= c <= "鿿"]
+    for i in range(len(cjk) - 1):
+        tokens.add(cjk[i] + cjk[i + 1])
+    tokens.update(cjk)
+    tokens.discard("")
+    return tokens
+
+
+def _toolsearch_score(name: str, description: str, keywords: set[str]) -> int:
+    """字段加权评分（参考 akashic-agent _score，仅用 name/description 字段）。
+
+    名称 part 精确命中 10 / 部分命中 5 / 全名兜底 3；描述命中额外 +2。
+    """
+    name_parts = [p for p in name.lower().split("_") if p]
+    name_lower = name.lower()
+    desc_lower = description.lower()
+    score = 0
+    for kw in keywords:
+        if kw in name_parts:
+            score += 10
+        elif any(kw in part or part in kw for part in name_parts):
+            score += 5
+        elif kw in name_lower:
+            score += 3
+        if kw in desc_lower:
+            score += 2
+    return score
+
+
 class WorkspaceTools:
+    # Exa 公开 MCP 搜索端点（无需 API key），见 web_search。
+    _WEB_SEARCH_MCP_URL = "https://mcp.exa.ai/mcp"
+
     def __init__(
         self,
         workdir: Path,
@@ -289,20 +441,19 @@ class WorkspaceTools:
             if not path.is_file():
                 return "Error: Image does not exist: %s" % raw_path
             data = path.read_bytes()
-            total += len(data)
-            if total > 10 * 1024 * 1024:
-                return "Error: Total image input exceeds 10 MB"
             mime = self._image_mime(data)
             if not mime:
                 return "Error: Unsupported or invalid image: %s" % raw_path
+            # 参考 akashic-agent：大图用 Pillow 自动缩放/压缩到预算内，避免直接失败。
+            try:
+                data_uri = await asyncio.to_thread(_encode_image_data_uri, data, mime)
+            except ValueError as exc:
+                return "Error: %s: %s" % (raw_path, exc)
+            total += len(data_uri)
+            if total > 24 * 1024 * 1024:
+                return "Error: Total image input exceeds the data budget"
             content.append(
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": "data:%s;base64,%s"
-                        % (mime, base64.b64encode(data).decode("ascii"))
-                    },
-                }
+                {"type": "image_url", "image_url": {"url": data_uri}}
             )
         client = OpenAICompatibleClient(
             base_url=os.getenv("VISION_BASE_URL")
@@ -354,11 +505,14 @@ class WorkspaceTools:
                 ensure_ascii=False,
                 indent=2,
             )
-        terms = [term.lower() for term in re.findall(r"[\w:-]+", query)]
+        keywords = _toolsearch_normalize(query)
         matches = []
         for spec in view.specs():
-            haystack = ("%s %s" % (spec.name, spec.description)).lower()
-            score = sum(1 for term in terms if term in haystack) if terms else 1
+            score = (
+                _toolsearch_score(spec.name, spec.description, keywords)
+                if keywords
+                else 1
+            )
             if score:
                 matches.append(
                     {
@@ -379,7 +533,7 @@ class WorkspaceTools:
             indent=2,
         )
 
-    def web_fetch(self, url: str, max_chars: int = 12000) -> str:
+    def web_fetch(self, url: str, max_chars: int = 12000, format: str = "markdown") -> str:
         parsed = urllib.parse.urlparse(url)
         if parsed.scheme not in ("http", "https") or not parsed.netloc:
             return "Error: URL must start with http:// or https://"
@@ -448,11 +602,21 @@ class WorkspaceTools:
             return "Error: Response text is severely garbled or uses an unsupported encoding"
         title = self._extract_html_title(text)
         published_at = self._extract_published_at(text)
-        if "html" in content_type.lower() or "<html" in text[:500].lower():
-            text = self._html_to_text(text)
+        # 参考 akashic-agent：format 决定输出形态。markdown（默认）用 html2text，
+        # text 用 lxml 抽正文，html 原样返回解码后的 HTML。
+        fmt = (format or "markdown").strip().lower()
+        if fmt not in ("text", "markdown", "html"):
+            fmt = "markdown"
+        is_html = "html" in content_type.lower() or "<html" in text[:500].lower()
+        if is_html and fmt == "markdown":
+            text = _html_to_markdown(text)
+        elif is_html and fmt == "text":
+            text = _html_to_plain_text(text)
+        # fmt == "html" 或非 HTML 内容：保留原始解码文本。
         source = {
             "url": final_url,
             "title": title or self._fallback_web_title(final_url),
+            "format": fmt,
         }
         if published_at:
             source["published_at"] = published_at
@@ -470,50 +634,61 @@ class WorkspaceTools:
         )
 
     def web_search(self, query: str, limit: int = 5) -> str:
+        # 参考 akashic-agent：走 Exa 公开 MCP 端点（无需 API key），返回带标题/URL/摘要
+        # 的结构化文本。旧的 DuckDuckGo HTML 抓取已被搜索引擎反爬全面封锁，永久失效。
+        import httpx
+
         q = query.strip()
         if not q:
             return "Error: Web search query must not be empty"
-        url = "https://duckduckgo.com/html/?" + urllib.parse.urlencode({"q": q})
+        num_results = min(max(1, int(limit)), 20)
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "web_search_exa",
+                "arguments": {
+                    "query": q,
+                    "numResults": num_results,
+                    "livecrawl": "fallback",
+                    "type": "auto",
+                },
+            },
+        }
         try:
-            req = urllib.request.Request(
-                url,
-                headers={"User-Agent": "kirakira-agent/0.1"},
-                method="GET",
-            )
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                html_text = resp.read().decode("utf-8", errors="replace")
-        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
-            return "Error: Web search failed for %r: %s" % (q, exc)
-        results = []
-        for match in re.finditer(r"(?is)<a\b([^>]*)>(.*?)</a>", html_text):
-            attributes = match.group(1)
-            class_match = re.search(r"(?i)class=['\"]([^'\"]*)['\"]", attributes)
-            if not class_match or "result__a" not in class_match.group(1).split():
-                continue
-            href_match = re.search(r"(?i)href=['\"]([^'\"]+)['\"]", attributes)
-            if not href_match:
-                continue
-            href = html.unescape(href_match.group(1))
-            title = self._html_to_text(match.group(2)).strip()
-            if href.startswith("//duckduckgo.com/l/?") or href.startswith("/l/?"):
-                parsed = urllib.parse.urlparse(
-                    "https:" + href
-                    if href.startswith("//")
-                    else "https://duckduckgo.com" + href
+            with httpx.Client(timeout=25.0) as client:
+                response = client.post(
+                    self._WEB_SEARCH_MCP_URL,
+                    json=payload,
+                    headers={
+                        "accept": "application/json, text/event-stream",
+                        "content-type": "application/json",
+                    },
                 )
-                qs = urllib.parse.parse_qs(parsed.query)
-                href = qs.get("uddg", [href])[0]
-            if title and href:
-                results.append({"title": title, "url": href})
-            if len(results) >= max(1, int(limit)):
-                break
-        if not results:
-            return (
-                "Error: Web search returned no structured results for %r. "
-                "Try a different query or use web_fetch with a verified URL."
-            ) % q
-        # Preserve the original top-level list contract for existing callers.
-        return json.dumps(results, ensure_ascii=False, indent=2)
+                response.raise_for_status()
+        except httpx.HTTPError as exc:
+            return "Error: Web search failed for %r: %s" % (q, exc)
+
+        # 端点以 SSE 帧返回；逐行取第一帧带 content 的 result。
+        for line in response.text.splitlines():
+            if not line.startswith("data: "):
+                continue
+            try:
+                data = json.loads(line[6:])
+            except json.JSONDecodeError:
+                continue
+            content = (data.get("result") or {}).get("content") or []
+            if content:
+                text = content[0].get("text", "")
+                if text.strip():
+                    return json.dumps(
+                        {"query": q, "result": text}, ensure_ascii=False
+                    )
+        return (
+            "Error: Web search returned no results for %r. "
+            "Try a different query or use web_fetch with a verified URL."
+        ) % q
 
     @staticmethod
     def _decompress_web_body(raw: bytes, content_encoding: str) -> bytes:
@@ -1076,9 +1251,16 @@ def build_default_registry(
     registry.register(
         ToolSpec(
             "web_fetch",
-            "Fetch a verified web URL and return readable content with structured source metadata (URL, title, and publication date when available). Use it to verify important claims found by search; HTTP, binary, encoding, and decoding failures are returned as errors and are not evidence.",
+            "Fetch a verified web URL and return readable content with structured source metadata (URL, title, and publication date when available). format selects the output shape: markdown (default), text, or html. Use it to verify important claims found by search; HTTP, binary, encoding, and decoding failures are returned as errors and are not evidence.",
             object_schema(
-                {"url": {"type": "string"}, "max_chars": {"type": "integer"}},
+                {
+                    "url": {"type": "string"},
+                    "max_chars": {"type": "integer"},
+                    "format": {
+                        "type": "string",
+                        "enum": ["text", "markdown", "html"],
+                    },
+                },
                 ["url"],
             ),
         ),

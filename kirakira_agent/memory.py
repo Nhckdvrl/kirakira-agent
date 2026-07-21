@@ -181,9 +181,67 @@ class MemoryRuntime:
         self._tasks: Dict[str, asyncio.Task[None]] = {}
         self._locks: Dict[str, asyncio.Lock] = {}
         self.embedding_client: EmbeddingClient | None = None
+        # memory2 结构化 store（vendored from akashic-agent）：作为长期记忆的持久化后端，
+        # 每次 memorize/consolidation 都镜像写入，带 content_hash 去重与强化计数。
+        self.store2 = None
+        try:
+            from kirakira_agent.memory2.store import MemoryStore2
+
+            self.store2 = MemoryStore2(str(self.store.root / "memory2.db"))
+        except Exception as exc:  # noqa: BLE001 - store2 不可用不能拖垮既有记忆
+            logging.getLogger(__name__).warning("memory2 store unavailable: %s", exc)
         self._load()
+        self._reconcile_store2_forgotten()
         if self.session_manager is not None:
             self.session_manager.on_delete(self._forget_session_memories)
+
+    def _mirror_to_store2(self, record: "MemoryRecord") -> None:
+        """把一条记忆镜像写入 memory2 store（upsert_item 自带去重/强化）。"""
+
+        if self.store2 is None:
+            return
+        try:
+            self.store2.upsert_item(
+                memory_type=record.memory_type,
+                summary=record.content,
+                embedding=None,
+                source_ref=record.source_ref or None,
+            )
+        except Exception:  # noqa: BLE001 - 镜像失败只记日志，不影响主记忆
+            logging.getLogger(__name__).exception("memory2 mirror write failed")
+
+    def _forget_in_store2(self, memory_type: str, content: str) -> None:
+        """在 memory2 store 里退休与该 (type, content) 对应的活跃项，保持两边一致。"""
+
+        if self.store2 is None:
+            return
+        try:
+            items, _total = self.store2.list_items_for_dashboard(
+                memory_type=memory_type, status="active", page_size=200
+            )
+            ids = [
+                str(item["id"])
+                for item in items
+                if str(item.get("summary") or "") == content and item.get("id")
+            ]
+            if ids:
+                self.store2.mark_superseded_batch(ids)
+        except Exception:  # noqa: BLE001 - 传播失败只记日志
+            logging.getLogger(__name__).exception("memory2 forget propagation failed")
+
+    def _reconcile_store2_forgotten(self) -> None:
+        """启动时把已 forgotten 的记录同步到 memory2 store，修复历史不一致。"""
+
+        if self.store2 is None:
+            return
+        with self._record_lock:
+            forgotten = [
+                (record.memory_type, record.content)
+                for record in self._records
+                if record.status == "forgotten"
+            ]
+        for memory_type, content in forgotten:
+            self._forget_in_store2(memory_type, content)
 
     def configure_embeddings(
         self, *, base_url: str, api_key: str, model: str
@@ -215,6 +273,7 @@ class MemoryRuntime:
                     if source_ref:
                         record.source_ref = source_ref
                     self._save()
+                    self._mirror_to_store2(record)
                     return record
             record = MemoryRecord(
                 id=self._next_id(),
@@ -225,6 +284,7 @@ class MemoryRuntime:
             )
             self._records.append(record)
             self._save()
+            self._mirror_to_store2(record)
             return record
 
     def candidates(
@@ -360,14 +420,19 @@ class MemoryRuntime:
     def forget(self, ids: List[str]) -> List[str]:
         with self._record_lock:
             forgotten: List[str] = []
+            forgotten_targets: List[tuple[str, str]] = []
             wanted = set(ids)
             for record in self._records:
                 if record.id in wanted and record.status == "active":
                     record.status = "forgotten"
                     forgotten.append(record.id)
+                    forgotten_targets.append((record.memory_type, record.content))
             if forgotten:
                 self._save()
-            return forgotten
+        # 锁外传播到 memory2，避免持锁做 IO。
+        for memory_type, content in forgotten_targets:
+            self._forget_in_store2(memory_type, content)
+        return forgotten
 
     def list_records(self, *, include_forgotten: bool = False) -> List[Dict[str, object]]:
         with self._record_lock:
@@ -454,8 +519,8 @@ class MemoryRuntime:
         *,
         model_client: Any,
         model: str,
-        min_messages: int = 6,
-        keep_messages: int = 4,
+        min_messages: int = 2,
+        keep_messages: int = 2,
     ) -> None:
         existing = self._tasks.get(session.key)
         if existing is not None and not existing.done():

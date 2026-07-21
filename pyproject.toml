@@ -8,7 +8,14 @@ version = "0.1.0"
 description = "A multi-channel, extensible AI agent runtime with memory, plugins, and MCP."
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["textual>=6.12,<9"]
+dependencies = [
+    "textual>=6.12,<9",
+    "httpx[socks]>=0.28.0",
+    "html2text>=2025.4.0",
+    "lxml>=6.0.0",
+    "Pillow>=11.0.0",
+    "numpy>=1.26",
+]
 keywords = ["agent", "harness", "tool-calling"]
 
 [project.scripts]

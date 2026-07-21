@@ -25,6 +25,38 @@ from kirakira_agent.tools.registry import ToolRegistry
 from kirakira_agent.tool_hooks import ToolExecutionRequest, ToolExecutor
 
 
+def _exa_sse(payload: dict) -> str:
+    """把一帧 JSON-RPC 结果包成 Exa MCP 的 SSE 响应体。"""
+    return "event: message\ndata: %s\n\n" % json.dumps(payload, ensure_ascii=False)
+
+
+class _FakeHttpxResponse:
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+    def raise_for_status(self) -> None:
+        return None
+
+
+class _FakeHttpxClient:
+    """替身 httpx.Client：要么返回预置 SSE，要么在 post 时抛出。"""
+
+    def __init__(self, *, text: str | None = None, exc: Exception | None = None) -> None:
+        self._text = text
+        self._exc = exc
+
+    def __enter__(self) -> "_FakeHttpxClient":
+        return self
+
+    def __exit__(self, *_args: object) -> bool:
+        return False
+
+    def post(self, *_args: object, **_kwargs: object) -> _FakeHttpxResponse:
+        if self._exc is not None:
+            raise self._exc
+        return _FakeHttpxResponse(self._text or "")
+
+
 class ToolTests(unittest.TestCase):
     def test_safe_path_blocks_escape(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -387,60 +419,45 @@ class ToolTests(unittest.TestCase):
             thread.join(timeout=3)
 
     def test_web_search_no_results_and_network_failures_are_tool_errors(self):
-        class EmptyResponse:
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *_args):
-                return False
-
-            def read(self):
-                return b"<html><body>No result links</body></html>"
-
+        # web_search 走 Exa MCP（参考 akashic-agent）：空结果与网络失败都必须是 tool error。
+        empty_sse = _exa_sse({"result": {"content": []}})
         with tempfile.TemporaryDirectory() as tmp:
             registry = build_default_registry(Path(tmp))
-            with mock.patch("urllib.request.urlopen", return_value=EmptyResponse()):
+            with mock.patch(
+                "httpx.Client", return_value=_FakeHttpxClient(text=empty_sse)
+            ):
                 empty = registry.execute(
                     ToolCall("empty", "web_search", {"query": "missing topic"})
                 )
             with mock.patch(
-                "urllib.request.urlopen",
-                side_effect=urllib.error.URLError("offline"),
+                "httpx.Client",
+                return_value=_FakeHttpxClient(exc=__import__("httpx").HTTPError("offline")),
             ):
                 failed = registry.execute(
                     ToolCall("failed", "web_search", {"query": "latest news"})
                 )
 
         self.assertTrue(empty.is_error)
-        self.assertIn("no structured results", empty.content)
+        self.assertIn("no results", empty.content)
         self.assertTrue(failed.is_error)
         self.assertIn("Web search failed", failed.content)
 
-    def test_web_search_preserves_result_title_and_url(self):
-        target = "https://example.com/news?id=7"
-        redirect = "//duckduckgo.com/l/?" + urllib.parse.urlencode({"uddg": target})
-        body = (
-            '<a href="%s" rel="nofollow" class="result__a">Verified &amp; Dated Report</a>'
-            % redirect.replace("&", "&amp;")
-        ).encode("utf-8")
-
-        class SearchResponse:
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *_args):
-                return False
-
-            def read(self):
-                return body
+    def test_web_search_returns_exa_result_text(self):
+        text = (
+            "Title: Verified & Dated Report\n"
+            "URL: https://example.com/news?id=7\n"
+            "Highlights:\n2026 market summary"
+        )
+        body = _exa_sse({"result": {"content": [{"type": "text", "text": text}]}})
 
         with tempfile.TemporaryDirectory() as tmp:
             tools = WorkspaceTools(Path(tmp), SkillLoader(Path(tmp) / "skills"))
-            with mock.patch("urllib.request.urlopen", return_value=SearchResponse()):
-                results = json.loads(tools.web_search("market report"))
+            with mock.patch("httpx.Client", return_value=_FakeHttpxClient(text=body)):
+                payload = json.loads(tools.web_search("market report"))
 
-        self.assertEqual(results[0]["title"], "Verified & Dated Report")
-        self.assertEqual(results[0]["url"], target)
+        self.assertEqual(payload["query"], "market report")
+        self.assertIn("https://example.com/news?id=7", payload["result"])
+        self.assertIn("Verified & Dated Report", payload["result"])
 
     def test_message_push_publishes_outbound(self):
         async def scenario():

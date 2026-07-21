@@ -615,6 +615,10 @@ def main() -> None:
     args.config_path = (
         Path(args.config).expanduser().resolve() if args.config else cwd / "config.toml"
     )
+    # 解析 workspace 就要展开 config 里的 ${...} 引用（含 secret），所以先加载与
+    # config 同目录的 .env；build_agent 之后会再按 workspace 加载一次，setdefault 保证
+    # 早绑定的值不被覆盖。
+    load_dotenv(args.config_path.parent / ".env")
     workdir = resolve_workspace(
         args.workspace, load_toml_config(args.config_path), default=cwd
     )
