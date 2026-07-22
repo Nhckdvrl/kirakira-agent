@@ -56,8 +56,9 @@ description: <一句话描述>
 - 约束和规则
 ```
 
-放在 `<workspace>/drift/skills/<name>/SKILL.md`。首次运行会自动放一个可执行示例
-`explore-curiosity`（空闲时像朋友一样随口问用户一个轻量问题）。
+放在 `<workspace>/drift/skills/<name>/SKILL.md`。首次运行会自动放两个可执行示例：
+`explore-curiosity`（会推送：像朋友随口一问，演示 message_push 路径）和 `review-memory`
+（纯后台：抽查一条长期记忆是否仍准确，演示静默收尾与跨轮连续性）。
 
 | 文件 | 谁维护 | 说明 |
 | --- | --- | --- |

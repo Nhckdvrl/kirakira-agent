@@ -7,7 +7,7 @@ import os
 import logging
 import sys
 from pathlib import Path
-from typing import List
+from typing import Any, List
 
 from kirakira_agent.agent import Agent, DEFAULT_SYSTEM
 from kirakira_agent.config import config_value, load_dotenv, load_toml_config, require_env
@@ -210,6 +210,7 @@ def _build_proactive(
     session_manager: SessionManager,
     memory: MemoryRuntime,
     client: OpenAICompatibleClient,
+    passive_busy_fn: Any | None = None,
 ) -> tuple[ProactiveLoop | None, DriftRunner | None]:
     """按配置装配主动推送链路与 Drift 链路；未启用则返回 (None, None)。"""
     cfg = ProactiveConfig.from_app_config(app_config, default_model=default_model)
@@ -246,6 +247,7 @@ def _build_proactive(
         state=ProactiveStateStore(workdir / "proactive.db"),
         memory=memory,
         drift_hook=drift_hook,
+        passive_busy_fn=passive_busy_fn,
     )
     return loop, drift_runner
 
@@ -471,6 +473,7 @@ async def build_runtime(
         session_manager=session_manager,
         memory=memory,
         client=client,
+        passive_busy_fn=loop.is_busy,
     )
     return CoreRuntime(
         bus=bus,
@@ -589,7 +592,9 @@ async def _main_async(args: argparse.Namespace, workdir: Path) -> None:
         enable_qq=args.qq,
         config_path=args.config_path,
     )
-    if args.serve or args.web or args.telegram or args.qq:
+    if getattr(args, "proactive", False):
+        await _run_proactive_once(runtime)
+    elif args.serve or args.web or args.telegram or args.qq:
         await runtime_serve(runtime)
     else:
         mode = choose_cli_mode(force_tui=args.tui, force_plain=args.plain)
@@ -609,6 +614,29 @@ async def _main_async(args: argparse.Namespace, workdir: Path) -> None:
                 await runtime_tui(runtime, workdir, session_id=args.session)
         else:
             await runtime_repl(runtime, workdir, session_id=args.session)
+
+
+async def _run_proactive_once(runtime: CoreRuntime) -> None:
+    """手动跑一次主动 tick 并打印状态，供演示/调试（不等电量定时器）。"""
+    import json as _json
+
+    loop = runtime.proactive_loop
+    if loop is None:
+        print(
+            "主动链路未启用。请在 config.toml 的 [proactive] 设 enabled=true "
+            "并填好 [proactive.target]。"
+        )
+        return
+    # 需要 outbound 分发在跑，否则推送消息不会真正送达渠道。
+    tasks = [asyncio.create_task(runtime.bus.dispatch_outbound(), name="bus_dispatch")]
+    try:
+        print("→ 执行一次主动 tick ...")
+        await loop.tick_once()
+        await runtime.bus.drain(timeout=10.0)
+        print(_json.dumps(loop.status(), ensure_ascii=False, indent=2))
+    finally:
+        # stop_background 负责关闭所有资源，并取消我们起的 dispatch task。
+        await runtime.stop_background(tasks)
 
 
 def choose_cli_mode(
@@ -641,6 +669,11 @@ def main() -> None:
     parser.add_argument("--web", action="store_true", help="Enable stdlib web channel.")
     parser.add_argument("--telegram", action="store_true", help="Enable Telegram Bot API channel.")
     parser.add_argument("--qq", action="store_true", help="Enable QQ OneBot webhook channel.")
+    parser.add_argument(
+        "--proactive",
+        action="store_true",
+        help="Run one proactive tick now (demo/debug), print status, then exit.",
+    )
     ui_group = parser.add_mutually_exclusive_group()
     ui_group.add_argument(
         "--tui",

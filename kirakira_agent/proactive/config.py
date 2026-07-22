@@ -30,6 +30,8 @@ class ProactiveConfig:
     chat_id: str = ""
     content_limit: int = 5
     delivery_cooldown_hours: float = 1.0
+    # 未读 content 超过该龄期（天）淘汰，防止队列无界增长；<=0 关闭
+    content_max_age_days: float = 14.0
     # 电量高（刚聊完）用短间隔；电量低（长期沉默）用长间隔。单位秒。
     tick_interval_s1: int = 2400
     tick_interval_s0: int = 4800
@@ -84,6 +86,15 @@ class ProactiveConfig:
                     "agent",
                     "delivery_cooldown_hours",
                     default=1.0,
+                )
+            ),
+            content_max_age_days=float(
+                config_value(
+                    app_config,
+                    "proactive",
+                    "agent",
+                    "content_max_age_days",
+                    default=14.0,
                 )
             ),
             tick_interval_s1=int(

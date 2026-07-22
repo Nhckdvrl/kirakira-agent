@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from contextlib import closing
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Sequence
 
@@ -28,6 +28,12 @@ CREATE INDEX IF NOT EXISTS idx_events_channel_status
 CREATE TABLE IF NOT EXISTS push_state (
     session_key TEXT PRIMARY KEY,
     last_push_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS decisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    decided_at TEXT NOT NULL,
+    action TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT ''
 );
 """
 
@@ -112,6 +118,25 @@ class ProactiveStateStore:
         )
         self._db.commit()
 
+    def expire_old(self, channel: str, now: datetime, max_age_days: float) -> int:
+        """淘汰 first_seen 超过 max_age_days 的未读事件，防止未读队列无界增长。
+
+        对齐 reference `_content_expired` 的绝对陈旧淘汰意图（MVP 只按龄期，不做
+        admission floor 衰减判定）。返回淘汰条数。
+        """
+        if max_age_days <= 0:
+            return 0
+        cutoff = (now - timedelta(days=max_age_days)).isoformat()
+        cursor = self._db.execute(
+            """
+            UPDATE events SET status = 'expired'
+            WHERE channel = ? AND status = 'unread' AND first_seen_at < ?
+            """,
+            (channel, cutoff),
+        )
+        self._db.commit()
+        return cursor.rowcount
+
     def last_push_at(self, session_key: str) -> datetime | None:
         row = self._db.execute(
             "SELECT last_push_at FROM push_state WHERE session_key = ?",
@@ -131,6 +156,28 @@ class ProactiveStateStore:
             (session_key, now.isoformat()),
         )
         self._db.commit()
+
+    def record_decision(self, now: datetime, action: str, detail: str = "") -> None:
+        """记录一次 tick 的决策，供 status 回看与 demo 展示（可观测性）。"""
+        self._db.execute(
+            "INSERT INTO decisions (decided_at, action, detail) VALUES (?, ?, ?)",
+            (now.isoformat(), action, detail[:300]),
+        )
+        self._db.commit()
+
+    def recent_decisions(self, limit: int = 10) -> List[Dict[str, Any]]:
+        rows = self._db.execute(
+            "SELECT decided_at, action, detail FROM decisions ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def unread_count(self, channel: str) -> int:
+        row = self._db.execute(
+            "SELECT COUNT(*) AS n FROM events WHERE channel = ? AND status = 'unread'",
+            (channel,),
+        ).fetchone()
+        return int(row["n"]) if row else 0
 
     def in_cooldown(
         self,

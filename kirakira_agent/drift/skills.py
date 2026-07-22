@@ -69,13 +69,21 @@ def discover_skills(workspace: Path) -> List[DriftSkill]:
 
 
 def ensure_example_skill(workspace: Path) -> None:
-    """首次运行时放一个可执行的示例 skill，方便直接演示 Drift 链路。"""
-    skill_dir = workspace / "drift" / "skills" / "explore-curiosity"
-    skill_file = skill_dir / "SKILL.md"
-    if skill_file.exists():
-        return
-    skill_dir.mkdir(parents=True, exist_ok=True)
-    skill_file.write_text(_EXAMPLE_SKILL, encoding="utf-8")
+    """首次运行时放两个可执行的示例 skill，方便直接演示 Drift 链路。
+
+    - explore-curiosity：会推送（像朋友随口一问），演示 message_push 路径。
+    - review-memory：纯后台（不推送），演示静默收尾与跨轮连续性。
+    """
+    base = workspace / "drift" / "skills"
+    for name, body in (
+        ("explore-curiosity", _EXAMPLE_SKILL),
+        ("review-memory", _REVIEW_MEMORY_SKILL),
+    ):
+        skill_file = base / name / "SKILL.md"
+        if skill_file.exists():
+            continue
+        skill_file.parent.mkdir(parents=True, exist_ok=True)
+        skill_file.write_text(body, encoding="utf-8")
 
 
 _EXAMPLE_SKILL = """---
@@ -97,4 +105,27 @@ description: 空闲时像朋友一样，随口问用户一个轻量、自然的�
 - 避开长期记忆里已经明确有答案的信息，不要重复最近问过的。
 - 不要问太大、太虚、太像采访的问题。
 - 结束前必须调用 `finish_drift`，填写 status 与 briefing。
+"""
+
+
+_REVIEW_MEMORY_SKILL = """---
+name: review-memory
+description: 空闲时抽查一条长期记忆是否仍然准确，纯后台记录，不打扰用户
+---
+
+## 目标
+利用空闲时间做一次轻量的长期记忆自检：抽一条记忆，判断它是否仍然可信、是否过时或自相矛盾。
+这是纯后台任务，不推送消息给用户。
+
+## 工作流程
+1. `recall_memory` 或 `read_file` 读取长期记忆里的若干条目。
+2. 从 Drift Briefing 的本 skill 前情里看上次查到哪，避免重复抽同一条。
+3. 挑一条，判断它是否仍然准确：有没有过时、有没有和其他记忆冲突。
+4. 把判断结果写进本轮 `finish_drift` 的 briefing（例如"抽查了 X，看起来仍然可信"）。
+5. 如果一轮没查完，用 `status="paused"` 在 `scratchpad_update` 写清下次从哪条继续。
+
+## 要求
+- 不调用 `message_push`：这是纯后台 skill，不打扰用户。
+- 结束前必须调用 `finish_drift`，填写 status 与 briefing；`next_tendency` 可写下次想查的方向。
+- 只读判断，不要在本轮直接删改长期记忆。
 """

@@ -881,8 +881,8 @@ MessageBus（bus 的队列绑在主事件循环上）。在工作线程里 `asyn
 `kirakira_agent/proactive/`（energy/contracts/sources/state/judge/loop）+ `kirakira_agent/drift/`
 （skills/state/tools/runner），经 `cli._build_proactive` 按 `[proactive]` 配置装配，作为后台 task
 接进 `CoreRuntime.start_background`。交付复用现成的 `bus.publish_outbound`。
-`tests/test_proactive.py`（11）+ `tests/test_drift.py`（5）覆盖电量调频、三通道、去重冷却、
-文件源 fetch/ack、端到端 tick 与 Drift run。全量 197 passed。
+`tests/test_proactive.py`（16）+ `tests/test_drift.py`（5）覆盖电量调频、三通道、去重冷却、
+文件源 fetch/ack、端到端 tick 与 Drift run。全量 202 passed。
 
 **这一轮的方法论**和前面一脉相承：不是"参考有什么就抄什么"，而是先分清哪些是差异化本质、
 哪些是可延后的厚度，用最小代价把本质做到能跑，把重型机制记进 audit 留作拓展位。

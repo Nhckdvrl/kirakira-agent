@@ -11,7 +11,12 @@ from kirakira_agent.bus import MessageBus
 from kirakira_agent.events import OutboundMessage
 from kirakira_agent.proactive import energy
 from kirakira_agent.proactive.config import ProactiveConfig
-from kirakira_agent.proactive.contracts import normalize_alert, normalize_content
+from kirakira_agent.proactive.contracts import (
+    normalize_alert,
+    normalize_content,
+    rank_alerts,
+    rank_content,
+)
 from kirakira_agent.proactive.loop import ProactiveLoop
 from kirakira_agent.proactive.sources import (
     FileInboxSource,
@@ -60,6 +65,25 @@ class ContractTests(unittest.TestCase):
         self.assertIn("url=http://x", content.to_prompt_line(0))
 
 
+class RankingTests(unittest.TestCase):
+    def test_rank_alerts_by_severity_then_recency(self):
+        events = [
+            {"severity": "low", "published_at": "2026-07-22T10:00:00+00:00"},
+            {"severity": "high", "published_at": "2026-07-22T09:00:00+00:00"},
+            {"severity": "medium", "published_at": "2026-07-22T11:00:00+00:00"},
+        ]
+        ranked = rank_alerts(events)
+        self.assertEqual(ranked[0]["severity"], "high")
+        self.assertEqual(ranked[-1]["severity"], "low")
+
+    def test_rank_content_newest_first(self):
+        events = [
+            {"first_seen_at": "2026-07-20T00:00:00+00:00", "title": "old"},
+            {"first_seen_at": "2026-07-22T00:00:00+00:00", "title": "new"},
+        ]
+        self.assertEqual(rank_content(events)[0]["title"], "new")
+
+
 class StateStoreTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -77,6 +101,15 @@ class StateStoreTests(unittest.TestCase):
         unread = self.store.unread("content")
         self.assertEqual(len(unread), 1)
         self.store.consume(["s:1"], NOW)
+        self.assertEqual(self.store.unread("content"), [])
+
+    def test_expire_old_content(self):
+        old = [{"item_id": "s:old", "_source": "s", "event_id": "old", "title": "x"}]
+        # first_seen = 20 天前
+        self.store.ingest("content", old, NOW - timedelta(days=20))
+        self.assertEqual(len(self.store.unread("content")), 1)
+        expired = self.store.expire_old("content", NOW, 14.0)
+        self.assertEqual(expired, 1)
         self.assertEqual(self.store.unread("content"), [])
 
     def test_cooldown(self):
@@ -222,6 +255,56 @@ class LoopTickTests(unittest.TestCase):
         self.assertEqual(len(sent), 1)
         self.assertEqual(sent[0].content, "看到条新闻")
         self.assertEqual(drift_calls, [])
+
+
+class StatusAndGateTests(unittest.TestCase):
+    def _loop(self, workdir, *, busy=False, drift_hook=None):
+        sessions = SessionManager(workdir)
+        (workdir / "proactive" / "inbox").mkdir(parents=True, exist_ok=True)
+        return ProactiveLoop(
+            config=_cfg(),
+            bus=MessageBus(),
+            session_manager=sessions,
+            model_client=_FakeClient(),
+            sources=build_file_inbox_registry(workdir),
+            state=ProactiveStateStore(workdir / "proactive.db"),
+            memory=None,
+            drift_hook=drift_hook,
+            passive_busy_fn=(lambda key: True) if busy else None,
+        ), sessions
+
+    def test_status_shape(self):
+        tmp = tempfile.TemporaryDirectory()
+        loop, sessions = self._loop(Path(tmp.name))
+        st = loop.status()
+        for key in ("target", "energy", "base_score", "estimated_next_interval_s",
+                    "unread_alert", "unread_content", "recent_decisions", "sources"):
+            self.assertIn(key, st)
+        self.assertEqual(st["target"], "web:u1")
+        loop.close()
+        sessions.close()
+        tmp.cleanup()
+
+    def test_busy_gate_records_decision_and_skips_drift(self):
+        async def scenario():
+            tmp = tempfile.TemporaryDirectory()
+            drift_calls = []
+
+            async def hook(now, key):
+                drift_calls.append(key)
+                return True
+
+            loop, sessions = self._loop(Path(tmp.name), busy=True, drift_hook=hook)
+            await loop.tick_once()
+            decisions = loop.status()["recent_decisions"]
+            loop.close()
+            sessions.close()
+            tmp.cleanup()
+            return drift_calls, decisions
+
+        drift_calls, decisions = asyncio.run(scenario())
+        self.assertEqual(drift_calls, [])  # 忙时不进 drift
+        self.assertTrue(any(d["action"] == "gated" for d in decisions))
 
 
 if __name__ == "__main__":

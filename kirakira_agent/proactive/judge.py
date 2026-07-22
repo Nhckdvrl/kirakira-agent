@@ -81,6 +81,7 @@ class ProactiveJudge:
         recent_conversation: str,
         proactive_context: str,
         current_context: str,
+        recent_proactive: str = "",
     ) -> Decision:
         prompt = _build_prompt(
             channel="alert",
@@ -89,15 +90,17 @@ class ProactiveJudge:
             recent_conversation=recent_conversation,
             proactive_context=proactive_context,
             current_context=current_context,
+            recent_proactive=recent_proactive,
             instruction=(
                 "这是一条高优先级 alert，必须推送。请把它自然化成一句符合 Kirakira 语气的话。"
                 '输出：{"message": "要发送的话"}'
             ),
         )
+        # alert 是高优先级：模型/解析失败也要发（回退原文），不能因一次异常吞掉告警。
         try:
             data = _parse(await self._complete(prompt))
-        except (ValueError, json.JSONDecodeError):
-            logger.exception("[proactive.judge] alert 解析失败，回退原文")
+        except Exception:
+            logger.exception("[proactive.judge] alert 判断失败，回退原文发送")
             data = {}
         message = str(data.get("message") or alert.title or alert.content).strip()
         return Decision(send=True, message=message, cited_ids=[alert.item_id])
@@ -110,6 +113,7 @@ class ProactiveJudge:
         recent_conversation: str,
         proactive_context: str,
         current_context: str,
+        recent_proactive: str = "",
     ) -> Decision:
         lines = "\n".join(
             item.to_prompt_line(index) for index, item in enumerate(contents)
@@ -121,6 +125,7 @@ class ProactiveJudge:
             recent_conversation=recent_conversation,
             proactive_context=proactive_context,
             current_context=current_context,
+            recent_proactive=recent_proactive,
             instruction=(
                 "判断这些内容里有没有值得此刻主动打扰用户去分享的。宁缺毋滥：不确定就 skip。"
                 "如果值得分享，选一到两条，写一条自然的推送消息，并列出引用的 id。\n"
@@ -128,10 +133,11 @@ class ProactiveJudge:
                 ' "cited_ids": ["被引用的候选 id"]}'
             ),
         )
+        # content 是可选内容：模型/解析失败时默认 skip（宁缺毋滥），不打扰用户。
         try:
             data = _parse(await self._complete(prompt))
-        except (ValueError, json.JSONDecodeError):
-            logger.exception("[proactive.judge] content 解析失败，默认 skip")
+        except Exception:
+            logger.exception("[proactive.judge] content 判断失败，默认 skip")
             return Decision(send=False, message="", cited_ids=[])
         send = str(data.get("decision") or "").strip().lower() == "send"
         message = str(data.get("message") or "").strip()
@@ -152,11 +158,13 @@ def _build_prompt(
     proactive_context: str,
     current_context: str,
     instruction: str,
+    recent_proactive: str = "",
 ) -> str:
     sections = [
         f"【通道】{channel}",
         "【长期记忆】\n" + (memory_text.strip() or "（空）"),
         "【近期对话】\n" + (recent_conversation.strip() or "（无）"),
+        "【最近已推送的主动消息（避免重复）】\n" + (recent_proactive.strip() or "（无）"),
         "【主动推送规则】\n" + (proactive_context.strip() or "（无额外规则）"),
         "【当前背景 context】\n" + (current_context.strip() or "（无）"),
         "【候选事件】\n" + (candidates.strip() or "（无）"),
