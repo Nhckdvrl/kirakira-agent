@@ -8,6 +8,8 @@ import gzip
 import json
 import os
 import socket
+import shlex
+import sys
 import threading
 import time
 import urllib.parse
@@ -471,7 +473,8 @@ class ToolTests(unittest.TestCase):
                         {"channel": "cli", "chat_id": "c1", "message": "hello"},
                     )
                 )
-                outbound, _ticket = await asyncio.wait_for(bus._outbound.get(), timeout=1)
+                envelope = await asyncio.wait_for(bus._outbound.get(), timeout=1)
+                outbound = envelope.message
                 self.assertEqual(result.content, "已发送")
                 self.assertIsInstance(outbound, OutboundMessage)
                 self.assertEqual(outbound.content, "hello")
@@ -488,7 +491,8 @@ class ToolTests(unittest.TestCase):
                         "bash",
                         {
                             "command": (
-                                "python -c \"import time; print('start', flush=True); "
+                                shlex.quote(sys.executable)
+                                + " -c \"import time; print('start', flush=True); "
                                 "time.sleep(0.1); print('done')\""
                             ),
                             "run_in_background": True,

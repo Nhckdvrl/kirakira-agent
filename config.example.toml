@@ -56,7 +56,7 @@ channel_name = "qq"
 # 开启后 agent 会按电量模型自适应轮询数据源，主动向你推送消息。
 # 需要先填好 [proactive.target] 再设为 true。
 enabled = false
-# 电量高（刚聊完）用短间隔、低（长期沉默）用长间隔；单位秒。tick_jitter 加随机抖动。
+# base_score 高（长期沉默或近期语境丰富）用短间隔，否则用长间隔；单位秒。
 tick_interval_s1 = 2400
 tick_interval_s0 = 4800
 tick_jitter = 0.3
@@ -77,7 +77,7 @@ delivery_cooldown_hours = 1
 content_max_age_days = 14   # 未读 content 超过该龄期(天)淘汰,防止无界堆积
 
 [proactive.drift]
-# Drift：三通道都没东西可推时，agent 照 drift/skills/*/SKILL.md 自主干后台活儿。
+# Drift：主动链路本轮未产生推送时，agent 照 drift/skills/*/SKILL.md 自主干后台活儿。
 # 建议先跑通 proactive 再开启。
 enabled = false
 min_interval_hours = 3

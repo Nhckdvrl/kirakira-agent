@@ -3,7 +3,7 @@
 参考 akashic 的 `proactive_v2/contracts.py`，MVP 精简为渲染 prompt 所需的最小字段。
 
 三种通道语义：
-- ``alert``   高优先级告警，直接透传推送
+- ``alert``   高优先级告警，优先发送并由模型自然化表达
 - ``content`` 内容候选，经 LLM 兴趣判断后决定是否推送
 - ``context`` 背景状态，只辅助判断，不单独触发推送
 """

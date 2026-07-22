@@ -3,7 +3,7 @@
 import asyncio
 import unittest
 
-from kirakira_agent.bus import MessageBus
+from kirakira_agent.bus import MessageBus, OutboundDeliveryError
 from kirakira_agent.events import OutboundMessage
 
 
@@ -38,6 +38,39 @@ class BusTests(unittest.TestCase):
                 events.index(("end", "same", "first")),
                 events.index(("start", "same", "second")),
             )
+
+        asyncio.run(scenario())
+
+    def test_waitable_delivery_completes_after_channel_callback(self):
+        async def scenario():
+            bus = MessageBus()
+            sent = []
+
+            async def send(message):
+                await asyncio.sleep(0.01)
+                sent.append(message.content)
+
+            bus.subscribe_outbound("test", send)
+            dispatcher = asyncio.create_task(bus.dispatch_outbound())
+            await bus.publish_outbound_and_wait(
+                OutboundMessage("test", "chat", "confirmed")
+            )
+            bus.stop()
+            await dispatcher
+            self.assertEqual(sent, ["confirmed"])
+
+        asyncio.run(scenario())
+
+    def test_waitable_delivery_fails_without_channel_subscriber(self):
+        async def scenario():
+            bus = MessageBus()
+            dispatcher = asyncio.create_task(bus.dispatch_outbound())
+            with self.assertRaises(OutboundDeliveryError):
+                await bus.publish_outbound_and_wait(
+                    OutboundMessage("missing", "chat", "lost")
+                )
+            bus.stop()
+            await dispatcher
 
         asyncio.run(scenario())
 

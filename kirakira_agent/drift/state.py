@@ -2,7 +2,7 @@
 
 保存每轮 run、每个 skill 的跨轮连续性（scratchpad / next_tendency）、以及
 全局 min_interval 门控所需的 last_drift_at。参考 akashic 的
-`plugins/drift_flow/state.py`，MVP 只保留 run 记录 + skill 连续性 + 节流。
+`plugins/drift_flow/state.py`，MVP 保留 run 记录 + skill 连续性 + 节流。
 """
 
 from __future__ import annotations

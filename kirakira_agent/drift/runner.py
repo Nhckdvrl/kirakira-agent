@@ -15,6 +15,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any, List
+from uuid import uuid4
 
 from kirakira_agent.agent import Agent
 from kirakira_agent.bus import MessageBus
@@ -161,28 +162,40 @@ class DriftRunner:
             asyncio.run(registry.shutdown())
 
     async def _commit(self, ctx: DriftRunContext, session_key: str) -> str:
-        """把 Drift 草稿消息投递出去（若有）。返回 sent / silent。"""
+        """把 Drift 草稿投递，并按 Reference 修正为 sent / silent。"""
         if not (ctx.message_pushed and ctx.draft_message and self._channel and self._chat_id):
             return "silent"
+        delivered = await self._deliver_message(ctx.draft_message, session_key)
+        return "sent" if delivered else "silent"
+
+    async def _deliver_message(self, message: str, session_key: str) -> bool:
+        delivery_id = uuid4().hex
         try:
-            await self._bus.publish_outbound(
+            await self._bus.publish_outbound_and_wait(
                 OutboundMessage(
                     channel=self._channel,
                     chat_id=self._chat_id,
-                    content=ctx.draft_message,
-                    metadata={"proactive": True, "drift": True},
+                    content=message,
+                    metadata={
+                        "proactive": True,
+                        "drift": True,
+                        "delivery_id": delivery_id,
+                    },
                 )
             )
         except Exception:
             logger.exception("[drift] 投递草稿消息失败")
-            return "silent"
-        try:
-            session = self._sessions.get_or_create(session_key)
-            session.add_message("assistant", ctx.draft_message, proactive=True, drift=True)
-            self._sessions.save(session)
-        except Exception:
-            logger.exception("[drift] 记录 Drift 消息失败")
-        return "sent"
+            return False
+        session = self._sessions.get_or_create(session_key)
+        session.add_message(
+            "assistant",
+            message,
+            proactive=True,
+            drift=True,
+            delivery_id=delivery_id,
+        )
+        self._sessions.save(session)
+        return True
 
     def _build_briefing(self, skill: DriftSkill, session_key: str) -> str:
         """拼一份 Drift Briefing：记忆 + 近期上下文 + 本 skill 连续性 + 最近 run。"""

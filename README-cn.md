@@ -2,6 +2,9 @@
 
 Kirakira Agent 是一个参考 `akashic-agent` 实现的多渠道 AI Agent Runtime。它不只是一个"你问它答"的 tool-calling demo，而是一个**会主动找你**的 AI 伙伴：统一接入 Web、Telegram、QQ/OneBot，既能被动回复，也能按电量模型自适应判断"此刻该不该发消息、发什么"，还能在空闲时自主执行后台任务。
 
+> 想先看清“从最小 MVP 做到了哪里、三条链路怎么验收”，直接看
+> [docs/MVP_TO_CURRENT.md](./docs/MVP_TO_CURRENT.md)。
+
 ## 三条链路
 
 和市面上多数 agent 只有"被动回复"一条链路不同，Kirakira 参考 akashic 实现了三条并列链路，后两条才是它区别于普通 chatbot 的地方：
@@ -15,7 +18,7 @@ Kirakira Agent 是一个参考 `akashic-agent` 实现的多渠道 AI Agent Runti
 
 [主动推送] ──→ 电量模型自适应轮询 ──→ 三路数据(alert/content/context) ──→ LLM 决策 ──→ 推送或跳过
               │
-              └── [Drift] ──→ 三路都没东西可推时,照 SKILL.md 自主干后台活儿
+              └── [Drift] ──→ 本轮没有产生推送时,照 SKILL.md 自主干后台活儿
 ```
 
 | 链路 | 触发方 | 行为定义在 | 差异点 |
@@ -25,8 +28,8 @@ Kirakira Agent 是一个参考 `akashic-agent` 实现的多渠道 AI Agent Runti
 | Drift | 主动链路空转 | 你写的 `SKILL.md` | 行为可编辑、跨轮连续性 |
 
 - **被动回复**：收到消息 → 记忆检索 → 工具循环 → 流式回复，每轮经过 7 个 phase 扩展点。
-- **主动推送（Proactive）**：Agent 按电量模型自适应调整轮询频率——刚聊完不烦你（长间隔），久没动静就加速（短间隔）；每轮拉三路数据：`alert` 直接透传、`content` 逐条 LLM 兴趣判断、`context` 只辅助判断不单独触发。
-- **Drift**：主动链路拉了一圈三路都空时，Agent 不空转，而是读你写在 `drift/skills/<name>/SKILL.md` 里的分步指南，一步步执行一个后台小任务（补用户画像、审计记忆等），带跨轮连续性，最后调 `finish_drift` 收尾。
+- **主动推送（Proactive）**：Agent 按电量模型和近期对话活跃度调整检查频率；每轮拉三路数据：`alert` 优先发送并由模型自然化表达、`content` 由 LLM 做兴趣判断、`context` 只辅助判断不单独触发。调度频率不等于发送概率，是否打扰仍受通道语义与冷却控制。
+- **Drift**：主动链路本轮没有产生推送时，Agent 不空转，而是读你写在 `drift/skills/<name>/SKILL.md` 里的分步指南，一步步执行一个后台小任务（补用户画像、审计记忆等），带跨轮连续性，最后调 `finish_drift` 收尾。
 
 详见 [_handbook/proactive.md](./_handbook/proactive.md) 与 [_handbook/drift.md](./_handbook/drift.md)。
 
@@ -66,23 +69,23 @@ Web / Telegram / QQ / CLI
              ↓
  电量模型决定本轮 tick 间隔（energy → base_score → interval）
              ↓
- Gate（目标就绪、被动链路空闲、冷却窗口）
+ Gate（目标就绪、被动链路空闲）
              ↓
  Fetch：SourceRegistry 并发拉取所有数据源
              ↓
  Ingest：三通道去重入库（proactive.db）
              ↓
- Decide：alert 直推 → content 兴趣判断 → 都没推则 ↓
+ Decide：alert 优先发送 → content 兴趣判断 → 本轮没推则 ↓
              ↓
- Drift：DriftRunner 选一个 SKILL.md → 复用 Agent loop 跑一轮 → finish_drift
+ Drift：DriftRunner 选一个 SKILL.md → 复用同步 Agent 与默认工具集跑一轮 → finish_drift
              ↓
- Deliver：bus.publish_outbound(metadata.proactive=true) → 原 Channel
+ Deliver：bus.publish_outbound_and_wait(metadata.proactive=true) → 原 Channel 确认
 ```
 
 ## 已实现能力
 
-- **主动推送链路（MVP）**：电量模型（多时间尺度指数衰减）自适应轮询节流；三通道 `alert`/`content`/`context` 语义；可插拔 `ProactiveSource` 协议 + 内置文件源；`proactive.db` 事件去重/ACK/冷却；LLM 兴趣判断决定推送或跳过；交付复用 MessageBus。
-- **Drift 空闲任务链路（MVP）**：主动链路空转时自动进入；发现 `drift/skills/*/SKILL.md` 并每轮重新选择；一轮 Drift 复用现有 Agent loop 跑成一次 run，SKILL.md 当 system prompt + 注入 Briefing；`message_push` / `finish_drift` 收尾；`drift.db` 保存 run 记录、跨轮连续性与 `min_interval_hours` 门控。
+- **主动推送链路（MVP）**：电量模型（多时间尺度指数衰减）自适应轮询节流；三通道 `alert`/`content`/`context` 语义；可插拔 `ProactiveSource` 协议 + 内置文件源；`proactive.db` 事件去重/pending ACK/冷却；LLM 兴趣判断决定推送或跳过；交付等待真实 Channel callback，成功后才带 `delivery_id` 写 Session 并消费事件。
+- **Drift 空闲任务链路（MVP）**：主动链路本轮未产生推送时尝试进入；发现 `drift/skills/*/SKILL.md` 并每轮重新选择；一轮 Drift 复用同步 Agent 与默认工具集跑成一次 run，SKILL.md 当 system prompt + 注入 Briefing；`message_push` / `finish_drift` 收尾；`drift.db` 保存 run 记录、跨轮连续性与 `min_interval_hours` 门控。
 - Web、Telegram、QQ/OneBot、CLI 被动消息入口。
 - 按 session 串行、跨 session 并行的 AgentLoop；`/stop` 中断并保存续跑标记。
 - OpenAI-compatible 普通响应和 SSE streaming；支持分片 tool call 参数重组。
@@ -280,7 +283,7 @@ VISION_API_KEY=your-key
 ```toml
 [proactive]
 enabled = true
-# 电量高（刚聊完）用短间隔、低（长期沉默）用长间隔；单位秒，tick_jitter 加抖动。
+# base_score 高（长期沉默或近期语境丰富）用短间隔，否则用长间隔；单位秒，tick_jitter 加抖动。
 tick_interval_s1 = 2400
 tick_interval_s0 = 4800
 model = ""            # 留空复用 [llm.main].model
@@ -299,7 +302,11 @@ min_interval_hours = 3
 max_steps = 20
 ```
 
-启动后主动链路作为后台 task 运行，并会在被动 turn 进行时自动避让。想快速体验：往 `<workspace>/proactive/inbox/demo.jsonl` 投几条事件（格式见该目录自动生成的 `README.md`），下一个 tick 就会看到判断与推送。Drift 首次运行会自动放两个示例 skill：`explore-curiosity`（会推送）与 `review-memory`（纯后台）。
+启动后主动链路作为后台 task 运行，并会在被动 turn 进行时自动避让。`[proactive.target].channel`
+会自动启用同名的内置 Web/Telegram/QQ Channel；目标找不到对应 Channel 时启动直接报错，不会等到
+消息入队后静默丢失。想快速体验：往 `<workspace>/proactive/inbox/demo.jsonl` 投几条事件（格式见该目录
+自动生成的 `README.md`），下一个 tick 就会完成判断、Channel 发送确认与事件提交。Drift 首次运行会
+自动放两个示例 skill：`explore-curiosity`（会推送）与 `review-memory`（纯后台）。
 
 不想等电量定时器？用一次性命令手动跑一个 tick 并打印状态，方便演示与调试：
 
@@ -386,7 +393,10 @@ drift/drift.db                Drift run 记录、跨轮连续性、min_interval 
 /home/xiang/.conda/envs/xingshu-vllm/bin/python -m unittest discover -s tests -v
 ```
 
-当前自动化测试共 186 项：183 项通过、3 项按环境条件跳过。另已使用 `deepseek-v4-flash` 在线验证普通响应、SSE 工具循环、后台记忆 consolidation，以及 context 估算/实际 usage/下一轮 baseline 的完整观测链。API key 不进入仓库。
+当前离线回归为 `215 passed, 4 subtests passed`，覆盖工具、Session、并发、MCP、snapshot、
+上下文、记忆、渠道、主动链路与 Drift。另已使用
+`deepseek-v4-flash` 在线验证普通响应、SSE 工具循环、后台记忆 consolidation，以及 context
+估算/实际 usage/下一轮 baseline 的完整观测链。API key 不进入仓库。
 
 ## 文档
 
@@ -404,10 +414,12 @@ drift/drift.db                Drift run 记录、跨轮连续性、min_interval 
 | 主动推送怎么判断、电量模型怎么调频、数据源怎么接 | [_handbook/proactive.md](./_handbook/proactive.md) |
 | Drift 空闲任务怎么写、跨轮连续性怎么保存 | [_handbook/drift.md](./_handbook/drift.md) |
 
-`docs/` 只留三篇，各司其职，不重复：
+`docs/` 各司其职，不重复：
 
 | 我想知道 | 看这里 |
 | --- | --- |
+| 从 MVP 到当前进度、三条链路如何启动验收 | [docs/MVP_TO_CURRENT.md](./docs/MVP_TO_CURRENT.md) |
 | 简历文案与面试追问（含三链路差异化，**面试先看这篇**） | [docs/RESUME_INTERVIEW_GUIDE.md](./docs/RESUME_INTERVIEW_GUIDE.md) |
-| 与 Reference 的逐项差异、复刻范围、哪些是 MVP / 有意暂缓 | [docs/DIFFERENCE_AUDIT.md](./docs/DIFFERENCE_AUDIT.md) |
-| 从 MVP 一步步长成现在这样的过程与工程取舍 | [docs/VERSION_EVOLUTION.md](./docs/VERSION_EVOLUTION.md) |
+| 与 Reference 的能力级差异、主动 MVP 边界与差距优先级 | [docs/DIFFERENCE_AUDIT.md](./docs/DIFFERENCE_AUDIT.md) |
+| 主动链路的总体架构、状态机、提交边界与演进顺序 | [docs/PROACTIVE_ARCHITECTURE.md](./docs/PROACTIVE_ARCHITECTURE.md) |
+| 被动链路如何从 Function Calling MVP 一步步工程化 | [docs/VERSION_EVOLUTION.md](./docs/VERSION_EVOLUTION.md) |

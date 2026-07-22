@@ -1,324 +1,236 @@
-# Kirakira Agent 与 akashic-agent 差距审计
+# Kirakira Agent 与 Akashic Agent 差异性评估
 
-> 审计基准：reference `6a0616c`（2026-07-16）；Kirakira 的 context 子系统于
-> 2026-07-21 再次逐调用点对齐。旧 commit 只用于说明最初审计起点，本文状态以当前工作树为准。
->
-> **范围更新（2026-07-22）**：主动链路不再排除。`proactive_v2`（energy/judge/三通道/source）与
-> drift 已 **MVP 复刻**并接入 runtime（见 §8）。原先"只做被动链路"的定调作废——这两条链路
-> 正是与市面 agent 的差异点，先做到能执行、保留拓展位，Tier-3 重型机制（phase-graph kernel、
-> snapshot 热重载、语义兴趣向量、hazard 穿线）刻意暂缓。
->
-> **本文档的规矩**：每一条状态都必须是**核对过代码**得出的，不能靠印象。上一版审计因为凭印象
-> 写，把 #123 标成"已跟进"，实际上根本没做（见 §6）。
+> 基准：本地 `Reference/` 的 Akashic Agent commit `012e37c`（2026-07-21）。本文评估当前工作树，
+> 不把文件同名、类型声明或代码行数当成功能等价的证据。被动链路的工程演进见
+> [VERSION_EVOLUTION.md](./VERSION_EVOLUTION.md)，主动链路自身的结构见
+> [PROACTIVE_ARCHITECTURE.md](./PROACTIVE_ARCHITECTURE.md)。
 
-## 1. 体量对照
+## 1. 结论先行
 
-| | Reference | Kirakira |
-| --- | ---: | ---: |
-| Python 总行数 | ~153,000 | ~12,700 |
-| 被动链路相关行数（agent+bus+core+session+infra+bootstrap，含少量 proactive） | ~49,000 | ~12,700 |
-| 测试文件数 | 135 | 24 |
-| 测试项数 | — | 186（183 通过、3 条件跳过） |
+Kirakira 不是 Akashic 的等比例缩小版。它采取了三种不同策略：
 
-体量差约 12 倍。差距来自两处：一是本项目**未做的范围**（`plugins/` 插件市场 19.2k、`eval`
-2.3k、前端 Dashboard、控制面）；二是**已做但取轻实现**的部分——`proactive_v2`（3.3k）与 drift
-已 MVP 复刻（§7），但只保留差异化本质，Tier-3 重型机制暂缓；`memory2`（5.6k）核心行为覆盖但
-LLM 门控算法未做。各主链路的**行为**覆盖度高于行数比暗示的程度，但**结构粒度**确实更粗（见 §4）。
+- **被动链路：语义对齐、结构压平。** 工具循环、Session、记忆检索、上下文治理、多渠道、MCP、
+  插件 snapshot 等核心行为已覆盖，但用单进程和更少的抽象层实现。
+- **主动推送：保留产品语义，运行时只做到 MVP。** 电量调频、alert/content/context、LLM 判断、
+  去重冷却和消息交付已经贯通；Akashic 的 phase kernel、snapshot lease、插件数据源、hazard、
+  embedding 兴趣与 durable outbox 尚未移植；pending ACK 已按 Reference 接入。
+- **Drift：保留“行为由 SKILL.md 定义”的内核。** Kirakira 能跑一次带连续性的后台 Agent run，
+  但没有 Akashic 的 journal、self-observation、hazard drive 和完整 lifecycle。
 
-## 2. 逐模块映射
+因此最准确的项目定位是：
 
-### 2.1 被动主链路（核心）
+> Kirakira 是一个参考 Akashic 语义、以可读单进程实现重建的 Agent Runtime。被动链路已形成较完整
+> 的工程基座；主动推送与 Drift 已证明端到端闭环，但跨崩溃可靠提交、插件化和恢复连续性仍处于 MVP。
 
-| Reference | Kirakira | 状态 |
-| --- | --- | --- |
-| `bus/events.py`、`events_lifecycle.py` | `events.py`、`lifecycle.py` | 已覆盖 |
-| `bus/queue.py` | `bus.py` | 已覆盖，并测试并发/顺序 |
-| `bus/event_bus.py` | `event_bus.py` | 已覆盖（ordered intercept + fanout observer） |
-| `agent/looping/*`（1211 行） | `runtime.AgentLoop` | 已覆盖被动消费、串行化、中断 |
-| `agent/core/passive_turn.py`（2255 行） | `runtime.PassiveTurnPipeline` + `DefaultReasoner` | 已覆盖 streaming tool loop 与 retry |
-| `agent/turns/*` | pipeline 内联 | 行为覆盖，无独立 TurnResult/SideEffect 抽象 |
-| `agent/lifecycle/*`（2200 行） | `lifecycle.py` + pipeline | 7 个 phase ctx 已覆盖；无 slot DAG（§4.1） |
-| `agent/prompting/assembler.py`、`budget.py`、prompt blocks | `prompting/{blocks,assembler,budget}.py` + `context_builder.py` | ✅ 结构与关键合同已迁移（§4.2） |
-| `agent/retrieval/protocol.py`、`default_pipeline.py` | `retrieval.py` | ✅ 已补接缝 + RRF 融合（§4.3） |
-| `agent/model_runtime/context_policy.py` | `context_policy.py` | ✅ 本轮补齐（含 #117 的 160 基准） |
-| `agent/model_runtime/*`（其余） | `models/openai_compatible.py` | 我们只有一类后端，无需统一（§5） |
-| `session/manager.py`、`store.py` | `session.py` | JSON canonical + SQLite FTS；#124 语义本就一致 |
-| `core/memory/*`、`memory2/*`（5.6k） | `memory.py`、`embeddings.py`、`retrieval.py` | 核心行为覆盖 + RRF 融合；LLM 门控算法未做（§4.4） |
+不能笼统地说“已复刻 Akashic”，也不应说“只是少了前端”。差距主要不在模型会不会调用工具，
+而在动态运行时、主动链路的提交协议、可恢复状态和运维控制面。
 
-### 2.2 工具与扩展
+## 2. 评估口径
 
-| Reference | Kirakira | 状态 |
-| --- | --- | --- |
-| `agent/tools/registry.py`、`base.py` | `tools/registry.py` | 已覆盖 |
-| `agent/tool_hooks/*` | `tool_hooks.py` | pre/post/error hook 已覆盖 |
-| `agent/tools/{filesystem,shell,web_fetch,web_search,vision,tool_search}.py` | `tools/builtins.py` | 已覆盖 |
-| `agent/tools/{memorize,recall_memory,forget_memory,message_lookup,message_push,schedule}.py` | `tools/builtins.py`、`scheduler.py` | 已覆盖 |
-| `agent/tools/spawn.py`、`agent/background/*` | `subagent.py` | 已覆盖 inline/background、profile、并发上限 3 |
-| `agent/policies/delegation.py` | `subagent.py` 的 `_MAX_BACKGROUND_JOBS = 3` | 行为等价（§6.2） |
-| `agent/policies/history_route.py` | 无 | **不需要**：upstream 死代码（§6.2） |
-| `agent/mcp/client.py` | `mcp/client.py` | 已覆盖，并已收紧结果结构校验 |
-| `agent/mcp/declarations.py`、`host.py`、`generation.py`、`watcher.py` | `mcp/declarations.py`、`host.py`、`publisher.py`、`watcher.py` | ✅ 本轮补齐 |
-| `agent/mcp/admin.py`、`agent/tools/workspace_mcp.py` | `mcp/admin.py` | ✅ 本轮补齐（§6.1） |
-| `agent/plugins/*`（7950 行） | `plugins.py`、`plugin_manifest.py`、`plugin_decorators.py` | 核心合同覆盖；代际粒度更粗（§4.1） |
-| `agent/plugins/snapshot.py` | `snapshot.py` | ✅ 本轮补齐；单一代际而非 per-plugin（§4.1） |
-| `agent/skills.py` | `skills.py` | 已覆盖 |
-| `agent/tools/agent_restart.py`、`agent/restart.py` | 无 | 有意未做（§5） |
+本文统一使用四种状态，避免把“有一个相似文件”写成“已覆盖”：
 
-### 2.3 渠道与装配
-
-| Reference | Kirakira | 状态 |
-| --- | --- | --- |
-| `infra/channels/contract.py`、`base.py` | `channels/contract.py`、`base.py` | 已覆盖 |
-| `infra/channels/web_chat_channel.py` | `channels/web.py` | 已覆盖，transport 不同 |
-| `infra/channels/telegram_channel.py` | `channels/telegram.py` | 已覆盖 Bot API 行为 |
-| `infra/channels/qq_channel.py`、`group_filter.py` | `channels/qq.py` | 已覆盖 OneBot HTTP 行为 |
-| `bootstrap/channel_host.py` | `channels/host.py` | 已覆盖启停与失败回滚 |
-| `bootstrap/app.py`、`wiring.py`（6.5k） | `cli.build_runtime`、`CoreRuntime` | 已覆盖核心装配 |
-| `infra/persistence/json_store.py` | 各模块内联 `_atomic_write` | 行为覆盖，未抽公共模块 |
-| `agent/control/*`、`infra/control/*`（1748+ 行） | 无 | 有意未做（§5） |
-| `agent/peer_agent/*`（1094 行） | 无 | 有意未做（§5） |
-| `frontend/`（React Dashboard） | 无 | 有意未做（§5） |
-
-## 3. 本轮（reference 更新 26 个 commit 后）的处置
-
-| Reference 变更 | 性质 | 处置 |
-| --- | --- | --- |
-| #120 MCP registry → 声明式热重载 | 子系统重做 | ✅ 已重做 |
-| #123 agent 自助管理 workspace MCP | 新能力 | ✅ 已补（本次审计才发现漏了，§6.1） |
-| #104 插件描述符 → 程序化能力声明 | 子系统重做 | ✅ 已重做 |
-| #105/#119 代际 + RuntimeSnapshot + lease | 新架构 | ✅ 已按比例实现 |
-| #117/#116 context policy 派生（640 → 160） | 参数与派生 | ✅ 已跟进 |
-| #127 workspace 状态隔离 | 装配 | ✅ 已跟进 |
-| #111 fail-loud contracts（236 文件） | 全仓原则 | ⚠️ 择要应用（§4.5） |
-| #124 session 裁剪保留历史 | 修复 | ✅ 本就一致（已核对 `session.py` 切片语义） |
-| #106 只启用一个 Memory Engine | 修复 | N/A：我们只有一个引擎 |
-| #121 supervised restart | 运维 | ❌ 有意未做（§5） |
-| #118 TUI IPC → app server | 控制面 | ❌ 有意未做（§5） |
-| #126 rolling backup | 运维脚本 | ❌ 有意未做（§5） |
-
-## 4. 保留的实现差异（不是"缺失"，是更轻的实现）
-
-### 4.1 代际粒度
-
-Reference 的 `RuntimeSnapshot` 按 **per-plugin generation** 组织：每个插件有独立代际、独立
-skill catalog、独立 MCP catalog，状态机是 `compiled → published_pending → committed/aborted →
-retired`，还有发布后验收与回滚、`quiesce`、`fork_lease`、slot 拓扑排序。
-
-Kirakira 的快照是**单一代际**（phase 模块 + MCP catalog + hooks），状态机是
-`compiled → published → retired → drained`。语义相同（换代不影响在途 turn、租约排空才回收），
-但做不到"只换某一个插件的代际而不动其他插件"。
-
-对当前规模够用；插件多到需要独立换代时再拆。
-
-### 4.2 Context trim（已完整迁移）
-
-Kirakira 现在与 Reference 一样使用 `PromptBlock` + 具名 `ContextTrimPlan`：稳定 system block
-与逐轮动态 Context Frame 分离，静态块按签名缓存；超限时重新 render，并依次移除
-`skills_catalog` → `recent_context` → `long_term_memory` → `retrieved_memory`，最后才把历史窗口
-缩到 50% / 0。Provider 预检同时计算 system、消息、工具 schema 和图片成本。
-
-每次尝试都会产生 `ContextPrepared`，并把 section 字符数、估算 token、缓存命中、裁剪计划、
-实际模型 usage 和下一轮 history baseline 写进 session trace。历史从 `last_consolidated` 开始，
-未归档消息达到安全阈值时先强制 consolidation；失败则阻断本轮，不再静默遗忘。
-
-### 4.3 Retrieval 接缝与融合（已补齐）
-
-`retrieval.py` 提供 `MemoryRetrievalPipeline` 协议，并实现了 reference `memory2/retriever.py`
-的核心机制：
-
-| 机制 | Reference | Kirakira |
-| --- | --- | --- |
-| RRF 融合 | `_rrf_merge`，k=60，keyword 权重 0.5 | `rrf_fuse`，同参数 |
-| 热度衰减 | alpha 0.20，半衰期 14 天 | `hotness_boost`，同参数 |
-| 注入预算 | max_chars 1200，line_max 180 | `plan_injection`，同参数 |
-| lane 划分 | vector + keyword | vector + lexical |
-
-**这不只是对齐 reference，更是修掉了我们自己的一个真实缺陷**：原来的
-`semantic * 0.75 + lexical * 0.25` 把尺度不可比的原始分相加，导致每条记录都有非零分、
-`limit` 永远被无关记忆填满（详见 `VERSION_EVOLUTION.md §5.4`）。
-
-### 4.4 记忆算法：仍然简化的部分
-
-Reference 的 `memory2`（5.7k 行）还有 LLM query rewrite、HyDE、sufficiency checker、
-profile extractor、procedure 冲突检测、dedup decider、图关系存储、独立 SQLite 向量 store。
-
-Kirakira 目前：Markdown + typed records + FTS + 可选 embedding + **RRF 多路融合 + 热度衰减 +
-注入预算**。
-
-**未跟进的都是 LLM 门控的**（query rewrite / HyDE / sufficiency / dedup decider）：每一项都要在
-每轮对话里多打一次模型。判断标准是"纯计算的先做，要多花模型调用的必须先有评测"——reference
-自己也用配置门控它们，且本项目文档一开始就写明 HyDE 必须经评测再开。接缝已经留好（§4.3）。
-
-**`dedup_decider` 已经用更省的方式做了**（在线测试发现缺陷后修复，见 §6.4）：reference 为去重
-单独多打一次模型；我们把已记事实喂进 consolidation **本来就要打的那次调用**，抽取与去重合并
-为一次判断，零额外往返。在线验证：同一组对话记录数从 9（含 3 对重复）降到 6，且更正/否定
-仍能覆盖旧事实。
-
-### 4.5 Fail-loud 范围
-
-Reference #111 是 236 文件、18k 行的全仓收紧，其中大半覆盖 dashboard/peer-agent 等未做范围，
-以及 proactive/drift（现已 MVP 实现，但全量 fail-loud 仍按范围裁剪）。我们提取原则应用于自己
-已实现的链路（memory 写入、session 列举、MCP 结果结构、plugin manifest），共 4 处 + 5 个测试。
-**原则一致，覆盖面按范围裁剪。**
-
-### 4.6 其他
-
-- **Phase slot DAG**：Reference phase module 可声明 slot import/export 并拓扑排序；我们是显式顺序链。
-- **Transport**：Reference 用 FastAPI/WebSocket 与更重的 SDK；我们用标准库 HTTP + Bot API + OneBot HTTP。
-- **持久化抽象**：Reference 有 `infra/persistence/json_store.py` 统一原子写；我们各模块内联。
-- **安装向导**：Reference 有 Click setup wizard；我们用 `config.example.toml` + 环境变量。
-- **Plugin jobs**：Reference 插件可声明 interval job；本项目主动/Drift 链路走内置循环，插件化
-  的周期任务声明尚未做（可归入主动链路的拓展位）。
-
-## 5. 有意未跟进（记录，不是遗忘）
-
-| 项 | 为什么不做 |
+| 状态 | 含义 |
 | --- | --- |
-| `agent/control/*` + app server（#118） | 控制面形态，不影响被动链路语义；我们只有本进程 REPL |
-| supervised restart（#121） | 进程监督属运维形态 |
-| rolling backup（#126） | 独立运维脚本 + systemd timer |
-| Codex backend 统一（#116） | 我们只有 OpenAI-compatible 一类后端，统一无对象 |
-| `agent/peer_agent/*` | A2A 外部 agent 进程管理与轮询，超出被动链路 |
-| `frontend/` Dashboard | 前端工程 |
-| `plugins/` 插件市场（19.2k） | 具体插件实现，不是 runtime |
+| **对齐** | 关键输入、状态变化、失败语义和输出均有对应实现与测试 |
+| **轻实现** | 用户可见行为成立，但结构、扩展点或恢复合同明显更简单 |
+| **替代实现** | 目标相同，因本项目约束选择了不同机制，不能声称逐行移植 |
+| **未实现** | 运行时能力不存在；即使有协议、文档或预留接口也不算完成 |
 
-## 6. 本次审计发现的错误与真实差距
+评估按五个问题核对：谁触发、谁拥有状态、什么时候提交、失败后怎样恢复、是否有调用点和测试。
+代码行数只说明维护面，不说明覆盖率。当前 `kirakira_agent/` 约 2.3 万行 Python；Reference 排除
+tests/eval 后约 10.6 万行。数倍的维护面差异本身正说明两者不是同一运行时厚度。
 
-### 6.1 已修复：agent 无法自助管理 MCP
+## 3. 架构层面的根本差异
 
-**上一版审计把 #120/#123 合并标成"✅ 已跟进重做"，但只做了 #120。**
+| 维度 | Akashic Agent | Kirakira Agent | 判断 |
+| --- | --- | --- | --- |
+| 部署形态 | 多层 bootstrap/infra/control，带 app server、前端与监督能力 | 单进程 CLI/TUI + 内置 Channel host | Kirakira 更易读易跑，运维能力更弱 |
+| 执行编排 | Turn/proactive lifecycle + slot DAG + side-effect abstraction | 显式顺序 pipeline，少量 phase hooks | 轻实现；固定流程清楚，第三方编排能力弱 |
+| 动态代际 | per-plugin generation、snapshot、lease、quiesce/rollback | 全局单一 snapshot，主要保护被动 turn | 被动基本对齐；主动未绑定 lease |
+| Provider | 多后端抽象与更完整控制能力 | OpenAI-compatible 一类接口 | 范围收窄；forced tool choice 等能力缺失 |
+| 状态与持久化 | 统一 persistence 语义、更多 SQLite/恢复合同 | JSON/SQLite 分散在各模块 | 能运行，但一致性与恢复边界较弱 |
+| 扩展生态 | 插件市场、plugin job、proactive source、lifecycle factory | workspace 插件 + hook/MCP；主动 source 为进程内协议 | 被动可扩展，主动扩展仍是预留位 |
+| 控制面 | app server、control protocol、Dashboard、peer agent | 本进程命令与状态输出 | 有意未实现 |
 
-后果是一个**能力回归**：我们跟随 upstream 删掉了 `mcp_add`/`mcp_remove`/`mcp_list`，却没有补上
-upstream 同期给出的替代品（`agent/mcp/admin.py` + `agent/tools/workspace_mcp.py`）。于是 agent
-完全失去了配置 MCP 的能力——比旧版还弱，只有人手改文件才行。
+Kirakira 的“轻”有真实收益：主链路可在较少文件内追踪，开发和演示成本低，也避免过早复制未被
+使用的抽象。但当需求进入热插拔、跨进程、可靠投递和故障恢复时，这些差异会从“简化”变成必须补的能力。
 
-已补 `mcp/admin.py`，提供 `workspace_mcp_apply` / `workspace_mcp_remove` /
-`workspace_mcp_status`，与人手改文件走同一条 reconcile；发布失败回滚声明、每次修改留备份、
-`status` 只回显 env 键名不回显值。10 个测试。
+## 4. 被动链路对照
 
-**教训**：审计表里合并条目（"#120/#123"）会掩盖漏项。一个 commit 一行。
+### 4.1 已对齐或按比例实现
 
-### 6.2 核对后确认"不是差距"的项
+| Akashic | Kirakira | 状态 | 说明 |
+| --- | --- | --- | --- |
+| `bus/*`、被动 lane | `bus.py`、`event_bus.py` | 对齐 | 同 chat 保序、跨 session 并发、intercept/fanout |
+| `agent/looping/*` | `runtime.AgentLoop` | 轻实现 | 消费、session 串行、中断成立，类型与层次更少 |
+| `agent/core/passive_turn.py`、`turns/*` | `PassiveTurnPipeline` + `DefaultReasoner` | 轻实现 | streaming tool loop、retry、持久化成立；TurnResult/side effect 被内联 |
+| lifecycle phases | `lifecycle.py` + EventBus | 轻实现 | 7 个 phase context；无 slot import/export DAG |
+| prompting/context policy | `prompting/`、`context_builder.py`、`context_policy.py` | 对齐 | PromptBlock、预算预检、分级裁切、trace |
+| retrieval pipeline | `retrieval.py` | 对齐 | lexical/vector 多路召回、RRF、热度、注入预算 |
+| session manager/store | `session.py` | 轻实现 | JSON canonical + SQLite FTS；存储抽象更薄 |
+| tool registry/hooks | `tools/registry.py`、`tool_hooks.py` | 对齐 | schema、pre/post/error、timeout、deferred discovery |
+| MCP declarations/generation | `mcp/` + `snapshot.py` | 轻实现 | 声明式发布、失败回滚、在途 turn 固定代际 |
+| Channel host | `channels/` | 替代实现 | Web/Telegram/QQ 行为覆盖，transport 更轻 |
+| subagent/background | `subagent.py` | 轻实现 | inline/background 与并发上限；无 peer-agent 进程体系 |
 
-这两项如果只看文件名会误判成缺失，核对代码后确认不需要：
+### 4.2 记忆系统不是“全量搬运”
 
-- **`agent/policies/history_route.py`**（意图路由）：`HistoryRoutePolicy` 类**在整个 reference
-  里从未被实例化**，只有 `policies/__init__.py` 导出它。是 upstream 的死代码。
-- **`agent/policies/delegation.py`**（委派决策）：类型签名看着很重（`heuristic|llm|manual_rule`、
-  confidence、reason_code），但实现的 docstring 写得很清楚："限制并发委派数量，其余决策交由
-  模型指引"——实际只做并发上限 3。我们 `subagent.py` 的 `_MAX_BACKGROUND_JOBS = 3` 行为等价，
-  差的只是结构化决策元数据。
+Kirakira 已具备 typed memory、异步 consolidation、source 关联、lexical/vector 检索、RRF、热度和
+注入预算。它还把语义去重并入本来就要发生的 consolidation 调用，避免 Reference 的独立
+`dedup_decider` 再增加一次模型往返。这是一个有意的成本优化。
 
-**方法论**：判断差距要看**调用点**，不能看文件名或类型声明。reference 里有 aspirational
-的类型脚手架（Literal 列了 llm/manual_rule，实现里根本没有）。
+仍未等价的部分包括 query rewrite、HyDE、sufficiency checker、独立 profile extractor、procedure
+冲突判断、图关系存储与独立向量 store。仓库虽已有部分 `memory2/` 模块，默认被动调用链是否启用、
+状态是否完整接入，必须逐项看 wiring，不能用目录存在来声称全量覆盖。
 
-### 6.3 尚未闭合的真实差距（按值得做的程度排序）
+当前策略是合理的：先用评测集证明额外 LLM gate 能提升召回或写入质量，再承担延迟与费用。
 
-1. ~~**Retrieval 接缝 + RRF**~~ —— ✅ 已完成（§4.3）。
-2. ~~**Context trim 按 section 分级**~~ —— ✅ 已完成（§4.2）。
-3. **评测集**——query rewrite / HyDE / sufficiency 都是 LLM 门控项，**没有评测集就没有理由
-   开启它们**。所以下一步不是继续抄算法，而是先能测量。见 `VERSION_EVOLUTION.md §11`。
-4. **per-plugin 代际**（§4.1）——当前规模不需要，插件变多再说。
-5. **结构化委派决策元数据**（§6.2）——只有在要做 trace/评测时才有价值。
+### 4.3 已确认不是差距的两项
 
-### 6.4 在线测试发现并已修复：同一事实被存两遍
+- Reference 的 `HistoryRoutePolicy` 没有实际实例化调用点，仅有导出；Kirakira 不复制死代码。
+- Reference 的 delegation policy 当前实质是并发委派上限 3；Kirakira 的 background subagent 也限制为 3。
+  Kirakira 缺的是结构化 reason/confidence 元数据，而不是并发门控行为。
 
-用真实 DeepSeek（`deepseek-v4-flash`）跑 6 轮"记住：…"后，`items.json` 里出现成对的重复：
+## 5. 主动推送对照
 
-```text
-[procedure] 部署脚本在 scripts/rollout.sh，每次发版都跑它      source_ref=:0-5  ← consolidation
-[procedure] 用户的部署脚本在 scripts/rollout.sh，每次发版都跑它。 source_ref=:0    ← memorize 工具
-[event]     错误码 E4011 表示配额超限                          ← 同一事实，
-[procedure] 用户的错误码 E4011 表示配额超限。                    ← 类型还不一致
-```
+### 5.1 能力映射
 
-**根因**：`memorize()` 去重靠 `_normalize_content(a) == _normalize_content(b)` 精确匹配，而
-consolidation 的 LLM 必然改写措辞，永远匹配不上。`consolidate_turn` 里的
-`_last_assistant_used_memorize` 只守住"显式记忆规则"这条路径，守不住后台 LLM 抽取那条。
+| Akashic | Kirakira | 状态 | 真实差异 |
+| --- | --- | --- | --- |
+| energy/scheduler | `proactive/energy.py` + `_next_interval()` | 替代实现 | 衰减与双档间隔沿用 Reference；Kirakira 每轮把 `D_energy` 与 `D_recent` 软或，Reference 还可接 lifecycle/hazard 产出的 base score |
+| 三通道 contracts | `proactive/contracts.py` | 轻实现 | alert/content/context 语义保留，字段更少 |
+| MCP proactive sources | `ProactiveSource` + `FileInboxSource` | 替代实现 | fetch/ack 接口成立，但没有 MCP/plugin 自动装配与 generation |
+| source gateway/reservoir | `SourceRegistry` + `ProactiveStateStore` | 轻实现 | 并发 fetch、稳定 id、未读/消费成立；恢复合同更弱 |
+| wake hazard/ranking | severity/newness 排序 | 轻实现 | 无累计 hazard、兴趣 embedding、turn prototype 校准 |
+| forced tool decision | `ProactiveJudge` 严格 JSON | 替代实现 | provider 通用，但结构保证更弱 |
+| `ProactiveKernel` + lifecycle | `ProactiveLoop._tick()` | 轻实现 | 显式顺序链，无 slot DAG、factory、start/stop rollback |
+| proactive snapshot lease | 无 | 未实现 | tick 期间 source/tool/skill 可能不具备同代际保证 |
+| delivery + pending ACK | Channel receipt + delivery id + pending ACK | 轻实现 | 对齐 orchestrator 的成功后提交与 wake state 的 ACK 队列；无 durable outbox |
+| trace/diagnostics | `decisions` 表 + `status()` | 轻实现 | 能回看动作，缺完整 strategy/lifecycle trace |
 
-**影响**：召回时两条都进注入块，1200 字符预算里一半是重复内容。
+### 5.2 产品语义已经成立的部分
 
-**词法阈值方案被实测否决**：否定句相似度（0.833）比真重复（0.727～0.800）还高，任何有效阈值
-都会把"CI 跑"和"CI 不跑"合并掉，让 agent 说反话——比冗余严重得多。去重必须理解语义。
+以下不是“接口占位”，而是已有端到端调用点和测试的行为：
 
-**修复**：consolidation 本来就要打一次 LLM，所以把已记事实喂进**同一次调用**
-（`_known_memory_digest()`），抽取与去重合并为一次判断，**零额外往返**。reference 用独立的
-`dedup_decider.py`（313 行）多打一次模型，我们并进已有调用，代价更低。
+- 后台循环按 Session 活跃状态自适应选择下一次检查间隔。
+- 所有 source 并发拉取，单源失败不阻断其他源。
+- alert 优先于 content；content 由模型判断是否值得打扰；context 不独立触发。
+- 稳定 item id 防止重复入库，content 有冷却和超龄淘汰。
+- 模型失败时 alert 回退原文、content 默认 skip，后台循环继续存活。
+- 主动消息走原 Channel，并写回 Session 供后续判断防重复。
+- 被动 turn 忙时主动 tick 让路。
 
-prompt 里显式保留了安全网："与上面某条**语义相反**（例如否定）→ 必须输出，这是修正，
-不是重复"——去重绝不能压掉更正。
+### 5.3 MVP 仍需明确承认的边界
 
-**在线验证**（同一组 6 轮"记住：…"）：
+1. **调度不是发送概率。** energy/base score 只选轮询间隔；是否发送由事件、冷却和 LLM 决定。
+2. **单进程发送闭环已打通，但还不是跨崩溃 exactly-once。** 主动链路会等待 Channel callback 成功，
+   失败不写 Session/不消费事件；仍缺 durable outbox，进程在渠道成功与本地提交之间崩溃时可能重复发送。
+3. **文件源只是契约样例。** 没有生产级 RSS/日历/MCP source 的自动发现、凭据、健康检查和限流。
+4. **主动链路没有代际租约。** 被动 turn 的 snapshot 经验尚未延伸到一次完整 proactive tick。
+5. **单目标配置。** 当前一套 `[proactive.target]` 对应一个 channel/chat，不是多用户调度器。
 
-| | 修复前 | 修复后 |
-| --- | ---: | ---: |
-| 记录条数 | 9（含 3 对重复） | **6** |
-| `scripts/rollout.sh` 召回 | 2 条（重复） | **1 条** |
-| `E4011` 召回 | 2 条（重复） | **1 条** |
+这五项比“有没有 phase graph”更影响生产可用性，优先级应更高。
 
-更正安全性另测：连说"CI 改成 GitLab""不喜欢猫了改养狗""PostgreSQL 16 升到 17"，
-三条更正**全部写入且旧事实被替换**，没有被去重压掉。
+## 6. Drift 对照
 
-## 7. 主动推送与 Drift（2026-07-22 MVP 复刻）
+| Akashic | Kirakira | 状态 | 说明 |
+| --- | --- | --- | --- |
+| `plugins/drift_flow` skill 驱动 | `drift/skills.py` + `runner.py` | 轻实现 | SKILL.md 决定行为，每次是一轮 Agent run |
+| run/cursor/continuum | `drift.db` | 轻实现 | run 记录、skill continuum、min interval 已有 |
+| message/finish tools | `drift/tools.py` | 替代实现 | 线程内生成草稿，主 event loop 等 Channel；成功记 sent，失败记 silent |
+| hazard drive | 直接在 no-push 后 `maybe_run` | 替代实现 | 简单确定性门控，无到期采样 |
+| journal/self-observation | 无 | 未实现 | 无 question/reinforce/revise 与 recent journal |
+| proactive lifecycle integration | 函数 hook | 轻实现 | 无 module factory、slot 和 snapshot binding |
 
-面试反馈"缺乏与市面项目的差异化"——根因是之前只复刻了**被动回复**这条与所有 chatbot 无异的
-链路。akashic 真正的差异点是另外两条，现已 MVP 复刻并接入 runtime。
+一个重要措辞边界是：Kirakira Drift **复用 Agent 和默认工具集**，并不完整复用
+`PassiveTurnPipeline`。它没有自动获得被动 turn 的全部 lifecycle、streaming、context retry、snapshot
+lease 与提交语义。
 
-### 8.1 逐模块映射
+## 7. Kirakira 自己的差异，而不只是“少了什么”
 
-| Reference | Kirakira | 状态 |
+与 Reference 相比，Kirakira 有几项明确的自主取舍：
+
+- **单进程、显式 pipeline 优先。** 主动 tick 的全部控制流能在一个文件内读完，适合学习、调试和
+  快速验证；代价是第三方 phase 组合能力较弱。
+- **Provider 中立的 JSON 主动决策。** 不依赖某一家模型的 forced tool choice，接 OpenAI-compatible
+  服务更容易；代价是结构化保证下降，需要更强 schema 校验。
+- **把语义去重并入 consolidation。** 少一次模型调用，降低常态延迟和费用；代价是 prompt 职责更重，
+  需要独立评测防止抽取与去重互相干扰。
+- **Drift 草稿后提交。** 同步 Agent 在线程里不直接碰主 MessageBus，避免跨事件循环；这也自然形成
+  “先生成副作用意图、再由 owner 提交”的边界。
+- **文件源作为可执行示例。** 无外部依赖即可演示主动链路，但必须清楚标注它不是生产 source 方案。
+
+这些差异只有在边界被写清时才是设计取舍；如果把可靠性缺口包装成“更轻”，就会掩盖风险。
+
+## 8. 有意未纳入当前范围
+
+| 能力 | 当前处置 | 原因 |
 | --- | --- | --- |
-| `proactive_v2/energy.py` | `proactive/energy.py` | ✅ 纯数学照搬（多时间尺度电量 + base_score + 调频） |
-| `proactive_v2/contracts.py` | `proactive/contracts.py` | ✅ 三通道契约精简 |
-| `proactive_v2/mcp_sources.py`（MCP gateway） | `proactive/sources.py`（协议 + 文件源） | ⚠️ 换实现：协议对齐、`asyncio.gather` 真并发拉取，内置文件源占位，MCP 留拓展位 |
-| `plugins/wake_proactive/hazard.py`（`rank_events`） | `proactive/contracts.py`（`rank_alerts`/`rank_content`） | ⚠️ 精简：alert 按严重度、content 按新近度排序（无 hazard 兴趣打分） |
-| `proactive_v2/state.py`、`plugins/wake_proactive/state.py` | `proactive/state.py` | ⚠️ 精简：去重/ACK/冷却 + 龄期淘汰，无 hazard/embedding 表 |
-| `plugins/wake_proactive/prompt.py`+`tools.py` | `proactive/judge.py` | ⚠️ 换实现：JSON 决策替代 forced tool call（`complete` 无 tool_choice）；含近期已推消息去重 |
-| `proactive_v2/loop.py`+kernel+`wake_proactive/runtime.py` | `proactive/loop.py` | ⚠️ 压平：直白 async tick，无 phase-graph kernel / snapshot；含 passive-busy 门控、判断降级、决策 trace/status |
-| `proactive_v2/loop.py` 的 trace jsonl（rate/config） | `state.py` `decisions` 表 + `loop.status()` + `--proactive` CLI | ⚠️ 精简：单表决策记录 + 一次性触发，替代多份 jsonl trace |
-| `plugins/drift_flow/*`、`wake_proactive/drift_drive.py` | `drift/{skills,state,tools,runner}.py` | ⚠️ 复用现有 Agent loop；无 hazard 采样 / journal |
+| Dashboard / frontend | 未实现 | 独立产品面，不决定 Agent 核心语义 |
+| app server / control protocol | 未实现 | 当前以本进程 CLI/TUI 为入口 |
+| supervised restart / rolling backup | 未实现 | 运维与恢复层，尚未进入部署目标 |
+| peer-agent 进程管理 | 未实现 | 当前 subagent 已满足本地委派范围 |
+| 插件 marketplace | 未实现 | 现有 workspace 插件满足开发阶段 |
+| 多 Provider backend | 未实现 | 当前只承诺 OpenAI-compatible |
 
-### 8.2 有意未跟进（Tier-3，记录不是遗忘）
+“不在当前范围”不等于永远不需要。若目标从个人本地 Agent 变成多用户长期服务，control、backup、
+租户隔离和可靠队列会立即变为核心要求。
 
-| 项 | 为什么暂缓 |
-| --- | --- |
-| phase-graph kernel（`ProactiveKernel` + slot DAG） | 当前单一 tick 链够用，插件化 phase 再说 |
-| snapshot 热重载 / 插件 proactive-source 运行时 | 依赖整套代际机制；文件源先占位 |
-| 语义兴趣向量（turn prototype + cosine 校准） | 依赖 embedding 全链路，属兴趣判断增强 |
-| hazard 穿线 / drift_drive 到期采样 | 概率触发的精调，MVP 用直接门控替代 |
-| self_observation journal（question/reinforce/revise） | 连续性增强，接口已留在 `drift/state.py` |
+## 9. 差距优先级
 
-### 8.3 验证
+### P0：把单进程发送确认升级为跨崩溃可靠提交
 
-- `tests/test_proactive.py`（16）：电量衰减/调频、三通道契约、排序（severity/新近度）、去重/冷却/龄期淘汰、文件源 fetch/ack、
-  端到端 tick（alert 直推 / content skip→drift / content send）。
-- `tests/test_drift.py`（5）：skill 发现、min_interval 门控、连续性往返、端到端 run（message_push
-  + finish_drift → 投递 + 落库）、disabled 不跑。
-- 接线：`cli._build_proactive` 按 `[proactive]` 装配；`CoreRuntime.{proactive_loop,drift_runner}`
-  加入 `start_background` / `stop_background`。全量 202 passed（余 5 项为既有环境问题，见 §8）。
+1. 在已有 Channel delivery receipt 与 delivery id 上增加 durable outbox。
+2. 为 proactive.db、drift.db 和 source cursor 定义备份/恢复与 crash replay 测试。
 
-## 8. 审计证据
+### P1：把 MVP 数据源变成可扩展运行时
 
-- Python：`/home/xiang/.conda/envs/xingshu-vllm/bin/python` 3.12。
-- `unittest discover -s tests`：**共 186 项，183 项通过、3 项条件跳过**。除原有 context policy、snapshot、
-  workspace、fail-loud、MCP、retrieval 回归外，新增 prompt assembly/cache、always-on skill、
-  Provider preflight、语义 retry trace、post-reply budget 与 TUI state 合同。
-- 关键回归 `test_turn_pins_snapshot_tools_across_mid_turn_hot_reload`：turn 中途换代后本轮仍
-  调用到旧代际工具并拿到旧代际返回值，全局 current 已是新代际，旧代际在租约释放后 drained。
-- 真实 stdio MCP server 端到端：声明 → 连接 → 发布 generation → `/tools` 列出
-  `mcp_fake__echo` / `mcp_fake__fail` → 干净关闭。
-- 全新 clone 按 README 操作可直接启动，运行时状态自动生成且不被 git 跟踪。
-- **真实模型在线验证**（DeepSeek `deepseek-v4-flash`，key 仅注入测试进程环境）：
-  - 基础响应、streaming（9 个 delta）、真实工具循环（`write_file` → `read_file`，文件确实落盘）、
-    session 工具链持久化。
-  - MCP 全链路：声明 → generation → 快照 → 模型自己 `tool_search` 解锁 → 调用 `mcp_fake__echo`
-    拿到回显。同时确认 MCP 工具**不在基础注册表**（快照专属设计生效）。
-  - agent 自助管理 MCP：模型调用 `workspace_mcp_apply` → 声明落盘 → 新代际发布 → 工具可用。
-  - 记忆：6 轮对话触发后台 consolidation，LLM 抽出 9 条带类型记录；RRF 对
-    `scripts/rollout.sh` / `E4011` / `PostgreSQL` 精确召回正确。
-  - context policy：128k 上下文派生出 `memory_window=20` / `max_tokens=4096`，与 1M 基准等比例一致。
-  - context 全链路：1M DeepSeek 配置下估算 `3106/891808` input tokens，Provider 报告
-    `3195 prompt + 15 completion = 3210 total`，回复后 baseline 为 22 history tokens；session 中
-    `selected_plan=full`、section breakdown、cache/usage 与 retry attempts 均可回查。
-  - **发现缺陷**：见 §6.4。
-- `git ls-files` 无密钥形状字符串；`Reference/` 由 `.gitignore` 排除。
+1. 从插件/MCP 声明编译真实 `ProactiveSource`。
+2. 一次 tick 绑定 snapshot lease，source generation 在 tick 内固定。
+3. 增加 source timeout、health、rate limit 和 per-source diagnostics。
+
+### P2：先可测，再增强智能
+
+1. 建立 content precision、重复率、打扰率、alert 漏发率数据集。
+2. 对比当前排序与 embedding prototype/hazard 的增益。
+3. 给 JSON decision 做 schema retry，或扩展 Provider contract 支持 forced tool choice。
+4. 建立 Drift 完成率、越权工具调用与 continuum 质量评测。
+
+### P3：规模出现后再增加结构厚度
+
+per-plugin generation、proactive phase DAG、多目标调度、app server、Dashboard 和 peer-agent 都应由实际
+扩展或部署需求驱动，而不是为了目录看起来像 Reference。
+
+## 10. 验证证据与限制
+
+仓库中的主要证据包括：
+
+- 被动链路：并发/保序、工具循环、Session、MCP generation、snapshot lease、context budget、memory
+  retrieval、Channel 与 graceful shutdown 测试。
+- 主动链路：`tests/test_proactive.py` 覆盖 energy、三通道、排序、去重、冷却、文件源 fetch/ack、
+  alert/content 端到端 tick、Channel 失败保留、pending ACK 跨 tick flush、busy gate 与 status。
+- Drift：`tests/test_drift.py` 覆盖 skill 发现、节流、continuum、Channel 确认与 sent/silent 修正。
+
+现有测试证明“进程内闭环贯通到 Channel callback”，尚未证明：真实外部平台最终展示、渠道成功与
+consume/ACK 的跨崩溃原子性、进程恢复、多目标公平调度、插件热换代中的主动 tick 一致性，以及
+主动内容质量。这些正是上面 P0–P2 的依据。
+
+## 11. 对外表述建议
+
+可以说：
+
+> 我参考 Akashic 的三链路语义，先重建了完整的被动 Agent Runtime，再实现主动推送与 Drift MVP。
+> 主动链路用电量模型调节检查频率，把外部事件分成 alert/content/context，由 LLM 做内容判断；空闲时
+> 运行用户可编辑的 Drift skill。当前会等待真实 Channel 发送成功后才提交事件；失败不写 Session，
+> Drift 记为 `silent`；
+> 下一阶段是 durable outbox、插件数据源与主动 snapshot。
+
+不要说：
+
+- “完整复刻 Akashic Agent”。
+- “主动消息 exactly-once”。
+- “Drift 完整复用被动 pipeline”。
+- “已有 MCP proactive source”，除非完成自动装配和真实端到端验证。
+- “代码少十倍但能力完全一致”。
+
+这种表述既能说明差异化，也把 MVP 与生产级能力的边界讲清楚。

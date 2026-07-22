@@ -118,6 +118,7 @@ class DriftRunnerTests(unittest.TestCase):
         self.assertEqual(len(sent), 1)
         self.assertEqual(sent[0].content, "最近在听什么歌？")
         self.assertTrue(sent[0].metadata.get("drift"))
+        self.assertTrue(sent[0].metadata.get("delivery_id"))
         self.assertEqual(len(recent), 1)
         self.assertEqual(recent[0]["status"], "completed")
         self.assertEqual(recent[0]["message_result"], "sent")
@@ -142,6 +143,43 @@ class DriftRunnerTests(unittest.TestCase):
             return ran
 
         self.assertFalse(asyncio.run(scenario()))
+
+    def test_channel_failure_records_silent_without_session_commit(self):
+        async def scenario():
+            tmp = tempfile.TemporaryDirectory()
+            workdir = Path(tmp.name)
+            sessions = SessionManager(workdir)
+            bus = MessageBus()
+
+            async def fail_send(message):
+                raise RuntimeError("channel unavailable")
+
+            bus.subscribe_outbound("web", fail_send)
+            runner = DriftRunner(
+                config=DriftConfig(enabled=True, min_interval_hours=0, max_steps=6),
+                workspace=workdir,
+                bus=bus,
+                session_manager=sessions,
+                model_client=_ScriptedClient(),
+                model="fake",
+                target_channel="web",
+                target_chat_id="u1",
+            )
+            dispatcher = asyncio.create_task(bus.dispatch_outbound())
+            ran = await runner.maybe_run(NOW, "web:u1")
+            recent = runner._state.recent_runs()
+            session = sessions.get_or_create("web:u1")
+            bus.stop()
+            await dispatcher
+            runner.close()
+            sessions.close()
+            tmp.cleanup()
+            return ran, recent, session.messages
+
+        ran, recent, messages = asyncio.run(scenario())
+        self.assertTrue(ran)
+        self.assertEqual(recent[0]["message_result"], "silent")
+        self.assertFalse(any(m.get("drift") for m in messages))
 
 
 if __name__ == "__main__":

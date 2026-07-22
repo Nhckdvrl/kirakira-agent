@@ -1,4 +1,9 @@
-# Kirakira Agent：从 MVP 到完整 Agent Runtime
+# Kirakira Agent：从 Function Calling MVP 到被动式 Agent Runtime
+
+> 本文只讲**用户消息触发的被动链路**：它如何从最小 Function Calling 闭环演进为可长期运行的
+> Agent Runtime。主动推送与 Drift 是后来新增、由后台时钟触发的另一条架构线，见
+> [PROACTIVE_ARCHITECTURE.md](./PROACTIVE_ARCHITECTURE.md)。两条线分开记录，避免把“被动基座如何长成”
+> 和“Agent 如何在没有用户消息时行动”混成一条时间线。
 
 ## 1. 为什么从 MVP 讲起
 
@@ -19,7 +24,7 @@ MVP：模型能调用一个工具
   ↓
 上下文可治理：PromptBlock、预算预检、语义降级、trace
   ↓
-追平 reference：对齐工具、全量搬 memory2、按运行时分层搬 skill
+追平 reference：对齐工具、迁移 memory2 核心状态与行为、按运行时分层搬 skill
   ↓
 当前：完整被动式 Agent Runtime
   ↓
@@ -369,7 +374,7 @@ Schedule 只执行用户明确创建的定时消息，不包含自主决策。�
 - Session、FTS 消息搜索、长期记忆和后台 consolidation。
 - Plugin、Subagent、Schedule 和 graceful shutdown。
 - PromptBlock、Context Frame、Provider 预算预检、语义降级与持久化 context trace。
-- 自动化测试共 186 项：183 项通过，3 项按环境条件跳过。
+- 自动化回归覆盖工具、Session、并发、MCP、snapshot、上下文、记忆与多渠道。
 - DeepSeek 在线普通响应、真实工具调用、记忆抽取和 context usage/baseline 验证。
 
 这已经是完整被动式 Agent Runtime，但还不是面向多租户和 SLA 的生产平台。
@@ -781,6 +786,9 @@ forget()  →  _forget_in_store2(type, content)   把删除同步到 store2（�
 
 最后一条线是把 `skills/` 对齐 reference。这里最先要纠正的是"对齐"这个词本身。
 
+> 本节保留的是**被动链路阶段当时的判断**：当时主动/Drift runtime 尚未进入这条演进线，因此相关
+> skill 被归入不搬。它们后来的 MVP 状态不在本文续写，见 [主动链路架构](./PROACTIVE_ARCHITECTURE.md)。
+
 原来仓库里有三个 skill（`python-coding`、`repo-navigation`、`test-debugging`）——它们是**自研的
 开发助手**，reference 里根本没有。reference 的九个 skill 是另一套：跑外部 CLI 的、管 MCP 的、
 管插件的、调 Codex 的、以及几个依赖 akashic 独有子系统的。所以"对齐"不是改几行，是**换一整套，
@@ -831,67 +839,11 @@ Tier 3 是这一轮最重要的判断，也是第 8.2 节那条规则在 skill �
 不要半新"、"降级后自洽才能降级"是同一种洁癖——只是从 MCP、记忆写入，延伸到了工具、记忆删除
 和 skill。
 
-## 12. 第八轮工程化：被动之外的两条链路
-
-前十一轮把**被动回复**这条主链路做得很扎实。但一次面试暴露了真正的问题：被动回复和市面
-所有 chatbot/agent 没有区别，讲得再细也是"又一个 agent loop"。参考项目 akashic 的名字叫
-"**会主动找你**的 AI 伙伴"——它的差异化根本不在被动链路，而在另外两条：**主动推送**和 **Drift**。
-之前为了先把被动主链路做扎实，把这两条明确排除了；现在回过头把它们补上。
-
-### 12.1 判断：先做本质，不做全量
-
-参考的主动链路实现极重：`proactive_v2` 是一套 phase-graph kernel（slot DAG 拓扑排序）+
-snapshot 热重载 + 插件工厂 + 语义兴趣向量。全量照搬会掉进和 memory2 一样的"Tier-3 泥潭"。
-判断标准和前面一致——**先做到能执行、保留拓展位，重型机制等有需要再补**。所以这一轮的目标是
-MVP：把两条链路的**差异化本质**做出来并接进 runtime，而不是复刻它的全部厚度。
-
-哪些是"本质"、必须做：
-
-- **电量模型自适应调频**：主动链路的招牌。固定间隔轮询要么吵要么迟钝，参考用一个多时间尺度
-  指数衰减的"电量"值刻画"距上次互动多久"，据此缩放轮询间隔。这段是纯数学（`energy.py`），
-  从参考照搬，可单测，零额外模型调用——高价值低成本，第一个做。
-- **三通道语义**：`alert` 直推 / `content` 兴趣判断 / `context` 只辅助。这是"主动"不等于"乱推"的关键。
-- **可插拔数据源**：定义 `ProactiveSource` 协议，链路只认 source/channel/事件。参考用 MCP 插件源，
-  但 kirakira 还没有 proactive-source 插件运行时（Tier-3 缺口），所以内置一个文件源占位，
-  协议留好 MCP 拓展位——**能跑能演示，日后无缝替换**。
-- **Drift = 一次 agent run**：这是 Drift 最优雅的地方。它不是独立执行引擎，而是借用被动链路
-  那套 Agent，只换 system prompt（用户写的 `SKILL.md`）和工具集。所以 kirakira 直接复用现有
-  `Agent` loop，用极小代价拿到"行为可编辑的后台任务"。
-
-哪些是 Tier-3、这轮不做：phase-graph kernel、snapshot 热重载、插件化数据源运行时、
-语义兴趣向量、hazard 概率穿线、self_observation journal。都在 §DIFFERENCE_AUDIT §7.2 记着。
-
-### 12.2 遇到的两个真实约束
-
-**约束一：`ModelClient.complete` 不支持 forced tool call。** 参考的判断层靠 `tool_choice="required"`
-强制模型调 `send`/`skip` 工具。kirakira 的 provider 接口没有这个能力。硬加会污染整个 provider
-抽象。改法：让判断器让模型直接产出严格 JSON（`{"decision","message","cited_ids"}`）再解析——
-同样是"LLM 决策"，且不绑定 provider 的 forced-tool 能力。这是一处**有意的实现差异**，面试时
-要能讲清"为什么不照抄"。
-
-**约束二：Drift run 跑在工作线程，不能跨事件循环碰 bus。** Drift 复用的 `Agent.run` 是同步的，
-通过 `asyncio.to_thread` 跑在工作线程里。而内置的 `message_push` 工具是 async 且直连
-MessageBus（bus 的队列绑在主事件循环上）。在工作线程里 `asyncio.run` 它会新建一个事件循环，
-跨循环访问主循环的队列——不安全。改法：Drift 覆盖 `message_push` 为**同步版**，只把消息记成
-草稿；真正的投递由 runner 在 run 结束后回到主事件循环上完成。这正好也对上参考的语义
-（Drift 的 message_push 是 fire-and-forget，投递与否由 runtime 记录，不由 skill 自报）。
-
-### 12.3 落地与验证
-
-`kirakira_agent/proactive/`（energy/contracts/sources/state/judge/loop）+ `kirakira_agent/drift/`
-（skills/state/tools/runner），经 `cli._build_proactive` 按 `[proactive]` 配置装配，作为后台 task
-接进 `CoreRuntime.start_background`。交付复用现成的 `bus.publish_outbound`。
-`tests/test_proactive.py`（16）+ `tests/test_drift.py`（5）覆盖电量调频、三通道、去重冷却、
-文件源 fetch/ack、端到端 tick 与 Drift run。全量 202 passed。
-
-**这一轮的方法论**和前面一脉相承：不是"参考有什么就抄什么"，而是先分清哪些是差异化本质、
-哪些是可延后的厚度，用最小代价把本质做到能跑，把重型机制记进 audit 留作拓展位。
-
-## 13. 下一版：工具编排 + LangSmith 评测回归
+## 12. 下一版：工具编排 + LangSmith 评测回归
 
 下一版最重要的不是继续加普通工具，而是证明“工具选择更准、参数更稳、改动不会让旧场景退化”。
 
-### 11.1 Trace 接入
+### 12.1 Trace 接入
 
 将以下节点记录到 LangSmith 或兼容 trace runner：
 
@@ -905,7 +857,7 @@ MessageBus（bus 的队列绑在主事件循环上）。在工作线程里 `asyn
 
 敏感字段必须脱敏，API key、完整私密附件和高风险工具参数不能原样上传。
 
-### 11.2 工具系统评测集
+### 12.2 工具系统评测集
 
 至少覆盖：
 
@@ -919,7 +871,7 @@ MessageBus（bus 的队列绑在主事件循环上）。在工作线程里 `asyn
 - 高风险工具是否被 Hook 拦截。
 - 工具成功后最终回复是否忠于结果。
 
-### 11.3 记忆评测集
+### 12.3 记忆评测集
 
 - 应记住的稳定偏好是否写入。
 - 短期状态是否不会被误存为长期事实。
@@ -930,7 +882,7 @@ MessageBus（bus 的队列绑在主事件循环上）。在工作线程里 `asyn
 - 无关问题是否不会注入噪声记忆。
 - consolidation 重放是否幂等。
 
-### 11.4 基线、回归与回滚
+### 12.4 基线、回归与回滚
 
 ```text
 固定 Dataset
@@ -944,7 +896,7 @@ MessageBus（bus 的队列绑在主事件循环上）。在工作线程里 `asyn
 
 每次运行记录 commit SHA、模型、Prompt 版本、工具 schema 版本、memory strategy 和 evaluator 版本。回滚不是“凭感觉改回 Prompt”，而是回到最后一个通过 gate 的版本和配置。
 
-### 11.5 下一版验收指标
+### 12.5 下一版验收指标
 
 - 工具选择准确率。
 - 工具参数一次通过率。
@@ -956,11 +908,11 @@ MessageBus（bus 的队列绑在主事件循环上）。在工作线程里 `asyn
 
 具体阈值应在第一批真实数据跑完后确定，不能在没有 baseline 时随意编百分比。
 
-## 14. 再下一版：100–200 用户的后端化
+## 13. 再下一版：100–200 用户的后端化
 
 这一层目前是设计方向，不应写进当前简历的“已完成”部分。
 
-### 12.1 服务拆分建议
+### 13.1 服务拆分建议
 
 ```text
 FastAPI / WebSocket / SSE Gateway
@@ -976,7 +928,7 @@ Worker：Agent Turn / Memory Consolidation / Embedding
 LLM、Tool/MCP、pgvector、对象存储
 ```
 
-### 12.2 多用户隔离
+### 13.2 多用户隔离
 
 - 所有业务表带 `tenant_id/user_id`。
 - Repository 查询默认注入用户作用域。
@@ -985,7 +937,7 @@ LLM、Tool/MCP、pgvector、对象存储
 - PostgreSQL 可增加 Row Level Security 作为第二层隔离。
 - Tool workspace、插件数据和附件路径按用户隔离。
 
-### 12.3 数据模型
+### 13.3 数据模型
 
 - `users`：身份、状态、配额。
 - `sessions`：channel、owner、metadata、version。
@@ -995,7 +947,7 @@ LLM、Tool/MCP、pgvector、对象存储
 - `memories`：type、summary、embedding、source、status、confidence。
 - `jobs`：schedule/subagent/consolidation 的统一状态机。
 
-### 12.4 Worker 与并发
+### 13.4 Worker 与并发
 
 - API 只负责提交 turn 和返回 turn id。
 - Worker 异步执行 AgentLoop。
@@ -1004,7 +956,7 @@ LLM、Tool/MCP、pgvector、对象存储
 - 结果通过 SSE/WebSocket 或轮询回传。
 - Tool call 和 memory write 使用幂等 key。
 
-### 12.5 内容审查
+### 13.5 内容审查
 
 - 入站文本、附件和出站回复分别审查。
 - 高风险工具调用走 policy engine，而不是只审查最终文本。
@@ -1012,7 +964,7 @@ LLM、Tool/MCP、pgvector、对象存储
 - 对误杀提供人工复核和申诉状态。
 - 管理后台展示用户、turn、tool call、memory、moderation 和 trace。
 
-### 12.6 什么时候可以写进简历
+### 13.6 什么时候可以写进简历
 
 至少完成：
 
@@ -1024,7 +976,7 @@ LLM、Tool/MCP、pgvector、对象存储
 
 完成后再把简历前两条升级为“FastAPI + PostgreSQL + Worker”，否则面试追问很容易露出没有真正实现。
 
-## 15. 当前项目如何讲
+## 14. 被动链路如何讲
 
 项目主线应是：
 
@@ -1035,10 +987,9 @@ LLM、Tool/MCP、pgvector、对象存储
 5. 多入口引入 MessageBus、同 session 串行和跨 session 并发。
 6. 通过真实 Bug 补齐 correlation、reasoning 回放、SSRF、rollback 和 graceful shutdown。
 7. 把 Prompt 拆成具名 block，用 Provider 预检、语义降级和 trace 管理长上下文。
-8. 追平 reference：对齐工具行为、全量搬 memory2 并接成持久后端、按运行时能力分层搬 skill——
+8. 追平 reference：对齐工具行为、迁移 memory2 核心状态与行为并接入持久后端、按运行时能力分层搬 skill——
    在这一轮里把"能力以运行时为准"从架构原则贯彻到工具、记忆删除和 skill。
-9. 做出被动之外的两条差异化链路——主动推送（电量自适应 + 三通道）和 Drift（行为写在 SKILL.md
-   里的后台 agent run）——回答"和市面 agent 有什么不同"。**面试时这条应当最先讲。**
-10. 下一版用 LangSmith/eval 把经验固化为可回归的工程指标。
+9. 下一版用 LangSmith/eval 把经验固化为可回归的工程指标。
 
-这条演进链比“参考了哪个项目”更能说明你真正理解并解决了 Agent 工程问题。
+这条演进链只回答“被动 Agent Runtime 是怎样工程化的”。项目的产品差异化、主动触发与 Drift
+不要硬塞进这条叙事，单独按 [主动链路架构](./PROACTIVE_ARCHITECTURE.md) 来讲。

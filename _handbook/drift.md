@@ -4,17 +4,18 @@
 
 Drift 是**你写模型可以做什么、模型照着执行**的后台任务系统。
 
-- **什么时候跑**：[主动链路](./proactive.md)拉了一圈，三路（alert/content/context）都没东西可推。
+- **什么时候跑**：[主动链路](./proactive.md)完成一轮但没有产生推送，例如没有候选、content 被 skip、
+  正在冷却或只有 context。被动链路忙导致的 gated tick 不会进入 Drift。
 - **做什么**：你写在 `<workspace>/drift/skills/<name>/SKILL.md` 里的事。
 - **怎么做**：SKILL.md 是一份分步操作指南，作为 system prompt，模型一步步按着走，最后调 `finish_drift` 收尾。
 - **跟主动推送的本质区别**：主动推送的行为是**代码里写死的 system prompt**；Drift 的行为是**你写的 SKILL.md**——可编辑、可增删，不改代码。
 
 这是 Kirakira 的第二条差异化链路。参考 akashic 的 `plugins/drift_flow`；本项目 MVP
-**复用现有 Agent loop**把"一轮 Drift"跑成一次 agent run，刻意不搬 hazard 穿线 /
+**复用同步 Agent 与默认工具集**把"一轮 Drift"跑成一次 agent run，刻意不搬 hazard 穿线 /
 self_observation journal 等 Tier-3 细节。代码在 `kirakira_agent/drift/`。
 
 ```text
-主动链路三路皆空
+主动链路本轮没有产生推送
   └─ DriftRunner.maybe_run(now, session_key):
      ├─ enabled？min_interval 到了？有 skill 吗？   （任一不满足 → 不跑）
      ├─ 每轮重新选一个 skill（最久没跑过的优先）
@@ -70,15 +71,16 @@ description: <一句话描述>
 
 | 工具 | 用途 |
 | --- | --- |
-| `message_push(message)` | 推一条消息给用户（fire-and-forget，本轮最多一次，记草稿后由 runner 投递） |
+| `message_push(message)` | 生成一条待发草稿（本轮最多一次）；runner 回主循环后等待 Channel 确认 |
 | `finish_drift(status, briefing, scratchpad_update?, next_tendency?)` | 保存状态并结束本轮，执行结束前必须调用 |
 
 `finish_drift.status`：
 - `completed` — 本轮小闭环已完成，不强行编造下一步。
 - `paused` — 本轮没做完，**必须**写 `scratchpad_update` 说明下次从哪继续。
 
-`message_result` 由 runtime 记录：调用过 `message_push` 且成功投递就是 `sent`，否则 `silent`——
-不由 skill 自报。
+`message_result` 由 runtime 记录：Channel callback 成功是 `sent`；没有草稿或发送失败都是
+`silent`。只有 `sent` 才写 Session。这对齐 Reference `record_commit_result(ctx, sent)`，不由 skill
+自报，也不另外引入草稿重发队列。
 
 ## 核心约束
 
@@ -113,7 +115,7 @@ Briefing 还会带最近 5 条 run 记录，让 skill 避免短期重复。
 ├─ 无 skill → 不跑（但会先落一个示例 skill）
 ├─ min_interval 未到 → 不跑
 ├─ 一轮 run：message_push 记草稿 → finish_drift → runner 投递 + 落库
-└─ status=completed 且 message_result=sent
+└─ Channel 失败：message_result=silent，不写 Session
 ```
 
-对应测试：`tests/test_drift.py`（5 项）。
+对应测试：`tests/test_drift.py`。

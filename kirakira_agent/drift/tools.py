@@ -1,8 +1,8 @@
 """Drift run 的收尾工具：``message_push`` 与 ``finish_drift``。
 
 两个工具都只改写本轮的 ``DriftRunContext``（同步、无副作用外泄）：
-- ``message_push`` 记录一条草稿消息（fire-and-forget，最多一次），
-  真正的投递由 runner 在 agent run 结束后到主事件循环上完成。
+- ``message_push`` 记录一条草稿消息（最多一次），真正的投递由 runner 在 agent run
+  结束后到主事件循环上完成，并按真实投递结果把 staged 修正为 sent / silent。
 - ``finish_drift`` 记录 status / briefing / 连续性，标记本轮结束。
 
 这样设计避免了在工作线程里跨事件循环访问 async 的 MessageBus。
@@ -65,7 +65,7 @@ def register_drift_tools(registry: ToolRegistry, ctx: DriftRunContext) -> None:
     registry.register(
         ToolSpec(
             "message_push",
-            "主动给用户推一条消息（fire-and-forget，本轮最多一次）。",
+            "生成一条主动消息草稿（本轮最多一次）；runtime 会按真实投递结果记录 sent / silent。",
             object_schema({"message": {"type": "string"}}, ["message"]),
         ),
         message_push,

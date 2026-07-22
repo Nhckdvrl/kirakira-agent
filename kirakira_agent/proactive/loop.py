@@ -13,8 +13,9 @@ import random
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional
+from uuid import uuid4
 
-from kirakira_agent.bus import MessageBus
+from kirakira_agent.bus import MessageBus, OutboundDeliveryError
 from kirakira_agent.events import OutboundMessage
 from kirakira_agent.models.base import ModelClient
 from kirakira_agent.proactive import energy
@@ -88,6 +89,7 @@ class ProactiveLoop:
             self._cfg.chat_id,
             self._cfg.drift.enabled,
         )
+        await self._flush_pending_acknowledgements()
         while self._running:
             interval = self._next_interval()
             self._wake.clear()
@@ -105,6 +107,10 @@ class ProactiveLoop:
     def stop(self) -> None:
         self._running = False
         self._wake.set()
+
+    @property
+    def target_channel(self) -> str:
+        return self._cfg.channel
 
     def close(self) -> None:
         self._state.close()
@@ -169,6 +175,8 @@ class ProactiveLoop:
         # 1. Gate：目标就绪、被动链路空闲
         if not self._cfg.target_ready:
             return
+        # 对齐 Reference：每轮都先重试已落库的 source ACK，与本轮是否被动忙无关。
+        await self._flush_pending_acknowledgements()
         if self._passive_busy_fn is not None and self._passive_busy_fn(session_key):
             logger.info("[proactive] 被动链路忙，跳过本轮")
             self._state.record_decision(now, "gated", "被动链路忙")
@@ -178,6 +186,10 @@ class ProactiveLoop:
         channels = await self._sources.fetch_all()
         self._state.ingest("alert", channels["alert"], now)
         new_content = set(self._state.ingest("content", channels["content"], now))
+        self._state.queue_acknowledgements(
+            self._group_acknowledgements(channels["content"]), now
+        )
+        await self._flush_pending_acknowledgements()
         # 淘汰陈旧未读 content，防止从不被引用的候选无界堆积
         self._state.expire_old("content", now, self._cfg.content_max_age_days)
         # context 不入库、不触发推送，只在本轮作为判断背景
@@ -193,8 +205,17 @@ class ProactiveLoop:
         # 3. Decide：alert 按严重度优先直推；还有 alert 时尽快再来一轮排空
         alerts = rank_alerts(self._state.unread("alert"))
         if alerts:
-            await self._push_alert(alerts[0], now, memory_text, recent_conversation,
-                                   proactive_context, context_text, recent_proactive)
+            try:
+                await self._push_alert(
+                    alerts[0], now, memory_text, recent_conversation,
+                    proactive_context, context_text, recent_proactive,
+                )
+            except OutboundDeliveryError as exc:
+                logger.error("[proactive] alert 渠道发送失败，保留未读: %s", exc)
+                self._state.record_decision(
+                    now, "delivery_failed", "alert: %s" % str(exc)
+                )
+                return
             self._state.record_decision(
                 now, "alert_pushed", str(alerts[0].get("title") or "")[:120]
             )
@@ -208,10 +229,17 @@ class ProactiveLoop:
         if has_new and not self._state.in_cooldown(
             session_key, now, self._cfg.delivery_cooldown_hours
         ):
-            pushed = await self._push_content(
-                contents, now, memory_text, recent_conversation,
-                proactive_context, context_text, recent_proactive,
-            )
+            try:
+                pushed = await self._push_content(
+                    contents, now, memory_text, recent_conversation,
+                    proactive_context, context_text, recent_proactive,
+                )
+            except OutboundDeliveryError as exc:
+                logger.error("[proactive] content 渠道发送失败，保留未读: %s", exc)
+                self._state.record_decision(
+                    now, "delivery_failed", "content: %s" % str(exc)
+                )
+                return
             self._state.record_decision(
                 now,
                 "content_pushed" if pushed else "content_skipped",
@@ -245,14 +273,18 @@ class ProactiveLoop:
             current_context=context_text,
             recent_proactive=recent_proactive,
         )
-        await self._deliver(decision, now)
+        await self._deliver(decision, now, [contract.item_id])
         source_id = str(alert_event.get("_source") or "")
         source_event_id = str(
             alert_event.get("event_id") or alert_event.get("id") or ""
         )
-        if source_id and source_event_id:
-            await self._sources.ack(source_id, [source_event_id])
-        self._state.consume([contract.item_id], now)
+        acknowledgements = (
+            {source_id: [source_event_id]} if source_id and source_event_id else {}
+        )
+        self._state.consume_and_queue_ack(
+            [contract.item_id], acknowledgements, now
+        )
+        await self._flush_pending_acknowledgements()
 
     async def _push_content(
         self,
@@ -277,49 +309,69 @@ class ProactiveLoop:
         )
         if not decision.send:
             return False
-        await self._deliver(decision, now)
+        await self._deliver(decision, now, decision.cited_ids)
         # 只消费/ACK 被真正引用的内容
         cited = set(decision.cited_ids)
         selected = [c for c in contracts if c.item_id in cited]
-        by_source: dict[str, List[str]] = {}
-        for contract in selected:
-            source_id = str(contract.raw.get("_source") or "")
-            source_event_id = str(
-                contract.raw.get("event_id") or contract.raw.get("id") or ""
-            )
-            if source_id and source_event_id:
-                by_source.setdefault(source_id, []).append(source_event_id)
-        for source_id, ids in by_source.items():
-            await self._sources.ack(source_id, ids)
         self._state.consume([c.item_id for c in selected], now)
         return True
 
     # ── 交付 ────────────────────────────────────────────────────
 
-    async def _deliver(self, decision: Decision, now: datetime) -> None:
+    async def _deliver(
+        self, decision: Decision, now: datetime, evidence_item_ids: List[str]
+    ) -> None:
         message = decision.message.strip()
         if not message:
-            return
-        await self._bus.publish_outbound(
+            raise OutboundDeliveryError("主动决策未生成可发送内容")
+        delivery_id = uuid4().hex
+        await self._bus.publish_outbound_and_wait(
             OutboundMessage(
                 channel=self._cfg.channel,
                 chat_id=self._cfg.chat_id,
                 content=message,
-                metadata={"proactive": True},
+                metadata={
+                    "proactive": True,
+                    "delivery_id": delivery_id,
+                    "evidence_item_ids": list(evidence_item_ids),
+                },
             )
         )
+        self._record_proactive_message(message, delivery_id, evidence_item_ids)
         self._state.mark_push(self._cfg.session_key, now)
-        self._record_proactive_message(message)
         logger.info("[proactive] 已推送 message=%r", message[:120])
 
-    def _record_proactive_message(self, message: str) -> None:
+    def _record_proactive_message(
+        self, message: str, delivery_id: str, evidence_item_ids: List[str]
+    ) -> None:
         """把主动消息落到目标 session，供后续 tick 感知近期已推内容，避免重复。"""
-        try:
-            session = self._sessions.get_or_create(self._cfg.session_key)
-            session.add_message("assistant", message, proactive=True)
-            self._sessions.save(session)
-        except Exception:
-            logger.exception("[proactive] 记录主动消息失败")
+        session = self._sessions.get_or_create(self._cfg.session_key)
+        session.add_message(
+            "assistant",
+            message,
+            proactive=True,
+            delivery_id=delivery_id,
+            evidence_item_ids=list(evidence_item_ids),
+        )
+        self._sessions.save(session)
+
+    async def _flush_pending_acknowledgements(self) -> None:
+        """对齐 Reference：只有源 ACK 真正成功后，才从持久队列删除。"""
+        for source_id, event_ids in self._state.pending_acknowledgements().items():
+            if await self._sources.ack(source_id, event_ids):
+                self._state.mark_acknowledged(source_id, event_ids)
+
+    @staticmethod
+    def _group_acknowledgements(events: List[dict]) -> Dict[str, List[str]]:
+        grouped: Dict[str, List[str]] = {}
+        for event in events:
+            source_id = str(event.get("_source") or "").strip()
+            source_event_id = str(
+                event.get("event_id") or event.get("id") or ""
+            ).strip()
+            if source_id and source_event_id:
+                grouped.setdefault(source_id, []).append(source_event_id)
+        return grouped
 
     # ── presence / 上下文读取 ────────────────────────────────────
 

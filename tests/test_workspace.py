@@ -23,14 +23,14 @@ class ResolveWorkspaceTests(unittest.TestCase):
         resolved = resolve_workspace(
             None, {"runtime": {"workspace": "/tmp/from-config"}}, default=Path("/tmp/d")
         )
-        self.assertEqual(resolved, Path("/tmp/from-config"))
+        self.assertEqual(resolved, Path("/tmp/from-config").resolve())
 
     def test_env_overrides_config(self) -> None:
         os.environ["KIRAKIRA_WORKSPACE"] = "/tmp/from-env"
         resolved = resolve_workspace(
             None, {"runtime": {"workspace": "/tmp/from-config"}}, default=Path("/tmp/d")
         )
-        self.assertEqual(resolved, Path("/tmp/from-env"))
+        self.assertEqual(resolved, Path("/tmp/from-env").resolve())
 
     def test_cli_overrides_env_and_config(self) -> None:
         os.environ["KIRAKIRA_WORKSPACE"] = "/tmp/from-env"
@@ -39,14 +39,14 @@ class ResolveWorkspaceTests(unittest.TestCase):
             {"runtime": {"workspace": "/tmp/from-config"}},
             default=Path("/tmp/d"),
         )
-        self.assertEqual(resolved, Path("/tmp/from-cli"))
+        self.assertEqual(resolved, Path("/tmp/from-cli").resolve())
 
     def test_blank_values_fall_through(self) -> None:
         os.environ["KIRAKIRA_WORKSPACE"] = "   "
         resolved = resolve_workspace(
             "", {"runtime": {"workspace": "/tmp/from-config"}}, default=Path("/tmp/d")
         )
-        self.assertEqual(resolved, Path("/tmp/from-config"))
+        self.assertEqual(resolved, Path("/tmp/from-config").resolve())
 
     def test_home_is_expanded(self) -> None:
         resolved = resolve_workspace(

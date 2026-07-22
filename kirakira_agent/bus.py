@@ -5,13 +5,24 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Tuple, TypeVar
 
 from kirakira_agent.events import InboundMessage, OutboundMessage
 
 logger = logging.getLogger(__name__)
 _T = TypeVar("_T")
+
+
+class OutboundDeliveryError(RuntimeError):
+    """An outbound message did not complete through its channel subscribers."""
+
+
+@dataclass
+class _OutboundEnvelope:
+    message: OutboundMessage
+    ticket: int
+    receipt: asyncio.Future[None] | None = None
 
 
 @dataclass
@@ -84,7 +95,7 @@ class ChatLane:
 class MessageBus:
     def __init__(self, chat_lane: ChatLane | None = None) -> None:
         self._inbound: asyncio.Queue[InboundMessage] = asyncio.Queue()
-        self._outbound: asyncio.Queue[tuple[OutboundMessage, int]] = asyncio.Queue()
+        self._outbound: asyncio.Queue[_OutboundEnvelope] = asyncio.Queue()
         self._subscribers: Dict[str, List[Callable[[OutboundMessage], Awaitable[None]]]] = {}
         self._chat_lane = chat_lane or ChatLane()
         self._running = False
@@ -102,10 +113,28 @@ class MessageBus:
         self._inbound.task_done()
 
     async def publish_outbound(self, msg: OutboundMessage) -> None:
+        """Enqueue an outbound message without waiting for channel delivery."""
         ticket = await self._chat_lane.mark_passive_send_pending(
             msg.channel, msg.chat_id
         )
-        await self._outbound.put((msg, ticket))
+        await self._outbound.put(_OutboundEnvelope(msg, ticket))
+
+    async def publish_outbound_and_wait(
+        self,
+        msg: OutboundMessage,
+    ) -> None:
+        """Enqueue a message and wait until every channel subscriber succeeds.
+
+        This is the commit boundary for proactive delivery.  A missing subscriber,
+        or a subscriber failure raises :class:`OutboundDeliveryError`.
+        """
+        loop = asyncio.get_running_loop()
+        receipt: asyncio.Future[None] = loop.create_future()
+        ticket = await self._chat_lane.mark_passive_send_pending(
+            msg.channel, msg.chat_id
+        )
+        await self._outbound.put(_OutboundEnvelope(msg, ticket, receipt))
+        await receipt
 
     def subscribe_outbound(
         self,
@@ -132,14 +161,15 @@ class MessageBus:
         try:
             while self._running:
                 try:
-                    msg, ticket = await asyncio.wait_for(
+                    envelope = await asyncio.wait_for(
                         self._outbound.get(), timeout=1.0
                     )
                 except asyncio.TimeoutError:
                     continue
                 task = asyncio.create_task(
-                    self._dispatch_one(msg, ticket),
-                    name="outbound:%s:%s" % (msg.channel, msg.chat_id),
+                    self._dispatch_one(envelope),
+                    name="outbound:%s:%s"
+                    % (envelope.message.channel, envelope.message.chat_id),
                 )
                 self._dispatch_tasks.add(task)
                 task.add_done_callback(self._dispatch_tasks.discard)
@@ -147,32 +177,48 @@ class MessageBus:
             if self._dispatch_tasks:
                 await asyncio.gather(*list(self._dispatch_tasks), return_exceptions=True)
 
-    async def _dispatch_one(self, msg: OutboundMessage, ticket: int) -> None:
+    async def _dispatch_one(self, envelope: _OutboundEnvelope) -> None:
+        msg = envelope.message
         try:
             await self._chat_lane.run_passive(
                 msg.channel,
                 msg.chat_id,
-                ticket,
+                envelope.ticket,
                 lambda: self._send_outbound(msg),
             )
+        except asyncio.CancelledError:
+            if envelope.receipt is not None and not envelope.receipt.done():
+                envelope.receipt.cancel()
+            raise
+        except Exception as exc:
+            if envelope.receipt is not None and not envelope.receipt.done():
+                envelope.receipt.set_exception(exc)
+            elif envelope.receipt is None:
+                logger.error(
+                    "outbound delivery failed channel=%s chat_id=%s: %s",
+                    msg.channel,
+                    msg.chat_id,
+                    exc,
+                )
+        else:
+            if envelope.receipt is not None and not envelope.receipt.done():
+                envelope.receipt.set_result(None)
         finally:
             self._outbound.task_done()
 
     async def _send_outbound(self, msg: OutboundMessage) -> None:
         subscribers = list(self._subscribers.get(msg.channel, []))
         if not subscribers:
-            logger.warning("no outbound subscriber for channel=%s", msg.channel)
-            return
+            raise OutboundDeliveryError(
+                "no outbound subscriber for channel=%s" % msg.channel
+            )
         for cb in subscribers:
             try:
                 await cb(msg)
             except Exception as exc:
-                logger.warning("outbound dispatch failed once: %s", exc)
-                await asyncio.sleep(1)
-                try:
-                    await cb(msg)
-                except Exception:
-                    logger.exception("outbound dispatch failed after retry")
+                raise OutboundDeliveryError(
+                    "outbound delivery failed channel=%s" % msg.channel
+                ) from exc
 
     def stop(self) -> None:
         self._running = False
