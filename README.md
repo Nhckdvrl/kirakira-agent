@@ -22,6 +22,9 @@ in; the reference's heavier machinery (phase-graph kernel, snapshot hot reload,
 semantic-interest vectors) is deliberately deferred. Both are off by default and
 enabled under `[proactive]` in `config.toml`.
 
+For the unified MVP-to-current roadmap and three-chain verification guide, see
+[docs/MVP_TO_CURRENT.md](docs/MVP_TO_CURRENT.md).
+
 > This is a learning project. The documentation is a first-class part of it: it
 > traces how each layer was driven into existence by a concrete problem, which is
 > the point of the exercise. Start with
@@ -111,15 +114,17 @@ It changes in the same commit as the code it documents.
 | [memory.md](_handbook/memory.md) | session vs memory; why recall fuses by rank, not score |
 | [context-management.md](_handbook/context-management.md) | prompt blocks, token budget, semantic retries and traces |
 | [cli-and-sessions.md](_handbook/cli-and-sessions.md) | TUI ownership, streaming finality and saved-session behavior |
-| [proactive.md](_handbook/proactive.md) | the energy model, three channels, pluggable sources and the push decision |
+| [proactive.md](_handbook/proactive.md) | operating contract: energy, three channels, sources and push decisions |
 | [drift.md](_handbook/drift.md) | idle-task skills, one drift run = one agent run, cross-run continuity |
 
 `docs/` describes **how it got here** — history, and the reasoning worth reusing.
 
 | | |
 | --- | --- |
-| [VERSION_EVOLUTION.md](docs/VERSION_EVOLUTION.md) | MVP → current runtime, one problem at a time |
-| [DIFFERENCE_AUDIT.md](docs/DIFFERENCE_AUDIT.md) | per-item diff against the reference, scope, and what is MVP / deferred |
+| [MVP_TO_CURRENT.md](docs/MVP_TO_CURRENT.md) | unified MVP-to-current progress and verification guide for all three chains |
+| [VERSION_EVOLUTION.md](docs/VERSION_EVOLUTION.md) | Function Calling MVP → passive runtime, one problem at a time |
+| [PROACTIVE_ARCHITECTURE.md](docs/PROACTIVE_ARCHITECTURE.md) | the proactive runtime architecture, state machine, commit boundary and roadmap |
+| [DIFFERENCE_AUDIT.md](docs/DIFFERENCE_AUDIT.md) | capability-level comparison with Akashic, deliberate choices, and prioritized gaps |
 | [RESUME_INTERVIEW_GUIDE.md](docs/RESUME_INTERVIEW_GUIDE.md) | résumé wording and interview Q&A, incl. the three-chain differentiator |
 
 [中文 README](README-cn.md) has the detailed configuration and channel setup.

@@ -32,7 +32,7 @@ class ProactiveConfig:
     delivery_cooldown_hours: float = 1.0
     # 未读 content 超过该龄期（天）淘汰，防止队列无界增长；<=0 关闭
     content_max_age_days: float = 14.0
-    # 电量高（刚聊完）用短间隔；电量低（长期沉默）用长间隔。单位秒。
+    # base_score 高（长期沉默或近期语境丰富）用短间隔，否则用长间隔。
     tick_interval_s1: int = 2400
     tick_interval_s0: int = 4800
     tick_jitter: float = 0.3

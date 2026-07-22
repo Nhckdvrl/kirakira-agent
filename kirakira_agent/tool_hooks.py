@@ -98,10 +98,12 @@ class ToolExecutor:
             if outcome.decision == "deny":
                 return ToolExecutionResult("denied", outcome.reason or "工具调用被拦截", args, extra)
         try:
-            invoked = await asyncio.wait_for(
-                invoker(request.tool_name, args), timeout=self.timeout_seconds
-            )
-        except asyncio.TimeoutError:
+            # ``wait_for`` 会把协程放进新 Task，让本 turn 按 owner task 绑定的
+            # RuntimeSnapshot 失效。``asyncio.timeout`` 在当前 Task 内取消，
+            # 同时保留 Reference 的“整轮固定同一代工具”语义。
+            async with asyncio.timeout(self.timeout_seconds):
+                invoked = await invoker(request.tool_name, args)
+        except TimeoutError:
             error = "tool timed out after %.1f seconds" % self.timeout_seconds
             await self._run_error_hooks(request, args, error, extra)
             return ToolExecutionResult("error", "Error: %s" % error, args, extra)

@@ -6,8 +6,9 @@
 由一个后台循环按电量模型自适应轮询数据源，判断此刻要不要主动发一条消息、发什么。
 
 这是 Kirakira 区别于普通 chatbot 的第一条差异化链路（第二条是 [Drift](./drift.md)）。
-参考 akashic 的 `proactive_v2` + `plugins/wake_proactive`；本项目是 MVP 复刻，
-保留差异化本质，刻意不搬 phase-graph kernel / snapshot 热重载等 Tier-3 机制。
+参考 akashic 的 `proactive_v2` + `plugins/wake_proactive`；本项目是 MVP 级重建，
+保留产品语义，刻意不搬 phase-graph kernel / snapshot 热重载等重型机制。完整架构与状态边界见
+[主动链路架构](../docs/PROACTIVE_ARCHITECTURE.md)。
 
 ```text
 ProactiveLoop.run()（后台 task，与 AgentLoop 并列，见 CoreRuntime.start_background）
@@ -17,9 +18,10 @@ ProactiveLoop.run()（后台 task，与 AgentLoop 并列，见 CoreRuntime.start
         ├─ Gate     目标就绪？被动链路空闲？（passive_busy_fn=AgentLoop.is_busy，避让在跑的 turn）
         ├─ Fetch    SourceRegistry.fetch_all() 并发拉所有源
         ├─ Ingest   三通道去重入库（proactive.db）
-        ├─ Decide   alert 直推 → content 兴趣判断 → 都没推则 ↓
+        ├─ Decide   alert 优先发送 → content 兴趣判断 → 本轮没推则 ↓
         │            └─ Drift（见 drift.md）
-        └─ Deliver  bus.publish_outbound(metadata.proactive=true)
+        └─ Deliver  bus.publish_outbound_and_wait(metadata.proactive=true)
+                     等 Channel 完成后才提交状态
 ```
 
 代码在 `kirakira_agent/proactive/`。
@@ -27,7 +29,8 @@ ProactiveLoop.run()（后台 task，与 AgentLoop 并列，见 CoreRuntime.start
 ## 电量模型：为什么轮询频率会自己变
 
 固定间隔轮询要么太吵、要么太迟钝。主动链路用一个**多时间尺度指数衰减**的"电量"
-模型（`energy.py`，从参考照搬的纯数学）来自适应调频：
+模型（`energy.py`）来自适应调频。多时间尺度衰减与双档间隔沿用 Reference；Kirakira 额外把
+`D_energy` 与 `D_recent` 用软或合成每轮的 `base_score`：
 
 ```text
 E(t) = α·exp(-t/τ₁) + β·exp(-t/τ₂) + γ·exp(-t/τ₃)
@@ -41,8 +44,10 @@ E(t) = α·exp(-t/τ₁) + β·exp(-t/τ₂) + γ·exp(-t/τ₃)
   - `base_score = 1 - (1-D_energy)(1-D_recent)`（软或：任一维度高都抬分）
 - `base_score` 越高 → `next_tick_from_score` 给的间隔越短 → 轮询越频繁 → 越快触发。
 
-结果：刚聊完不烦你（长间隔 `tick_interval_s0`），久没动静就加速（短间隔 `tick_interval_s1`），
-`tick_jitter` 加随机抖动避免整点齐发。`last_user_at` 与近期消息数从目标 session 推导。
+结果：长期沉默（`D_energy` 高）或近期对话丰富（`D_recent` 高）都会让 `base_score` 升高，使用较短的
+`tick_interval_s1`；两者都低时使用较长的 `tick_interval_s0`。`tick_jitter` 加随机抖动避免整点齐发。
+`last_user_at` 与近期消息数从目标 session 推导。注意：电量只决定**多久检查一次**，是否发送仍由
+通道语义、LLM 判断与冷却控制。
 
 ## 三个通道
 
@@ -50,13 +55,14 @@ E(t) = α·exp(-t/τ₁) + β·exp(-t/τ₂) + γ·exp(-t/τ₃)
 
 | 通道 | 用途 | 是否触发推送 | ACK |
 | --- | --- | ---: | ---: |
-| `alert` | 健康告警、日程提醒、异常 | 是，直接透传 | 需要 |
+| `alert` | 健康告警、日程提醒、异常 | 是，优先发送；模型自然化表达 | 需要 |
 | `content` | RSS、新闻、社区内容 | 经 LLM 兴趣判断 | 需要 |
 | `context` | 睡眠、在线、环境状态 | 否，只辅助判断 | 不需要 |
 
-判断顺序（`loop.py:_tick`）：**alert 按严重度优先直推**（还有 alert 则尽快再轮询排空）→
+判断顺序（`loop.py:_tick`）：**alert 按严重度优先发送**（模型负责自然化表达；还有 alert 则尽快再轮询排空）→
 有新 content 且不在冷却期时，候选**按新近度排序取前 N** 再做**兴趣判断** → 都没推 → 交给
-**Drift**。`context` 从不单独触发，只作为本轮判断的背景注入 prompt。排序函数在
+**Drift**。这里的入口是“本轮没产生推送”，不要求三路严格为空；content 被 skip 或只有 context
+时也可能进入 Drift。`context` 从不单独触发，只作为本轮判断的背景注入 prompt。排序函数在
 `contracts.py`（`rank_alerts` 按 severity、`rank_content` 按时间），对齐 reference 的 `rank_events`。
 
 ## 数据源：可插拔协议
@@ -86,14 +92,20 @@ ACK 后把 event_id 写入 `<id>.acked`，下次自动过滤。这样零依赖�
 fetch → ingest（INSERT OR IGNORE，item_id=<source>:<event_id> 稳定去重）
       → unread（未读队列）
       → LLM 判断 send/skip
-      → 投递成功 → consume（标记已消费）+ ack（回源确认）
+      → Channel 确认发送成功 → consume（标记已消费）
 ```
 
 - `item_id` 是稳定身份 `<source_id>:<event_id>`；同一事件多轮出现只入库一次。
 - 推送后写 `push_state.last_push_at`，`delivery_cooldown_hours` 内抑制 content 刷屏（alert 不受限）。
-- 只 ACK/consume 被 LLM 真正引用（`cited_ids`）的事件，没引用的留在未读队列等下轮。
+- 对齐 Reference：content 入库后即把上游 ACK 写入 `pending_acknowledgements`，本地未读副本仍保留；
+  alert 只在 Channel 成功后才把 consume 与 pending ACK 同事务落库。
+- content 只 consume 被 LLM 真正引用的 `cited_ids`，没引用的留在未读队列。
 - `expire_old` 每轮淘汰 `first_seen` 超过 `content_max_age_days`（默认 14 天）的未读 content，
   防止从不被引用的候选无界堆积（对齐 reference `_content_expired` 的绝对陈旧淘汰）。
+
+Channel subscriber 不存在或发送失败，都不会写 Session 或消费对应事件。
+alert 保持未读；content 保持本地未读，但仍只在出现新 content 时触发评估。source ACK
+失败会持久化保留并在启动/后续 tick 重试。跨进程 exactly-once 仍需要 durable outbox。
 
 ## LLM 判断
 
@@ -121,7 +133,7 @@ fetch → ingest（INSERT OR IGNORE，item_id=<source>:<event_id> 稳定去重�
 ## 可观测性：决策 trace 与 status
 
 每轮 tick 的结果都写入 `proactive.db` 的 `decisions` 表（`record_decision`）：
-`alert_pushed` / `content_pushed` / `content_skipped` / `drift` / `idle` / `gated`。
+`alert_pushed` / `content_pushed` / `content_skipped` / `delivery_failed` / `drift` / `idle` / `gated`。
 
 `ProactiveLoop.status()` 返回一份快照：当前电量、base_score、下次间隔估计、三通道未读数、
 上次推送时间、是否在冷却、最近 10 条决策、已注册源、Drift 是否启用。
@@ -137,24 +149,27 @@ fetch → ingest（INSERT OR IGNORE，item_id=<source>:<event_id> 稳定去重�
 ## 配置与开关
 
 见 `config.toml` 的 `[proactive]` 段。`enabled=false`（默认）时循环根本不启动；
-`enabled=true` 但没填 `[proactive.target]` 会记警告并跳过。交付复用现有 MessageBus，
+`enabled=true` 但没填 `[proactive.target]` 会记警告并跳过。交付复用 MessageBus 的 waitable delivery
+receipt，
 推送消息打 `metadata.proactive=true`，并落一条 `proactive` 标记的 assistant 消息到目标
-session，供后续 tick 感知"近期已推内容"避免重复。
+session，供后续 tick 感知"近期已推内容"避免重复。runtime 像 Reference 一样直接等待
+Channel sender；网络超时由各 Channel client 自身配置。
 
 ## 验证清单
 
 ```text
 ┌─ enabled=false → ProactiveLoop 不构造（cli._build_proactive 返回 None）
-├─ energy：久沉默 base_score 高、间隔短；刚聊完间隔长
-├─ 三通道：alert 直推、content 走判断、context 不单独触发
+├─ energy：久沉默或近期对话丰富时 base_score 高、间隔短
+├─ 三通道：alert 优先发送、content 走判断、context 不单独触发
 ├─ 排序：alert 按 severity、content 按新近度
 ├─ 去重：同一事件重复 tick 不重复投递
 ├─ 冷却：距上次推送不足 cooldown 时抑制 content
 ├─ 龄期：超龄未读 content 被淘汰
 ├─ 门控：被动链路忙时记 gated 决策并跳过（不进 drift）
 ├─ 健壮：判断层模型异常时 alert 发原文、content 默认 skip，不崩 tick
+├─ 交付：Channel 成功后才写 Session/consume；alert ACK 持久排队后回源
 ├─ 可观测：status() 含电量/未读数/最近决策；--proactive 手动触发
-└─ 三路都空 → 进入 Drift（drift_hook 被调用）
+└─ 本轮没有产生推送 → 进入 Drift（drift_hook 被调用）
 ```
 
-对应测试：`tests/test_proactive.py`（16 项）。
+对应测试：`tests/test_proactive.py`。

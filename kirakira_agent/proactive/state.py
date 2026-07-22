@@ -1,14 +1,14 @@
 """主动链路的持久状态（``proactive.db``）。
 
-职责：事件去重/入库、未读队列、消费标记、推送冷却时间。
-参考 akashic 的 `plugins/wake_proactive/state.py`，MVP 只保留去重 + ACK 队列 + 推送节流。
+职责：事件去重/入库、未读、消费标记、待回源 ACK、
+推送冷却时间。参考 akashic 的 `plugins/wake_proactive/state.py`，其中本地
+consume 与 pending acknowledgement 同事务提交。
 """
 
 from __future__ import annotations
 
 import json
 import sqlite3
-from contextlib import closing
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Sequence
@@ -25,6 +25,12 @@ CREATE TABLE IF NOT EXISTS events (
 );
 CREATE INDEX IF NOT EXISTS idx_events_channel_status
     ON events(channel, status);
+CREATE TABLE IF NOT EXISTS pending_acknowledgements (
+    source_id TEXT NOT NULL,
+    source_event_id TEXT NOT NULL,
+    queued_at TEXT NOT NULL,
+    PRIMARY KEY(source_id, source_event_id)
+);
 CREATE TABLE IF NOT EXISTS push_state (
     session_key TEXT PRIMARY KEY,
     last_push_at TEXT NOT NULL
@@ -88,7 +94,7 @@ class ProactiveStateStore:
         return new_ids
 
     def unread(self, channel: str) -> List[Dict[str, Any]]:
-        """返回某通道所有未读事件（含 first_seen_at 注解）。"""
+        """返回未读事件（含 first_seen_at 注解）。"""
         rows = self._db.execute(
             """
             SELECT item_id, source_id, source_event_id, payload, first_seen_at
@@ -115,6 +121,97 @@ class ProactiveStateStore:
         self._db.executemany(
             "UPDATE events SET status = 'consumed' WHERE item_id = ?",
             [(item_id,) for item_id in ids],
+        )
+        self._db.commit()
+
+    def consume_and_queue_ack(
+        self,
+        item_ids: Sequence[str],
+        acknowledgements: Dict[str, Sequence[str]],
+        now: datetime,
+    ) -> None:
+        """Reference 同款提交边界：消费事件与排队 source ACK 原子落库。"""
+        ids = [str(i).strip() for i in item_ids if str(i).strip()]
+        pending = [
+            (str(source_id).strip(), str(event_id).strip(), now.isoformat())
+            for source_id, event_ids in acknowledgements.items()
+            if str(source_id).strip()
+            for event_id in event_ids
+            if str(event_id).strip()
+        ]
+        if not ids and not pending:
+            return
+        try:
+            self._db.execute("BEGIN")
+            if ids:
+                self._db.executemany(
+                    "UPDATE events SET status = 'consumed' WHERE item_id = ?",
+                    [(item_id,) for item_id in ids],
+                )
+            if pending:
+                self._db.executemany(
+                    """
+                    INSERT OR IGNORE INTO pending_acknowledgements
+                        (source_id, source_event_id, queued_at)
+                    VALUES (?, ?, ?)
+                    """,
+                    pending,
+                )
+            self._db.commit()
+        except Exception:
+            self._db.rollback()
+            raise
+
+    def queue_acknowledgements(
+        self,
+        acknowledgements: Dict[str, Sequence[str]],
+        now: datetime,
+    ) -> None:
+        """按 Reference 在 content 入库后排队回源 ACK；本地 reservoir 仍保留未读副本。"""
+        pending = [
+            (str(source_id).strip(), str(event_id).strip(), now.isoformat())
+            for source_id, event_ids in acknowledgements.items()
+            if str(source_id).strip()
+            for event_id in event_ids
+            if str(event_id).strip()
+        ]
+        if not pending:
+            return
+        self._db.executemany(
+            """
+            INSERT OR IGNORE INTO pending_acknowledgements
+                (source_id, source_event_id, queued_at)
+            VALUES (?, ?, ?)
+            """,
+            pending,
+        )
+        self._db.commit()
+
+    def pending_acknowledgements(self) -> Dict[str, List[str]]:
+        rows = self._db.execute(
+            """
+            SELECT source_id, source_event_id
+            FROM pending_acknowledgements
+            ORDER BY queued_at ASC, source_id ASC, source_event_id ASC
+            """
+        ).fetchall()
+        grouped: Dict[str, List[str]] = {}
+        for row in rows:
+            grouped.setdefault(row["source_id"], []).append(row["source_event_id"])
+        return grouped
+
+    def mark_acknowledged(
+        self, source_id: str, source_event_ids: Sequence[str]
+    ) -> None:
+        ids = [str(i).strip() for i in source_event_ids if str(i).strip()]
+        if not source_id or not ids:
+            return
+        self._db.executemany(
+            """
+            DELETE FROM pending_acknowledgements
+            WHERE source_id = ? AND source_event_id = ?
+            """,
+            [(source_id, event_id) for event_id in ids],
         )
         self._db.commit()
 

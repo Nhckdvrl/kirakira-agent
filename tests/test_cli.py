@@ -1,5 +1,6 @@
 """Kirakira Agent learning harness module."""
 
+import asyncio
 import os
 import subprocess
 import sys
@@ -9,6 +10,43 @@ from pathlib import Path
 
 
 class CliTests(unittest.TestCase):
+    def test_proactive_target_auto_enables_builtin_channel(self):
+        from kirakira_agent.cli import build_runtime
+
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                workdir = Path(tmp)
+                config = workdir / "config.toml"
+                config.write_text(
+                    """
+[llm.main]
+model = "fake"
+base_url = "http://example.test/v1"
+
+[channels.chat]
+channel_name = "push-web"
+
+[proactive]
+enabled = true
+
+[proactive.target]
+channel = "push-web"
+chat_id = "u1"
+""",
+                    encoding="utf-8",
+                )
+                runtime = await build_runtime(workdir, config_path=config)
+                try:
+                    self.assertIsNotNone(runtime.channel_host)
+                    self.assertIn(
+                        "push-web",
+                        [channel.name for channel in runtime.channel_host.channels],
+                    )
+                finally:
+                    await runtime.stop_background([])
+
+        asyncio.run(scenario())
+
     def test_cli_mode_selection(self):
         from kirakira_agent.cli import choose_cli_mode
 

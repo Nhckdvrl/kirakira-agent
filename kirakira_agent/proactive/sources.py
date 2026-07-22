@@ -87,15 +87,18 @@ class SourceRegistry:
                 grouped[kind].append(enriched)
         return grouped
 
-    async def ack(self, source_id: str, event_ids: Sequence[str]) -> None:
+    async def ack(self, source_id: str, event_ids: Sequence[str]) -> bool:
+        """回源确认并返回是否成功，供 runtime 决定是否删除 pending ACK。"""
         source = self._sources.get(source_id)
         if source is None:
             logger.warning("[proactive.source] ack 未知源 source=%s", source_id)
-            return
+            return False
         try:
             await source.ack(event_ids)
+            return True
         except Exception:
             logger.exception("[proactive.source] ack 失败 source=%s", source_id)
+            return False
 
 
 class FileInboxSource:

@@ -23,7 +23,7 @@
 - **热重载与代际快照：** 将 MCP 从命令式注册重构为声明式热重载（内容 revision 驱动、整批候选语义、失败保持旧代际服务）；引入 RuntimeSnapshot + 每 turn 租约，解决"turn 执行期间工具被换掉"的竞态——换代只切 current 指针，在途 turn 继续使用其锁定的代际，旧 MCP 进程等租约计数归零后才断开。
 - **会话与长期记忆：** 使用原子 JSON 保存 session 和完整 reasoning/tool history，以 SQLite FTS5 建立可重建的消息索引；设计 typed memory、source evidence、强化/遗忘和 session 删除撤销，结合中文词法与可选 embedding 混合召回，并在回复后异步 consolidation，避免记忆抽取阻塞用户响应。
 - **上下文治理：** 将 Prompt 拆为具名 block，分离稳定 system 与逐轮 Context Frame；统一预算 system/messages/tool schema/image，并在 Provider 请求前预检，按语义 section 逐级重渲染；持久化 retry plan、section/cache、模型实际 usage 和下一轮 baseline，避免长对话静默丢历史。
-- **扩展与可靠性：** 实现插件程序化能力声明、config/KV、生命周期模块、工具 Hook、inline/background subagent 和显式调度；针对 Web 并发串回复、DeepSeek reasoning 回放、session 文件名碰撞、MCP/插件半加载、重定向 SSRF 和后台任务关机竞态补充回归测试；建立 fail-loud 边界（向量检索可降级、向量写入必须报错），当前自动化测试共 186 项（183 通过、3 项按环境条件跳过）。
+- **扩展与可靠性：** 实现插件程序化能力声明、config/KV、生命周期模块、工具 Hook、inline/background subagent 和显式调度；针对 Web 并发串回复、DeepSeek reasoning 回放、session 文件名碰撞、MCP/插件半加载、重定向 SSRF 和后台任务关机竞态补充回归测试；建立 fail-loud 边界（向量检索可降级、向量写入必须报错）。
 
 ### 2.2 一页简历压缩版
 
@@ -32,7 +32,7 @@
 - 从 Function Calling MVP 搭建 `MessageBus -> AgentLoop -> ToolExecutor` 异步执行链，实现同会话串行、跨会话并发、SSE 流式事件、turn 中断和完整工具链持久化。
 - 设计 ToolRegistry/ToolExecutor，支持 schema 校验、Hook、延迟工具发现、声明式 MCP 热重载及文件/Shell/网络安全边界，控制工具 schema 膨胀并在产生副作用前拦截错误参数。
 - 构建 Session + 长期记忆系统，使用 JSON/SQLite FTS5 管理对话与历史回源，结合 lexical/vector 多路召回、RRF、热度半衰、source evidence、遗忘撤销和异步 consolidation 支持长期对话。
-- 实现具名 PromptBlock、Context Frame、Provider 预算预检和可解释降级 trace；接入 Web、Telegram、QQ/OneBot、插件与后台子 Agent，自动化测试共 186 项（183 通过、3 跳过），并完成 DeepSeek 在线工具循环、记忆抽取与 context usage 验证。
+- 实现具名 PromptBlock、Context Frame、Provider 预算预检和可解释降级 trace；接入 Web、Telegram、QQ/OneBot、插件与后台子 Agent，并完成 DeepSeek 在线工具循环、记忆抽取与 context usage 验证。
 
 ### 2.3 为什么这样写
 
@@ -63,9 +63,9 @@
 ### 可加进简历的一条
 
 **主动推送与自治后台链路：** 在被动 agent loop 之外实现两条自治链路。主动推送用多时间尺度
-指数衰减"电量"模型自适应调节轮询频率（刚聊完拉长间隔、久沉默缩短间隔），每 tick 拉取
+指数衰减"电量"与近期对话活跃度调节检查频率（长期沉默或近期语境丰富时加快检查），每 tick 拉取
 `alert`/`content`/`context` 三通道数据，经 LLM 兴趣判断决定推送或跳过，事件按稳定 id 去重、
-按冷却窗口节流；Drift 在主动链路无内容可推时复用同一套 Agent loop 跑后台任务，任务行为由
+按冷却窗口节流；Drift 在主动链路本轮未产生推送时复用同步 Agent 与默认工具集跑后台任务，任务行为由
 用户编写的 `SKILL.md` 定义而非硬编码，并在 SQLite 中保存跨轮连续性与最小间隔门控。
 
 ### 高频追问预案
@@ -73,11 +73,12 @@
 **问：主动推送会不会一直骚扰用户？频率怎么定？**
 不是固定间隔。用一个多时间尺度指数衰减的"电量"值 `E(t)`（30min/240min/48h 三个时间常数）
 刻画"距上次互动多久"，合成一个 `base_score`；分数越高（久没聊，或刚聊得很热）→ 下次 tick
-间隔越短。刚聊完时 E 高、饥渴度低，间隔拉长不打扰；半天没动静 E 衰减、饥渴度上升，间隔缩短。
+间隔越短。刚聊完时单看 `D_energy` 会降低，但若近期对话很丰富，`D_recent` 又会把
+`base_score` 拉高；半天没动静时 E 衰减、`D_energy` 上升，间隔缩短。
 再加随机抖动避免整点齐发。纯数学、可单测，不额外打模型。
 
 **问：三个通道有什么区别？**
-`alert` 直接透传推送（会议提醒这种）；`content` 要经过一次 LLM 兴趣判断，宁缺毋滥，不确定就
+`alert` 优先发送并由模型自然化表达（会议提醒这种）；`content` 要经过一次 LLM 兴趣判断，宁缺毋滥，不确定就
 skip；`context`（睡眠/在线状态）从不单独触发推送，只作为背景注入判断 prompt。判断顺序是
 alert 优先 → content 兴趣判断 → 都没推就进 Drift。
 
@@ -94,7 +95,7 @@ alert 优先 → content 兴趣判断 → 都没推就进 Drift。
 **问：Drift 和主动推送有什么本质区别？**
 主动推送的行为是**代码里写死的 system prompt**；Drift 的行为是**用户写在 SKILL.md 里的分步指南**，
 可编辑、可增删，不动代码。一轮 Drift 就是一次 agent run：SKILL.md 当 system prompt，注入一份
-Briefing（记忆 + 近期上下文 + 本 skill 前情），复用现有 Agent loop 一步步执行，最后调
+Briefing（记忆 + 近期上下文 + 本 skill 前情），复用同步 Agent 与默认工具集一步步执行，最后调
 `finish_drift` 收尾。跨轮连续性（续跑断点、倾向）存在 SQLite 里，下轮通过 Briefing 注入。
 
 **问：这块的 tradeoff / 有没有偷工？（要诚实）**
@@ -274,6 +275,6 @@ cosine 与 keyword overlap 的原始分数尺度不同，直接加权没有统�
 
 ## 9. 项目介绍口述版
 
-“这个项目最开始只是一个 Function Calling MVP，模型返回工具名和参数，我执行后把结果回填。工具一多，我先解决参数校验、异常、超时和上下文串线，把执行拆成 ToolRegistry 和 ToolExecutor，再加入 Hook、延迟工具发现和 MCP。之后为了支持长期对话，我把原始 Session 和长期记忆拆开：Session 保存完整 tool history，长期记忆在回复后异步抽取，并保留 source 以支持遗忘和撤销；检索用 lexical/vector 多路召回与 RRF 融合。长上下文再拆为具名 PromptBlock，并用 Provider 预检、语义降级和 trace 避免静默截断。多渠道接入后，我用 MessageBus 和 session lock 保证同会话串行、跨 session 并发，也处理了 streaming、取消和优雅关机。在被动回复之外，我又加了两条自治链路：主动推送用一个电量衰减模型自适应决定轮询频率，拉 alert/content/context 三路数据、经 LLM 兴趣判断决定要不要主动发消息；空闲时进入 Drift，复用同一套 Agent loop 去跑用户写在 SKILL.md 里的后台任务。这两条才是它区别于普通 chatbot 的地方——它会自己找你、也会自己找事做。下一步是用 LangSmith/eval 建立工具、记忆和 context budget 的回归基线，再评估 BM25、query rewrite 和 HyDE。”
+“这个项目最开始只是一个 Function Calling MVP，模型返回工具名和参数，我执行后把结果回填。工具一多，我先解决参数校验、异常、超时和上下文串线，把执行拆成 ToolRegistry 和 ToolExecutor，再加入 Hook、延迟工具发现和 MCP。之后为了支持长期对话，我把原始 Session 和长期记忆拆开：Session 保存完整 tool history，长期记忆在回复后异步抽取，并保留 source 以支持遗忘和撤销；检索用 lexical/vector 多路召回与 RRF 融合。长上下文再拆为具名 PromptBlock，并用 Provider 预检、语义降级和 trace 避免静默截断。多渠道接入后，我用 MessageBus 和 session lock 保证同会话串行、跨 session 并发，也处理了 streaming、取消和优雅关机。在被动回复之外，我又加了两条自治链路：主动推送用电量衰减和近期活跃度调节检查频率，拉 alert/content/context 三路数据、经 LLM 兴趣判断决定要不要主动发消息；本轮没有产生推送时尝试进入 Drift，复用同步 Agent 与默认工具集去跑用户写在 SKILL.md 里的后台任务。这两条才是它区别于普通 chatbot 的地方——它会自己找你、也会自己找事做。下一步是用 durable outbox 补齐跨崩溃可靠提交、接入真实插件数据源，再用 LangSmith/eval 建立工具、记忆和主动决策的回归基线。”
 
 这段口述能自然引出工具系统、记忆、并发、Bug、差异化的两条链路和下一版评测。差异化部分（主动推送 + Drift）应当**最先讲**，直接回应"和市面项目有什么不同"。

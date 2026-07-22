@@ -262,6 +262,34 @@ async def build_runtime(
 ) -> CoreRuntime:
     load_dotenv(workdir / ".env")
     app_config = load_toml_config(config_path or workdir / "config.toml")
+    # 主动目标必须有真实 Channel subscriber。配置 proactive target 后自动装配对应
+    # 内置渠道，避免用户还要额外猜测 --telegram/--qq/--web 才能完成发送链。
+    proactive_enabled = bool(
+        config_value(app_config, "proactive", "enabled", default=False)
+    )
+    proactive_channel = str(
+        config_value(app_config, "proactive", "target", "channel", default="")
+        or ""
+    ).strip()
+    if proactive_enabled:
+        web_cfg = config_value(app_config, "channels", "chat", default={}) or {}
+        telegram_cfg = (
+            config_value(app_config, "channels", "telegram", default={}) or {}
+        )
+        qq_cfg = config_value(app_config, "channels", "qq", default={}) or {}
+        web_name = os.getenv(
+            "KIRAKIRA_WEB_CHANNEL", str(web_cfg.get("channel_name") or "web")
+        )
+        telegram_name = os.getenv(
+            "KIRAKIRA_TELEGRAM_CHANNEL",
+            str(telegram_cfg.get("channel_name") or "telegram"),
+        )
+        qq_name = os.getenv(
+            "KIRAKIRA_QQ_CHANNEL", str(qq_cfg.get("channel_name") or "qq")
+        )
+        enable_web = enable_web or proactive_channel == web_name
+        enable_telegram = enable_telegram or proactive_channel == telegram_name
+        enable_qq = enable_qq or proactive_channel == qq_name
     model = os.getenv("MODEL_ID") or str(
         config_value(app_config, "llm", "main", "model", default="")
     )
@@ -475,6 +503,16 @@ async def build_runtime(
         client=client,
         passive_busy_fn=loop.is_busy,
     )
+    if proactive_loop is not None:
+        available_channels = {
+            channel.name for channel in (channel_host.channels if channel_host else [])
+        }
+        target_channel = proactive_loop.target_channel
+        if target_channel not in available_channels:
+            raise RuntimeError(
+                "proactive target channel %r is not configured; available channels: %s"
+                % (target_channel, ", ".join(sorted(available_channels)) or "(none)")
+            )
     return CoreRuntime(
         bus=bus,
         event_bus=event_bus,
@@ -627,7 +665,9 @@ async def _run_proactive_once(runtime: CoreRuntime) -> None:
             "并填好 [proactive.target]。"
         )
         return
-    # 需要 outbound 分发在跑，否则推送消息不会真正送达渠道。
+    # 单次模式也必须启动真实 Channel；只跑 Bus dispatcher 只能入队，无法完成发送。
+    if runtime.channel_host is not None:
+        await runtime.channel_host.start_all()
     tasks = [asyncio.create_task(runtime.bus.dispatch_outbound(), name="bus_dispatch")]
     try:
         print("→ 执行一次主动 tick ...")

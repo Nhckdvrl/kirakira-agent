@@ -118,6 +118,15 @@ class StateStoreTests(unittest.TestCase):
         self.assertTrue(self.store.in_cooldown("k", NOW + timedelta(minutes=30), 1.0))
         self.assertFalse(self.store.in_cooldown("k", NOW + timedelta(hours=2), 1.0))
 
+    def test_consume_and_queue_ack_is_persistent_until_marked(self):
+        events = [{"item_id": "s:1", "_source": "s", "event_id": "1"}]
+        self.store.ingest("alert", events, NOW)
+        self.store.consume_and_queue_ack(["s:1"], {"s": ["1"]}, NOW)
+        self.assertEqual(self.store.unread("alert"), [])
+        self.assertEqual(self.store.pending_acknowledgements(), {"s": ["1"]})
+        self.store.mark_acknowledged("s", ["1"])
+        self.assertEqual(self.store.pending_acknowledgements(), {})
+
 
 class SourceTests(unittest.TestCase):
     def test_file_inbox_fetch_and_ack(self):
@@ -165,6 +174,25 @@ class _FakeClient:
         if "【通道】alert" in prompt:
             return ModelResponse(text=json.dumps({"message": self.alert_msg}))
         return ModelResponse(text=json.dumps(self.content_decision))
+
+
+class _FlakyAckSource:
+    id = "flaky"
+    channels = ("alert", "content", "context")
+
+    def __init__(self):
+        self.fail_ack = True
+        self.acked = []
+
+    async def fetch(self):
+        if "a1" in self.acked:
+            return []
+        return [{"kind": "alert", "event_id": "a1", "title": "meeting"}]
+
+    async def ack(self, event_ids):
+        if self.fail_ack:
+            raise RuntimeError("source unavailable")
+        self.acked.extend(event_ids)
 
 
 def _cfg(**kw):
@@ -254,7 +282,149 @@ class LoopTickTests(unittest.TestCase):
         )
         self.assertEqual(len(sent), 1)
         self.assertEqual(sent[0].content, "看到条新闻")
+        self.assertTrue(sent[0].metadata.get("delivery_id"))
         self.assertEqual(drift_calls, [])
+
+    def test_content_is_acked_on_ingest_but_kept_locally_when_skipped(self):
+        async def scenario():
+            tmp = tempfile.TemporaryDirectory()
+            workdir = Path(tmp.name)
+            sessions = SessionManager(workdir)
+            inbox = workdir / "proactive" / "inbox"
+            inbox.mkdir(parents=True)
+            (inbox / "demo.jsonl").write_text(
+                json.dumps({"kind": "content", "event_id": "c1", "title": "news"})
+                + "\n",
+                encoding="utf-8",
+            )
+            state = ProactiveStateStore(workdir / "proactive.db")
+            loop = ProactiveLoop(
+                config=_cfg(),
+                bus=MessageBus(),
+                session_manager=sessions,
+                model_client=_FakeClient(content_decision={"decision": "skip"}),
+                sources=build_file_inbox_registry(workdir),
+                state=state,
+            )
+            await loop._tick()
+            self.assertEqual(state.unread_count("content"), 1)
+            self.assertEqual(state.pending_acknowledgements(), {})
+            self.assertIn(
+                "c1", (inbox / "demo.acked").read_text(encoding="utf-8")
+            )
+            loop.close()
+            sessions.close()
+            tmp.cleanup()
+
+        asyncio.run(scenario())
+
+    def test_failed_alert_delivery_keeps_unread_and_retries_before_ack(self):
+        async def scenario():
+            tmp = tempfile.TemporaryDirectory()
+            workdir = Path(tmp.name)
+            sessions = SessionManager(workdir)
+            inbox = workdir / "proactive" / "inbox"
+            inbox.mkdir(parents=True)
+            (inbox / "demo.jsonl").write_text(
+                json.dumps(
+                    {"kind": "alert", "event_id": "a1", "title": "meeting"}
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            state = ProactiveStateStore(workdir / "proactive.db")
+            bus = MessageBus()
+            sent = []
+            fail_delivery = True
+
+            async def channel_send(message):
+                nonlocal fail_delivery
+                if fail_delivery:
+                    raise RuntimeError("channel unavailable")
+                sent.append(message)
+
+            bus.subscribe_outbound("web", channel_send)
+            loop = ProactiveLoop(
+                config=_cfg(),
+                bus=bus,
+                session_manager=sessions,
+                model_client=_FakeClient(alert_msg="会议快开始了"),
+                sources=build_file_inbox_registry(workdir),
+                state=state,
+            )
+            dispatcher = asyncio.create_task(bus.dispatch_outbound())
+
+            await loop._tick()
+            self.assertEqual(state.unread_count("alert"), 1)
+            self.assertFalse((inbox / "demo.acked").exists())
+            self.assertEqual(sent, [])
+            self.assertTrue(
+                any(
+                    d["action"] == "delivery_failed"
+                    for d in state.recent_decisions()
+                )
+            )
+
+            fail_delivery = False
+            await loop._tick()
+            self.assertEqual(len(sent), 1)
+            self.assertEqual(state.unread_count("alert"), 0)
+            self.assertIn("a1", (inbox / "demo.acked").read_text(encoding="utf-8"))
+            session = sessions.get_or_create("web:u1")
+            self.assertTrue(
+                any(m.get("proactive") for m in session.messages)
+            )
+
+            bus.stop()
+            await dispatcher
+            loop.close()
+            sessions.close()
+            tmp.cleanup()
+
+        asyncio.run(scenario())
+
+    def test_source_ack_failure_stays_pending_and_flushes_next_tick(self):
+        async def scenario():
+            tmp = tempfile.TemporaryDirectory()
+            workdir = Path(tmp.name)
+            sessions = SessionManager(workdir)
+            state = ProactiveStateStore(workdir / "proactive.db")
+            source = _FlakyAckSource()
+            sources = SourceRegistry()
+            sources.add(source)
+            bus = MessageBus()
+            sent = []
+            bus.subscribe_outbound("web", lambda m: sent.append(m) or asyncio.sleep(0))
+            loop = ProactiveLoop(
+                config=_cfg(),
+                bus=bus,
+                session_manager=sessions,
+                model_client=_FakeClient(alert_msg="会议快开始了"),
+                sources=sources,
+                state=state,
+            )
+            dispatcher = asyncio.create_task(bus.dispatch_outbound())
+
+            await loop._tick()
+            self.assertEqual(len(sent), 1)
+            self.assertEqual(state.unread_count("alert"), 0)
+            self.assertEqual(
+                state.pending_acknowledgements(), {"flaky": ["a1"]}
+            )
+
+            source.fail_ack = False
+            await loop._tick()
+            self.assertEqual(len(sent), 1)
+            self.assertEqual(state.pending_acknowledgements(), {})
+            self.assertEqual(source.acked, ["a1"])
+
+            bus.stop()
+            await dispatcher
+            loop.close()
+            sessions.close()
+            tmp.cleanup()
+
+        asyncio.run(scenario())
 
 
 class StatusAndGateTests(unittest.TestCase):
@@ -278,7 +448,8 @@ class StatusAndGateTests(unittest.TestCase):
         loop, sessions = self._loop(Path(tmp.name))
         st = loop.status()
         for key in ("target", "energy", "base_score", "estimated_next_interval_s",
-                    "unread_alert", "unread_content", "recent_decisions", "sources"):
+                    "unread_alert", "unread_content",
+                    "recent_decisions", "sources"):
             self.assertIn(key, st)
         self.assertEqual(st["target"], "web:u1")
         loop.close()
