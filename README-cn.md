@@ -1,10 +1,36 @@
 # Kirakira Agent
 
-Kirakira Agent 目前是一个被动回复架构实现的多渠道 AI Agent Runtime。它不再只是一个最小 tool-calling demo，而是一套可持续扩展的运行时：统一接入 Web、Telegram、QQ/OneBot，经过消息总线、会话隔离、长期记忆、生命周期插件和多轮工具循环后回复用户。
+Kirakira Agent 是一个参考 `akashic-agent` 实现的多渠道 AI Agent Runtime。它不只是一个"你问它答"的 tool-calling demo，而是一个**会主动找你**的 AI 伙伴：统一接入 Web、Telegram、QQ/OneBot，既能被动回复，也能按电量模型自适应判断"此刻该不该发消息、发什么"，还能在空闲时自主执行后台任务。
 
-本项目明确不包含 `proactive_v2`、drift、自主传感器、自主判断后主动触达等主动链路。用户明确创建的定时消息、当前 turn 触发的子代理和 `message_push` 属于被动请求产生的副作用，仍在实现范围内。
+## 三条链路
 
-## 架构
+和市面上多数 agent 只有"被动回复"一条链路不同，Kirakira 参考 akashic 实现了三条并列链路，后两条才是它区别于普通 chatbot 的地方：
+
+```text
+你的消息 ─→ [被动回复] ──→ agent loop ──→ 回复
+              │
+              ├── 记忆系统 ── 每轮注入长期记忆 + 回复后异步 consolidation
+              │
+              └── 插件系统 ── 拦截命令、注入 phase、阻断工具、挂载新工具...
+
+[主动推送] ──→ 电量模型自适应轮询 ──→ 三路数据(alert/content/context) ──→ LLM 决策 ──→ 推送或跳过
+              │
+              └── [Drift] ──→ 三路都没东西可推时,照 SKILL.md 自主干后台活儿
+```
+
+| 链路 | 触发方 | 行为定义在 | 差异点 |
+| --- | --- | --- | --- |
+| 被动回复 | 用户消息 | 代码（agent loop） | 与市面 agent 一致 |
+| 主动推送 | 定时轮询 | 代码（system prompt） | 电量自适应节流 + 三通道语义 |
+| Drift | 主动链路空转 | 你写的 `SKILL.md` | 行为可编辑、跨轮连续性 |
+
+- **被动回复**：收到消息 → 记忆检索 → 工具循环 → 流式回复，每轮经过 7 个 phase 扩展点。
+- **主动推送（Proactive）**：Agent 按电量模型自适应调整轮询频率——刚聊完不烦你（长间隔），久没动静就加速（短间隔）；每轮拉三路数据：`alert` 直接透传、`content` 逐条 LLM 兴趣判断、`context` 只辅助判断不单独触发。
+- **Drift**：主动链路拉了一圈三路都空时，Agent 不空转，而是读你写在 `drift/skills/<name>/SKILL.md` 里的分步指南，一步步执行一个后台小任务（补用户画像、审计记忆等），带跨轮连续性，最后调 `finish_drift` 收尾。
+
+详见 [_handbook/proactive.md](./_handbook/proactive.md) 与 [_handbook/drift.md](./_handbook/drift.md)。
+
+## 被动回复架构
 
 ```text
 Web / Telegram / QQ / CLI
@@ -33,8 +59,30 @@ Web / Telegram / QQ / CLI
 下一轮开始前：等待同 session 上一次 consolidation 收口
 ```
 
+## 主动推送与 Drift 架构
+
+```text
+ ProactiveLoop.run()（后台 task，与 AgentLoop 并列）
+             ↓
+ 电量模型决定本轮 tick 间隔（energy → base_score → interval）
+             ↓
+ Gate（目标就绪、被动链路空闲、冷却窗口）
+             ↓
+ Fetch：SourceRegistry 并发拉取所有数据源
+             ↓
+ Ingest：三通道去重入库（proactive.db）
+             ↓
+ Decide：alert 直推 → content 兴趣判断 → 都没推则 ↓
+             ↓
+ Drift：DriftRunner 选一个 SKILL.md → 复用 Agent loop 跑一轮 → finish_drift
+             ↓
+ Deliver：bus.publish_outbound(metadata.proactive=true) → 原 Channel
+```
+
 ## 已实现能力
 
+- **主动推送链路（MVP）**：电量模型（多时间尺度指数衰减）自适应轮询节流；三通道 `alert`/`content`/`context` 语义；可插拔 `ProactiveSource` 协议 + 内置文件源；`proactive.db` 事件去重/ACK/冷却；LLM 兴趣判断决定推送或跳过；交付复用 MessageBus。
+- **Drift 空闲任务链路（MVP）**：主动链路空转时自动进入；发现 `drift/skills/*/SKILL.md` 并每轮重新选择；一轮 Drift 复用现有 Agent loop 跑成一次 run，SKILL.md 当 system prompt + 注入 Briefing；`message_push` / `finish_drift` 收尾；`drift.db` 保存 run 记录、跨轮连续性与 `min_interval_hours` 门控。
 - Web、Telegram、QQ/OneBot、CLI 被动消息入口。
 - 按 session 串行、跨 session 并行的 AgentLoop；`/stop` 中断并保存续跑标记。
 - OpenAI-compatible 普通响应和 SSE streaming；支持分片 tool call 参数重组。
@@ -225,6 +273,34 @@ VISION_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 VISION_API_KEY=your-key
 ```
 
+## 开启主动推送与 Drift
+
+主动链路默认关闭。填好目标渠道后开启：
+
+```toml
+[proactive]
+enabled = true
+# 电量高（刚聊完）用短间隔、低（长期沉默）用长间隔；单位秒，tick_jitter 加抖动。
+tick_interval_s1 = 2400
+tick_interval_s0 = 4800
+model = ""            # 留空复用 [llm.main].model
+
+[proactive.target]
+channel = "telegram"  # 推送目标渠道
+chat_id = ""          # 你的 user id
+
+[proactive.agent]
+content_limit = 5
+delivery_cooldown_hours = 1   # content 刷屏抑制（alert 不受限）
+
+[proactive.drift]
+enabled = true        # 建议先跑通 proactive 再开启
+min_interval_hours = 3
+max_steps = 20
+```
+
+启动后主动链路作为后台 task 运行。想快速体验：往 `<workspace>/proactive/inbox/demo.jsonl` 投几条事件（格式见该目录自动生成的 `README.md`），下一个 tick 就会看到判断与推送。Drift 首次运行会自动放一个示例 skill `explore-curiosity`。
+
 ## 内置工具
 
 工作区：`bash`、`task_output`、`task_stop`、`list_dir`、`read_file`、`write_file`、`edit_file`。
@@ -238,6 +314,9 @@ VISION_API_KEY=your-key
 扩展：`plugin_install`、`plugin_list`、`plugin_doctor`、`spawn`、`spawn_manage`。
 
 调度：`schedule`、`list_schedules`、`cancel_schedule`。
+
+> 主动推送与 Drift 是**后台链路**而非工具：`ProactiveLoop` / `DriftRunner` 作为后台 task 运行。
+> Drift run 内部额外挂载 `message_push`（覆盖为记草稿、由 runner 投递）与 `finish_drift` 收尾工具。
 
 > MCP 不再有 `mcp_add` / `mcp_remove` / `mcp_list`。server 由 `<workspace>/mcp/servers/*.toml`
 > 声明并热重载，见 [_handbook/workspace-mcp.md](./_handbook/workspace-mcp.md)。
@@ -282,6 +361,11 @@ uploads/                      Channel 附件
 .kirakira/plugins/            安装的插件代码
 .kirakira/plugin-data/        插件运行数据
 mcp/servers/*.toml            workspace MCP 声明（热重载）
+proactive.db                  主动链路事件去重 / ACK / 推送冷却
+proactive/inbox/*.jsonl       内置文件数据源（每行一个事件）
+PROACTIVE_CONTEXT.md          主动推送规则面板（主 agent 维护、判断器每轮读取）
+drift/skills/<name>/SKILL.md  Drift 任务定义（你写，agent 每轮当 system prompt）
+drift/drift.db                Drift run 记录、跨轮连续性、min_interval 门控
 ```
 
 以上路径都相对 workspace 根解析。workspace 由 `--workspace` > `KIRAKIRA_WORKSPACE` >
@@ -309,15 +393,13 @@ mcp/servers/*.toml            workspace MCP 声明（热重载）
 | Prompt 怎么分块、超限如何降级、trace 在哪里 | [_handbook/context-management.md](./_handbook/context-management.md) |
 | Session 与长期记忆为什么分开 | [_handbook/memory.md](./_handbook/memory.md) |
 | TUI 是否基于 tmux、流式终态和历史 Session 怎么工作 | [_handbook/cli-and-sessions.md](./_handbook/cli-and-sessions.md) |
+| 主动推送怎么判断、电量模型怎么调频、数据源怎么接 | [_handbook/proactive.md](./_handbook/proactive.md) |
+| Drift 空闲任务怎么写、跨轮连续性怎么保存 | [_handbook/drift.md](./_handbook/drift.md) |
 
-`docs/` 是**历史与方法论**：记录为什么变成今天这样。
+`docs/` 只留三篇，各司其职，不重复：
 
 | 我想知道 | 看这里 |
 | --- | --- |
-| 从 MVP 一步步长成现在这样的过程 | [docs/VERSION_EVOLUTION.md](./docs/VERSION_EVOLUTION.md) |
-| 可迁移的架构判断（分层、声明式、代际、错误边界） | [docs/ARCHITECTURE_LESSONS.md](./docs/ARCHITECTURE_LESSONS.md) |
-| Handbook 是什么、为什么有用、怎么写 | [docs/HANDBOOK_GUIDE.md](./docs/HANDBOOK_GUIDE.md) |
-| 与 Reference 的逐项差异和有意未跟进项 | [docs/DIFFERENCE_AUDIT.md](./docs/DIFFERENCE_AUDIT.md) |
-| 代码串联与数据流 | [docs/PROJECT_REPORT.md](./docs/PROJECT_REPORT.md) |
-| 复刻范围与完成清单 | [docs/REPLICATION_PLAN.md](./docs/REPLICATION_PLAN.md) |
-| 简历文案与面试追问 | [docs/RESUME_INTERVIEW_GUIDE.md](./docs/RESUME_INTERVIEW_GUIDE.md) |
+| 简历文案与面试追问（含三链路差异化，**面试先看这篇**） | [docs/RESUME_INTERVIEW_GUIDE.md](./docs/RESUME_INTERVIEW_GUIDE.md) |
+| 与 Reference 的逐项差异、复刻范围、哪些是 MVP / 有意暂缓 | [docs/DIFFERENCE_AUDIT.md](./docs/DIFFERENCE_AUDIT.md) |
+| 从 MVP 一步步长成现在这样的过程与工程取舍 | [docs/VERSION_EVOLUTION.md](./docs/VERSION_EVOLUTION.md) |

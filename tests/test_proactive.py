@@ -1,0 +1,228 @@
+"""主动推送链路测试：电量模型、契约、状态库、数据源、端到端 tick。"""
+
+import asyncio
+import json
+import tempfile
+import unittest
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+from kirakira_agent.bus import MessageBus
+from kirakira_agent.events import OutboundMessage
+from kirakira_agent.proactive import energy
+from kirakira_agent.proactive.config import ProactiveConfig
+from kirakira_agent.proactive.contracts import normalize_alert, normalize_content
+from kirakira_agent.proactive.loop import ProactiveLoop
+from kirakira_agent.proactive.sources import (
+    FileInboxSource,
+    SourceRegistry,
+    build_file_inbox_registry,
+)
+from kirakira_agent.proactive.state import ProactiveStateStore
+from kirakira_agent.schema import ModelResponse
+from kirakira_agent.session import SessionManager
+
+NOW = datetime(2026, 7, 22, 12, 0, 0, tzinfo=timezone.utc)
+
+
+class EnergyTests(unittest.TestCase):
+    def test_energy_decays_over_time(self):
+        fresh = energy.compute_energy(NOW, NOW)
+        stale = energy.compute_energy(NOW - timedelta(hours=6), NOW)
+        self.assertGreater(fresh, stale)
+        self.assertEqual(energy.compute_energy(None, NOW), 0.0)
+
+    def test_base_score_higher_when_idle_or_active(self):
+        idle = energy.base_score(energy.compute_energy(NOW - timedelta(days=2), NOW), 0)
+        active = energy.base_score(energy.compute_energy(NOW, NOW), 12)
+        # 久没聊、或刚聊得热，都该给出较高冲动分
+        self.assertGreater(idle, 0.5)
+        self.assertGreater(active, 0.5)
+
+    def test_high_score_yields_shorter_interval(self):
+        rng = __import__("random").Random(0)
+        short = energy.next_tick_from_score(0.9, tick_s1=2400, tick_s0=4800, rng=rng)
+        long = energy.next_tick_from_score(0.05, tick_s1=2400, tick_s0=4800, rng=rng)
+        self.assertLess(short, long)
+
+
+class ContractTests(unittest.TestCase):
+    def test_normalize_alert_and_content(self):
+        alert = normalize_alert(
+            {"_source": "s", "event_id": "a1", "title": "T", "content": "B", "severity": "high"}
+        )
+        self.assertEqual(alert.item_id, "s:a1")
+        self.assertIn("severity=high", alert.to_prompt_line())
+        content = normalize_content(
+            {"_source": "s", "event_id": "c1", "title": "C", "url": "http://x"}
+        )
+        self.assertEqual(content.item_id, "s:c1")
+        self.assertIn("url=http://x", content.to_prompt_line(0))
+
+
+class StateStoreTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.store = ProactiveStateStore(Path(self.tmp.name) / "proactive.db")
+
+    def tearDown(self):
+        self.store.close()
+        self.tmp.cleanup()
+
+    def test_ingest_dedups_and_unread_consume(self):
+        events = [{"item_id": "s:1", "_source": "s", "event_id": "1", "title": "x"}]
+        self.assertEqual(self.store.ingest("content", events, NOW), ["s:1"])
+        # 第二次相同事件不再算新
+        self.assertEqual(self.store.ingest("content", events, NOW), [])
+        unread = self.store.unread("content")
+        self.assertEqual(len(unread), 1)
+        self.store.consume(["s:1"], NOW)
+        self.assertEqual(self.store.unread("content"), [])
+
+    def test_cooldown(self):
+        self.assertFalse(self.store.in_cooldown("k", NOW, 1.0))
+        self.store.mark_push("k", NOW)
+        self.assertTrue(self.store.in_cooldown("k", NOW + timedelta(minutes=30), 1.0))
+        self.assertFalse(self.store.in_cooldown("k", NOW + timedelta(hours=2), 1.0))
+
+
+class SourceTests(unittest.TestCase):
+    def test_file_inbox_fetch_and_ack(self):
+        async def scenario():
+            tmp = tempfile.TemporaryDirectory()
+            inbox = Path(tmp.name) / "inbox"
+            inbox.mkdir(parents=True)
+            (inbox / "demo.jsonl").write_text(
+                json.dumps({"kind": "alert", "event_id": "a1", "title": "T"}) + "\n"
+                + json.dumps({"kind": "content", "event_id": "c1", "title": "C"}) + "\n",
+                encoding="utf-8",
+            )
+            source = FileInboxSource("demo", inbox, ("alert", "content", "context"))
+            events = await source.fetch()
+            self.assertEqual(len(events), 2)
+            await source.ack(["a1"])
+            remaining = await source.fetch()
+            self.assertEqual([e["event_id"] for e in remaining], ["c1"])
+            registry = SourceRegistry()
+            registry.add(source)
+            grouped = await registry.fetch_all()
+            self.assertEqual(len(grouped["content"]), 1)
+            self.assertEqual(grouped["content"][0]["_source"], "demo")
+            tmp.cleanup()
+
+        asyncio.run(scenario())
+
+    def test_build_file_inbox_registry_creates_dir(self):
+        tmp = tempfile.TemporaryDirectory()
+        registry = build_file_inbox_registry(Path(tmp.name))
+        self.assertTrue((Path(tmp.name) / "proactive" / "inbox" / "README.md").exists())
+        self.assertIsInstance(registry, SourceRegistry)
+        tmp.cleanup()
+
+
+class _FakeClient:
+    """按 system prompt 返回固定 JSON 决策的假模型。"""
+
+    def __init__(self, alert_msg="ALERT!", content_decision=None):
+        self.alert_msg = alert_msg
+        self.content_decision = content_decision or {"decision": "skip"}
+
+    def complete(self, messages, tools, system, model, max_tokens):
+        prompt = messages[0]["content"]
+        if "【通道】alert" in prompt:
+            return ModelResponse(text=json.dumps({"message": self.alert_msg}))
+        return ModelResponse(text=json.dumps(self.content_decision))
+
+
+def _cfg(**kw):
+    base = dict(enabled=True, channel="web", chat_id="u1", content_limit=5)
+    base.update(kw)
+    return ProactiveConfig(**base)
+
+
+class LoopTickTests(unittest.TestCase):
+    def _run_loop_once(self, inbox_events, client, drift_calls):
+        async def scenario():
+            tmp = tempfile.TemporaryDirectory()
+            workdir = Path(tmp.name)
+            sessions = SessionManager(workdir)
+            inbox = workdir / "proactive" / "inbox"
+            inbox.mkdir(parents=True)
+            (inbox / "demo.jsonl").write_text(
+                "\n".join(json.dumps(e) for e in inbox_events) + "\n", encoding="utf-8"
+            )
+            sources = build_file_inbox_registry(workdir)
+            state = ProactiveStateStore(workdir / "proactive.db")
+            bus = MessageBus()
+            sent = []
+            bus.subscribe_outbound("web", lambda m: sent.append(m) or asyncio.sleep(0))
+
+            async def drift_hook(now, key):
+                drift_calls.append(key)
+                return True
+
+            loop = ProactiveLoop(
+                config=_cfg(),
+                bus=bus,
+                session_manager=sessions,
+                model_client=client,
+                sources=sources,
+                state=state,
+                memory=None,
+                drift_hook=drift_hook,
+            )
+            dispatcher = asyncio.create_task(bus.dispatch_outbound())
+            await loop._tick()
+            await bus.drain(timeout=2)
+            bus.stop()
+            await dispatcher
+            loop.close()
+            state.close()
+            sessions.close()
+            tmp.cleanup()
+            return sent
+
+        return asyncio.run(scenario())
+
+    def test_alert_is_pushed(self):
+        drift_calls = []
+        sent = self._run_loop_once(
+            [{"kind": "alert", "event_id": "a1", "title": "meeting", "content": "soon"}],
+            _FakeClient(alert_msg="会议快开始了"),
+            drift_calls,
+        )
+        self.assertEqual(len(sent), 1)
+        self.assertEqual(sent[0].content, "会议快开始了")
+        self.assertTrue(sent[0].metadata.get("proactive"))
+        self.assertEqual(drift_calls, [])  # 推了 alert 就不进 drift
+
+    def test_content_skip_falls_through_to_drift(self):
+        drift_calls = []
+        sent = self._run_loop_once(
+            [{"kind": "content", "event_id": "c1", "title": "news", "url": "http://x"}],
+            _FakeClient(content_decision={"decision": "skip"}),
+            drift_calls,
+        )
+        self.assertEqual(sent, [])
+        self.assertEqual(drift_calls, ["web:u1"])  # 没推 → 交给 drift
+
+    def test_content_send(self):
+        drift_calls = []
+        sent = self._run_loop_once(
+            [{"kind": "content", "event_id": "c1", "title": "news", "url": "http://x"}],
+            _FakeClient(
+                content_decision={
+                    "decision": "send",
+                    "message": "看到条新闻",
+                    "cited_ids": ["demo:c1"],
+                }
+            ),
+            drift_calls,
+        )
+        self.assertEqual(len(sent), 1)
+        self.assertEqual(sent[0].content, "看到条新闻")
+        self.assertEqual(drift_calls, [])
+
+
+if __name__ == "__main__":
+    unittest.main()
