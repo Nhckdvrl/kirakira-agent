@@ -24,6 +24,11 @@ from kirakira_agent.memory import MemoryRuntime
 from kirakira_agent.mcp import McpCatalogPublisher, WorkspaceMcpAdmin, WorkspaceMcpWatcher
 from kirakira_agent.models import OpenAICompatibleClient
 from kirakira_agent.plugins import PluginManager
+from kirakira_agent.proactive import ProactiveLoop
+from kirakira_agent.proactive.config import ProactiveConfig
+from kirakira_agent.proactive.sources import build_file_inbox_registry
+from kirakira_agent.proactive.state import ProactiveStateStore
+from kirakira_agent.drift import DriftRunner
 from kirakira_agent.runtime import (
     AgentLoop,
     CoreRuntime,
@@ -194,6 +199,55 @@ def _build_channel_host(
         )
         added = True
     return host if added else None
+
+
+def _build_proactive(
+    *,
+    workdir: Path,
+    app_config: JsonDict,
+    default_model: str,
+    bus: MessageBus,
+    session_manager: SessionManager,
+    memory: MemoryRuntime,
+    client: OpenAICompatibleClient,
+) -> tuple[ProactiveLoop | None, DriftRunner | None]:
+    """按配置装配主动推送链路与 Drift 链路；未启用则返回 (None, None)。"""
+    cfg = ProactiveConfig.from_app_config(app_config, default_model=default_model)
+    if not cfg.enabled:
+        return None, None
+    if not cfg.target_ready:
+        logging.getLogger(__name__).warning(
+            "[proactive] enabled=true 但未配置 target.channel/chat_id，主动链路不启动"
+        )
+        return None, None
+
+    drift_runner: DriftRunner | None = None
+    drift_hook = None
+    if cfg.drift.enabled:
+        drift_runner = DriftRunner(
+            config=cfg.drift,
+            workspace=workdir,
+            bus=bus,
+            session_manager=session_manager,
+            model_client=client,
+            model=cfg.model,
+            memory=memory,
+            target_channel=cfg.channel,
+            target_chat_id=cfg.chat_id,
+        )
+        drift_hook = drift_runner.maybe_run
+
+    loop = ProactiveLoop(
+        config=cfg,
+        bus=bus,
+        session_manager=session_manager,
+        model_client=client,
+        sources=build_file_inbox_registry(workdir),
+        state=ProactiveStateStore(workdir / "proactive.db"),
+        memory=memory,
+        drift_hook=drift_hook,
+    )
+    return loop, drift_runner
 
 
 async def build_runtime(
@@ -409,6 +463,15 @@ async def build_runtime(
             )
         for plugin_channel in plugin_manager.channels:
             channel_host.add(plugin_channel)
+    proactive_loop, drift_runner = _build_proactive(
+        workdir=workdir,
+        app_config=app_config,
+        default_model=model,
+        bus=bus,
+        session_manager=session_manager,
+        memory=memory,
+        client=client,
+    )
     return CoreRuntime(
         bus=bus,
         event_bus=event_bus,
@@ -424,6 +487,8 @@ async def build_runtime(
         mcp_watcher=mcp_watcher,
         scheduler=scheduler,
         subagents=subagents,
+        proactive_loop=proactive_loop,
+        drift_runner=drift_runner,
     )
 
 

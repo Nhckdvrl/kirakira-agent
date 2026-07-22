@@ -1,13 +1,26 @@
 # Kirakira Agent
 
-Kirakira Agent is a multi-channel AI agent runtime, built by working through the
-passive-reply architecture of [`akashic-agent`](https://github.com/kachofugetsu09/akashic-agent)
-from a minimal function-calling MVP upward. It has Web, Telegram, QQ/OneBot and
-CLI channels; an ordered message bus; session-aware concurrent turns; streaming
-OpenAI-compatible tool loops; persistent sessions and long-term memory; plugins,
-MCP, skills, scheduling and isolated subagents.
+Kirakira Agent is a multi-channel AI agent runtime built after
+[`akashic-agent`](https://github.com/kachofugetsu09/akashic-agent) from a minimal
+function-calling MVP upward. It is not just a "you ask, it answers" bot — it has
+**three parallel chains**, and the latter two are what set it apart from an ordinary
+chatbot:
 
-The autonomous proactive/drift chain is intentionally out of scope.
+- **Passive reply** — Web, Telegram, QQ/OneBot and CLI channels; an ordered message
+  bus; session-aware concurrent turns; streaming OpenAI-compatible tool loops;
+  persistent sessions and long-term memory; plugins, MCP, skills, scheduling and
+  isolated subagents.
+- **Proactive push** — a background loop that adaptively paces its polling with an
+  energy model, pulls three channels of data (`alert`/`content`/`context`) and lets
+  the LLM decide whether to reach out. See [_handbook/proactive.md](_handbook/proactive.md).
+- **Drift** — when the proactive chain has nothing to push, it reuses the same agent
+  loop to run a background task defined by a user-authored `SKILL.md`, with
+  cross-run continuity. See [_handbook/drift.md](_handbook/drift.md).
+
+Proactive/Drift are MVP-level: the differentiating essence is implemented and wired
+in; the reference's heavier machinery (phase-graph kernel, snapshot hot reload,
+semantic-interest vectors) is deliberately deferred. Both are off by default and
+enabled under `[proactive]` in `config.toml`.
 
 > This is a learning project. The documentation is a first-class part of it: it
 > traces how each layer was driven into existence by a concrete problem, which is
@@ -48,6 +61,8 @@ kirakira_agent/          the runtime
 ├── tools/               registry, executor, built-in tools
 ├── mcp/                 declarative workspace MCP (declarations/host/publisher/watcher)
 ├── channels/            web, telegram, qq, host
+├── proactive/           energy model, three channels, pluggable sources, judge, tick loop
+├── drift/               idle-task chain: skill discovery, run state, runner (reuses agent loop)
 ├── plugins.py           plugin loading and programmatic capability declaration
 └── ...
 
@@ -95,17 +110,16 @@ It changes in the same commit as the code it documents.
 | [memory.md](_handbook/memory.md) | session vs memory; why recall fuses by rank, not score |
 | [context-management.md](_handbook/context-management.md) | prompt blocks, token budget, semantic retries and traces |
 | [cli-and-sessions.md](_handbook/cli-and-sessions.md) | TUI ownership, streaming finality and saved-session behavior |
+| [proactive.md](_handbook/proactive.md) | the energy model, three channels, pluggable sources and the push decision |
+| [drift.md](_handbook/drift.md) | idle-task skills, one drift run = one agent run, cross-run continuity |
 
 `docs/` describes **how it got here** — history, and the reasoning worth reusing.
 
 | | |
 | --- | --- |
 | [VERSION_EVOLUTION.md](docs/VERSION_EVOLUTION.md) | MVP → current runtime, one problem at a time |
-| [ARCHITECTURE_LESSONS.md](docs/ARCHITECTURE_LESSONS.md) | transferable design judgement, from real decisions here |
-| [HANDBOOK_GUIDE.md](docs/HANDBOOK_GUIDE.md) | what a handbook is, why it works, how to write one |
-| [DIFFERENCE_AUDIT.md](docs/DIFFERENCE_AUDIT.md) | per-item diff against the reference, and what was deliberately skipped |
-| [PROJECT_REPORT.md](docs/PROJECT_REPORT.md) | code walkthrough and data flow |
-| [REPLICATION_PLAN.md](docs/REPLICATION_PLAN.md) | scope and completion checklist |
+| [DIFFERENCE_AUDIT.md](docs/DIFFERENCE_AUDIT.md) | per-item diff against the reference, scope, and what is MVP / deferred |
+| [RESUME_INTERVIEW_GUIDE.md](docs/RESUME_INTERVIEW_GUIDE.md) | résumé wording and interview Q&A, incl. the three-chain differentiator |
 
 [中文 README](README-cn.md) has the detailed configuration and channel setup.
 

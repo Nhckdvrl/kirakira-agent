@@ -45,6 +45,64 @@
 
 不会出现一条简历塞入十几个名词，却无法讲清任何一条调用链的问题。
 
+## 2.5 差异化主线：三条链路（面试主打）
+
+> 上一次面试被吊"缺乏与市面项目的差异化"。根因很直接：只讲了**被动回复**——这条链路
+> 和市面所有 chatbot/agent 一模一样。真正的差异点是另外两条链路，现在都做出来了，
+> 面试时**先讲这两条**。
+
+**一句话定位**：市面多数 agent 只有"你问它答"一条链路；Kirakira 有三条并列链路，
+后两条是它区别于普通 chatbot 的地方——它**会自己找你**，还能**在空闲时自主干活**。
+
+| 链路 | 触发方 | 行为定义在哪 | 差异点 |
+| --- | --- | --- | --- |
+| 被动回复 | 用户消息 | 代码（agent loop） | 与市面一致，是基座 |
+| 主动推送 | 后台定时轮询 | 代码（system prompt） | **电量模型自适应节流 + 三通道语义** |
+| Drift | 主动链路空转时 | **你写的 SKILL.md** | **行为可编辑、不改代码、跨轮连续性** |
+
+### 可加进简历的一条
+
+**主动推送与自治后台链路：** 在被动 agent loop 之外实现两条自治链路。主动推送用多时间尺度
+指数衰减"电量"模型自适应调节轮询频率（刚聊完拉长间隔、久沉默缩短间隔），每 tick 拉取
+`alert`/`content`/`context` 三通道数据，经 LLM 兴趣判断决定推送或跳过，事件按稳定 id 去重、
+按冷却窗口节流；Drift 在主动链路无内容可推时复用同一套 Agent loop 跑后台任务，任务行为由
+用户编写的 `SKILL.md` 定义而非硬编码，并在 SQLite 中保存跨轮连续性与最小间隔门控。
+
+### 高频追问预案
+
+**问：主动推送会不会一直骚扰用户？频率怎么定？**
+不是固定间隔。用一个多时间尺度指数衰减的"电量"值 `E(t)`（30min/240min/48h 三个时间常数）
+刻画"距上次互动多久"，合成一个 `base_score`；分数越高（久没聊，或刚聊得很热）→ 下次 tick
+间隔越短。刚聊完时 E 高、饥渴度低，间隔拉长不打扰；半天没动静 E 衰减、饥渴度上升，间隔缩短。
+再加随机抖动避免整点齐发。纯数学、可单测，不额外打模型。
+
+**问：三个通道有什么区别？**
+`alert` 直接透传推送（会议提醒这种）；`content` 要经过一次 LLM 兴趣判断，宁缺毋滥，不确定就
+skip；`context`（睡眠/在线状态）从不单独触发推送，只作为背景注入判断 prompt。判断顺序是
+alert 优先 → content 兴趣判断 → 都没推就进 Drift。
+
+**问：怎么保证同一条新闻不被反复推送？**
+事件有稳定身份 `<source>:<event_id>`，入库用 `INSERT OR IGNORE` 去重；只有被 LLM 真正引用
+（cited）的事件才 consume + ACK，没引用的留在未读队列。推送后记 `last_push_at`，冷却窗口内
+抑制 content 刷屏（alert 不受此限）。
+
+**问：数据从哪来？是写死的吗？**
+不是。定义了一个 `ProactiveSource` 协议（`fetch`/`ack` + 声明通道），链路只认 source/channel/事件，
+不硬编码数据来源。MVP 内置一个从 `proactive/inbox/*.jsonl` 读事件的文件源做演示；要接 RSS/日历/
+健康数据，实现同一个协议（fetch 调 MCP 工具、ack 回源）即可无缝替换。
+
+**问：Drift 和主动推送有什么本质区别？**
+主动推送的行为是**代码里写死的 system prompt**；Drift 的行为是**用户写在 SKILL.md 里的分步指南**，
+可编辑、可增删，不动代码。一轮 Drift 就是一次 agent run：SKILL.md 当 system prompt，注入一份
+Briefing（记忆 + 近期上下文 + 本 skill 前情），复用现有 Agent loop 一步步执行，最后调
+`finish_drift` 收尾。跨轮连续性（续跑断点、倾向）存在 SQLite 里，下轮通过 Briefing 注入。
+
+**问：这块的 tradeoff / 有没有偷工？（要诚实）**
+明确说是 **MVP**：先做到两条链路能执行、留好拓展位，参考项目的重型机制（phase-graph kernel、
+snapshot 热重载、插件化数据源运行时、语义兴趣向量、hazard 概率穿线）刻意暂缓。比如判断层
+因为 `ModelClient.complete` 不支持 forced tool call，改成让模型产出严格 JSON 再解析——这是
+provider 能力受限下的有意实现差异，不是没想到。这样讲比假装全量复刻更经得起追问。
+
 ## 3. 当前不能写成“已完成”的内容
 
 - FastAPI 分层 API 和 Worker 消费链路。
@@ -216,6 +274,6 @@ cosine 与 keyword overlap 的原始分数尺度不同，直接加权没有统�
 
 ## 9. 项目介绍口述版
 
-“这个项目最开始只是一个 Function Calling MVP，模型返回工具名和参数，我执行后把结果回填。工具一多，我先解决参数校验、异常、超时和上下文串线，把执行拆成 ToolRegistry 和 ToolExecutor，再加入 Hook、延迟工具发现和 MCP。之后为了支持长期对话，我把原始 Session 和长期记忆拆开：Session 保存完整 tool history，长期记忆在回复后异步抽取，并保留 source 以支持遗忘和撤销；检索用 lexical/vector 多路召回与 RRF 融合。长上下文再拆为具名 PromptBlock，并用 Provider 预检、语义降级和 trace 避免静默截断。多渠道接入后，我用 MessageBus 和 session lock 保证同会话串行、跨 session 并发，也处理了 streaming、取消和优雅关机。下一步是用 LangSmith/eval 建立工具、记忆和 context budget 的回归基线，再评估 BM25、query rewrite 和 HyDE。”
+“这个项目最开始只是一个 Function Calling MVP，模型返回工具名和参数，我执行后把结果回填。工具一多，我先解决参数校验、异常、超时和上下文串线，把执行拆成 ToolRegistry 和 ToolExecutor，再加入 Hook、延迟工具发现和 MCP。之后为了支持长期对话，我把原始 Session 和长期记忆拆开：Session 保存完整 tool history，长期记忆在回复后异步抽取，并保留 source 以支持遗忘和撤销；检索用 lexical/vector 多路召回与 RRF 融合。长上下文再拆为具名 PromptBlock，并用 Provider 预检、语义降级和 trace 避免静默截断。多渠道接入后，我用 MessageBus 和 session lock 保证同会话串行、跨 session 并发，也处理了 streaming、取消和优雅关机。在被动回复之外，我又加了两条自治链路：主动推送用一个电量衰减模型自适应决定轮询频率，拉 alert/content/context 三路数据、经 LLM 兴趣判断决定要不要主动发消息；空闲时进入 Drift，复用同一套 Agent loop 去跑用户写在 SKILL.md 里的后台任务。这两条才是它区别于普通 chatbot 的地方——它会自己找你、也会自己找事做。下一步是用 LangSmith/eval 建立工具、记忆和 context budget 的回归基线，再评估 BM25、query rewrite 和 HyDE。”
 
-这段口述能自然引出工具系统、记忆、并发、Bug 和下一版评测，不需要提任何参考项目。
+这段口述能自然引出工具系统、记忆、并发、Bug、差异化的两条链路和下一版评测。差异化部分（主动推送 + Drift）应当**最先讲**，直接回应"和市面项目有什么不同"。

@@ -1415,6 +1415,8 @@ class CoreRuntime:
     mcp_watcher: Any | None = None
     scheduler: Any | None = None
     subagents: Any | None = None
+    proactive_loop: Any | None = None
+    drift_runner: Any | None = None
 
     def add_tool_hooks(self, hooks: List[ToolHook]) -> None:
         self.reasoner.add_tool_hooks(hooks)
@@ -1462,6 +1464,10 @@ class CoreRuntime:
             await self.channel_host.start_all()
         if self.scheduler is not None:
             tasks.append(asyncio.create_task(self.scheduler.run(), name="scheduler"))
+        if self.proactive_loop is not None:
+            tasks.append(
+                asyncio.create_task(self.proactive_loop.run(), name="proactive_loop")
+            )
         if self.mcp_watcher is not None:
             tasks.append(
                 asyncio.create_task(self.mcp_watcher.run(), name="workspace_mcp_watcher")
@@ -1474,6 +1480,8 @@ class CoreRuntime:
         await self.loop.shutdown()
         if self.scheduler is not None:
             self.scheduler.stop()
+        if self.proactive_loop is not None:
+            self.proactive_loop.stop()
         if self.mcp_watcher is not None:
             self.mcp_watcher.stop()
         drained = await self.bus.drain(timeout=10.0)
@@ -1491,6 +1499,10 @@ class CoreRuntime:
             await self.plugin_manager.terminate_all()
         if self.mcp_watcher is not None:
             await self.mcp_watcher.shutdown()
+        if self.drift_runner is not None:
+            self.drift_runner.close()
+        if self.proactive_loop is not None:
+            self.proactive_loop.close()
         await self.memory.shutdown()
         await self.event_bus.shutdown()
         self.session_manager.close()

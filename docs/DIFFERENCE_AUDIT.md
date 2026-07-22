@@ -3,9 +3,10 @@
 > 审计基准：reference `6a0616c`（2026-07-16）；Kirakira 的 context 子系统于
 > 2026-07-21 再次逐调用点对齐。旧 commit 只用于说明最初审计起点，本文状态以当前工作树为准。
 >
-> **排除范围**：只排除自主主动链路——`proactive_v2`、drift、sensor、energy、judge、presence，
-> 以及无人请求时的自主触达。Web、Telegram、QQ、用户创建的定时任务、用户 turn 派生的后台任务
-> 都属于被动链路，在审计范围内。
+> **范围更新（2026-07-22）**：主动链路不再排除。`proactive_v2`（energy/judge/三通道/source）与
+> drift 已 **MVP 复刻**并接入 runtime（见 §8）。原先"只做被动链路"的定调作废——这两条链路
+> 正是与市面 agent 的差异点，先做到能执行、保留拓展位，Tier-3 重型机制（phase-graph kernel、
+> snapshot 热重载、语义兴趣向量、hazard 穿线）刻意暂缓。
 >
 > **本文档的规矩**：每一条状态都必须是**核对过代码**得出的，不能靠印象。上一版审计因为凭印象
 > 写，把 #123 标成"已跟进"，实际上根本没做（见 §6）。
@@ -19,9 +20,10 @@
 | 测试文件数 | 135 | 24 |
 | 测试项数 | — | 186（183 通过、3 条件跳过） |
 
-体量差约 12 倍，但其中大部分是**被明确排除的范围**（`proactive_v2` 3.3k、`plugins/` 插件市场
-19.2k、`memory2` 5.6k、`eval` 2.3k、前端 Dashboard）以及 reference 更完整的代际/控制面机制。
-被动主链路的**行为**覆盖度远高于行数比暗示的程度，但**结构粒度**确实更粗（见 §4）。
+体量差约 12 倍。差距来自两处：一是本项目**未做的范围**（`plugins/` 插件市场 19.2k、`eval`
+2.3k、前端 Dashboard、控制面）；二是**已做但取轻实现**的部分——`proactive_v2`（3.3k）与 drift
+已 MVP 复刻（§7），但只保留差异化本质，Tier-3 重型机制暂缓；`memory2`（5.6k）核心行为覆盖但
+LLM 门控算法未做。各主链路的**行为**覆盖度高于行数比暗示的程度，但**结构粒度**确实更粗（见 §4）。
 
 ## 2. 逐模块映射
 
@@ -154,9 +156,10 @@ Kirakira 目前：Markdown + typed records + FTS + 可选 embedding + **RRF 多�
 
 ### 4.5 Fail-loud 范围
 
-Reference #111 是 236 文件、18k 行的全仓收紧，其中大半覆盖我们排除的 proactive/dashboard/
-peer-agent。我们提取原则应用于自己的被动链路（memory 写入、session 列举、MCP 结果结构、
-plugin manifest），共 4 处 + 5 个测试。**原则一致，覆盖面按范围裁剪。**
+Reference #111 是 236 文件、18k 行的全仓收紧，其中大半覆盖 dashboard/peer-agent 等未做范围，
+以及 proactive/drift（现已 MVP 实现，但全量 fail-loud 仍按范围裁剪）。我们提取原则应用于自己
+已实现的链路（memory 写入、session 列举、MCP 结果结构、plugin manifest），共 4 处 + 5 个测试。
+**原则一致，覆盖面按范围裁剪。**
 
 ### 4.6 其他
 
@@ -164,7 +167,8 @@ plugin manifest），共 4 处 + 5 个测试。**原则一致，覆盖面按范�
 - **Transport**：Reference 用 FastAPI/WebSocket 与更重的 SDK；我们用标准库 HTTP + Bot API + OneBot HTTP。
 - **持久化抽象**：Reference 有 `infra/persistence/json_store.py` 统一原子写；我们各模块内联。
 - **安装向导**：Reference 有 Click setup wizard；我们用 `config.example.toml` + 环境变量。
-- **Plugin jobs**：Reference 插件可声明 interval job，与排除的主动自治边界重叠。
+- **Plugin jobs**：Reference 插件可声明 interval job；本项目主动/Drift 链路走内置循环，插件化
+  的周期任务声明尚未做（可归入主动链路的拓展位）。
 
 ## 5. 有意未跟进（记录，不是遗忘）
 
@@ -255,7 +259,43 @@ prompt 里显式保留了安全网："与上面某条**语义相反**（例如�
 更正安全性另测：连说"CI 改成 GitLab""不喜欢猫了改养狗""PostgreSQL 16 升到 17"，
 三条更正**全部写入且旧事实被替换**，没有被去重压掉。
 
-## 7. 审计证据
+## 7. 主动推送与 Drift（2026-07-22 MVP 复刻）
+
+面试反馈"缺乏与市面项目的差异化"——根因是之前只复刻了**被动回复**这条与所有 chatbot 无异的
+链路。akashic 真正的差异点是另外两条，现已 MVP 复刻并接入 runtime。
+
+### 8.1 逐模块映射
+
+| Reference | Kirakira | 状态 |
+| --- | --- | --- |
+| `proactive_v2/energy.py` | `proactive/energy.py` | ✅ 纯数学照搬（多时间尺度电量 + base_score + 调频） |
+| `proactive_v2/contracts.py` | `proactive/contracts.py` | ✅ 三通道契约精简 |
+| `proactive_v2/mcp_sources.py`（MCP gateway） | `proactive/sources.py`（协议 + 文件源） | ⚠️ 换实现：协议对齐，内置文件源占位，MCP 留拓展位 |
+| `proactive_v2/state.py`、`plugins/wake_proactive/state.py` | `proactive/state.py` | ⚠️ 精简：去重/ACK/冷却，无 hazard/embedding 表 |
+| `plugins/wake_proactive/prompt.py`+`tools.py` | `proactive/judge.py` | ⚠️ 换实现：JSON 决策替代 forced tool call（`complete` 无 tool_choice） |
+| `proactive_v2/loop.py`+kernel+`wake_proactive/runtime.py` | `proactive/loop.py` | ⚠️ 压平：直白 async tick，无 phase-graph kernel / snapshot |
+| `plugins/drift_flow/*`、`wake_proactive/drift_drive.py` | `drift/{skills,state,tools,runner}.py` | ⚠️ 复用现有 Agent loop；无 hazard 采样 / journal |
+
+### 8.2 有意未跟进（Tier-3，记录不是遗忘）
+
+| 项 | 为什么暂缓 |
+| --- | --- |
+| phase-graph kernel（`ProactiveKernel` + slot DAG） | 当前单一 tick 链够用，插件化 phase 再说 |
+| snapshot 热重载 / 插件 proactive-source 运行时 | 依赖整套代际机制；文件源先占位 |
+| 语义兴趣向量（turn prototype + cosine 校准） | 依赖 embedding 全链路，属兴趣判断增强 |
+| hazard 穿线 / drift_drive 到期采样 | 概率触发的精调，MVP 用直接门控替代 |
+| self_observation journal（question/reinforce/revise） | 连续性增强，接口已留在 `drift/state.py` |
+
+### 8.3 验证
+
+- `tests/test_proactive.py`（11）：电量衰减/调频、三通道契约、去重/冷却、文件源 fetch/ack、
+  端到端 tick（alert 直推 / content skip→drift / content send）。
+- `tests/test_drift.py`（5）：skill 发现、min_interval 门控、连续性往返、端到端 run（message_push
+  + finish_drift → 投递 + 落库）、disabled 不跑。
+- 接线：`cli._build_proactive` 按 `[proactive]` 装配；`CoreRuntime.{proactive_loop,drift_runner}`
+  加入 `start_background` / `stop_background`。全量 197 passed（余 5 项为既有环境问题，见 §8）。
+
+## 8. 审计证据
 
 - Python：`/home/xiang/.conda/envs/xingshu-vllm/bin/python` 3.12。
 - `unittest discover -s tests`：**共 186 项，183 项通过、3 项条件跳过**。除原有 context policy、snapshot、
