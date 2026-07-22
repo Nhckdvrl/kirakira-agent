@@ -22,16 +22,23 @@ system_prompt = "你是 Kirakira。使用与用户相同的语言回答；执行
 # 超限时会依次移除 skills catalog、recent context、长期记忆、检索记忆，最后缩短历史；
 # 每次尝试的 section/token 明细会写进 session 消息的 context_trace。
 
+[memory]
+enabled = true
+# auto 读取 memory/structured-owner.json；迁移成功后使用 memory2，回滚后使用 legacy。
+engine = "auto"
+
 # 可选：配置后启用语义+词法混合记忆检索；不配置则使用纯词法检索。
 [memory.embedding]
 model = ""
 api_key = ""
 base_url = ""
+# 必须与 provider 返回维度一致；为空时 M1 保留无向量数据，M2 再执行 backfill。
+# output_dimensionality = 1024
 
 [channels.chat]
 enabled = true
 host = "127.0.0.1"
-port = 8765
+port = 6322
 channel_name = "web"
 
 [channels.telegram]
@@ -40,11 +47,22 @@ allow_from = []
 channel_name = "telegram"
 
 [channels.qq]
+enabled = false
 bot_uin = ""
 api_base_url = "http://127.0.0.1:3000"
+access_token = ""
 allow_from = []
 require_at = true
 channel_name = "qq"
+
+# 腾讯开放平台官方 QQBot（C2C WebSocket），与上面的 NapCat/OneBot QQ 并存。
+[channels.qqbot]
+enabled = false
+app_id = ""
+client_secret = ""
+allow_from = []
+channel_name = "qqbot"
+api_base_url = "https://api.sgroup.qq.com"
 
 # [[channels.qq.groups]]
 # group_id = "123456789"

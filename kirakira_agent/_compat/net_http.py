@@ -96,7 +96,13 @@ class HttpRequester:
 
 
 class SharedHttpResources:
-    """占位：akashic 里用于共享连接池，这里不需要。"""
+    """Reference-compatible HTTP resource owner."""
+
+    def __init__(self) -> None:
+        self.external_default = get_default_http_requester("external_default")
+
+    async def aclose(self) -> None:
+        return None
 
 
 _DEFAULT_REQUESTER: HttpRequester | None = None

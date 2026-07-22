@@ -16,6 +16,7 @@ Kirakira 不是 Akashic 的等比例缩小版。它采取了三种不同策略�
   embedding 兴趣与 durable outbox 尚未移植；pending ACK 已按 Reference 接入。
 - **Drift：保留“行为由 SKILL.md 定义”的内核。** Kirakira 能跑一次带连续性的后台 Agent run，
   但没有 Akashic 的 journal、self-observation、hazard drive 和完整 lifecycle。
+- **Dify：尚未实现。** 当前仓库没有 Dify adapter、配置、生产调用点或端到端测试。
 
 因此最准确的项目定位是：
 
@@ -24,6 +25,18 @@ Kirakira 不是 Akashic 的等比例缩小版。它采取了三种不同策略�
 
 不能笼统地说“已复刻 Akashic”，也不应说“只是少了前端”。差距主要不在模型会不会调用工具，
 而在动态运行时、主动链路的提交协议、可恢复状态和运维控制面。
+
+### 1.1 启动与初始化
+
+当前已经对齐 Reference 的用户侧命令契约：仓库根目录 `main.py`、`uv run python main.py`、`setup`、`init`、`gateway`、`--config`、`--workspace`。首次缺少配置时会自动进入 setup；向导只生成 Kirakira runtime 真正支持的 LLM、Web、Telegram、OneBot、Proactive 与 Drift 配置。
+
+默认入口外层现已按 Reference 接入固定 supervisor：workspace 独占、gateway child、boot readiness、信号转发和私有重启提交校验均已落地；`gateway` 保持未托管调试语义。尚未对齐的是 Reference 上层的 `agent_restart` 工具准入协调器，因此当前 runtime 不会主动请求 supervisor 换代。
+
+Telegram 的五个 `infra/channels` 源文件已经与固定 Reference 逐字节一致，差异只存在于文件外的
+namespace、MessageBus、SessionManager、message-push 和 interrupt binding。固定 Supervisor 源文件也
+以同样方式保持一致，Kirakira gateway 只在外部识别其 boot 环境。渠道层也不再把两种 QQ 混为一谈：
+`channels.qq` 对应 NapCat/OneBot；`channels.qqbot` 对应腾讯开放平台官方 QQBot。QQ 两条实现尚未完成
+本轮要求的一比一移植，不能与 Telegram 一起标成已对齐。
 
 ## 2. 评估口径
 
@@ -44,13 +57,14 @@ tests/eval 后约 10.6 万行。数倍的维护面差异本身正说明两者不
 
 | 维度 | Akashic Agent | Kirakira Agent | 判断 |
 | --- | --- | --- | --- |
-| 部署形态 | 多层 bootstrap/infra/control，带 app server、前端与监督能力 | 单进程 CLI/TUI + 内置 Channel host | Kirakira 更易读易跑，运维能力更弱 |
+| 部署形态 | 多层 bootstrap/infra/control，带 app server、前端与监督能力 | setup/init + supervisor/gateway + 内置 Channel host；有 Memory2 M1 管理 API，无完整 app server/前端 | 进程启动已对齐，控制面仍更轻 |
 | 执行编排 | Turn/proactive lifecycle + slot DAG + side-effect abstraction | 显式顺序 pipeline，少量 phase hooks | 轻实现；固定流程清楚，第三方编排能力弱 |
 | 动态代际 | per-plugin generation、snapshot、lease、quiesce/rollback | 全局单一 snapshot，主要保护被动 turn | 被动基本对齐；主动未绑定 lease |
 | Provider | 多后端抽象与更完整控制能力 | OpenAI-compatible 一类接口 | 范围收窄；forced tool choice 等能力缺失 |
 | 状态与持久化 | 统一 persistence 语义、更多 SQLite/恢复合同 | JSON/SQLite 分散在各模块 | 能运行，但一致性与恢复边界较弱 |
 | 扩展生态 | 插件市场、plugin job、proactive source、lifecycle factory | workspace 插件 + hook/MCP；主动 source 为进程内协议 | 被动可扩展，主动扩展仍是预留位 |
-| 控制面 | app server、control protocol、Dashboard、peer agent | 本进程命令与状态输出 | 有意未实现 |
+| 控制面 | app server、control protocol、Dashboard、peer agent | 本进程命令与状态输出 + Memory2 健康/管理 API | 仅记忆控制面轻实现，其余未实现 |
+| Dify 集成 | 当前基线不作为核心链路 | 无 | 未实现；不能列入“已跑通链路” |
 
 Kirakira 的“轻”有真实收益：主链路可在较少文件内追踪，开发和演示成本低，也避免过早复制未被
 使用的抽象。但当需求进入热插拔、跨进程、可靠投递和故障恢复时，这些差异会从“简化”变成必须补的能力。
@@ -70,20 +84,22 @@ Kirakira 的“轻”有真实收益：主链路可在较少文件内追踪，�
 | session manager/store | `session.py` | 轻实现 | JSON canonical + SQLite FTS；存储抽象更薄 |
 | tool registry/hooks | `tools/registry.py`、`tool_hooks.py` | 对齐 | schema、pre/post/error、timeout、deferred discovery |
 | MCP declarations/generation | `mcp/` + `snapshot.py` | 轻实现 | 声明式发布、失败回滚、在途 turn 固定代际 |
-| Channel host | `channels/` | 替代实现 | Web/Telegram/QQ 行为覆盖，transport 更轻 |
+| Channel host | `channels/` | 分项判断 | Telegram 已按 Reference 移植；Web、QQ/OneBot 与官方 QQBot 仍是 Kirakira 实现 |
 | subagent/background | `subagent.py` | 轻实现 | inline/background 与并发上限；无 peer-agent 进程体系 |
 
-### 4.2 记忆系统不是“全量搬运”
+### 4.2 记忆系统：M1 已完成 owner 切换，但算法尚未对齐
 
-Kirakira 已具备 typed memory、异步 consolidation、source 关联、lexical/vector 检索、RRF、热度和
-注入预算。它还把语义去重并入本来就要发生的 consolidation 调用，避免 Reference 的独立
-`dedup_decider` 再增加一次模型往返。这是一个有意的成本优化。
+当前不能再描述为“Memory2 只是镜像”。M1 已从迁移前权威 `items.json` 构建全新 staging
+`memory2.db`，逐条校验后发布 `structured-owner.json`；正式被动检索、显式记忆工具和 Dashboard
+都通过同一个 Memory2 owner，`items.json` 已归档且停止双写。doctor 会核对 Reference pin、依赖、
+schema、数量、向量和 16 个 Memory2 算法文件的源码漂移。
 
-仍未等价的部分包括 query rewrite、HyDE、sufficiency checker、独立 profile extractor、procedure
-冲突判断、图关系存储与独立向量 store。仓库虽已有部分 `memory2/` 模块，默认被动调用链是否启用、
-状态是否完整接入，必须逐项看 wiring，不能用目录存在来声称全量覆盖。
+但运行语义还不是 Reference 的 `DefaultMemoryEngine`：当前是 Kirakira 旧同步接口之上的兼容 façade，
+因此类型阈值、scope、answer/timeline、证据/引用、Reference Memorizer 的语义替换、自动失效检测和
+完整四文件 consolidation 尚未进入正式主链。embedding 当前也没有配置，所有数据暂时走词法 lane。
 
-当前策略是合理的：先用评测集证明额外 LLM gate 能提升召回或写入质量，再承担延迟与费用。
+准确状态是：**M1 持久化 owner 对齐，M2+ 算法与事件接线未对齐。** 详细合同与现场证据见
+[MEMORY2_M0_M1.md](./MEMORY2_M0_M1.md)。
 
 ### 4.3 已确认不是差距的两项
 
@@ -166,9 +182,9 @@ lease 与提交语义。
 
 | 能力 | 当前处置 | 原因 |
 | --- | --- | --- |
-| Dashboard / frontend | 未实现 | 独立产品面，不决定 Agent 核心语义 |
+| 完整 Dashboard / frontend | 轻实现 | Memory2 已有分页、过滤、详情、编辑、相似项、删除和健康 API；尚无 Reference 完整前端 |
 | app server / control protocol | 未实现 | 当前以本进程 CLI/TUI 为入口 |
-| supervised restart / rolling backup | 未实现 | 运维与恢复层，尚未进入部署目标 |
+| Agent 发起的 restart / rolling backup | 未实现 | 固定 Supervisor 已对齐；尚缺 Agent 自重启准入工具与 rolling backup |
 | peer-agent 进程管理 | 未实现 | 当前 subagent 已满足本地委派范围 |
 | 插件 marketplace | 未实现 | 现有 workspace 插件满足开发阶段 |
 | 多 Provider backend | 未实现 | 当前只承诺 OpenAI-compatible |
@@ -210,6 +226,10 @@ per-plugin generation、proactive phase DAG、多目标调度、app server、Das
 - 主动链路：`tests/test_proactive.py` 覆盖 energy、三通道、排序、去重、冷却、文件源 fetch/ack、
   alert/content 端到端 tick、Channel 失败保留、pending ACK 跨 tick flush、busy gate 与 status。
 - Drift：`tests/test_drift.py` 覆盖 skill 发现、节流、continuum、Channel 确认与 sent/silent 修正。
+- Telegram/启动：固定 Reference 源码字节一致性测试、原始 Telegram utils 契约测试和真实
+  Supervisor → gateway readiness 启动。
+
+当前完整离线回归为 `257 passed, 4 subtests passed`。
 
 现有测试证明“进程内闭环贯通到 Channel callback”，尚未证明：真实外部平台最终展示、渠道成功与
 consume/ACK 的跨崩溃原子性、进程恢复、多目标公平调度、插件热换代中的主动 tick 一致性，以及

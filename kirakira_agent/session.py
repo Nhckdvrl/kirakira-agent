@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import hashlib
 import logging
@@ -233,6 +234,11 @@ class SessionManager:
             except FileNotFoundError:
                 pass
 
+    async def save_async(self, session: Session) -> None:
+        """Persist session without blocking the channel event loop."""
+
+        await asyncio.to_thread(self.save, session)
+
     def search_messages(self, query: str, limit: int = 10) -> List[JsonDict]:
         needle = query.lower().strip()
         if not needle:
@@ -291,6 +297,19 @@ class SessionManager:
             for session in sorted(
                 self._all_sessions(), key=lambda item: item.updated_at, reverse=True
             )
+        ]
+
+    def get_channel_metadata(self, channel: str) -> List[JsonDict]:
+        """Expose the narrow metadata projection used by Reference channels."""
+
+        prefix = f"{channel}:"
+        return [
+            {
+                "chat_id": str(item["key"])[len(prefix):],
+                "metadata": dict(item.get("metadata") or {}),
+            }
+            for item in self.list_sessions()
+            if str(item.get("key") or "").startswith(prefix)
         ]
 
     def delete_session(self, key: str) -> bool:

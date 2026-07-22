@@ -158,14 +158,87 @@ class AfterTurnCtx:
     extra_metadata: JsonDict = field(default_factory=dict)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class TurnCommitted:
+    """Frozen post-turn payload aligned with Reference."""
+
     session_key: str
     channel: str
     chat_id: str
-    user_content: str
-    assistant_reply: str
+    input_message: str
+    persisted_user_message: str
+    assistant_response: str
     tools_used: Tuple[str, ...]
+    turn_id: str = ""
+    assistant_message_id: str | None = None
+    thinking: str | None = None
+    raw_reply: str | None = None
+    meme_tag: str | None = None
+    meme_media_count: int | None = None
+    tool_chain_raw: Tuple[JsonDict, ...] = ()
+    tool_call_groups: Tuple[JsonDict, ...] = ()
+    timestamp: datetime | None = None
+    post_reply_budget: JsonDict = field(default_factory=dict)
+    react_stats: JsonDict = field(default_factory=dict)
+    extra: JsonDict = field(default_factory=dict)
+    model_usage: JsonDict = field(default_factory=dict)
+
+    def __init__(
+        self,
+        *,
+        session_key: str,
+        channel: str,
+        chat_id: str,
+        input_message: str = "",
+        persisted_user_message: str = "",
+        assistant_response: str = "",
+        tools_used: Tuple[str, ...] = (),
+        user_content: str = "",
+        assistant_reply: str = "",
+        turn_id: str = "",
+        assistant_message_id: str | None = None,
+        thinking: str | None = None,
+        raw_reply: str | None = None,
+        meme_tag: str | None = None,
+        meme_media_count: int | None = None,
+        tool_chain_raw: Tuple[JsonDict, ...] = (),
+        tool_call_groups: Tuple[JsonDict, ...] = (),
+        timestamp: datetime | None = None,
+        post_reply_budget: JsonDict | None = None,
+        react_stats: JsonDict | None = None,
+        extra: JsonDict | None = None,
+        model_usage: JsonDict | None = None,
+    ) -> None:
+        object.__setattr__(self, "session_key", session_key)
+        object.__setattr__(self, "channel", channel)
+        object.__setattr__(self, "chat_id", chat_id)
+        object.__setattr__(self, "input_message", input_message or user_content)
+        object.__setattr__(
+            self, "persisted_user_message", persisted_user_message or input_message or user_content
+        )
+        object.__setattr__(self, "assistant_response", assistant_response or assistant_reply)
+        object.__setattr__(self, "tools_used", tuple(tools_used))
+        object.__setattr__(self, "turn_id", turn_id)
+        object.__setattr__(self, "assistant_message_id", assistant_message_id)
+        object.__setattr__(self, "thinking", thinking)
+        object.__setattr__(self, "raw_reply", raw_reply)
+        object.__setattr__(self, "meme_tag", meme_tag)
+        object.__setattr__(self, "meme_media_count", meme_media_count)
+        object.__setattr__(self, "tool_chain_raw", tuple(tool_chain_raw))
+        object.__setattr__(self, "tool_call_groups", tuple(tool_call_groups))
+        object.__setattr__(self, "timestamp", timestamp)
+        object.__setattr__(self, "post_reply_budget", dict(post_reply_budget or {}))
+        object.__setattr__(self, "react_stats", dict(react_stats or {}))
+        object.__setattr__(self, "extra", dict(extra or {}))
+        object.__setattr__(self, "model_usage", dict(model_usage or {}))
+
+    @property
+    def user_content(self) -> str:
+        return self.input_message
+
+    @property
+    def assistant_reply(self) -> str:
+        return self.assistant_response
 
 
 @dataclass(frozen=True)
@@ -202,6 +275,10 @@ class ToolCallCompleted:
     status: str
     iteration: int = 0
 
+    @property
+    def final_arguments(self) -> JsonDict:
+        return self.arguments
+
 
 @dataclass(frozen=True)
 class StreamDeltaReady:
@@ -211,6 +288,10 @@ class StreamDeltaReady:
     iteration: int
     content_delta: str = ""
     reasoning_delta: str = ""
+
+    @property
+    def thinking_delta(self) -> str:
+        return self.reasoning_delta
 
 
 @dataclass(frozen=True)

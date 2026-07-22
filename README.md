@@ -1,5 +1,16 @@
 # Kirakira Agent
 
+Reference-aligned first run and service entry:
+
+```bash
+uv run python main.py setup    # interactive setup
+uv run python main.py init     # non-interactive workspace initialization
+uv run python main.py          # full long-running service
+uv run python main.py gateway  # explicit unmanaged debug entry
+```
+
+Running `uv run python main.py` without a `config.toml` automatically opens the setup wizard. The legacy `python -m kirakira_agent` TUI/plain entry remains available.
+
 Kirakira Agent is a multi-channel AI agent runtime built after
 [`akashic-agent`](https://github.com/kachofugetsu09/akashic-agent) from a minimal
 function-calling MVP upward. It is not just a "you ask, it answers" bot — it has
@@ -22,8 +33,15 @@ in; the reference's heavier machinery (phase-graph kernel, snapshot hot reload,
 semantic-interest vectors) is deliberately deferred. Both are off by default and
 enabled under `[proactive]` in `config.toml`.
 
+Current milestone: Memory2 M0 and M1 are complete (`memory2.db` is the sole
+structured-memory owner); M2–M6 have not started. Telegram's five channel source
+files and the fixed supervisor are byte-identical to the pinned Reference checkout.
+There is currently no Dify adapter or end-to-end Dify chain.
+
 For the unified MVP-to-current roadmap and three-chain verification guide, see
 [docs/MVP_TO_CURRENT.md](docs/MVP_TO_CURRENT.md).
+For the supervisor and Web/Telegram/QQ/official-QQBot contracts, see
+[docs/STARTUP_AND_CHANNELS.md](docs/STARTUP_AND_CHANNELS.md).
 
 > This is a learning project. The documentation is a first-class part of it: it
 > traces how each layer was driven into existence by a concrete problem, which is
@@ -32,14 +50,18 @@ For the unified MVP-to-current roadmap and three-chain verification guide, see
 
 ## Quick start
 
-Python 3.11+. The core runtime uses the standard library; the full-screen terminal
-client uses Textual and is installed with the project.
+Python 3.11+. Dependencies are locked by `uv.lock`; Telegram uses the same
+`python-telegram-bot` and `telegramify-markdown` stack as Reference.
 
 ```bash
-cp .env.example .env          # put your API key here
-cp config.example.toml config.toml
-python -m kirakira_agent      # streaming full-screen TUI on an interactive terminal
+uv run python main.py setup    # configure Web/Telegram/QQ/official QQBot
+uv run python main.py          # supervisor -> full gateway service
+uv run python main.py gateway  # unmanaged gateway for debugging
 ```
+
+With no `config.toml`, the default command opens the setup wizard automatically.
+The wizard validates channel credentials, discovers Telegram `chat_id` and official
+QQBot `user_openid`, and wires the selected channel as the proactive target.
 
 ```bash
 python -m kirakira_agent --tui               # force the full-screen client
@@ -64,7 +86,7 @@ kirakira_agent/          the runtime
 ├── prompting/           named prompt blocks, context frames, trim plans
 ├── tools/               registry, executor, built-in tools
 ├── mcp/                 declarative workspace MCP (declarations/host/publisher/watcher)
-├── channels/            web, telegram, qq, host
+├── channels/            web, telegram, qq/OneBot, official qqbot, host
 ├── proactive/           energy model, three channels, pluggable sources, judge, tick loop
 ├── drift/               idle-task chain: skill discovery, run state, runner (reuses agent loop)
 ├── plugins.py           plugin loading and programmatic capability declaration

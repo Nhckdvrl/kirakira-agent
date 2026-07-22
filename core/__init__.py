@@ -1,0 +1,1 @@
+"""Reference infrastructure compatibility namespace."""

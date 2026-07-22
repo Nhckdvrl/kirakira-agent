@@ -7,12 +7,15 @@ import tempfile
 import threading
 import unittest
 import urllib.request
+from types import SimpleNamespace
+from unittest import mock
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from kirakira_agent.bus import MessageBus
 from kirakira_agent.channels.contract import ChannelContext
 from kirakira_agent.channels.qq import QQChannel
+from kirakira_agent.channels.qqbot import QQBotChannel
 from kirakira_agent.channels.telegram import TelegramChannel
 from kirakira_agent.channels.web import WebChannel
 from kirakira_agent.context_builder import ContextBuilder
@@ -21,7 +24,6 @@ from kirakira_agent.memory import MemoryRuntime
 from kirakira_agent.runtime import AgentLoop, DefaultReasoner, PassiveTurnPipeline, RuntimeConfig
 from kirakira_agent.schema import ModelResponse
 from kirakira_agent.events import OutboundMessage
-from kirakira_agent.lifecycle import StreamDeltaReady
 from kirakira_agent.session import SessionManager
 from kirakira_agent.tools import build_default_registry
 
@@ -119,6 +121,75 @@ class FakeOneBotServer:
 
 
 class ChannelTests(unittest.TestCase):
+    def test_official_qqbot_c2c_inbound_and_outbound_contract(self):
+        class FakeResponse:
+            status_code = 200
+
+            def raise_for_status(self):
+                return None
+
+        class FakeClient:
+            def __init__(self):
+                self.posts = []
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_args):
+                return None
+
+            async def post(self, url, **kwargs):
+                self.posts.append((url, kwargs))
+                return FakeResponse()
+
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                bus = MessageBus()
+                sessions = SessionManager(root)
+                channel = QQBotChannel(
+                    app_id="app",
+                    client_secret="secret",
+                    allow_from=["openid-1"],
+                )
+                channel._ctx = ChannelContext(
+                    bus=bus,
+                    session_manager=sessions,
+                    event_bus=EventBus(),
+                    workspace=root,
+                    log=__import__("logging").getLogger("test.qqbot"),
+                )
+                channel._token = "token"
+                channel._token_expires_at = float("inf")
+                await channel._handle_c2c(
+                    {
+                        "id": "message-1",
+                        "content": "你好",
+                        "author": {"user_openid": "openid-1"},
+                    }
+                )
+                inbound = await bus.consume_inbound()
+                self.assertEqual(inbound.channel, "qqbot")
+                self.assertEqual(inbound.chat_id, "c2c:openid-1")
+                self.assertEqual(inbound.content, "你好")
+                await bus.complete_inbound(inbound)
+
+                client = FakeClient()
+                with mock.patch(
+                    "kirakira_agent.channels.qqbot.httpx.AsyncClient",
+                    return_value=client,
+                ):
+                    await channel._on_response(
+                        OutboundMessage("qqbot", "c2c:openid-1", "收到")
+                    )
+                self.assertEqual(
+                    client.posts[0][0],
+                    "https://api.sgroup.qq.com/v2/users/openid-1/messages",
+                )
+                self.assertEqual(client.posts[0][1]["json"]["msg_id"], "message-1")
+
+        asyncio.run(scenario())
+
     def test_web_channel_correlates_concurrent_requests_in_same_session(self):
         class EchoModel:
             def complete(self, messages, tools, system, model, max_tokens):
@@ -288,6 +359,15 @@ class ChannelTests(unittest.TestCase):
                 )
                 await channel.start(ctx)
                 try:
+                    dashboard = (
+                        await asyncio.to_thread(
+                            lambda: urllib.request.urlopen(
+                                "http://127.0.0.1:%d/memory" % port,
+                                timeout=5,
+                            ).read().decode("utf-8")
+                        )
+                    )
+                    self.assertIn("Kirakira Memory2 Dashboard", dashboard)
                     listed = json.loads(
                         await asyncio.to_thread(
                             lambda: urllib.request.urlopen(
@@ -372,41 +452,78 @@ class ChannelTests(unittest.TestCase):
         asyncio.run(scenario())
 
     def test_telegram_allow_list(self):
-        channel = TelegramChannel(token="test-token", allow_from=["123", "alice"])
+        with tempfile.TemporaryDirectory() as tmp:
+            sessions = SessionManager(Path(tmp))
+            channel = TelegramChannel(
+                token="test-token",
+                bus=MessageBus(),
+                session_manager=sessions,
+                allow_from=["123", "alice"],
+            )
 
-        self.assertTrue(channel._allowed("123", ""))
-        self.assertTrue(channel._allowed("999", "Alice"))
-        self.assertFalse(channel._allowed("999", "bob"))
+            self.assertTrue(channel._is_allowed(SimpleNamespace(id=123, username=None)))
+            self.assertTrue(channel._is_allowed(SimpleNamespace(id=999, username="Alice")))
+            self.assertFalse(channel._is_allowed(SimpleNamespace(id=999, username="bob")))
+            sessions.close()
 
-    def test_telegram_chunks_long_response(self):
-        channel = TelegramChannel(token="test-token")
-
-        chunks = channel._chunks("x" * 4100, 4096)
-
-        self.assertEqual(len(chunks), 2)
-        self.assertEqual(len(chunks[0]), 4096)
-        self.assertEqual(len(chunks[1]), 4)
-
-    def test_telegram_stream_edits_one_message_then_finalizes(self):
+    def test_telegram_plain_update_does_not_require_reply_context(self):
         async def scenario():
-            channel = TelegramChannel(token="test-token")
-            calls = []
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                bus = MessageBus()
+                sessions = SessionManager(root)
+                channel = TelegramChannel(
+                    token="test-token",
+                    bus=bus,
+                    session_manager=sessions,
+                    allow_from=["123"],
+                )
+                channel._safe_send_typing = mock.AsyncMock()
+                message = SimpleNamespace(
+                    message_id=2,
+                    text="hello",
+                    reply_to_message=None,
+                )
+                update = SimpleNamespace(
+                    effective_message=message,
+                    effective_chat=SimpleNamespace(id=123),
+                    effective_user=SimpleNamespace(id=123, username="alice"),
+                )
+                await channel._on_message(update, SimpleNamespace(bot=object()))
+                inbound = await bus.consume_inbound()
+                self.assertEqual(inbound.content, "hello")
+                self.assertEqual(inbound.chat_id, "123")
+                self.assertEqual(inbound.metadata["username"], "alice")
+                await bus.complete_inbound(inbound)
+                sessions.close()
 
-            def fake_api(method, params):
-                calls.append((method, dict(params)))
-                return {"ok": True, "result": {"message_id": 42}}
+        asyncio.run(scenario())
 
-            channel._api = fake_api
-            await channel._on_stream_delta(
-                StreamDeltaReady("telegram:1", "telegram", "1", 0, "hello", "")
-            )
-            await channel._on_response(
-                OutboundMessage("telegram", "1", "hello world")
-            )
-
-            self.assertEqual(calls[0][0], "sendMessage")
-            self.assertEqual(calls[1][0], "editMessageText")
-            self.assertEqual(calls[1][1]["text"], "hello world")
+    def test_telegram_outbound_uses_reference_markdown_sender(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                sessions = SessionManager(root)
+                channel = TelegramChannel(
+                    token="test-token",
+                    bus=MessageBus(),
+                    session_manager=sessions,
+                )
+                with mock.patch(
+                    "infra.channels.telegram_channel.send_markdown",
+                    new=mock.AsyncMock(),
+                ) as sender:
+                    await channel._on_response(
+                        OutboundMessage(
+                            "telegram",
+                            "1",
+                            "### 标题\n\n**重点**",
+                        )
+                    )
+                sender.assert_awaited_once()
+                self.assertEqual(sender.await_args.args[1], "1")
+                self.assertEqual(sender.await_args.args[2], "### 标题\n\n**重点**")
+                sessions.close()
 
         asyncio.run(scenario())
 

@@ -68,6 +68,9 @@ class QQChannel:
         self._ctx = ctx
         self._attachments = AttachmentStore(ctx.workspace / "uploads" / self.name)
         self._loop = asyncio.get_running_loop()
+        # Reference 的 NcatBot 启动会真实连接 NapCat；Webhook 替代实现也必须在
+        # readiness 前验证 OneBot API，而不是只证明本地端口监听成功。
+        await asyncio.to_thread(self._api, "get_status", {})
         ctx.bus.subscribe_outbound(self.name, self._on_response)
         handler = self._handler_factory()
         self._server = _DaemonThreadingHTTPServer(

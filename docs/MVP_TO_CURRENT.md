@@ -1,208 +1,205 @@
-# Kirakira Agent：从 MVP 到当前进度
+# Kirakira Agent：从 MVP 到当前版本
 
-> 这是项目的总入口。当前目标不是复制 Akashic 的全部厚度，而是先让
-> **被动回复、主动推送、Drift 空闲任务**三条链路都能从触发走到实际结果，
-> 再逐层增加可靠性、智能判断与插件化。
+> 当前版本快照：2026-07-23。Reference 固定为
+> `012e37c8b51df045353972bb551d8e868ab52455`。本文只写已经进入正式启动入口并经过验证的能力；
+> 源码存在但没有生产调用点的内容不算完成。
 
-## 1. MVP 的统一验收标准
+## 1. 当前结论
+
+Kirakira 目前处于“先把基础链路跑通，再逐步加深”的阶段：
+
+| 范围 | 当前状态 | 结论 |
+| --- | --- | --- |
+| 被动回复 | 已跑通，工程化基座 | Web、Telegram、QQ/OneBot、CLI 可进入同一 AgentLoop |
+| 主动推送 | MVP 已跑通 | Tick、Source、判断、真实 Channel callback、Session、ACK 已闭环 |
+| Drift | MVP 已跑通 | 主动空转后可执行 `SKILL.md`、使用工具、选择发送并保存连续状态 |
+| Dify | 未实现 | 当前仓库没有 Dify adapter、配置、调用点或端到端测试，不能写成已跑通 |
+| Telegram | Reference 对齐 | 五个 `infra/channels` 文件逐字节一致，Kirakira 差异位于文件外 binding |
+| 启动/Supervisor | Reference 对齐 | `agent/supervisor.py` 逐字节一致；默认入口为 supervisor → gateway |
+| Memory2 | M1 完成 | `memory2.db` 是唯一结构化 owner；M2 DefaultMemoryEngine 尚未开始 |
+
+当前完整离线回归：
 
 ```text
-用户发消息  → Agent 能执行工具并回复                 （被动链路）
-外部来事件  → Agent 能判断并向指定 Channel 发送       （主动链路）
-本轮没有推送 → Agent 能执行 SKILL.md 并正常收尾          （Drift 链路）
+257 passed, 4 subtests passed
 ```
 
-三条链路共享 `MessageBus`、Channel、Session、模型、记忆和工具，但触发方式不同。
-“链路打通”必须看到真正的 Channel callback 或任务结果，不能只看到函数、队列或数据表存在。
+真实服务也已通过当前配置启动：Supervisor 和 gateway 分离运行，readiness 为 ready，Web 与 Telegram
+均完成启动。这里不把未执行的 QQ、Dify 或后续 Memory2 算法写成已验证。
 
 ## 2. 从最小 MVP 到现在
 
-### 阶段 A：Function Calling MVP
+### 2.1 Function Calling MVP
 
-最初只验证一件事：
+最初只验证最短闭环：
 
 ```text
-User → Model 选工具 → 执行工具 → 结果回填 Model → Final Text
+User → Model 选择工具 → Tool 执行 → 结果回填 Model → Final Text
 ```
 
-这个阶段证明 Agent 能做事，但还没有持久会话、并发、真实 Channel、长期记忆和运行时扩展。
+它证明 Agent 能调用工具，但没有持久会话、并发、真实渠道、主动触发和长期记忆 owner。
 
-### 阶段 B：被动链路成为可运行 Runtime
+### 2.2 被动链路
+
+随后形成当前共享基座：
 
 ```text
-Web / Telegram / QQ / CLI
+Channel 入站
   → InboundMessage
   → MessageBus
-  → AgentLoop（同 Session 串行，跨 Session 并行）
+  → AgentLoop（同 session 串行，跨 session 并行）
   → PassiveTurnPipeline
-  → 记忆与上下文组装
+  → Memory2 检索 façade + Prompt/Context
   → Streaming Model + Tool Loop
-  → Session Commit
+  → Session commit
   → OutboundMessage
-  → 原 Channel 回复
+  → 原 Channel
 ```
 
-在最小工具循环之上，逐步补齐了 ToolRegistry/Executor、Hook、MCP、Session、长期记忆、
-PromptBlock、上下文预检、Streaming、Plugin、Subagent、Schedule 和多 Channel。当前被动链路
-已经超过 MVP，是其他两条链路共享的工程基座。
+这一阶段补齐 ToolRegistry/Executor、Hook、MCP、Session、Context budget、Streaming、Plugin、Subagent、
+Schedule 和多渠道。它已经超过最小 MVP，但内部厚度仍低于 Reference 的完整 runtime。
 
-### 阶段 C：主动推送 MVP
+### 2.3 主动推送 MVP
 
 ```text
 后台 Tick
-  → Gate（目标已配置、被动链路空闲）
+  → Gate（目标存在、被动链路空闲）
   → SourceRegistry.fetch_all()
-  → alert/content 去重入库，context 作为背景
-  → alert 优先 / content 由 LLM 判断
+  → alert/content/context 去重入库
+  → alert 优先；content 由 LLM 判断
   → MessageBus.publish_outbound_and_wait()
-  → Web / Telegram / QQ sender
-  → 成功后写 Session + delivery_id
-  → consume / pending source ACK
+  → 真实 Channel sender
+  → sender 成功后写 Session + delivery_id
+  → consume + pending source ACK
 ```
 
-当前内置文件 Source，用 `<workspace>/proactive/inbox/*.jsonl` 演示 fetch/ACK 闭环。
-Channel 未注册或 sender 失败不会被当作已发送；只有 Channel 成功才写 Session 和消费状态。
+当前内置文件 Source，以 `<workspace>/proactive/inbox/*.jsonl` 验证 fetch/ACK。Channel 缺失或发送失败
+不会提交为成功。这条链路已达到可用 MVP，但还没有 Reference 的 plugin Source、durable outbox、
+多目标和完整跨崩溃恢复。
 
-### 阶段 D：Drift MVP
+### 2.4 Drift MVP
 
 ```text
-主动链路本轮未产生推送
-  → DriftRunner 按节流选择 drift/skills/*/SKILL.md
-  → 组装记忆 + 近期上下文 + continuum Briefing
-  → 运行一次同步 Agent + 默认工具集
-  → message_push 可选生成草稿
-  → finish_drift 收尾
+主动链路本轮没有推送
+  → DriftRunner 选择 drift/skills/*/SKILL.md
+  → 注入记忆、近期上下文和 continuum
+  → 复用 Agent 与默认工具运行
+  → message_push（可选）/ finish_drift
   → Channel 成功记 sent，否则记 silent
-  → 保存 run 与跨轮 continuum
+  → 保存 run 与 continuum
 ```
 
-Drift 不是另外一套执行引擎；它复用现有 Agent 和工具，只改变触发方式、system prompt 和收尾合同。
+Drift 不是第四套执行引擎，只改变触发、system prompt 和终止合同。
 
-## 3. 当前进度
+### 2.5 Telegram 与启动层收口
 
-| 链路 | 当前状态 | 已经跑通 | 下一阶段，不阻塞 MVP |
-| --- | --- | --- | --- |
-| 被动 | 工程化基座 | 入站、记忆/上下文、多轮工具、Streaming、Session、原 Channel 出站 | 评测集、多租户、运维控制面 |
-| 主动 | MVP 闭环 | Tick、文件 Source、三通道、LLM 判断、真实 Channel callback、Session、ACK | 真实 MCP/plugin Source、多目标、durable outbox |
-| Drift | MVP 闭环 | SKILL 发现、Agent run、工具、finish、可选发送、run/continuum | hazard、self-observation journal、更完整 lifecycle |
-
-当前离线回归结果：
+渠道与启动不承担 Kirakira 的差异化算法，因此本轮改为直接复用 Reference 源码：
 
 ```text
-215 passed, 4 subtests passed
+Reference/infra/channels/{base,contract,reply_context,telegram_channel,telegram_utils}.py
+  == byte-for-byte ==
+infra/channels/{base,contract,reply_context,telegram_channel,telegram_utils}.py
+
+Reference/agent/supervisor.py
+  == byte-for-byte ==
+agent/supervisor.py
 ```
 
-其中被动链路与 Channel 定向测试 35 项、主动链路与装配 27 项、Drift 6 项。
-测试证明进程内链路能走到 Channel callback；真实 Telegram/QQ 平台最终展示仍取决于本地 token、
-OneBot 和网络配置，不在离线测试中伪造“已验证”。
+Kirakira 的 namespace、MessageBus、SessionManager、message-push、interrupt 和 gateway readiness 映射
+位于外部 compatibility/binding 文件，不再修改复制源码。Telegram 因此具备 Reference 的 polling、
+白名单、去重、typing、回复上下文、图片/文档、Markdown entities、UTF-16 分段、429 重试、Conflict
+停收、工具/思考 live preview 和最终消息收口。
 
-## 4. 启动与验证
+QQ/OneBot 与官方 QQBot 尚未按同一标准逐字节复刻；它们当前仍是可运行的 Kirakira 实现。
 
-### 4.1 准备配置
+### 2.6 Memory2 M0–M1
+
+M0 建立 doctor、依赖/import/schema/Reference 漂移检查和基础契约测试。M1 完成 owner 切换：
+
+```text
+memory/memory2.db          唯一结构化长期记忆 owner
+memory/MEMORY.md           独立人工长期档案
+memory/SELF.md             独立自我模型
+memory/PENDING.md          独立待整理事实
+memory/RECENT_CONTEXT.md   可重建投影
+```
+
+旧 `items.json` 不再参与正式读写；被动链路、记忆工具和 Dashboard 通过同一个 Memory2 兼容 façade。
+迁移使用 offline lock、backup、staging DB、integrity check、原子发布和 rollback。
+
+M1 只解决唯一 owner 和可恢复迁移，不等于 Memory2 算法已经对齐。详见
+[MEMORY2_M0_M1.md](./MEMORY2_M0_M1.md)。
+
+## 3. Memory2 长期计划进度
+
+| 里程碑 | 状态 | 已完成/下一步 |
+| --- | --- | --- |
+| M0 可执行差距审计 | 完成 | doctor、Reference pin、import/schema/count/vector/Markdown 检查 |
+| M1 唯一结构化存储 | 完成 | staging 迁移、唯一 owner、兼容 façade、Dashboard、verify/rollback |
+| M2 DefaultMemoryEngine | 未开始 | Memorizer、工具新 schema、embedding 向导/backfill、显式检索语义 |
+| M3 被动/主动检索切换 | 未开始 | `engine.query()`、类型阈值、scope、timeline/interest、recall inspector |
+| M4 自动写入与四文件链路 | 未开始 | Reference consolidation、PostResponseWorker、optimizer |
+| M5 证据/撤销/持久化收口 | 未开始 | source_ref 回源、session undo、replacement 恢复、并发边界 |
+| M6 评测与切除旧链路 | 未开始 | LongMemEval、状态 oracle、删除兼容 façade 和旧 consolidation |
+
+下一次记忆升级必须从 M2 开始，不得跳过 embedding 配置、Reference engine 接线和真实生产调用验证。
+
+## 4. 当前启动方法
+
+首次配置：
 
 ```bash
-cp config.example.toml config.toml
+uv run python main.py setup
 ```
 
-至少填好 `[llm.main]` 的 model/base_url/api_key。先用 Web 验证被动链路：
-
-```toml
-[channels.chat]
-enabled = true
-host = "127.0.0.1"
-port = 8765
-channel_name = "web"
-```
-
-### 4.2 验证被动链路
+没有 `config.toml` 时，直接运行也会进入向导：
 
 ```bash
-.venv/bin/python -m kirakira_agent --serve
+uv run python main.py
 ```
 
-打开 `http://127.0.0.1:8765`，发送一条需要读取仓库文件的消息。能收到最终回复，且
-`sessions/` 中出现对应 Session，就证明入站、工具循环、出站和持久化都已走通。
+正式启动链：
 
-### 4.3 验证主动链路
-
-推荐用 Telegram 做真实外部发送验收：
-
-```toml
-[channels.telegram]
-enabled = true
-token = "${TELEGRAM_BOT_TOKEN}"
-allow_from = ["<your-user-id>"]
-channel_name = "telegram"
-
-[proactive]
-enabled = true
-
-[proactive.target]
-channel = "telegram"
-chat_id = "<your-user-id>"
-
-[proactive.drift]
-enabled = false
+```text
+main.py
+  → entry
+  → Reference supervisor（workspace lock / boot_id / signal / readiness）
+  → main.py gateway
+  → Runtime + configured Channels + Proactive + Drift
 ```
 
-放入一条 alert：
+常用命令：
 
 ```bash
-mkdir -p proactive/inbox
-printf '%s\n' '{"kind":"alert","event_id":"smoke-alert-1","title":"Kirakira 主动链路测试","content":"收到这条消息即表示主动发送成功","severity":"high"}' >> proactive/inbox/smoke.jsonl
+uv run python main.py                 # 正式 supervisor 入口
+uv run kirakira-agent                # 同一正式入口
+uv run python main.py gateway         # 未托管调试入口
+uv run python main.py init            # 非交互初始化
+uv run python main.py memory doctor   # Memory2 只读检查
+uv run pytest -q                      # 完整离线回归
 ```
 
-立即执行一次 tick：
+启动和渠道详细合同见 [STARTUP_AND_CHANNELS.md](./STARTUP_AND_CHANNELS.md)。
 
-```bash
-.venv/bin/python -m kirakira_agent --proactive
-```
+## 5. 当前明确没有完成的部分
 
-终端应打印 `alert_pushed`，Telegram 应收到消息，`proactive/inbox/smoke.acked` 应出现
-`smoke-alert-1`，目标 Session 中应有 `proactive=true` 和 `delivery_id`。
+- Dify 链路不存在；下一步若要接入，必须先定义 adapter、配置、入站/出站 owner 和端到端验收。
+- QQ 两种渠道能运行，但尚未像 Telegram 一样直接复用 Reference 源文件。
+- 主动链路仍是 MVP：缺少真实 plugin/MCP Source、多目标、durable outbox 和完整恢复语义。
+- Drift 缺少 Reference 的 journal、self-observation、hazard drive 和完整 lifecycle。
+- Memory2 只到 M1；embedding 未配置，M2–M6 均未完成。
+- Reference 的完整 app-server、控制协议、插件市场和完整 Dashboard 不在当前版本。
 
-### 4.4 验证 Drift
+## 6. 下一次工作的优先级
 
-先确保 inbox 没有未读 alert/新 content，再开启：
+1. 先选一个尚未跑通的基础链路：Dify 或 QQ Reference 对齐，并给出真实端到端证据。
+2. 记忆系统从 M2 开始，接入 DefaultMemoryEngine 和 embedding，不跳阶段。
+3. 再根据真实使用中的漏发、误发、重复和打扰问题加深主动/Drift，而不是先增加抽象。
 
-```toml
-[proactive.drift]
-enabled = true
-min_interval_hours = 0
-max_steps = 20
-```
+## 7. 文档导航
 
-再执行：
-
-```bash
-.venv/bin/python -m kirakira_agent --proactive
-```
-
-本轮没有推送候选时会进入 Drift。检查 `drift/drift.db` 的 run 记录；若选中的 skill 调用
-`message_push`，还会经过同一个目标 Channel 发送。
-
-### 4.5 离线回归
-
-```bash
-.venv/bin/python -m pytest tests -q
-```
-
-## 5. 现在不做什么
-
-以下能力有价值，但不应在三条链路的基础闭环之前抢优先级：
-
-- 主动 phase graph 与完整 lifecycle factory。
-- 兴趣 embedding、hazard 概率模型和 self-observation journal。
-- 多目标/多用户主动调度。
-- durable outbox 与跨进程 exactly-once。
-- Dashboard、多租户服务化与运维控制面。
-
-下一阶段应从真实使用问题反推：先接一个真实 Source，记录漏发、误发、重复与打扰率，
-再决定是否引入 Reference 更厚的 hazard、embedding 或可靠队列。
-
-## 6. 文档导航
-
-- [VERSION_EVOLUTION.md](./VERSION_EVOLUTION.md)：只讲被动链路从 Function Calling MVP 到 Runtime 的演进。
-- [PROACTIVE_ARCHITECTURE.md](./PROACTIVE_ARCHITECTURE.md)：主动推送与 Drift 的数据流、提交边界和 Reference 对照。
-- [DIFFERENCE_AUDIT.md](./DIFFERENCE_AUDIT.md)：当前工作树与 Akashic 的能力级差异。
-- `../_handbook/`：每个子系统当前真实的运行合同。
+- [STARTUP_AND_CHANNELS.md](./STARTUP_AND_CHANNELS.md)：启动、Telegram 与其他渠道现状。
+- [MEMORY2_M0_M1.md](./MEMORY2_M0_M1.md)：Memory2 M0/M1 owner、数据流、迁移和恢复。
+- [DIFFERENCE_AUDIT.md](./DIFFERENCE_AUDIT.md)：Kirakira 与 Reference 的当前差异。
+- [VERSION_EVOLUTION.md](./VERSION_EVOLUTION.md)：被动链路的演进历史。
+- [PROACTIVE_ARCHITECTURE.md](./PROACTIVE_ARCHITECTURE.md)：主动推送与 Drift 架构。

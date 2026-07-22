@@ -5,6 +5,7 @@ import argparse
 import importlib.util
 import os
 import logging
+import signal
 import sys
 from pathlib import Path
 from typing import Any, List
@@ -15,6 +16,7 @@ from kirakira_agent.bus import MessageBus
 from kirakira_agent.channels.contract import ChannelContext
 from kirakira_agent.channels.host import ChannelHost
 from kirakira_agent.channels.qq import QQChannel
+from kirakira_agent.channels.qqbot import QQBotChannel
 from kirakira_agent.channels.telegram import TelegramChannel
 from kirakira_agent.channels.web import WebChannel
 from kirakira_agent.context_builder import ContextBuilder
@@ -104,11 +106,21 @@ def _build_channel_host(
     enable_web: bool = False,
     enable_telegram: bool = False,
     enable_qq: bool = False,
+    enable_qqbot: bool = False,
     interrupt=None,
     memory=None,
     app_config=None,
 ) -> ChannelHost | None:
+    from agent.looping.interrupt import InterruptController
+    from agent.tools.message_push import MessagePushTool
+    from core.net.http import SharedHttpResources
+    from infra.channels.base import AttachmentStore
+
     app_config = app_config or {}
+    push_tool = MessagePushTool()
+    interrupt_controller = InterruptController(interrupt) if interrupt else None
+    attachment_store = AttachmentStore(workdir / "uploads")
+    http_resources = SharedHttpResources()
     host = ChannelHost(
         lambda channel: ChannelContext(
             bus=bus,
@@ -118,6 +130,10 @@ def _build_channel_host(
             log=logging.getLogger("channels.%s" % channel.name),
             interrupt=interrupt,
             memory=memory,
+            push_tool=push_tool,
+            attachment_store=attachment_store,
+            http_resources=http_resources,
+            interrupt_controller=interrupt_controller,
         )
     )
     added = False
@@ -128,7 +144,7 @@ def _build_channel_host(
         host.add(
             WebChannel(
                 host=os.getenv("KIRAKIRA_WEB_HOST", str(chat_config.get("host") or "127.0.0.1")),
-                port=int(os.getenv("KIRAKIRA_WEB_PORT", str(chat_config.get("port") or 8765))),
+                port=int(os.getenv("KIRAKIRA_WEB_PORT", str(chat_config.get("port") or 6322))),
                 channel_name=os.getenv("KIRAKIRA_WEB_CHANNEL", str(chat_config.get("channel_name") or "web")),
             )
         )
@@ -147,8 +163,12 @@ def _build_channel_host(
         host.add(
             TelegramChannel(
                 token=telegram_token,
+                bus=bus,
+                session_manager=session_manager,
                 allow_from=_env_list("TELEGRAM_ALLOW_FROM")
                 or [str(item) for item in telegram_config.get("allow_from", [])],
+                event_bus=event_bus,
+                interrupt_controller=interrupt_controller,
                 channel_name=os.getenv(
                     "KIRAKIRA_TELEGRAM_CHANNEL",
                     str(telegram_config.get("channel_name") or "telegram"),
@@ -184,7 +204,9 @@ def _build_channel_host(
                 ),
                 webhook_host=os.getenv("KIRAKIRA_QQ_WEBHOOK_HOST", "127.0.0.1"),
                 webhook_port=int(os.getenv("KIRAKIRA_QQ_WEBHOOK_PORT", "8766")),
-                access_token=os.getenv("ONEBOT_ACCESS_TOKEN", ""),
+                access_token=os.getenv(
+                    "ONEBOT_ACCESS_TOKEN", str(qq_config.get("access_token") or "")
+                ),
                 allow_from=_env_list("QQ_ALLOW_FROM")
                 or [str(item) for item in qq_config.get("allow_from", [])],
                 group_allow=_env_list("QQ_GROUP_ALLOW") or configured_group_ids,
@@ -194,6 +216,39 @@ def _build_channel_host(
                 ),
                 channel_name=os.getenv(
                     "KIRAKIRA_QQ_CHANNEL", str(qq_config.get("channel_name") or "qq")
+                ),
+            )
+        )
+        added = True
+    qqbot_config = config_value(app_config, "channels", "qqbot", default={}) or {}
+    qqbot_app_id = (
+        os.getenv("QQBOT_APP_ID") or str(qqbot_config.get("app_id") or "")
+    ).strip()
+    qqbot_secret = (
+        os.getenv("QQBOT_CLIENT_SECRET")
+        or str(qqbot_config.get("client_secret") or "")
+    ).strip()
+    if enable_qqbot or _env_bool(
+        "KIRAKIRA_QQBOT_ENABLED",
+        bool(qqbot_config.get("enabled", bool(qqbot_app_id and qqbot_secret))),
+    ):
+        if not qqbot_app_id or not qqbot_secret:
+            raise RuntimeError(
+                "QQBOT_APP_ID and QQBOT_CLIENT_SECRET are required when official QQBot is enabled"
+            )
+        host.add(
+            QQBotChannel(
+                app_id=qqbot_app_id,
+                client_secret=qqbot_secret,
+                allow_from=_env_list("QQBOT_ALLOW_FROM")
+                or [str(item) for item in qqbot_config.get("allow_from", [])],
+                channel_name=os.getenv(
+                    "KIRAKIRA_QQBOT_CHANNEL",
+                    str(qqbot_config.get("channel_name") or "qqbot"),
+                ),
+                api_base_url=str(
+                    qqbot_config.get("api_base_url")
+                    or "https://api.sgroup.qq.com"
                 ),
             )
         )
@@ -258,6 +313,7 @@ async def build_runtime(
     enable_web: bool = False,
     enable_telegram: bool = False,
     enable_qq: bool = False,
+    enable_qqbot: bool = False,
     config_path: Path | None = None,
 ) -> CoreRuntime:
     load_dotenv(workdir / ".env")
@@ -277,6 +333,7 @@ async def build_runtime(
             config_value(app_config, "channels", "telegram", default={}) or {}
         )
         qq_cfg = config_value(app_config, "channels", "qq", default={}) or {}
+        qqbot_cfg = config_value(app_config, "channels", "qqbot", default={}) or {}
         web_name = os.getenv(
             "KIRAKIRA_WEB_CHANNEL", str(web_cfg.get("channel_name") or "web")
         )
@@ -287,9 +344,14 @@ async def build_runtime(
         qq_name = os.getenv(
             "KIRAKIRA_QQ_CHANNEL", str(qq_cfg.get("channel_name") or "qq")
         )
+        qqbot_name = os.getenv(
+            "KIRAKIRA_QQBOT_CHANNEL",
+            str(qqbot_cfg.get("channel_name") or "qqbot"),
+        )
         enable_web = enable_web or proactive_channel == web_name
         enable_telegram = enable_telegram or proactive_channel == telegram_name
         enable_qq = enable_qq or proactive_channel == qq_name
+        enable_qqbot = enable_qqbot or proactive_channel == qqbot_name
     model = os.getenv("MODEL_ID") or str(
         config_value(app_config, "llm", "main", "model", default="")
     )
@@ -319,7 +381,11 @@ async def build_runtime(
     bus = MessageBus()
     event_bus = EventBus()
     session_manager = SessionManager(workdir)
-    memory = MemoryRuntime(workdir, session_manager=session_manager)
+    memory = MemoryRuntime(
+        workdir,
+        session_manager=session_manager,
+        engine=str(config_value(app_config, "memory", "engine", default="auto")),
+    )
     embedding_model = os.getenv("EMBEDDING_MODEL_ID") or str(
         config_value(app_config, "memory", "embedding", "model", default="")
     )
@@ -474,6 +540,7 @@ async def build_runtime(
         enable_web=enable_web,
         enable_telegram=enable_telegram,
         enable_qq=enable_qq,
+        enable_qqbot=enable_qqbot,
         interrupt=loop.request_interrupt,
         memory=memory,
         app_config=app_config,
@@ -588,13 +655,39 @@ async def runtime_repl(
 
 async def runtime_serve(runtime: CoreRuntime) -> None:
     tasks = await runtime.start_background()
+    readiness = None
+    boot_id = (
+        os.getenv("AKASHIC_BOOT_ID", "")
+        or os.getenv("KIRAKIRA_BOOT_ID", "")
+    ).strip()
+    supervised = (
+        os.getenv("AKASHIC_SUPERVISED") == "1"
+        or os.getenv("KIRAKIRA_SUPERVISED") == "1"
+    )
+    if supervised and boot_id:
+        from kirakira_agent.readiness import RuntimeReadiness
+
+        readiness = RuntimeReadiness(runtime.session_manager.workspace, boot_id)
+        readiness.mark_ready()
+    loop = asyncio.get_running_loop()
+    stop_event = asyncio.Event()
+    registered_signals: list[signal.Signals] = []
+    for watched in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(watched, stop_event.set)
+            registered_signals.append(watched)
+        except (NotImplementedError, RuntimeError):
+            pass
     try:
         print("kirakira-agent server running. Ctrl+C to stop.")
-        while True:
-            await asyncio.sleep(3600)
+        await stop_event.wait()
     except (KeyboardInterrupt, asyncio.CancelledError):
         pass
     finally:
+        for watched in registered_signals:
+            loop.remove_signal_handler(watched)
+        if readiness is not None:
+            readiness.clear()
         await runtime.stop_background(tasks)
 
 
@@ -628,11 +721,12 @@ async def _main_async(args: argparse.Namespace, workdir: Path) -> None:
         enable_web=args.web,
         enable_telegram=args.telegram,
         enable_qq=args.qq,
+        enable_qqbot=args.qqbot,
         config_path=args.config_path,
     )
     if getattr(args, "proactive", False):
         await _run_proactive_once(runtime)
-    elif args.serve or args.web or args.telegram or args.qq:
+    elif args.serve or args.web or args.telegram or args.qq or args.qqbot:
         await runtime_serve(runtime)
     else:
         mode = choose_cli_mode(force_tui=args.tui, force_plain=args.plain)
@@ -703,12 +797,29 @@ def choose_cli_mode(
     return "tui" if stdin_tty and stdout_tty and available else "plain"
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Kirakira Agent")
+    parser.add_argument(
+        "command",
+        nargs="?",
+        choices=["memory"],
+        help="Administrative command group (currently: memory).",
+    )
+    parser.add_argument(
+        "memory_action",
+        nargs="?",
+        choices=["doctor", "backup", "migrate", "verify", "rollback", "clear"],
+        help="Memory administration action.",
+    )
+    parser.add_argument("--backup-id", default="", help="Backup id for memory verify/rollback.")
+    parser.add_argument("--confirm", default="", help="Explicit confirmation token for destructive memory actions.")
+    parser.add_argument("--include-sessions", action="store_true", help="Also delete all persisted sessions during memory clear.")
+    parser.add_argument("--clear-self", action="store_true", help="Also reset memory/SELF.md during memory clear.")
     parser.add_argument("--serve", action="store_true", help="Run background agent loop and configured channels.")
     parser.add_argument("--web", action="store_true", help="Enable stdlib web channel.")
     parser.add_argument("--telegram", action="store_true", help="Enable Telegram Bot API channel.")
     parser.add_argument("--qq", action="store_true", help="Enable QQ OneBot webhook channel.")
+    parser.add_argument("--qqbot", action="store_true", help="Enable official Tencent QQBot channel.")
     parser.add_argument(
         "--proactive",
         action="store_true",
@@ -746,7 +857,7 @@ def main() -> None:
         default=None,
         help="Path to config.toml. Defaults to ./config.toml.",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     # config 先于 workspace 解析：workspace 可以写在 config 里，但 config 本身不住在
     # workspace 内，否则会形成先有鸡还是先有蛋。
     cwd = Path(os.getcwd()).resolve()
@@ -761,4 +872,33 @@ def main() -> None:
         args.workspace, load_toml_config(args.config_path), default=cwd
     )
     workdir.mkdir(parents=True, exist_ok=True)
+    if args.command == "memory":
+        import json as _json
+
+        from kirakira_agent.memory_admin import backup, clear, doctor, migrate, rollback, verify
+
+        if not args.memory_action:
+            parser.error("memory requires doctor/backup/migrate/verify/rollback/clear")
+        try:
+            if args.memory_action == "doctor":
+                result = doctor(workdir, project_root=cwd)
+            elif args.memory_action == "backup":
+                result = backup(workdir)
+            elif args.memory_action == "migrate":
+                result = migrate(workdir)
+            elif args.memory_action == "verify":
+                result = verify(workdir, backup_id=args.backup_id)
+            elif args.memory_action == "rollback":
+                result = rollback(workdir, backup_id=args.backup_id)
+            else:
+                result = clear(
+                    workdir,
+                    confirm=args.confirm,
+                    include_sessions=args.include_sessions,
+                    clear_self=args.clear_self,
+                )
+        except Exception as exc:
+            parser.exit(2, "memory %s failed: %s\n" % (args.memory_action, exc))
+        print(_json.dumps(result, ensure_ascii=False, indent=2))
+        return
     asyncio.run(_main_async(args, workdir))

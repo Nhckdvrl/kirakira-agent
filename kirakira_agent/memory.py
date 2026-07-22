@@ -171,27 +171,39 @@ class MarkdownMemoryStore:
 
 
 class MemoryRuntime:
-    def __init__(self, workspace: Path, session_manager: SessionManager | None = None) -> None:
+    def __init__(
+        self,
+        workspace: Path,
+        session_manager: SessionManager | None = None,
+        *,
+        engine: str = "auto",
+    ) -> None:
         self.workspace = workspace
         self.store = MarkdownMemoryStore(workspace)
         self.session_manager = session_manager
         self.items_path = self.store.root / "items.json"
+        self.owner_path = self.store.root / "structured-owner.json"
         self._records: List[MemoryRecord] = []
         self._record_lock = threading.RLock()
         self._tasks: Dict[str, asyncio.Task[None]] = {}
         self._locks: Dict[str, asyncio.Lock] = {}
         self.embedding_client: EmbeddingClient | None = None
-        # memory2 结构化 store（vendored from akashic-agent）：作为长期记忆的持久化后端，
-        # 每次 memorize/consolidation 都镜像写入，带 content_hash 去重与强化计数。
+        self.engine = self._resolve_engine(engine)
         self.store2 = None
-        try:
+        if self.engine == "memory2":
             from kirakira_agent.memory2.store import MemoryStore2
-
             self.store2 = MemoryStore2(str(self.store.root / "memory2.db"))
-        except Exception as exc:  # noqa: BLE001 - store2 不可用不能拖垮既有记忆
-            logging.getLogger(__name__).warning("memory2 store unavailable: %s", exc)
+        else:
+            # Legacy is retained only as an explicit rollback engine during M1.
+            try:
+                from kirakira_agent.memory2.store import MemoryStore2
+
+                self.store2 = MemoryStore2(str(self.store.root / "memory2.db"))
+            except Exception as exc:  # pragma: no cover - rollback compatibility
+                logger.warning("legacy mirror unavailable: %s", exc)
         self._load()
-        self._reconcile_store2_forgotten()
+        if self.engine == "legacy":
+            self._reconcile_store2_forgotten()
         if self.session_manager is not None:
             self.session_manager.on_delete(self._forget_session_memories)
 
@@ -253,12 +265,40 @@ class MemoryRuntime:
                 model=model,
             )
 
+    def _resolve_engine(self, requested: str) -> str:
+        explicit = os.getenv("KIRAKIRA_MEMORY_ENGINE", requested).strip().lower()
+        if explicit in {"legacy", "memory2"}:
+            return explicit
+        if explicit not in {"", "auto"}:
+            raise ValueError("memory engine 必须是 auto/legacy/memory2")
+        if self.owner_path.exists():
+            payload = json.loads(self.owner_path.read_text(encoding="utf-8"))
+            owner = str(payload.get("owner") or "").strip().lower()
+            if owner in {"legacy", "memory2"}:
+                return owner
+            raise RuntimeError("structured-owner.json owner 无效")
+        # Pre-M1 workspaces continue on the old owner until an explicit staged
+        # migration publishes the marker. A new workspace starts legacy too so
+        # rollback remains deterministic during M1.
+        return "legacy"
+
+    @staticmethod
+    def _canonical_memory_type(memory_type: str) -> tuple[str, dict[str, object]]:
+        raw = memory_type.strip() or "requested_memory"
+        if raw in {"identity", "fact", "requested_memory"}:
+            return "profile", {"legacy_memory_type": raw}
+        if raw not in {"procedure", "preference", "event", "profile"}:
+            return "profile", {"legacy_memory_type": raw}
+        return raw, {}
+
     def memorize(
         self,
         content: str,
         source_ref: str = "",
         memory_type: str = "requested_memory",
     ) -> MemoryRecord:
+        if self.engine == "memory2":
+            return self._memorize_memory2(content, source_ref, memory_type)
         with self._record_lock:
             content = content.strip()
             if not content:
@@ -287,6 +327,36 @@ class MemoryRuntime:
             self._mirror_to_store2(record)
             return record
 
+    def _memorize_memory2(
+        self,
+        content: str,
+        source_ref: str,
+        memory_type: str,
+    ) -> MemoryRecord:
+        if self.store2 is None:
+            raise RuntimeError("Memory2 store 未初始化")
+        summary = content.strip()
+        if not summary:
+            raise ValueError("memory content is empty")
+        canonical_type, extra = self._canonical_memory_type(memory_type)
+        if canonical_type == "procedure":
+            from kirakira_agent.memory2.rule_schema import build_procedure_rule_schema
+
+            extra["rule_schema"] = build_procedure_rule_schema(summary)
+        embedding = self._embed_for_store(summary)
+        result = self.store2.upsert_item(
+            memory_type=canonical_type,
+            summary=summary,
+            embedding=embedding,
+            source_ref=source_ref or None,
+            extra=extra or None,
+        )
+        item_id = result.split(":", 1)[1]
+        if source_ref:
+            self.store2.update_item_for_dashboard(item_id, source_ref=source_ref)
+        self._load()
+        return next(record for record in self._records if record.id == item_id)
+
     def candidates(
         self,
         memory_types: List[str] | None = None,
@@ -295,7 +365,13 @@ class MemoryRuntime:
     ) -> List[MemoryRecord]:
         """按 type/时间过滤出候选集合；排序交给各 lane。"""
 
-        allowed_types = {item for item in (memory_types or []) if item}
+        if self.engine == "memory2":
+            self._load()
+        allowed_types = {
+            self._canonical_memory_type(item)[0]
+            for item in (memory_types or [])
+            if item
+        }
         since_dt = self._parse_optional_time(since)
         until_dt = self._parse_optional_time(until)
         with self._record_lock:
@@ -418,6 +494,18 @@ class MemoryRuntime:
         return selected, trace
 
     def forget(self, ids: List[str]) -> List[str]:
+        if self.engine == "memory2":
+            if self.store2 is None:
+                raise RuntimeError("Memory2 store 未初始化")
+            active = {
+                str(item["id"])
+                for item in self.store2.get_items_by_ids(ids)
+                if item.get("status") == "active"
+            }
+            affected = [item_id for item_id in ids if item_id in active]
+            self.store2.mark_superseded_batch(affected)
+            self._load()
+            return affected
         with self._record_lock:
             forgotten: List[str] = []
             forgotten_targets: List[tuple[str, str]] = []
@@ -435,6 +523,8 @@ class MemoryRuntime:
         return forgotten
 
     def list_records(self, *, include_forgotten: bool = False) -> List[Dict[str, object]]:
+        if self.engine == "memory2":
+            self._load()
         with self._record_lock:
             records = [
                 record
@@ -451,6 +541,29 @@ class MemoryRuntime:
         content: str | None = None,
         memory_type: str | None = None,
     ) -> bool:
+        if self.engine == "memory2":
+            if self.store2 is None:
+                raise RuntimeError("Memory2 store 未初始化")
+            canonical_type = None
+            if memory_type is not None:
+                canonical_type = self._canonical_memory_type(memory_type)[0]
+            embedding = None
+            replace_embedding = False
+            if content is not None:
+                value = content.strip()
+                if not value:
+                    raise ValueError("memory content is empty")
+                embedding = self._embed_for_store(value)
+                replace_embedding = True
+            updated = self.store2.replace_item_content(
+                memory_id,
+                summary=content,
+                memory_type=canonical_type,
+                embedding=embedding,
+                replace_embedding=replace_embedding,
+            )
+            self._load()
+            return updated is not None
         with self._record_lock:
             for record in self._records:
                 if record.id != memory_id:
@@ -551,13 +664,14 @@ class MemoryRuntime:
 
     async def shutdown(self, timeout: float = 30.0) -> None:
         tasks = [task for task in self._tasks.values() if not task.done()]
-        if not tasks:
-            return
-        _done, pending = await asyncio.wait(tasks, timeout=max(0.1, timeout))
-        for task in pending:
-            task.cancel()
-        if pending:
-            await asyncio.gather(*pending, return_exceptions=True)
+        if tasks:
+            _done, pending = await asyncio.wait(tasks, timeout=max(0.1, timeout))
+            for task in pending:
+                task.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+        if self.store2 is not None:
+            self.store2.close()
 
     async def _consolidate_session(
         self,
@@ -751,6 +865,9 @@ class MemoryRuntime:
         return ""
 
     def _load(self) -> None:
+        if self.engine == "memory2":
+            self._load_from_store2()
+            return
         if not self.items_path.exists():
             self._records = []
             return
@@ -773,7 +890,47 @@ class MemoryRuntime:
             if item.get("id") and item.get("content")
         ]
 
+    def _load_from_store2(self) -> None:
+        if self.store2 is None:
+            raise RuntimeError("Memory2 store 未初始化")
+        records: List[MemoryRecord] = []
+        page = 1
+        while True:
+            items, total = self.store2.list_items_for_dashboard(
+                page=page,
+                page_size=200,
+                sort_by="created_at",
+                sort_order="asc",
+            )
+            for item in items:
+                detail = self.store2.get_item_for_dashboard(
+                    str(item["id"]), include_embedding=True
+                )
+                if detail is None:
+                    continue
+                records.append(
+                    MemoryRecord(
+                        id=str(detail["id"]),
+                        content=str(detail["summary"]),
+                        created_at=str(detail["created_at"]),
+                        source_ref=str(detail.get("source_ref") or ""),
+                        status=str(detail["status"]),
+                        memory_type=str(detail["memory_type"]),
+                        reinforcement=max(1, int(detail.get("reinforcement") or 1)),
+                        updated_at=str(detail["updated_at"]),
+                        embedding=detail.get("embedding")
+                        if isinstance(detail.get("embedding"), list)
+                        else None,
+                    )
+                )
+            if page * 200 >= total:
+                break
+            page += 1
+        self._records = records
+
     def _save(self) -> None:
+        if self.engine == "memory2":
+            raise RuntimeError("Memory2 模式禁止写 items.json")
         _atomic_write(
             self.items_path,
             json.dumps([r.to_json() for r in self._records], ensure_ascii=False, indent=2),
@@ -857,6 +1014,20 @@ class MemoryRuntime:
 
     def _forget_session_memories(self, session_key: str) -> None:
         prefix = session_key + ":"
+        if self.engine == "memory2":
+            if self.store2 is None:
+                raise RuntimeError("Memory2 store 未初始化")
+            items, _ = self.store2.list_items_for_dashboard(
+                status="active", source_ref=prefix, page_size=200
+            )
+            ids = [
+                str(item["id"])
+                for item in items
+                if str(item.get("source_ref") or "").startswith(prefix)
+            ]
+            self.store2.mark_superseded_batch(ids)
+            self._load()
+            return
         with self._record_lock:
             changed = False
             for record in self._records:

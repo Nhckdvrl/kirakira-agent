@@ -6,6 +6,7 @@ import asyncio
 import inspect
 import logging
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from typing import Dict, List, TypeAlias, TypeVar, cast
 
 logger = logging.getLogger(__name__)
@@ -13,15 +14,32 @@ E = TypeVar("E")
 Handler: TypeAlias = Callable[[E], Awaitable[E | None] | E | None]
 
 
+@dataclass
+class EventSubscription:
+    """Reference-compatible removable event subscription."""
+
+    bus: "EventBus"
+    event_type: type[object]
+    handler: Handler[object]
+    _closed: bool = False
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self.bus.off(self.event_type, self.handler)
+        self._closed = True
+
+
 class EventBus:
     def __init__(self) -> None:
         self._handlers: Dict[type[object], List[Handler[object]]] = {}
         self._tasks: set[asyncio.Task[None]] = set()
 
-    def on(self, event_type: type[E], handler: Handler[E]) -> None:
-        self._handlers.setdefault(cast(type[object], event_type), []).append(
-            cast(Handler[object], handler)
-        )
+    def on(self, event_type: type[E], handler: Handler[E]) -> EventSubscription:
+        raw_type = cast(type[object], event_type)
+        raw_handler = cast(Handler[object], handler)
+        self._handlers.setdefault(raw_type, []).append(raw_handler)
+        return EventSubscription(self, raw_type, raw_handler)
 
     def off(self, event_type: type[E], handler: Handler[E]) -> None:
         handlers = self._handlers.get(cast(type[object], event_type), [])

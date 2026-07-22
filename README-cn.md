@@ -4,6 +4,8 @@ Kirakira Agent 是一个参考 `akashic-agent` 实现的多渠道 AI Agent Runti
 
 > 想先看清“从最小 MVP 做到了哪里、三条链路怎么验收”，直接看
 > [docs/MVP_TO_CURRENT.md](./docs/MVP_TO_CURRENT.md)。
+> 启动、初始化向导及 Web/Telegram/两种 QQ 的完整合同见
+> [docs/STARTUP_AND_CHANNELS.md](./docs/STARTUP_AND_CHANNELS.md)。
 
 ## 三条链路
 
@@ -108,7 +110,7 @@ Web / Telegram / QQ / CLI
 - inline/background `spawn` 子代理，独立 session、三类权限 profile、并发上限、list/cancel 和完成回注。
 - 后台 shell、`task_output`、`task_stop`，timeout、取消和 runtime 关机均清理进程组。
 - 用户请求创建的持久化 `schedule` / `list_schedules` / `cancel_schedule`。
-- Telegram 图片/文档入站、长消息分片、429 重试、live edit、出站文件。
+- Reference Telegram 完整渠道：图片/文档与引用消息入站、UTF-16 分片、Markdown entities、429 重试、Conflict 处理、typing、工具/思考 live edit 和出站文件。
 - QQ 图片入站、私聊/群聊策略、群发送者标识、OneBot 状态校验和出站媒体。
 - Web 并发请求关联、主动消息长轮询、会话/记忆管理 API。
 - Shell 进程组超时/取消、文件原子写入、编辑歧义保护、二进制检测。
@@ -118,7 +120,8 @@ Web / Telegram / QQ / CLI
 ## 环境要求
 
 - Python 3.11+
-- 核心 Runtime 只使用标准库；全屏终端界面使用 Textual，安装项目时会自动安装。
+- [uv](https://docs.astral.sh/uv/)（推荐；项目已提交 `uv.lock`，首次运行自动创建隔离环境并安装锁定依赖）
+- Runtime 依赖由 `uv.lock` 固定；Telegram 使用 Reference 相同的 `python-telegram-bot` 与 `telegramify-markdown`，全屏终端界面使用 Textual。
 - Telegram、QQ、MCP 等能力通过 HTTP API 或 stdio 协议接入。
 
 推荐使用现有 conda 环境：
@@ -128,9 +131,30 @@ conda activate xingshu-vllm
 python -m unittest discover -s tests -v
 ```
 
-## 配置
+## 首次配置（与 Reference 同入口）
 
-推荐从示例开始：
+推荐直接运行交互向导：
+
+```bash
+uv run python main.py setup
+```
+
+也可以直接运行 `uv run python main.py`；首次检测不到 `config.toml` 时会自动进入同一个向导，配置完成后继续启动完整服务。向导会生成权限为 `0600` 的 `config.toml` 与 `.env`，初始化 `~/.kirakira/workspace`，并配置 Web、Telegram、QQ/NapCat/OneBot、腾讯开放平台官方 QQBot、Proactive 和 Drift。
+
+渠道初始化与 Reference 保持同一条完整链路：
+
+- Telegram：验证 BotFather token，写入白名单；开启主动推送时监听一条新消息自动取得并验证 `chat_id`。
+- 官方 QQBot：验证 AppID/AppSecret，通过 Gateway WebSocket Identify 监听第一条 C2C 消息取得 `user_openid`；主动目标写成 `qqbot / c2c:USER_OPENID`。
+- QQ/NapCat/OneBot：配置 bot QQ、HTTP API、access token、私聊白名单和群白名单，初始化时校验 `get_status`；NapCat 事件上报到 `http://127.0.0.1:8766/qq/webhook`。
+- Web：随主进程启动并只监听本机，默认地址 `http://127.0.0.1:6322`。
+
+CI 或不需要问答时使用非交互初始化：
+
+```bash
+uv run python main.py init
+```
+
+仍可手动从示例开始：
 
 ```bash
 cp config.example.toml config.toml
@@ -157,7 +181,7 @@ effective_context_percent = 0.9
 [channels.chat]
 enabled = true
 host = "127.0.0.1"
-port = 8765
+port = 6322
 ```
 
 环境变量优先于 `config.toml`。旧 `.env` 配置仍兼容：
@@ -175,6 +199,20 @@ OPENAI_COMPATIBLE_THINKING=enabled
 ```
 
 ## 启动
+
+Reference 风格的推荐入口会启动全部已配置 Channel、被动链路、Proactive 与 Drift：
+
+```bash
+uv run python main.py
+```
+
+显式启动未托管 runtime（调试别名）：
+
+```bash
+uv run python main.py gateway
+```
+
+默认命令与 Reference 一样先进入固定 supervisor，再由它启动 `gateway`。supervisor 对 workspace 加独占锁，等待带 boot ID/PID 的 readiness，转发 SIGINT/SIGTERM，并只接受当前 boot 私有管道上的合法重启提交；`gateway` 则绕开 supervisor，供调试器直接附着。旧的 `python -m kirakira_agent` 入口继续保留，用于本地 TUI/Plain 客户端。
 
 本地 CLI 默认在交互终端启动全屏 TUI，并实时展示模型增量、推理片段、工具状态和耗时：
 
@@ -222,7 +260,7 @@ python -m kirakira_agent --serve --telegram
 python -m kirakira_agent --serve --qq
 ```
 
-Web 默认地址：<http://127.0.0.1:8765>
+Web 默认地址：<http://127.0.0.1:6322>
 
 QQ/NapCat/OneBot HTTP 上报地址：
 
@@ -254,6 +292,19 @@ group_id = "777"
 allow_from = ["10001", "10002"]
 require_at = true
 ```
+
+腾讯开放平台官方 QQBot 是独立渠道，不与 NapCat 配置混用：
+
+```toml
+[channels.qqbot]
+enabled = true
+app_id = "你的 AppID"
+client_secret = "${QQBOT_CLIENT_SECRET}"
+allow_from = ["你的 user_openid"]
+channel_name = "qqbot"
+```
+
+官方 QQBot 使用 Gateway WebSocket 接收入站 C2C 消息，并使用 `/v2/users/{openid}/messages` 发送被动回复和主动消息；启动时会校验 access token，运行中负责 token 提前续期、心跳与断线重连。
 
 ## 可选语义记忆
 
@@ -362,12 +413,14 @@ my-plugin/
 
 ```text
 sessions/                     JSON session + SQLite FTS 索引
-memory/MEMORY.md              人工内容 + Runtime 托管长期记忆块
+memory/MEMORY.md              人工维护的长期档案（与结构化 Memory2 独立）
 memory/SELF.md                Agent 自我模型
 memory/RECENT_CONTEXT.md      近期 turn 摘要
 memory/HISTORY.md             幂等时间线记录
 memory/PENDING.md             预留的待整理记忆文件
-memory/items.json             类型化 memory item
+memory/memory2.db             唯一结构化长期记忆 owner（M1）
+memory/structured-owner.json  Memory2/legacy 发布与回滚标记
+memory/items.legacy.*.json    迁移前只读恢复点，不参与运行
 uploads/                      Channel 附件
 .kirakira/schedules.json      持久化定时消息
 .kirakira/shell-tasks/        后台 shell 临时日志
@@ -393,8 +446,8 @@ drift/drift.db                Drift run 记录、跨轮连续性、min_interval 
 /home/xiang/.conda/envs/xingshu-vllm/bin/python -m unittest discover -s tests -v
 ```
 
-当前离线回归为 `215 passed, 4 subtests passed`，覆盖工具、Session、并发、MCP、snapshot、
-上下文、记忆、渠道、主动链路与 Drift。另已使用
+当前离线回归为 `257 passed, 4 subtests passed`，覆盖工具、Session、并发、MCP、snapshot、
+上下文、Memory2 M0/M1、Reference Telegram/Supervisor 一致性、主动链路与 Drift。另已使用
 `deepseek-v4-flash` 在线验证普通响应、SSE 工具循环、后台记忆 consolidation，以及 context
 估算/实际 usage/下一轮 baseline 的完整观测链。API key 不进入仓库。
 

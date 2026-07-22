@@ -14,4 +14,6 @@ __all__ = [
     "TelegramChannel",
     "QQChannel",
 ]
+from kirakira_agent.channels.qqbot import QQBotChannel
 
+__all__ = ["QQBotChannel"]

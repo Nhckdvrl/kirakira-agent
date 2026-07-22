@@ -31,6 +31,10 @@ class ChannelHost:
                     await channel.stop()
                 except Exception:
                     logger.exception("渠道启动失败后的清理也失败 %s", channel.name)
+                # Reference 只有完整 AppRuntime.start 成功后才发布 readiness。渠道配置
+                # 错误属于启动失败，不能吞掉后让 supervisor/用户误以为服务可用。
+                await self.stop_all()
+                raise RuntimeError("channel %s failed to start: %s" % (channel.name, exc)) from exc
 
     async def stop_all(self) -> None:
         for channel in reversed(self._started):

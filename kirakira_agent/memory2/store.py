@@ -1022,6 +1022,58 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
         return self.get_item_for_dashboard(item_id)
 
     @_synchronized
+    def replace_item_content(
+        self,
+        item_id: str,
+        *,
+        summary: str | None = None,
+        memory_type: str | None = None,
+        embedding: list[float] | None = None,
+        replace_embedding: bool = False,
+    ) -> dict[str, object] | None:
+        """Kirakira M1 dashboard adapter for editing canonical item text/type.
+
+        The update is owned by this store connection and keeps the content hash
+        and rebuildable sqlite-vec projection in the same transaction.
+        """
+        current = self.get_item_for_dashboard(item_id, include_embedding=True)
+        if current is None:
+            return None
+        new_summary = str(summary if summary is not None else current["summary"]).strip()
+        new_type = str(memory_type if memory_type is not None else current["memory_type"]).strip()
+        if not new_summary:
+            raise ValueError("memory summary 不能为空")
+        if new_type not in {"procedure", "preference", "event", "profile"}:
+            raise ValueError("memory_type 必须是 procedure/preference/event/profile")
+        next_embedding = embedding if replace_embedding else current.get("embedding")
+        if next_embedding is not None and not isinstance(next_embedding, list):
+            raise ValueError("embedding 必须是数组或 null")
+        row = self._db.execute(
+            "SELECT rowid FROM memory_items WHERE id=?",
+            (item_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        self._db.execute(
+            """UPDATE memory_items
+               SET summary=?, memory_type=?, content_hash=?, embedding=?, updated_at=?
+               WHERE id=?""",
+            (
+                new_summary,
+                new_type,
+                _content_hash(new_summary, new_type),
+                json.dumps(next_embedding) if next_embedding is not None else None,
+                _now_iso(),
+                item_id,
+            ),
+        )
+        self._vec_delete([int(row[0])])
+        if isinstance(next_embedding, list):
+            self._vec_insert(int(row[0]), next_embedding)
+        self._db.commit()
+        return self.get_item_for_dashboard(item_id)
+
+    @_synchronized
     def delete_item(self, item_id: str) -> bool:
         with self._lock:
             row = self._db.execute(

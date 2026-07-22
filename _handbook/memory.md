@@ -1,146 +1,100 @@
-# 记忆系统
+# 记忆系统（当前 M1）
 
-## 先理解它是什么
+## 先分清三类状态
 
-记忆分两件事，别混在一起：
-
-- **Session** = 这次对话说过什么。完整、逐字、只属于一个会话。
-- **Memory** = 关于用户的稳定事实。跨会话、经过提炼、要被检索。
-
-简单说：**session 是录音，memory 是笔记。**
+- **Session**：逐轮对话历史，保存在 `sessions/`，回答“当时说了什么”。
+- **结构化长期记忆**：跨会话 profile/preference/procedure/event，唯一 owner 是 `memory/memory2.db`。
+- **Markdown 状态**：`MEMORY.md`、`SELF.md`、`PENDING.md` 等各自独立，不由 Memory2 替代。
 
 ```text
-┌─ 用户消息
-│  └─ 检索：query → 多路召回 → RRF 融合 → 热度加权 → 注入预算 → 塞进 prompt
-├─ 回复先返回用户（不阻塞）
-└─ 后台 consolidation
-   ├─ 达到窗口后调 LLM 抽取结构化 memories/history
-   ├─ exact dedup + reinforcement
-   └─ 写 items.json 与 MEMORY.md 托管区
+用户消息
+  → PassiveTurnPipeline
+  → MemoryRuntime 兼容 façade
+  → memory2.db active items
+  → lexical/vector lane + RRF + hotness + 注入预算
+  → Prompt
+  → 回复
+
+显式 memorize / 后台 consolidation
+  → 同一个 MemoryRuntime
+  → MemoryStore2
+  → memory2.db
 ```
 
-## 五个 Markdown 文件
+旧 `memory/items.json` 已归档为恢复点，正式 runtime 不再读取或双写它。
 
-都在 `<workspace>/memory/` 下，运行时启动时自动创建：
+## 当前持久化 owner
 
-| 文件 | 写者 | 读方 | 用途 |
-| --- | --- | --- | --- |
-| `MEMORY.md` | consolidation（托管区） + 人工 | system prompt | 长期记忆：稳定事实、偏好、身份 |
-| `SELF.md` | 人工 | system prompt | Agent 的自我模型 |
-| `RECENT_CONTEXT.md` | consolidation | system prompt | 近期在聊什么 |
-| `HISTORY.md` | consolidation（只追加） | 检索 | 时间线事件日志 |
-| `PENDING.md` | 预留 | — | 待整理缓冲 |
-
-`MEMORY.md` 由**托管块 + 人工区**组成。`forget` 只重写托管块，**绝不动人工写的内容**——
-否则用户手写的东西会被 agent 悄悄删掉。
-
-结构化记录在 `items.json`：id、type、source_ref、status、reinforcement、时间、可选 embedding。
-
-## 检索：为什么是 RRF 而不是加权求和
-
-两条 lane 各有盲区，所以要融合而不是二选一：
-
-| lane | 擅长 | 盲区 |
+| 对象 | owner | 当前用途 |
 | --- | --- | --- |
-| `vector` | 口语化、同义改写（"kitten" ≈ "feline"） | `scripts/rollout.sh`、错误码 |
-| `lexical` | 变量名、命令、路径、错误码、精确实体 | 换个说法就没了 |
+| `memory2.db` | `MemoryStore2` | 唯一结构化长期记忆、状态、强化、source_ref |
+| `MEMORY.md` | Markdown runtime/人工 | 人工与兼容长期档案，独立于结构化 owner |
+| `SELF.md` | Markdown runtime/人工 | Agent 自我模型 |
+| `PENDING.md` | Markdown runtime | 待整理事实 |
+| `RECENT_CONTEXT.md` | consolidation | 可重建近期摘要 |
+| `HISTORY.md` | 当前 legacy consolidation | M4 前仍会写；Reference 四文件链路接入后停止生产写入 |
 
-融合**只看名次，不看原始分**：
+## M1 已经保证什么
 
-```text
-score(item) = Σ_lane  weight_lane / (k + rank_in_lane)      k = 60, lexical 权重 0.5
-```
+1. `memory2.db` 是唯一结构化 owner，不再把它当 `items.json` 的可忽略镜像。
+2. 被动检索、`memorize/recall_memory/forget_memory` 和 Dashboard 读取同一个 owner。
+3. 普通遗忘执行逻辑 supersede；只有 Dashboard 明确确认才允许 hard delete。
+4. 迁移使用 offline lock、backup、staging DB、`PRAGMA integrity_check`、原子发布和 rollback。
+5. 删除 Session 会按 `source_ref` 逻辑退休对应记忆。
+6. 写入 embedding 失败 fail-loud；查询 embedding 失败可以降级到 lexical lane。
 
-**为什么不能直接加权原始分**：cosine 在 [-1,1]、词法分在 [0,1]，尺度不可比，相加得到的数
-没有意义。更要命的是它让**每条记录都有非零分**，于是 `limit` 永远被无关记忆填满。
-RRF 下每条 lane 有自己的准入规则（词法要求 overlap > 0，向量要求 cosine ≥ 0.25），
-**不匹配的是缺席，不是排在最后**。
+## 当前检索仍是什么
 
-历史细节见 `docs/VERSION_EVOLUTION.md §5.4`。
-
-## 核心约束
-
-1. **写入侧向量失败必须报错，检索侧可以降级**。
-   - 检索失败 → 退回词法召回，本轮仍有答案，向量服务恢复后自动变好，**没留下痕迹**。
-   - 写入失败 → 这条记忆永远没有向量，索引半有半无，**损坏被固化**。
-   所以 `_embed_for_query` 吞异常并降级，`_embed_for_store` 抛错。别把它们合并回一个函数。
-2. **回复先返回，consolidation 在后台**。抽取记忆要调 LLM，绝不能挡在用户回复前面。
-3. **同 session 下一轮开始前等待上一轮 consolidation 收口**，避免边写边读。
-4. **注入有硬预算**（1200 字符 / 单行 180）。检索质量再好也不能吃光上下文。
-5. **热度随时间半衰**（alpha 0.20，半衰期 14 天）。否则一条被反复提到的旧记忆会永远压住新记忆。
-6. **删除 session 会撤销带 source_ref 的记忆**。不能"对话删了，事实还在"。
-7. **去重靠 consolidation 那次 LLM 调用，不靠字符串比对**（见下节）。更正与否定必须能覆盖
-   旧事实——去重绝不能把它们压掉。
-
-## 去重：为什么并进 consolidation 那一次调用
-
-两个写入者会撞车：
+M1 保留 Kirakira 旧同步接口作为兼容 façade：
 
 ```text
-用户："记住：部署脚本在 scripts/rollout.sh"
-  ├─ memorize 工具      → "用户的部署脚本在 scripts/rollout.sh。"        source_ref=:0
-  └─ 后台 consolidation → "部署脚本在 scripts/rollout.sh，每次发版都跑它"  source_ref=:0-5
+query
+  ├─ lexical lane（精确实体、路径、错误码）
+  └─ vector lane（配置 embedding 后启用）
+       → RRF
+       → reinforcement/age hotness
+       → 字符预算
+       → Prompt Context Frame
 ```
 
-`memorize()` 的去重是**精确字符串匹配**，只挡得住**重放**（同文本、同 source_ref），
-挡不住**改写**——而 consolidation 的 LLM 必然改写措辞。曾经因此同一事实存两遍，
-类型还可能不一致（一条 `event` 一条 `procedure`），注入块一半是冗余。
+当前 embedding 未配置，因此在线查询只使用 lexical lane。RRF、热度和注入预算仍能工作，但这不是
+Reference `DefaultMemoryEngine` 的完整检索语义。
 
-**为什么不用"词法相似度超阈值就去重"**：实测否决，不安全——
+## 当前写入语义
 
-```text
-否定句   0.833   CI 跑在 GitHub Actions 上   ||  CI 不跑在 GitHub Actions 上
-真重复   0.800   使用的数据库是 PostgreSQL 16 ||  用户使用的数据库是 PostgreSQL 16。
-真重复   0.727   错误码 E4011 表示配额超限    ||  用户的错误码 E4011 表示配额超限。
-```
+- 精确重复会强化而不是重复插入。
+- legacy `identity/fact/requested_memory` 映射为 `profile`，原类型保存在 `extra_json`。
+- `forgotten` 映射为 `superseded`。
+- M1 仍接受旧工具参数 `content/memory_type`。
+- 当前 consolidation 仍是 Kirakira 旧实现；自动抽取、语义去重与 Markdown 更新尚未按 Reference M4
+  收口。
 
-**否定句的相似度比真重复还高。** 任何抓得住真重复的阈值都会把「CI 跑」和「CI 不跑」合并掉
-再丢一条——让 agent 说反话，比冗余严重得多。去重**必须理解语义**。
+因此当前写入可以直接使用，但不能把 M1 描述成已经具备 Reference Memorizer 的 procedure 合并、
+preference/profile 替换、显式 evidence 或 PostResponseWorker 失效检测。
 
-**现在的做法**：consolidation 本来就要打一次 LLM，所以把「已记事实」喂进**同一次调用**，
-让抽取和去重合并成一次判断——**零额外往返**。`_known_memory_digest()` 取两部分：
-
-- 本 session 已记的（`memorize` 刚写的，最可能被重复抽取）
-- 与本轮内容词法相关的旧记忆（跨 session 复述）
-
-prompt 里的规则是显式的，尤其最后一条：
-
-```text
-- 只是换个说法表达上面某条事实 → 跳过。
-- 需要修正或补充细节 → 输出完整新版本，沿用原 memory_type。
-- 与上面某条语义相反（例如否定）→ 必须输出，这是修正，不是重复。
-- 只输出上面没有的新信息。
-```
-
-倒数第二条是**安全网**：去重绝不能压掉更正，否则 agent 会卡在过时事实上——那比冗余更糟。
-
-reference 用独立的 `memory2/dedup_decider.py`（313 行）多打一次模型来做这件事；我们并进
-已有调用，代价更低。
-
-> **注意**：`memorize()` 本身是原语，直接连调两次不同措辞仍会产生两条记录。去重发生在
-> consolidation 这一层，不在原语层。
-
-## 失败会怎样
+## 失败边界
 
 | 情况 | 结果 |
 | --- | --- |
-| 向量服务挂了，检索时 | 降级为词法召回，记 ERROR 日志，本轮正常回复 |
-| 向量服务挂了，写入时 | **抛 RuntimeError**，拒绝写入无法被语义召回的记录 |
-| consolidation 抽取失败 | 记 ERROR，用户回复不受影响，下轮重试 |
-| `items.json` 损坏 | 启动时暴露，不静默重建 |
+| 查询 embedding 失败 | 降级词法，本轮继续 |
+| 写入 embedding 失败 | 抛错，不静默固化半索引记录 |
+| `memory2.db` integrity/schema 损坏 | fail-loud，不回退旧 `items.json` |
+| consolidation 模型失败 | 用户回复已完成；记录错误，不伪造记忆成功 |
+| 普通 forget | status → superseded，不物理删除 |
+| 明确 hard delete | 仅 Dashboard 确认操作允许 |
 
-## 换一套检索策略
+## Memory2 长期计划停点
 
-`retrieval.py` 的 `MemoryRetrievalPipeline` 协议就是接缝：
-
-```python
-class MemoryRetrievalPipeline(Protocol):
-    def retrieve(self, request: RetrievalRequest) -> RetrievalResult: ...
+```text
+M0 doctor/审计                  完成
+M1 Memory2 唯一结构化 owner     完成  ← 当前版本
+M2 DefaultMemoryEngine          未开始
+M3 被动 context / 主动 interest 未开始
+M4 自动提取与四文件 Markdown     未开始
+M5 evidence / undo / replacement 未开始
+M6 E2E eval 与切除 legacy        未开始
 ```
 
-被动 turn 依赖协议而非具体实现。要做 query rewrite / HyDE / sufficiency，实现这个协议即可，
-主链路不用动。
-
-**但先想清楚**：这三项每一项都要在**每轮对话多打一次 LLM**。纯计算的优化（RRF、热度、预算）
-零额外往返，所以先做；要花模型调用的，**先有评测集证明它值，再开**。不要因为"HyDE 听起来
-高级"就默认打开。
+下一轮从 M2 开始：先配置真实 embedding、接入 Reference `DefaultMemoryEngine`、Memorizer 和新工具合同，
+再切换生产查询。详细迁移、验证和回滚命令见
+[`docs/MEMORY2_M0_M1.md`](../docs/MEMORY2_M0_M1.md)。

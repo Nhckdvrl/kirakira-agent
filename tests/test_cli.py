@@ -7,9 +7,223 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 class CliTests(unittest.TestCase):
+    def test_setup_rejects_telegram_display_name(self):
+        import click
+        from kirakira_agent.bootstrap import _normalize_telegram_identity
+
+        self.assertEqual(_normalize_telegram_identity("@jackdjjiwo"), "jackdjjiwo")
+        self.assertEqual(_normalize_telegram_identity("1862986856"), "1862986856")
+        with self.assertRaises(click.BadParameter):
+            _normalize_telegram_identity("Xin-Yi Mae")
+
+    def test_setup_rejects_bot_group_and_mismatched_telegram_targets(self):
+        from kirakira_agent.bootstrap import _validate_telegram_chat_target
+
+        class Response:
+            def __init__(self, payload):
+                self._payload = payload
+
+            def json(self):
+                return self._payload
+
+        class Client:
+            def __init__(self, chat):
+                self.chat = chat
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return None
+
+            def get(self, url, **_kwargs):
+                if url.endswith("/getMe"):
+                    return Response({"ok": True, "result": {"id": 8641833384}})
+                return Response({"ok": True, "result": self.chat})
+
+        with mock.patch(
+            "httpx.Client",
+            return_value=Client(
+                {"id": 8641833384, "type": "private", "username": "bot"}
+            ),
+        ):
+            self.assertIn(
+                "机器人自己的 ID",
+                _validate_telegram_chat_target("token", "8641833384") or "",
+            )
+        with mock.patch(
+            "httpx.Client",
+            return_value=Client(
+                {"id": -1001, "type": "group", "username": "jackdjjiwo"}
+            ),
+        ):
+            self.assertIn(
+                "私聊", _validate_telegram_chat_target("token", "-1001") or ""
+            )
+        with mock.patch(
+            "httpx.Client",
+            return_value=Client(
+                {"id": 999, "type": "private", "username": "someone_else"}
+            ),
+        ):
+            self.assertIn(
+                "不一致",
+                _validate_telegram_chat_target(
+                    "token", "999", "jackdjjiwo"
+                )
+                or "",
+            )
+        with mock.patch(
+            "httpx.Client",
+            return_value=Client(
+                {"id": 1862986856, "type": "private", "username": "jackdjjiwo"}
+            ),
+        ):
+            self.assertIsNone(
+                _validate_telegram_chat_target(
+                    "token", "1862986856", "jackdjjiwo"
+                )
+            )
+
+    def test_reference_style_gateway_maps_to_full_service(self):
+        from kirakira_agent.entry import main
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = root / "config.toml"
+            config.write_text(
+                '[runtime]\nworkspace = "workspace"\n', encoding="utf-8"
+            )
+            with mock.patch("kirakira_agent.cli.main") as runtime_main:
+                main(["gateway", "--config", str(config)])
+
+            runtime_main.assert_called_once()
+            runtime_args = runtime_main.call_args.args[0]
+            self.assertIn("--serve", runtime_args)
+            self.assertIn(str(config.resolve()), runtime_args)
+
+    def test_reference_style_default_entry_uses_supervisor(self):
+        from kirakira_agent.entry import main
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = root / "config.toml"
+            workspace = root / "workspace"
+            config.write_text(
+                '[runtime]\nworkspace = "%s"\n' % workspace,
+                encoding="utf-8",
+            )
+            with mock.patch(
+                "kirakira_agent.supervisor.run_supervisor", return_value=0
+            ) as run_supervisor:
+                with self.assertRaises(SystemExit) as exited:
+                    main(["--config", str(config)])
+
+            self.assertEqual(exited.exception.code, 0)
+            run_supervisor.assert_called_once_with(
+                config_path=config.resolve(), workspace=workspace.resolve()
+            )
+
+    def test_reference_style_supervise_rejects_unowned_flags(self):
+        from kirakira_agent.entry import main
+
+        with self.assertRaises(SystemExit) as exited:
+            main(["supervise", "--unknown", "value"])
+
+        self.assertIn("supervise 不支持参数", str(exited.exception))
+
+    def test_reference_style_init_creates_config_and_workspace(self):
+        from kirakira_agent.entry import main
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = root / "config.toml"
+            workspace = root / "workspace"
+            main(
+                [
+                    "init",
+                    "--config",
+                    str(config),
+                    "--workspace",
+                    str(workspace),
+                ]
+            )
+
+            self.assertTrue(config.is_file())
+            self.assertIn(str(workspace), config.read_text(encoding="utf-8"))
+            self.assertTrue((workspace / "proactive" / "inbox" / "README.md").is_file())
+            self.assertTrue((workspace / "drift" / "skills" / "explore-curiosity" / "SKILL.md").is_file())
+
+    def test_reference_style_setup_renders_supported_chains(self):
+        from click.testing import CliRunner
+        from kirakira_agent.bootstrap import run_setup_wizard
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = root / "config.toml"
+            workspace = root / "workspace"
+
+            @__import__("click").command()
+            def setup_command():
+                run_setup_wizard(config, workspace)
+
+            result = CliRunner().invoke(
+                setup_command,
+                input=(
+                    "deepseek-chat\n"
+                    "https://api.deepseek.com/v1\n"
+                    "secret-key\n"
+                    "128000\n"
+                    "n\n"
+                    "n\n"
+                    "n\n"
+                ),
+            )
+            self.assertEqual(result.exit_code, 0, result.output)
+            rendered = config.read_text(encoding="utf-8")
+            self.assertIn("[channels.chat]", rendered)
+            self.assertIn("[proactive.target]", rendered)
+            self.assertIn("[proactive.drift]", rendered)
+            self.assertIn("KIRAKIRA_MAIN_API_KEY=secret-key", (root / ".env").read_text())
+
+    def test_setup_renderer_wires_all_reference_channels(self):
+        from kirakira_agent.bootstrap import WizardAnswers, _render_config, _render_env
+
+        answers = WizardAnswers(
+            workspace=Path("/tmp/kirakira-test"),
+            model="model",
+            base_url="https://model.invalid/v1",
+            api_key="main-secret",
+            telegram_enabled=True,
+            telegram_token="tg-secret",
+            telegram_allow_from=["alice"],
+            qqbot_enabled=True,
+            qqbot_app_id="qq-app",
+            qqbot_client_secret="qqbot-secret",
+            qqbot_user_openid="openid-1",
+            qq_enabled=True,
+            qq_bot_uin="10000",
+            qq_allow_from=["10001"],
+            qq_access_token="onebot-secret",
+            proactive_enabled=True,
+            proactive_channel="qqbot",
+            proactive_chat_id="c2c:openid-1",
+        )
+        rendered = _render_config(answers)
+        secrets = _render_env(answers)
+        self.assertIn("[channels.telegram]", rendered)
+        self.assertIn("[channels.qqbot]", rendered)
+        self.assertIn("[channels.qq]", rendered)
+        self.assertIn('channel = "qqbot"', rendered)
+        self.assertIn('chat_id = "c2c:openid-1"', rendered)
+        self.assertIn("TELEGRAM_BOT_TOKEN=tg-secret", secrets)
+        self.assertIn("QQBOT_CLIENT_SECRET=qqbot-secret", secrets)
+        self.assertIn("ONEBOT_ACCESS_TOKEN=onebot-secret", secrets)
+
     def test_proactive_target_auto_enables_builtin_channel(self):
         from kirakira_agent.cli import build_runtime
 
