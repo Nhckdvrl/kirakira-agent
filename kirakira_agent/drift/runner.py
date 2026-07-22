@@ -113,13 +113,14 @@ class DriftRunner:
         return True
 
     def _select_skill(self, skills: List[DriftSkill]) -> DriftSkill:
-        """每轮重新比较，选最久没跑过的 skill（从未跑过的优先）。"""
+        """每轮重新比较，选最久没跑过的 skill（从未跑过的优先）。
+
+        排序键用 run_at 的 ISO 串：从未跑过 → "" 最小 → 最先选；跑过的按最早 run_at 优先。
+        """
         last_run = self._state.last_run_at_by_skill()
         return min(
             skills,
-            key=lambda s: last_run.get(s.name, datetime.min.replace(tzinfo=None)).isoformat()
-            if s.name in last_run
-            else "",
+            key=lambda s: last_run[s.name].isoformat() if s.name in last_run else "",
         )
 
     def _run_agent(

@@ -12,7 +12,7 @@ import logging
 import random
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Awaitable, Callable, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from kirakira_agent.bus import MessageBus
 from kirakira_agent.events import OutboundMessage
@@ -23,6 +23,8 @@ from kirakira_agent.proactive.contracts import (
     normalize_alert,
     normalize_content,
     normalize_context,
+    rank_alerts,
+    rank_content,
 )
 from kirakira_agent.proactive.judge import Decision, ProactiveJudge, format_context
 from kirakira_agent.proactive.sources import SourceRegistry
@@ -107,6 +109,35 @@ class ProactiveLoop:
     def close(self) -> None:
         self._state.close()
 
+    async def tick_once(self) -> None:
+        """按需执行一次完整 tick（供 CLI/演示手动触发，不等电量定时器）。"""
+        self._ensure_context_file()
+        await self._tick()
+
+    def status(self) -> Dict[str, Any]:
+        """返回当前主动链路状态快照，供 CLI/演示回看（可观测性）。"""
+        now = datetime.now(timezone.utc)
+        last_user_at, recent_count = self._presence(now)
+        e = energy.compute_energy(last_user_at, now)
+        score = energy.base_score(e, recent_count)
+        last_push = self._state.last_push_at(self._cfg.session_key)
+        return {
+            "target": self._cfg.session_key,
+            "energy": round(e, 4),
+            "base_score": round(score, 4),
+            "recent_msg_count": recent_count,
+            "estimated_next_interval_s": self._next_interval(),
+            "unread_alert": self._state.unread_count("alert"),
+            "unread_content": self._state.unread_count("content"),
+            "last_push_at": last_push.isoformat() if last_push else None,
+            "in_cooldown": self._state.in_cooldown(
+                self._cfg.session_key, now, self._cfg.delivery_cooldown_hours
+            ),
+            "recent_decisions": self._state.recent_decisions(10),
+            "sources": [s.id for s in self._sources.sources],
+            "drift_enabled": self._cfg.drift.enabled,
+        }
+
     # ── 调度（电量模型）──────────────────────────────────────────
 
     def _next_interval(self) -> int:
@@ -140,12 +171,15 @@ class ProactiveLoop:
             return
         if self._passive_busy_fn is not None and self._passive_busy_fn(session_key):
             logger.info("[proactive] 被动链路忙，跳过本轮")
+            self._state.record_decision(now, "gated", "被动链路忙")
             return
 
         # 2. Fetch + Ingest（三通道去重入库）
         channels = await self._sources.fetch_all()
         self._state.ingest("alert", channels["alert"], now)
         new_content = set(self._state.ingest("content", channels["content"], now))
+        # 淘汰陈旧未读 content，防止从不被引用的候选无界堆积
+        self._state.expire_old("content", now, self._cfg.content_max_age_days)
         # context 不入库、不触发推送，只在本轮作为判断背景
         context_text = format_context(
             [normalize_context(item) for item in channels["context"]]
@@ -153,13 +187,19 @@ class ProactiveLoop:
 
         memory_text = self._read_memory()
         recent_conversation = self._recent_conversation(session_key)
+        recent_proactive = self._recent_proactive(session_key)
         proactive_context = self._read_context_file()
 
-        # 3. Decide：alert 优先直推
-        alerts = self._state.unread("alert")
+        # 3. Decide：alert 按严重度优先直推；还有 alert 时尽快再来一轮排空
+        alerts = rank_alerts(self._state.unread("alert"))
         if alerts:
             await self._push_alert(alerts[0], now, memory_text, recent_conversation,
-                                   proactive_context, context_text)
+                                   proactive_context, context_text, recent_proactive)
+            self._state.record_decision(
+                now, "alert_pushed", str(alerts[0].get("title") or "")[:120]
+            )
+            if len(alerts) > 1:
+                self._wake.set()
             return
 
         # 4. content：只有出现新内容、且不在冷却期时才做兴趣判断
@@ -170,14 +210,21 @@ class ProactiveLoop:
         ):
             pushed = await self._push_content(
                 contents, now, memory_text, recent_conversation,
-                proactive_context, context_text,
+                proactive_context, context_text, recent_proactive,
+            )
+            self._state.record_decision(
+                now,
+                "content_pushed" if pushed else "content_skipped",
+                "候选 %d 条" % len(contents),
             )
             if pushed:
                 return
 
         # 5. 三路都没推 → 交给 Drift 用空闲时间干活
+        drifted = False
         if self._drift_hook is not None:
-            await self._drift_hook(now, session_key)
+            drifted = await self._drift_hook(now, session_key)
+        self._state.record_decision(now, "drift" if drifted else "idle", "")
 
     async def _push_alert(
         self,
@@ -187,6 +234,7 @@ class ProactiveLoop:
         recent_conversation: str,
         proactive_context: str,
         context_text: str,
+        recent_proactive: str = "",
     ) -> None:
         contract = normalize_alert(alert_event)
         decision = await self._judge.decide_alert(
@@ -195,6 +243,7 @@ class ProactiveLoop:
             recent_conversation=recent_conversation,
             proactive_context=proactive_context,
             current_context=context_text,
+            recent_proactive=recent_proactive,
         )
         await self._deliver(decision, now)
         source_id = str(alert_event.get("_source") or "")
@@ -213,8 +262,10 @@ class ProactiveLoop:
         recent_conversation: str,
         proactive_context: str,
         context_text: str,
+        recent_proactive: str = "",
     ) -> bool:
-        page = content_events[: self._cfg.content_limit]
+        # 新内容优先，避免总在最旧的候选上打转
+        page = rank_content(content_events)[: self._cfg.content_limit]
         contracts = [normalize_content(event) for event in page]
         decision = await self._judge.decide_content(
             contracts,
@@ -222,6 +273,7 @@ class ProactiveLoop:
             recent_conversation=recent_conversation,
             proactive_context=proactive_context,
             current_context=context_text,
+            recent_proactive=recent_proactive,
         )
         if not decision.send:
             return False
@@ -307,6 +359,23 @@ class ProactiveLoop:
             if content:
                 lines.append(f"{role}: {content}")
         return "\n".join(lines)[:3000]
+
+    def _recent_proactive(self, session_key: str, limit: int = 5) -> str:
+        """读取最近已推送的主动消息，喂给判断器以避免重复推送（对齐 reference 意图）。"""
+        try:
+            session = self._sessions.get_or_create(session_key)
+        except Exception:
+            return ""
+        collected: List[str] = []
+        for msg in reversed(session.messages):
+            if msg.get("role") != "assistant" or not msg.get("proactive"):
+                continue
+            content = str(msg.get("content") or "")[:300]
+            if content:
+                collected.append(f"- {content}")
+            if len(collected) >= limit:
+                break
+        return "\n".join(reversed(collected))
 
     def _read_memory(self) -> str:
         reader = getattr(self._memory, "read_long_term", None)

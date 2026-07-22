@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from pathlib import Path
@@ -51,18 +52,26 @@ class SourceRegistry:
     def sources(self) -> List[ProactiveSource]:
         return list(self._sources.values())
 
+    async def _safe_fetch(self, source: ProactiveSource) -> List[Dict[str, Any]]:
+        """拉取单个源；失败不外抛，记日志返回空，保证部分可用。"""
+        try:
+            return await source.fetch()
+        except Exception:
+            logger.exception("[proactive.source] fetch 失败 source=%s", source.id)
+            return []
+
     async def fetch_all(self) -> Dict[str, List[Dict[str, Any]]]:
         """并发拉取所有源，按 alert/content/context 分组。
 
+        真正并发（asyncio.gather）：MCP 源是 I/O 密集，顺序拉会把 tick 拖长。
         单个源失败不影响其他源（记日志跳过），符合"部分可用"语义。
         """
+        sources = list(self._sources.values())
+        all_events = await asyncio.gather(
+            *(self._safe_fetch(source) for source in sources)
+        )
         grouped: Dict[str, List[Dict[str, Any]]] = {k: [] for k in VALID_CHANNELS}
-        for source in self._sources.values():
-            try:
-                events = await source.fetch()
-            except Exception:
-                logger.exception("[proactive.source] fetch 失败 source=%s", source.id)
-                continue
+        for source, events in zip(sources, all_events):
             for event in events:
                 kind = str(event.get("kind") or "").strip()
                 if kind not in grouped:

@@ -299,7 +299,15 @@ min_interval_hours = 3
 max_steps = 20
 ```
 
-启动后主动链路作为后台 task 运行。想快速体验：往 `<workspace>/proactive/inbox/demo.jsonl` 投几条事件（格式见该目录自动生成的 `README.md`），下一个 tick 就会看到判断与推送。Drift 首次运行会自动放一个示例 skill `explore-curiosity`。
+启动后主动链路作为后台 task 运行，并会在被动 turn 进行时自动避让。想快速体验：往 `<workspace>/proactive/inbox/demo.jsonl` 投几条事件（格式见该目录自动生成的 `README.md`），下一个 tick 就会看到判断与推送。Drift 首次运行会自动放两个示例 skill：`explore-curiosity`（会推送）与 `review-memory`（纯后台）。
+
+不想等电量定时器？用一次性命令手动跑一个 tick 并打印状态，方便演示与调试：
+
+```bash
+python -m kirakira_agent --proactive
+```
+
+它会执行一次完整 tick（Gate→Fetch→Decide→Deliver→空则 Drift），然后打印当前电量、下次间隔估计、三通道未读数、上次推送时间和最近决策记录（`recent_decisions`），随后退出。
 
 ## 内置工具
 

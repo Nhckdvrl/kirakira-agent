@@ -43,6 +43,7 @@ python -m kirakira_agent --tui               # force the full-screen client
 python -m kirakira_agent --plain             # streaming line-oriented fallback
 python -m kirakira_agent --session research  # create or resume a named local chat
 python -m kirakira_agent --serve             # run configured channels
+python -m kirakira_agent --proactive         # run one proactive tick now, print status, exit
 python -m kirakira_agent --workspace /tmp/ws # isolated runtime state
 python -m unittest discover -s tests
 ```

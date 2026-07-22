@@ -270,10 +270,12 @@ prompt 里显式保留了安全网："与上面某条**语义相反**（例如�
 | --- | --- | --- |
 | `proactive_v2/energy.py` | `proactive/energy.py` | ✅ 纯数学照搬（多时间尺度电量 + base_score + 调频） |
 | `proactive_v2/contracts.py` | `proactive/contracts.py` | ✅ 三通道契约精简 |
-| `proactive_v2/mcp_sources.py`（MCP gateway） | `proactive/sources.py`（协议 + 文件源） | ⚠️ 换实现：协议对齐，内置文件源占位，MCP 留拓展位 |
-| `proactive_v2/state.py`、`plugins/wake_proactive/state.py` | `proactive/state.py` | ⚠️ 精简：去重/ACK/冷却，无 hazard/embedding 表 |
-| `plugins/wake_proactive/prompt.py`+`tools.py` | `proactive/judge.py` | ⚠️ 换实现：JSON 决策替代 forced tool call（`complete` 无 tool_choice） |
-| `proactive_v2/loop.py`+kernel+`wake_proactive/runtime.py` | `proactive/loop.py` | ⚠️ 压平：直白 async tick，无 phase-graph kernel / snapshot |
+| `proactive_v2/mcp_sources.py`（MCP gateway） | `proactive/sources.py`（协议 + 文件源） | ⚠️ 换实现：协议对齐、`asyncio.gather` 真并发拉取，内置文件源占位，MCP 留拓展位 |
+| `plugins/wake_proactive/hazard.py`（`rank_events`） | `proactive/contracts.py`（`rank_alerts`/`rank_content`） | ⚠️ 精简：alert 按严重度、content 按新近度排序（无 hazard 兴趣打分） |
+| `proactive_v2/state.py`、`plugins/wake_proactive/state.py` | `proactive/state.py` | ⚠️ 精简：去重/ACK/冷却 + 龄期淘汰，无 hazard/embedding 表 |
+| `plugins/wake_proactive/prompt.py`+`tools.py` | `proactive/judge.py` | ⚠️ 换实现：JSON 决策替代 forced tool call（`complete` 无 tool_choice）；含近期已推消息去重 |
+| `proactive_v2/loop.py`+kernel+`wake_proactive/runtime.py` | `proactive/loop.py` | ⚠️ 压平：直白 async tick，无 phase-graph kernel / snapshot；含 passive-busy 门控、判断降级、决策 trace/status |
+| `proactive_v2/loop.py` 的 trace jsonl（rate/config） | `state.py` `decisions` 表 + `loop.status()` + `--proactive` CLI | ⚠️ 精简：单表决策记录 + 一次性触发，替代多份 jsonl trace |
 | `plugins/drift_flow/*`、`wake_proactive/drift_drive.py` | `drift/{skills,state,tools,runner}.py` | ⚠️ 复用现有 Agent loop；无 hazard 采样 / journal |
 
 ### 8.2 有意未跟进（Tier-3，记录不是遗忘）
@@ -288,12 +290,12 @@ prompt 里显式保留了安全网："与上面某条**语义相反**（例如�
 
 ### 8.3 验证
 
-- `tests/test_proactive.py`（11）：电量衰减/调频、三通道契约、去重/冷却、文件源 fetch/ack、
+- `tests/test_proactive.py`（16）：电量衰减/调频、三通道契约、排序（severity/新近度）、去重/冷却/龄期淘汰、文件源 fetch/ack、
   端到端 tick（alert 直推 / content skip→drift / content send）。
 - `tests/test_drift.py`（5）：skill 发现、min_interval 门控、连续性往返、端到端 run（message_push
   + finish_drift → 投递 + 落库）、disabled 不跑。
 - 接线：`cli._build_proactive` 按 `[proactive]` 装配；`CoreRuntime.{proactive_loop,drift_runner}`
-  加入 `start_background` / `stop_background`。全量 197 passed（余 5 项为既有环境问题，见 §8）。
+  加入 `start_background` / `stop_background`。全量 202 passed（余 5 项为既有环境问题，见 §8）。
 
 ## 8. 审计证据
 

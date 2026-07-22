@@ -23,9 +23,9 @@ class SkillDiscoveryTests(unittest.TestCase):
         workdir = Path(tmp.name)
         ensure_example_skill(workdir)
         skills = discover_skills(workdir)
-        self.assertEqual(len(skills), 1)
-        self.assertEqual(skills[0].name, "explore-curiosity")
-        self.assertIn("finish_drift", skills[0].body)
+        names = {s.name for s in skills}
+        self.assertEqual(names, {"explore-curiosity", "review-memory"})
+        self.assertTrue(all("finish_drift" in s.body for s in skills))
         tmp.cleanup()
 
 

@@ -74,6 +74,7 @@ chat_id = ""
 content_limit = 5
 # 距上次推送不足该小时数时，抑制 content 刷屏（alert 不受限）。
 delivery_cooldown_hours = 1
+content_max_age_days = 14   # 未读 content 超过该龄期(天)淘汰,防止无界堆积
 
 [proactive.drift]
 # Drift：三通道都没东西可推时，agent 照 drift/skills/*/SKILL.md 自主干后台活儿。

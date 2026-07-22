@@ -97,3 +97,30 @@ def normalize_context(event: Dict[str, Any]) -> ContextContract:
         source=_text(event.get("_source") or event.get("source")),
         raw=event,
     )
+
+
+# ── 事件排序（对齐 reference 的 rank_events）──────────────────────
+
+_SEVERITY_ORDER = {"critical": 3, "high": 3, "medium": 2, "low": 1, "": 0}
+
+
+def _event_time(event: Dict[str, Any]) -> str:
+    """取事件时间用于排序：优先 published_at，其次 first_seen_at。ISO 串可字典序比较。"""
+    return _text(event.get("published_at") or event.get("first_seen_at"))
+
+
+def rank_content(events: list[Dict[str, Any]]) -> list[Dict[str, Any]]:
+    """内容候选按新近度排序：新的优先（reference 用 recency + 兴趣打分，MVP 先按时间）。"""
+    return sorted(events, key=_event_time, reverse=True)
+
+
+def rank_alerts(events: list[Dict[str, Any]]) -> list[Dict[str, Any]]:
+    """告警按严重度优先、其次新近度排序。"""
+    return sorted(
+        events,
+        key=lambda e: (
+            _SEVERITY_ORDER.get(_text(e.get("severity")).lower(), 0),
+            _event_time(e),
+        ),
+        reverse=True,
+    )

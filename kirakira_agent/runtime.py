@@ -1352,6 +1352,14 @@ class AgentLoop:
         task.cancel()
         return True
 
+    def is_busy(self, session_key: str) -> bool:
+        """该 session 是否正在处理一轮被动 turn。供主动链路避让。"""
+        task = self._active_tasks.get(session_key)
+        if task is not None and not task.done():
+            return True
+        lock = self._session_locks.get(session_key)
+        return bool(lock is not None and lock.locked())
+
     async def shutdown(self) -> None:
         self.stop()
         pending = [task for task in self._tasks if not task.done()]
