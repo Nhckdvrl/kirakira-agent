@@ -18,6 +18,14 @@ from uuid import uuid4
 
 from kirakira_agent.event_bus import EventBus
 from kirakira_agent.config import load_toml_config
+from kirakira_agent.plugin_generation import (
+    GateResult,
+    PluginContributions,
+    PluginGeneration,
+    PluginGenerationRegistry,
+    compute_generation_id,
+    file_revision,
+)
 from kirakira_agent.plugin_jobs import PluginJobHost, PluginJobSpec
 from kirakira_agent.plugin_registry import plugin_registry
 from kirakira_agent.plugin_services import PluginServiceHost
@@ -288,6 +296,8 @@ class PluginManager:
         # 声明式扩展点的运行时宿主:插件只声明,生命周期由 manager 持有。
         self.service_host = PluginServiceHost()
         self.job_host = PluginJobHost(event_bus=event_bus)
+        # per-plugin 代际:换代时在途 turn 仍持旧代际租约,租约归零才 quiesce。
+        self.generations = PluginGenerationRegistry()
         self._register_management_tools()
 
     async def load_all(self) -> None:
@@ -322,6 +332,8 @@ class PluginManager:
         if self.mcp_publisher is not None:
             # 插件 MCP 与 workspace MCP 共用换代语义：整批发布，失败保持旧代际。
             await self.mcp_publisher.publish(self.mcp_servers, source="plugins")
+        # 冻结每个插件这一代的贡献;gate 未过的插件不发布代际。
+        await self.publish_generations()
         # 托管服务整批启动:任一失败会回滚已起的进程,不留半启动状态。
         self.service_host.bind_plugin_services(self.managed_services)
         await self.service_host.start_all()
@@ -429,6 +441,109 @@ class PluginManager:
 
     def plugin_data_dir(self, plugin_id: str) -> Path:
         return self.workspace / ".kirakira" / "plugin-data" / plugin_id
+
+    # --- per-plugin 代际 ---
+
+    def capture_contributions(self, record: ActivePlugin) -> PluginContributions:
+        """冻结一个插件当前贡献的全部能力,作为它这一代的不可变内容。"""
+
+        plugin = record.instance
+        if plugin is None:
+            return PluginContributions()
+        services = self.managed_services.get(record.plugin_id, {})
+        mcp = {
+            name: spec
+            for name, spec in self.mcp_servers.items()
+            if any(
+                declared.name == name for declared in plugin.mcp_servers()
+            )
+        }
+        return PluginContributions(
+            skill_roots=tuple(resolve_skill_roots(record.root, plugin.skill_roots())),
+            drift_skill_roots=tuple(
+                resolve_skill_roots(record.root, plugin.drift_skill_roots())
+            ),
+            mcp_servers=mcp,
+            managed_services=dict(services),
+            before_turn_modules=tuple(plugin.before_turn_modules()),
+            before_reasoning_modules=tuple(plugin.before_reasoning_modules()),
+            prompt_render_modules=tuple(plugin.prompt_render_modules()),
+            before_step_modules=tuple(plugin.before_step_modules()),
+            after_step_modules=tuple(plugin.after_step_modules()),
+            after_reasoning_modules=tuple(plugin.after_reasoning_modules()),
+            after_turn_modules=tuple(plugin.after_turn_modules()),
+            tool_hooks=tuple(plugin.tool_hooks()),
+            proactive_sources=tuple(
+                RegisteredProactiveSource(plugin_id=record.plugin_id, spec=spec)
+                for spec in plugin.proactive_sources()
+            ),
+            jobs=tuple(plugin.jobs()),
+            channels=tuple(plugin.channels()),
+        )
+
+    async def build_generation(self, record: ActivePlugin) -> PluginGeneration:
+        """为一个已装载插件编译候选代际,并跑语义检查决定是否准入。"""
+
+        plugin = record.instance
+        source_revision = file_revision(record.root / "plugin.py")
+        config_revision = file_revision(record.root / "config.toml")
+        checks: List[PluginSemanticCheck] = []
+        if plugin is not None:
+            checks.extend(plugin.static_semantic_checks())
+            readiness = PluginReadinessContext(
+                workspace_tool_names=tuple(self.tool_registry.names())
+                if self.tool_registry is not None
+                else (),
+                mcp_server_names=tuple(self.mcp_servers),
+            )
+            try:
+                checks.extend(await plugin.readiness_semantic_checks(readiness))
+            except Exception as exc:  # noqa: BLE001 - 检查失败本身就是一次失败结果
+                checks.append(PluginSemanticCheck.fail("readiness_error", str(exc)))
+        gate = GateResult.from_checks(
+            plugin_id=record.plugin_id,
+            candidate_revision="%s:%s" % (source_revision, config_revision),
+            checks=tuple(checks),
+        )
+        return PluginGeneration(
+            plugin_id=record.plugin_id,
+            generation_id=compute_generation_id(
+                plugin_id=record.plugin_id,
+                source_revision=source_revision,
+                config_revision=config_revision,
+            ),
+            module_path=type(plugin).__module__ if plugin is not None else "",
+            source_revision=source_revision,
+            config_revision=config_revision,
+            instance=plugin,
+            contributions=self.capture_contributions(record),
+            gate_result=gate,
+        )
+
+    async def publish_generations(self) -> List[str]:
+        """为所有已装载插件发布代际;gate 未过的插件保留旧代际并记录错误。"""
+
+        published: List[str] = []
+        for record in self.active:
+            try:
+                generation = await self.build_generation(record)
+                if not generation.gate_result.passed:
+                    self.errors[record.plugin_id] = (
+                        "semantic gate failed: %s"
+                        % generation.gate_result.failure_reason
+                    )
+                    logger.warning(
+                        "plugin semantic gate failed, keeping previous generation: %s (%s)",
+                        record.plugin_id,
+                        generation.gate_result.failure_reason,
+                    )
+                    continue
+                self.generations.publish(generation)
+                published.append(generation.generation_id)
+            except Exception as exc:  # noqa: BLE001 - 单插件代际失败不影响其余插件
+                self.errors[record.plugin_id] = str(exc)
+                logger.exception("plugin generation build failed: %s", record.plugin_id)
+        return published
 
     @staticmethod
     def _validate_declarations(root: Path, plugin: Plugin) -> None:
