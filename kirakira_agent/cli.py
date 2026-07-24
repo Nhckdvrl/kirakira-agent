@@ -395,12 +395,17 @@ async def build_runtime(
         provider=memory_provider,
         light_provider=memory_provider,
         event_publisher=event_bus,
+        session_manager=session_manager,
+        memory_window=int(
+            config_value(app_config, "agent", "context", "memory_window", default=40)
+        ),
     )
     memory = MemoryRuntime(
         workdir,
         session_manager=session_manager,
         engine=str(config_value(app_config, "memory", "engine", default="auto")),
         shared_store=memory_services.store,
+        event_bus=event_bus,
     )
     embedding_model = os.getenv("EMBEDDING_MODEL_ID") or str(
         config_value(app_config, "memory", "embedding", "model", default="")

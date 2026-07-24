@@ -20,6 +20,10 @@ from kirakira_agent._compat.provider import LLMProvider
 from kirakira_agent.coremem.default_engine import DefaultMemoryEngine
 from kirakira_agent.coremem.default_memory_config import DefaultMemoryConfig
 from kirakira_agent.coremem.engine import MemoryEngine
+from kirakira_agent.coremem.markdown import (
+    MemoryLifecycleBindRequest,
+    build_markdown_memory_runtime,
+)
 from kirakira_agent.coremem.plugin import DisabledMemoryEngine
 
 logger = logging.getLogger(__name__)
@@ -36,6 +40,8 @@ class MemoryServices:
 
     engine: MemoryEngine | None = None
     store: Any = None
+    # 四文件 Markdown 长期档案 + consolidation 维护(Reference 里与 engine 并列)。
+    markdown: Any = None
 
     async def aclose(self) -> None:
         """关闭引擎持有的资源(store / embedder / 事件订阅)。
@@ -94,6 +100,11 @@ def build_memory_engine(
     )
 
 
+def memory_keep_count(memory_window: int) -> int:
+    """照 Reference `bootstrap/memory.py:_memory_keep_count`:向下取偶,至少 2。"""
+    return max(2, ((max(1, memory_window) + 1) // 2) * 2)
+
+
 def build_memory_services(
     *,
     app_config: dict[str, Any],
@@ -102,6 +113,8 @@ def build_memory_services(
     light_provider: LLMProvider | None = None,
     http_resources: SharedHttpResources | None = None,
     event_publisher: Any = None,
+    session_manager: Any = None,
+    memory_window: int = 40,
 ) -> MemoryServices:
     engine = build_memory_engine(
         app_config=app_config,
@@ -111,5 +124,31 @@ def build_memory_services(
         http_resources=http_resources,
         event_publisher=event_publisher,
     )
+    config = build_config(app_config)
+    # Markdown 四文件与 engine 并列:它订阅 TurnCommitted 做 consolidation,
+    # 提交后发 ConsolidationCommitted —— 引擎正是靠这个事件做长期事实提取。
+    markdown = build_markdown_memory_runtime(
+        workspace=workspace,
+        provider=provider,
+        model=config.model,
+        keep_count=memory_keep_count(memory_window),
+        # 不订阅 TurnCommitted:当前 consolidation 的唯一驱动仍是 MemoryRuntime,
+        # 两边都订阅会重复归档并争抢 last_consolidated 游标。切换是 Stage 5 收尾工作。
+        event_bus=None,
+        recent_context_provider=light_provider or provider,
+        recent_context_model=config.light_model or config.model,
+    )
+    if session_manager is not None:
+        # 维护队列需要读写 Session 才能推进 consolidation 游标。
+        markdown.maintenance.bind_lifecycle(
+            MemoryLifecycleBindRequest(
+                get_session=session_manager.get_or_create,
+                save_session=session_manager.save_async,
+            )
+        )
     # 引擎是 coremem.db 的唯一 owner;把它的 store 一并暴露,过渡期消费者共享同一连接。
-    return MemoryServices(engine=engine, store=getattr(engine, "_v2_store", None))
+    return MemoryServices(
+        engine=engine,
+        store=getattr(engine, "_v2_store", None),
+        markdown=markdown,
+    )

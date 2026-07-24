@@ -178,8 +178,10 @@ class MemoryRuntime:
         *,
         engine: str = "auto",
         shared_store: Any = None,
+        event_bus: Any = None,
     ) -> None:
         self.workspace = workspace
+        self.event_bus = event_bus
         self.store = MarkdownMemoryStore(workspace)
         self.session_manager = session_manager
         self.items_path = self.store.root / "items.json"
@@ -748,15 +750,52 @@ class MemoryRuntime:
                         source_ref,
                         memory_type,
                     )
+            history_entries: List[str] = []
             for index, summary in enumerate(payload.get("history", [])[:3]):
                 value = str(summary or "").strip()
                 if value:
                     self.store.append_history(
                         "%s:summary:%d" % (source_ref, index), value
                     )
+                    history_entries.append(value)
             session.last_consolidated = end
             if self.session_manager is not None:
                 self.session_manager.save(session)
+            # consolidation 提交后广播,引擎据此做长期 profile/preference/procedure 提取。
+            self._publish_consolidation(session, source_ref, history_entries, selected)
+
+    def _publish_consolidation(
+        self,
+        session: Session,
+        source_ref: str,
+        history_entries: List[str],
+        selected: List[JsonDict],
+    ) -> None:
+        """发布 ConsolidationCommitted。
+
+        没有 event_bus 时是空操作;发布失败只记日志——consolidation 本身已经提交,
+        不能因为下游提取失败而回滚已经写好的归档。
+        """
+        if self.event_bus is None or not history_entries:
+            return
+        try:
+            from kirakira_agent.coremem.events import ConsolidationCommitted
+
+            conversation = "\n".join(
+                "%s: %s" % (item.get("role") or "", str(item.get("content") or "")[:500])
+                for item in selected
+            )
+            self.event_bus.enqueue(
+                ConsolidationCommitted(
+                    history_entry_payloads=[(entry, 0) for entry in history_entries],
+                    source_ref=source_ref,
+                    scope_channel=str(session.metadata.get("channel") or ""),
+                    scope_chat_id=str(session.metadata.get("chat_id") or ""),
+                    conversation=conversation,
+                )
+            )
+        except Exception:  # noqa: BLE001 - 归档已提交,下游失败不回滚
+            logger.warning("consolidation event publish failed", exc_info=True)
 
     def _known_memory_digest(
         self,
