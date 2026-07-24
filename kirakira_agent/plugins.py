@@ -19,6 +19,7 @@ from uuid import uuid4
 
 from kirakira_agent.event_bus import EventBus
 from kirakira_agent.config import load_toml_config
+from kirakira_agent.phase import topo_sort_modules
 from kirakira_agent.plugin_generation import (
     GateResult,
     PluginContributions,
@@ -446,7 +447,28 @@ class PluginManager:
                 self._decorated_modules.get(phase, []), key=lambda item: -item[0]
             )
         )
-        return modules
+        return self._order_phase_modules(phase, modules)
+
+    @staticmethod
+    def _order_phase_modules(phase: str, modules: List[object]) -> List[object]:
+        """全部模块都声明了 slot 时按依赖图排序,否则保持注册/优先级顺序。
+
+        只在"全员声明"时启用是刻意的:混用会让未声明 slot 的老模块被隐式重排,
+        那种偶然的顺序变化比顺序不可控更难排查。插件全部迁移到 slot 后自动生效。
+        """
+        if not modules or not all(
+            isinstance(getattr(module, "slot", None), str)
+            and getattr(module, "slot")
+            for module in modules
+        ):
+            return modules
+        try:
+            return topo_sort_modules(modules)
+        except RuntimeError as error:
+            # 依赖成环/重复 slot 是插件的声明错误:保持原顺序并大声报错,
+            # 不能让一个坏插件把整个相位打挂。
+            logger.error("phase %s slot ordering failed: %s", phase, error)
+            return modules
 
     @property
     def mcp_servers(self) -> Dict[str, Dict[str, Any]]:
