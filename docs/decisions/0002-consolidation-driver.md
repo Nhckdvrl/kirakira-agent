@@ -1,6 +1,6 @@
 # 0002 consolidation 暂由 MemoryRuntime 驱动,不交给 MarkdownMemoryMaintenance
 
-- 状态:accepted(待 NOW.md 第 1 项完成后由新记录 supersede)
+- 状态:superseded by [0003](./0003-consolidation-handover.md)
 - 关联:`kirakira_agent/memory.py`、`kirakira_agent/coremem/markdown.py`、
   `kirakira_agent/coremem/services.py`
 

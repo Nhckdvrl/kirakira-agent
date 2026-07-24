@@ -119,7 +119,7 @@ Kirakira ≈2.6 万行,Reference ≈10.5 万行(产品代码)。差距的核心�
 | Stage 3 embedding 配置 | 完成 | 已实配并现场验证:1024 维,语义召回可用 |
 | Stage 4 主动兴趣检索 | 完成 | content 判断前 `engine.query(intent="interest", read_only, strong)` |
 | Stage 5 工具切引擎 | 完成 | memorize/recall/forget 走 `engine.mutate/query`;`coremem.db` 单 owner;关停释放资源 |
-| Stage 5 收尾:consolidation 移交 | 未完成 | 见 [NOW.md](./NOW.md) 第 1 项与 [decisions/0002](./decisions/0002-consolidation-driver.md) |
+| Stage 5 收尾:consolidation 移交 | 完成 | 归档由 `MarkdownMemoryMaintenance` 驱动,guard 改用可等待的 `consolidate(force=True)`;见 [decisions/0003](./decisions/0003-consolidation-handover.md) |
 
 ## 5. 主动推送 / Drift(MVP,未变)
 
@@ -131,7 +131,7 @@ Drift:主动空转 → 选 `drift/skills/*/SKILL.md` → 注入记忆/近期/con
 
 未完成事项、接手点与验收边界统一维护在 [NOW.md](./NOW.md),本文不重复列举。
 
-摘要:consolidation 驱动权移交、DI 推广到 context/session、模块 frame 签名、
+摘要:删除旧 consolidation 回退路径、DI 推广到 context/session、模块 frame 签名、
 durable outbox、插件源真实端到端验证;以及未排期的 Drift journal、QQ 逐字节对齐、
 control plane / 前端 / peer-agent / eval。
 

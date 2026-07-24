@@ -1158,6 +1158,16 @@ class PassiveTurnPipeline:
         result = AfterReasoningResult(ctx=after_ctx, outbound=outbound)
         return await self._commit_and_dispatch(state, result)
 
+    def _markdown_maintenance(self):
+        """承重的 markdown 维护器;未接服务包时返回 None,回退旧 consolidation 路径。"""
+        services = self.memory_services
+        markdown = getattr(services, "markdown", None) if services is not None else None
+        maintenance = getattr(markdown, "maintenance", None)
+        # 未绑定 session 生命周期的维护器不能驱动归档。
+        if maintenance is None or getattr(maintenance, "_get_session", None) is None:
+            return None
+        return maintenance
+
     async def _guard_memory_context(self, session: Any, session_key: str) -> str:
         total = len(session.messages)
         last = max(0, min(int(session.last_consolidated or 0), total))
@@ -1167,12 +1177,32 @@ class PassiveTurnPipeline:
         if pending < threshold:
             return ""
         before = int(session.last_consolidated or 0)
-        self.memory.schedule_consolidation(
-            session,
-            model_client=self.reasoner.model_client,
-            model=self.config.model,
-        )
-        await self.memory.wait_for_session(session_key)
+        maintenance = self._markdown_maintenance()
+        if maintenance is not None:
+            # 强制归档并等待:与队列维护共用同一把 session 锁,不会互相插队。
+            from kirakira_agent.coremem.markdown import ConsolidateRequest
+
+            try:
+                await maintenance.consolidate(
+                    ConsolidateRequest(
+                        session=session,
+                        force=True,
+                        scope_channel=str(session.metadata.get("channel") or ""),
+                        scope_chat_id=str(session.metadata.get("chat_id") or ""),
+                    )
+                )
+            except Exception:
+                logger.exception("guard consolidation failed: %s", session_key)
+            else:
+                if int(session.last_consolidated or 0) > before:
+                    await self.session_manager.save_async(session)
+        else:
+            self.memory.schedule_consolidation(
+                session,
+                model_client=self.reasoner.model_client,
+                model=self.config.model,
+            )
+            await self.memory.wait_for_session(session_key)
         if int(session.last_consolidated or 0) > before:
             return ""
         return (
@@ -1217,7 +1247,8 @@ class PassiveTurnPipeline:
         )
         if msg.metadata.get("username"):
             session.metadata["username"] = str(msg.metadata["username"])
-        if not msg.metadata.get("skip_post_memory"):
+        if not msg.metadata.get("skip_post_memory") and self._markdown_maintenance() is None:
+            # 有承重维护器时,归档与近期上下文刷新由它订阅 TurnCommitted 驱动。
             await asyncio.to_thread(
                 self.memory.consolidate_turn,
                 session,
@@ -1284,7 +1315,7 @@ class PassiveTurnPipeline:
         await _run_plugin_modules(self._after_turn_modules, after_turn)
         if state.dispatch_outbound:
             await self.bus.publish_outbound(result.outbound)
-        if not msg.metadata.get("skip_post_memory"):
+        if not msg.metadata.get("skip_post_memory") and self._markdown_maintenance() is None:
             self.memory.schedule_consolidation(
                 session,
                 model_client=self.reasoner.model_client,

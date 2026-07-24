@@ -3,21 +3,18 @@
 只保留未完成、正在做或真实阻塞的事项。完成后从本文件删除,历史由 git 与
 [decisions/](./decisions/) 负责。规范见 `Reference/docs/writing-rules.md`。
 
-## 1. 记忆:consolidation 驱动权移交
+## 1. 记忆:删除旧 consolidation 回退路径
 
-**现状**:归档由 `MemoryRuntime.schedule_consolidation` 驱动;`MarkdownMemoryMaintenance`
-已构建但以 `event_bus=None` 接入,不订阅 `TurnCommitted`,只提供四文件读取。
+**现状**:归档已由 `MarkdownMemoryMaintenance` 驱动(见
+[decisions/0003](./decisions/0003-consolidation-handover.md))。`MemoryRuntime` 的
+`consolidate_turn` / `schedule_consolidation` / `_consolidate_session` 仍保留,
+作为"没有承重维护器"时的回退。
 
-**为什么没直接切**:两边都订阅会重复归档并争抢 `last_consolidated` 游标;且旧路径承载
-一条安全行为——待归档消息超阈值且 consolidation 无法推进时拒绝本轮,避免静默丢历史
-(`PassiveTurnPipeline._guard_memory_context`),它依赖同步 schedule + wait 语义,
-而 maintenance 是异步队列。理由见 [decisions/0002](./decisions/0002-consolidation-driver.md)。
+**接手点**:确认没有部署依赖回退路径(未配 embedding 的场景也应能用维护器)后,
+删除这三个方法及其只被它们使用的辅助函数。
 
-**接手点**:先给异步 maintenance 补等价的 context guard(超阈值且未推进时能让 turn 拒绝),
-再把驱动权交给它并删除旧 `_consolidate_session`。
-
-**验收**:①超阈值且归档卡住时 turn 仍被拒绝,不静默丢历史;②同一 session 不会被
-归档两次;③`ConsolidationCommitted` 仍按窗口发出,引擎长期提取不回退。
+**验收**:删除后未配 embedding 的部署仍能归档并刷新近期上下文;
+`_markdown_maintenance()` 的 None 分支可以一并去掉。
 
 ## 2. 依赖注入推广到 context / session
 

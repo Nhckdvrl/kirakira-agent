@@ -132,9 +132,9 @@ def build_memory_services(
         provider=provider,
         model=config.model,
         keep_count=memory_keep_count(memory_window),
-        # 不订阅 TurnCommitted:当前 consolidation 的唯一驱动仍是 MemoryRuntime,
-        # 两边都订阅会重复归档并争抢 last_consolidated 游标。切换是 Stage 5 收尾工作。
-        event_bus=None,
+        # 订阅 TurnCommitted 驱动归档;runtime 侧的旧 consolidation 调用已在有维护器时关闭,
+        # 因此不会重复归档。见 decisions/0002。
+        event_bus=event_publisher,
         recent_context_provider=light_provider or provider,
         recent_context_model=config.light_model or config.model,
     )
