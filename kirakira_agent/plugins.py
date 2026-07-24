@@ -308,27 +308,53 @@ class PluginManager:
         # per-plugin 代际:换代时在途 turn 仍持旧代际租约,租约归零才 quiesce。
         self.generations = PluginGenerationRegistry()
         self._reconcile_lock = asyncio.Lock()
+        # watcher 注入的唤醒回调:安装/卸载/启停后立即热重载,不必重启进程。
+        self.reload_hook: Optional[Any] = None
         self._register_management_tools()
+
+    async def _activate_plugin(self, root: Path, manifest: Dict[str, Any]) -> str | None:
+        """装载并初始化单个插件目录;返回激活后的 plugin_id,跳过时返回 None。"""
+
+        plugin = self._load_one(root / "plugin.py")
+        if plugin is None:
+            raise ValueError("plugin.py declares no Plugin subclass")
+        name = str(getattr(plugin, "name", "") or root.name).strip()
+        if any(record.plugin_id == name for record in self.active):
+            logger.warning("duplicate plugin name skipped: %s", name)
+            return None
+        if not is_enabled(manifest, name):
+            logger.info("plugin disabled by manifest: %s", name)
+            return None
+        await self._initialize_plugin(name, root, plugin)
+        self.active.append(ActivePlugin(name, root, plugin))
+        return name
+
+    async def _deactivate_plugin(self, plugin_id: str) -> None:
+        """卸载/禁用一个插件:终止实例并退休它的代际,不影响其余插件。"""
+
+        record = next(
+            (item for item in self.active if item.plugin_id == plugin_id), None
+        )
+        if record is None:
+            return
+        if record.instance is not None:
+            try:
+                await record.instance.terminate()
+            except Exception:
+                logger.exception("plugin terminate failed: %s", plugin_id)
+            if record.instance in self.instances:
+                self.instances.remove(record.instance)
+        self.active.remove(record)
+        current = self.generations.current(plugin_id)
+        if current is not None:
+            self.generations.retire(plugin_id)
 
     async def load_all(self) -> None:
         # 清单只决定启停；损坏时整体失败，不静默退化成“全部启用”。
         manifest = load_manifest(self.workspace / ".kirakira" / MANIFEST_NAME)
-        seen_names: set[str] = set()
         for root in discover_plugin_roots(self.plugin_dirs):
             try:
-                plugin = self._load_one(root / "plugin.py")
-                if plugin is None:
-                    raise ValueError("plugin.py declares no Plugin subclass")
-                name = str(getattr(plugin, "name", "") or root.name).strip()
-                if name in seen_names:
-                    logger.warning("duplicate plugin name skipped: %s", name)
-                    continue
-                seen_names.add(name)
-                if not is_enabled(manifest, name):
-                    logger.info("plugin disabled by manifest: %s", name)
-                    continue
-                await self._initialize_plugin(name, root, plugin)
-                self.active.append(ActivePlugin(name, root, plugin))
+                await self._activate_plugin(root, manifest)
             except Exception as exc:
                 self.errors[root.name] = str(exc)
                 logger.exception("plugin failed to load: %s", root)
@@ -530,6 +556,16 @@ class PluginManager:
             gate_result=gate,
         )
 
+    def _request_reload(self) -> None:
+        """请求 watcher 立即热重载。未接 watcher 时是空操作(退回轮询/重启)。"""
+        hook = self.reload_hook
+        if hook is None:
+            return
+        try:
+            hook()
+        except Exception:
+            logger.exception("plugin reload hook failed")
+
     def watch_revision(self) -> str:
         """所有插件源码 + 配置 + manifest 的内容指纹,用于热重载变化检测。"""
 
@@ -550,7 +586,37 @@ class PluginManager:
 
         async with self._reconcile_lock:
             results: List[Dict[str, Any]] = []
-            for record in self.active:
+            manifest = load_manifest(self._manifest_path())
+            discovered = {
+                root.name: root for root in discover_plugin_roots(self.plugin_dirs)
+            }
+            active_ids = {record.plugin_id for record in self.active}
+            # 目录还在但被 manifest 关掉,等价于卸载。
+            desired = {
+                name for name in discovered if is_enabled(manifest, name)
+            }
+
+            # 1. 消失或被禁用的插件先下线,释放它们占的名字与资源。
+            for plugin_id in sorted(active_ids - desired):
+                await self._deactivate_plugin(plugin_id)
+                results.append({"plugin_id": plugin_id, "state": "deactivated"})
+
+            # 2. 新出现的插件上线——安装后免重启就靠这一步。
+            for plugin_id in sorted(desired - active_ids):
+                try:
+                    activated = await self._activate_plugin(
+                        discovered[plugin_id], manifest
+                    )
+                except Exception as exc:  # noqa: BLE001 - 单插件失败不影响其余
+                    self.errors[plugin_id] = str(exc)
+                    logger.exception("plugin activation failed: %s", plugin_id)
+                    results.append({"plugin_id": plugin_id, "state": "activate_failed"})
+                    continue
+                if activated is not None:
+                    results.append({"plugin_id": plugin_id, "state": "activated"})
+
+            # 3. 仍在线的插件按 revision 变化换代。
+            for record in list(self.active):
                 current = self.generations.current(record.plugin_id)
                 try:
                     candidate = await self.build_generation(record)
@@ -591,6 +657,13 @@ class PluginManager:
                         "previous_leases": previous.lease_count if previous else 0,
                     }
                 )
+            # 有增删或换代时,同步 skill 链接与 MCP/服务发布,让新能力真正可用。
+            if any(
+                item.get("state") in {"activated", "deactivated", "swapped"}
+                for item in results
+            ):
+                await self._republish_after_reconcile()
+
             # 换代后立刻回收租约已归零的旧代际;仍在服务的等下一轮。
             drained = self.generations.drain_quiescible()
             if drained:
@@ -601,6 +674,28 @@ class PluginManager:
                     }
                 )
             return results
+
+    async def _republish_after_reconcile(self) -> None:
+        """换代后把 skill / MCP / 托管服务重新发布到当前活跃集合。"""
+
+        try:
+            self._sync_skill_links()
+            if self.skill_loader is not None:
+                self.skill_loader.reload()
+        except Exception:
+            logger.exception("plugin skill resync failed")
+        if self.mcp_publisher is not None:
+            try:
+                await self.mcp_publisher.publish(self.mcp_servers, source="plugins")
+            except Exception:
+                logger.exception("plugin MCP republish failed")
+        try:
+            # 服务按新集合整批重启:先停旧的再起新的,失败会回滚。
+            await self.service_host.stop_all()
+            self.service_host.bind_plugin_services(self.managed_services)
+            await self.service_host.start_all()
+        except Exception:
+            logger.exception("plugin managed service republish failed")
 
     async def publish_generations(self) -> List[str]:
         """为所有已装载插件发布代际;gate 未过的插件保留旧代际并记录错误。"""
@@ -951,7 +1046,7 @@ class PluginManager:
         self.tool_registry.register(
             ToolSpec(
                 "plugin_install",
-                "Install an Akashic-compatible plugin from a local directory or HTTPS Git repository. Restart is required.",
+                "Install an Akashic-compatible plugin from a local directory or HTTPS Git repository. Applied by hot reload, no restart needed.",
                 object_schema({"source": {"type": "string"}}, ["source"]),
             ),
             self.install,
@@ -960,7 +1055,7 @@ class PluginManager:
         self.tool_registry.register(
             ToolSpec(
                 "plugin_enable",
-                "Enable an installed plugin in the manifest. Restart is required to load it.",
+                "Enable an installed plugin in the manifest. Applied by hot reload, no restart needed.",
                 object_schema({"name": {"type": "string"}}, ["name"]),
             ),
             self.enable_plugin,
@@ -969,7 +1064,7 @@ class PluginManager:
         self.tool_registry.register(
             ToolSpec(
                 "plugin_disable",
-                "Disable an installed plugin in the manifest. Restart is required to unload it.",
+                "Disable an installed plugin in the manifest. Applied by hot reload, no restart needed.",
                 object_schema({"name": {"type": "string"}}, ["name"]),
             ),
             self.disable_plugin,
@@ -978,7 +1073,7 @@ class PluginManager:
         self.tool_registry.register(
             ToolSpec(
                 "plugin_uninstall",
-                "Remove an installed plugin directory and its manifest entry. Plugin data is preserved. Restart is required.",
+                "Remove an installed plugin directory and its manifest entry. Plugin data is preserved. Applied by hot reload.",
                 object_schema({"name": {"type": "string"}}, ["name"]),
             ),
             self.uninstall,
@@ -1013,7 +1108,8 @@ class PluginManager:
         manifest[name] = PluginEnablement(name, enabled)
         self._write_manifest(manifest)
         verb = "enabled" if enabled else "disabled"
-        return "Plugin %r %s in manifest. Restart kirakira-agent to apply." % (name, verb)
+        self._request_reload()
+        return "Plugin %r %s in manifest. Hot reload will apply it shortly." % (name, verb)
 
     def enable_plugin(self, name: str) -> str:
         return self._set_enabled(name, True)
@@ -1033,9 +1129,10 @@ class PluginManager:
         if name in manifest:
             del manifest[name]
             self._write_manifest(manifest)
+        self._request_reload()
         return (
             "Uninstalled plugin %r. Data under .kirakira/plugin-data/%s is preserved. "
-            "Restart kirakira-agent to apply." % (name, name)
+            "Hot reload will unload it shortly." % (name, name)
         )
 
     def list_plugins(self) -> str:
@@ -1175,15 +1272,26 @@ class PluginManager:
             if not re.fullmatch(r"[A-Za-z0-9_.-]+", plugin_name):
                 return "Error: invalid plugin name: %s" % plugin_name
             target = install_root / plugin_name
-            if target.exists():
-                return "Error: plugin %r is already installed" % plugin_name
+            upgrading = target.exists()
             git_dir = staging / ".git"
             if git_dir.exists():
                 await asyncio.to_thread(shutil.rmtree, git_dir)
-            os.replace(staging, target)
+            if upgrading:
+                # 升级:旧目录先挪走再原子换入,失败可回滚,不会留下半个插件。
+                backup = install_root / (".backup-%s-%s" % (plugin_name, uuid4().hex))
+                os.replace(target, backup)
+                try:
+                    os.replace(staging, target)
+                except BaseException:
+                    os.replace(backup, target)
+                    raise
+                await asyncio.to_thread(shutil.rmtree, backup, True)
+            else:
+                os.replace(staging, target)
+            self._request_reload()
             return (
-                "Installed plugin %r at %s. Restart kirakira-agent to activate it."
-                % (plugin_name, target)
+                "%s plugin %r at %s. Hot reload will apply it shortly."
+                % ("Upgraded" if upgrading else "Installed", plugin_name, target)
             )
         finally:
             if staging.exists():

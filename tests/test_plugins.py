@@ -194,7 +194,7 @@ class PluginTests(unittest.TestCase):
 
         asyncio.run(scenario())
 
-    def test_plugin_install_requires_entrypoint_and_restart(self):
+    def test_plugin_install_lands_on_disk_and_supports_upgrade(self):
         async def scenario():
             with tempfile.TemporaryDirectory() as tmp:
                 workspace = Path(tmp) / "workspace"
@@ -217,15 +217,35 @@ class PluginTests(unittest.TestCase):
                     memory=None,
                 )
 
+                reload_calls = []
+                manager.reload_hook = lambda: reload_calls.append(1)
+
                 result = await manager.install(str(source))
 
-                self.assertIn("Restart", result)
+                # 装好后由热重载接手,不再要求重启进程
+                self.assertIn("Installed", result)
+                self.assertIn("Hot reload", result)
+                self.assertEqual(len(reload_calls), 1)
                 self.assertTrue(
                     (workspace / ".kirakira" / "plugins" / "installed-demo").is_dir()
                 )
+                # 安装本身不激活插件;激活由 reconcile 完成
                 self.assertEqual(manager.active, [])
-                duplicate = await manager.install(str(source))
-                self.assertIn("already installed", duplicate)
+
+                # 再装一次是升级(原子替换),不是错误
+                upgrade = await manager.install(str(source))
+                self.assertIn("Upgraded", upgrade)
+                self.assertEqual(len(reload_calls), 2)
+                self.assertTrue(
+                    (workspace / ".kirakira" / "plugins" / "installed-demo" / "plugin.py").is_file()
+                )
+                # 升级后不留备份残渣
+                leftovers = [
+                    p.name
+                    for p in (workspace / ".kirakira" / "plugins").iterdir()
+                    if p.name.startswith(".backup-")
+                ]
+                self.assertEqual(leftovers, [])
 
         asyncio.run(scenario())
 

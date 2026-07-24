@@ -167,6 +167,14 @@ class PluginGenerationRegistry:
     def current(self, plugin_id: str) -> PluginGeneration | None:
         return self._current.get(plugin_id)
 
+    def retire(self, plugin_id: str) -> PluginGeneration | None:
+        """插件被卸载/禁用时退休它的当前代际;仍有租约的代际等归零后才 quiesce。"""
+        generation = self._current.pop(plugin_id, None)
+        if generation is not None:
+            generation.state = "retired"
+            self._retired.append(generation)
+        return generation
+
     @property
     def active(self) -> Tuple[PluginGeneration, ...]:
         return tuple(self._current[key] for key in sorted(self._current))

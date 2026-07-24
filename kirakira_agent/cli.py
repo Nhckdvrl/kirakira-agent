@@ -550,6 +550,8 @@ async def build_runtime(
     # 在途 turn 持有各插件当前代际租约;热重载换代不会抽走 turn 正在用的能力。
     pipeline.plugin_generations = plugin_manager.generations
     plugin_watcher = PluginWatcher(plugin_manager)
+    # 安装/卸载/启停后立即热重载,不必重启进程。
+    plugin_manager.reload_hook = plugin_watcher.wake
     reasoner.add_tool_hooks(plugin_manager.tool_hooks)
     reasoner.add_prompt_render_plugin_modules(plugin_manager.prompt_render_modules)
     reasoner.add_before_step_plugin_modules(plugin_manager.before_step_modules)
