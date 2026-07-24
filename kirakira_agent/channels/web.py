@@ -553,7 +553,7 @@ class WebChannel:
         params = query or {}
         page = max(1, int((params.get("page") or ["1"])[0]))
         page_size = max(1, min(200, int((params.get("page_size") or ["50"])[0])))
-        if memory.engine == "memory2" and memory.store2 is not None:
+        if memory.engine == "coremem" and memory.store2 is not None:
             embedding_raw = str((params.get("has_embedding") or [""])[0]).lower()
             has_embedding = None
             if embedding_raw in {"1", "true"}:
@@ -588,7 +588,7 @@ class WebChannel:
         memory = getattr(self._ctx, "memory", None)
         if memory is None:
             return None
-        if memory.engine == "memory2" and memory.store2 is not None:
+        if memory.engine == "coremem" and memory.store2 is not None:
             return memory.store2.get_item_for_dashboard(memory_id)
         return next(
             (item for item in memory.list_records(include_forgotten=True) if item["id"] == memory_id),
@@ -599,7 +599,7 @@ class WebChannel:
         if self._ctx is None:
             return []
         memory = getattr(self._ctx, "memory", None)
-        if memory is None or memory.engine != "memory2" or memory.store2 is None:
+        if memory is None or memory.engine != "coremem" or memory.store2 is None:
             return []
         return memory.store2.find_similar_items_for_dashboard(
             memory_id, top_k=max(1, min(50, limit))
@@ -636,7 +636,7 @@ class WebChannel:
         if self._ctx is None:
             return 0
         memory = getattr(self._ctx, "memory", None)
-        if memory is None or memory.engine != "memory2" or memory.store2 is None:
+        if memory is None or memory.engine != "coremem" or memory.store2 is None:
             raise RuntimeError("hard delete 只允许在 Memory2 Dashboard 执行")
         deleted = memory.store2.delete_items_batch([item for item in ids if item])
         memory._load()

@@ -82,7 +82,7 @@ class MemoryM1Tests(unittest.TestCase):
             after = sorted(str(path.relative_to(workspace)) for path in workspace.rglob("*"))
             self.assertEqual(before, after)
             self.assertEqual(report["legacy"]["items"], 2)
-            self.assertEqual(report["memory2"]["integrity"], "missing")
+            self.assertEqual(report["coremem"]["integrity"], "missing")
 
     def test_staged_migration_runtime_and_rollback(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -94,7 +94,7 @@ class MemoryM1Tests(unittest.TestCase):
             self.assertIn("手写内容", (workspace / "memory" / "MEMORY.md").read_text())
             self.assertNotIn("managed-memory", (workspace / "memory" / "MEMORY.md").read_text())
 
-            conn = sqlite3.connect(workspace / "memory" / "memory2.db")
+            conn = sqlite3.connect(workspace / "memory" / "coremem.db")
             try:
                 rows = conn.execute(
                     "SELECT id, memory_type, status, reinforcement, source_ref, extra_json "
@@ -109,7 +109,7 @@ class MemoryM1Tests(unittest.TestCase):
             self.assertIn("rule_schema", json.loads(rows[1][5]))
 
             runtime = MemoryRuntime(workspace)
-            self.assertEqual(runtime.engine, "memory2")
+            self.assertEqual(runtime.engine, "coremem")
             self.assertEqual(runtime.recall("蓝色")[0].id, "mem_0001")
             registry = build_default_registry(workspace, memory=runtime)
             tool_result = registry.execute(

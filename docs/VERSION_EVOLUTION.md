@@ -315,9 +315,15 @@ reference 自己也用配置门控它们。
 `retrieval.py` 里的 `MemoryRetrievalPipeline` 协议就是为这一步留的接缝：要换整套检索策略，
 实现这个协议即可，被动链路不用动。
 
-### 5.7 仍然缺的
+### 5.7 仍然缺的（此节已被后续升级覆盖）
 
 query rewrite、语义去重、矛盾处理（同一事实的新旧版本冲突）、图关系存储。
+
+> **更新(2026-07-25)**:上面 5.4–5.7 描述的是第一/二版**词法为主的检索**。此后记忆已照 Reference
+> 重建为 `DefaultMemoryEngine`(装配 HyDE / query rewrite / 语义去重 / 替换 / 自动摄入),并通过
+> `MemoryServices` 依赖注入接入被动检索——见第 11.5–11.7 节与 [MEMORY_SYSTEM.md](./MEMORY_SYSTEM.md)。
+> `retrieval.py` 留的那条接缝正是为此:现在被动 turn 调 `engine.query(MemoryQuery(intent="context"))`,
+> 检索智能移到引擎后面,runtime 不再感知。承重需配 `[memory.embedding]`。
 
 ## 6. 第四轮工程化：多渠道、并发与异步链路
 
@@ -838,6 +844,63 @@ Tier 3 是这一轮最重要的判断，也是第 8.2 节那条规则在 skill �
 三条线不同，判断准则是同一条：**能力以运行时为准，不以代码或文档为准。** 这和第 8 节"宁可全旧
 不要半新"、"降级后自洽才能降级"是同一种洁癖——只是从 MCP、记忆写入，延伸到了工具、记忆删除
 和 skill。
+
+### 11.5 异步原生 model runtime：去掉"同步裹线程"的阻抗
+
+追平 reference 到这一步，暴露出一个**架构层**而非行为层的差距:reference 的整条 runtime 是异步原生的
+(`model_runtime` 层 + `await provider.chat`),而 kirakira 的模型客户端只有同步 `complete`(urllib +
+`time.sleep`)，runtime 靠 `asyncio.to_thread(model_client.complete)` 在五六处裹成异步。
+
+这套"同步内核裹线程"平时能跑，但一旦要接 reference 那些**异步原生的插件接口**(尤其 `engine.query`)，
+seam 两侧异步性就错位——同步的 `to_thread(memory.retrieve)` 对上异步的 `await engine.query`，处处别扭。
+
+修法是把客户端做成异步原生:
+
+```text
+OpenAICompatibleClient
+  + acomplete / acomplete_stream(httpx.AsyncClient，SSE 解析与同步版共用一份)
+runtime / _compat.provider
+  优先 await 异步；只有同步 stub 客户端才回退 to_thread(complete)
+```
+
+收益是**根上**的:memory / proactive / drift 的所有 LLM 调用(都走 `_compat.provider`)现在都是异步原生，
+不再裹线程。记忆接线感到的那种"外来阻抗"从此消失。老式同步 stub 靠"优先异步、回退同步"零改动继续绿。
+
+> 这是 kirakira 与 reference 的四个**地基级重构**中的第一个(异步 runtime / 依赖注入 / Turn+lifecycle
+> DAG / 记忆 seam)。"接个东西搞半天"的感觉，本质是在没打好的地基上硬插;先把地基对齐，上层就顺了。
+
+### 11.6 记忆:从"兼容 façade"到 `DefaultMemoryEngine`
+
+reference 那句"一行就接好"的 `engine.query()`,底下垫着一个把所有零件装配好的引擎。kirakira 之前把零件
+(`memory2` 的 retriever / memorizer / hyde / …)都复制来了，却**没有装配者**——被动 turn 只能调旧
+`MemoryRuntime.retrieve` 的同步词法，引擎语义(intent 分流、HyDE、改写、语义去重、自动摄入)全缺。这就是
+"零件都在、却停在 M1"的真正原因。
+
+这一轮把装配者补上:`memory2` 整体折叠进 `coremem` 单包(数据库随之 `memory2.db → coremem.db`)，照抄
+reference 的 `DefaultMemoryEngine`;被动 turn 改调 `engine.query(MemoryQuery(intent="context"))`,检索智能
+搬到引擎后面，runtime 不再感知。承重需配 `[memory.embedding]`(reference 用 DashScope text-embedding-v3)。
+详见 [MEMORY_SYSTEM.md](./MEMORY_SYSTEM.md)。
+
+### 11.7 依赖注入:`MemoryServices` 缝
+
+光有引擎还不够——如果 runtime 直接 `import` 具体引擎类，换实现就要连锁改一堆调用点和测试。reference 的解法
+是 `MemoryServices(engine)`:runtime 只认识这个薄服务包,不认识实现。
+
+```text
+build_memory_services(...)  → 门控:配了 embedding → DefaultMemoryEngine，否则 DisabledMemoryEngine
+PassiveTurnPipeline(memory_services=…)  → 检索走 memory_services.engine.query(...)
+```
+
+这是四个地基重构里"依赖注入"的第一次落地。它让"换记忆实现只换一个 service 包"成立，也是后续把
+context / session 也服务化的模板。
+
+### 11.8 这两轮补充的收获
+
+```text
+同步内核裹线程 ≠ 异步原生      seam 两侧异步性一致，插件接口才不别扭；地基不对，上层处处费劲
+零件齐 ≠ 子系统成            复制来算法零件不等于能跑，缺的是把它们装配成一条接口的引擎
+import 具体类 ≠ 可替换        依赖注入让 runtime 只认接口；换实现不连锁改，才谈得上"照 reference 演进"
+```
 
 ## 12. 下一版：工具编排 + LangSmith 评测回归
 

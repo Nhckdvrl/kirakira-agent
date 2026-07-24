@@ -418,8 +418,8 @@ memory/SELF.md                Agent 自我模型
 memory/RECENT_CONTEXT.md      近期 turn 摘要
 memory/HISTORY.md             幂等时间线记录
 memory/PENDING.md             预留的待整理记忆文件
-memory/memory2.db             唯一结构化长期记忆 owner（M1）
-memory/structured-owner.json  Memory2/legacy 发布与回滚标记
+memory/coremem.db             唯一结构化长期记忆 owner（原 memory2.db）
+memory/structured-owner.json  coremem/legacy 发布与回滚标记
 memory/items.legacy.*.json    迁移前只读恢复点，不参与运行
 uploads/                      Channel 附件
 .kirakira/schedules.json      持久化定时消息
@@ -446,8 +446,8 @@ drift/drift.db                Drift run 记录、跨轮连续性、min_interval 
 /home/xiang/.conda/envs/xingshu-vllm/bin/python -m unittest discover -s tests -v
 ```
 
-当前离线回归为 `257 passed, 4 subtests passed`，覆盖工具、Session、并发、MCP、snapshot、
-上下文、Memory2 M0/M1、Reference Telegram/Supervisor 一致性、主动链路与 Drift。另已使用
+当前离线回归为 `274 passed, 4 subtests passed`，覆盖工具、Session、并发、MCP、snapshot、
+上下文、记忆引擎契约 + DI 服务、异步 model runtime、Reference Telegram/Supervisor 一致性、主动链路与 Drift。另已使用
 `deepseek-v4-flash` 在线验证普通响应、SSE 工具循环、后台记忆 consolidation，以及 context
 估算/实际 usage/下一轮 baseline 的完整观测链。API key 不进入仓库。
 

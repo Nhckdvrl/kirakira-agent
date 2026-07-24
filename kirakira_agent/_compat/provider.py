@@ -50,14 +50,20 @@ class ModelClientProvider:
         request_messages = [
             dict(item) for item in messages if item.get("role") != "system"
         ]
-        response = await asyncio.to_thread(
-            self._client.complete,
-            request_messages,
-            [],
-            "\n\n".join(system_parts),
-            model,
-            max_tokens,
-        )
+        system = "\n\n".join(system_parts)
+        # 优先走异步原生 acomplete；同步 stub 客户端回退到 to_thread(complete)。
+        acomplete = getattr(self._client, "acomplete", None)
+        if callable(acomplete):
+            response = await acomplete(request_messages, [], system, model, max_tokens)
+        else:
+            response = await asyncio.to_thread(
+                self._client.complete,
+                request_messages,
+                [],
+                system,
+                model,
+                max_tokens,
+            )
         return LLMResponse(
             content=response.text,
             thinking=response.reasoning_content,

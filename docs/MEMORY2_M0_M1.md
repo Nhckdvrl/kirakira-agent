@@ -1,8 +1,11 @@
-# Memory2 M0–M1：当前可用架构、迁移与恢复
+# 记忆 M0–M1：owner 切换、迁移与恢复(历史记录)
 
-> Reference 基线固定为 `012e37c8b51df045353972bb551d8e868ab52455`。本文只描述已经进入
-> Kirakira 正式运行入口的 M0/M1；M2 的 `DefaultMemoryEngine`、Reference 检索阈值和自动失效逻辑
-> 尚未启用，不能因为源码存在就声称完成。
+> **当前记忆系统权威文档是 [MEMORY_SYSTEM.md](./MEMORY_SYSTEM.md)。** 本文保留为 M0/M1 阶段的迁移与
+> 恢复历史记录。**命名已变更**:包 `memory2` 已折叠进 `coremem`,数据库 `memory2.db` → `coremem.db`,
+> owner 标记 `memory2` → `coremem`;下文中的旧名请按此对应。M2 `DefaultMemoryEngine` 此后已移植完成
+> 并经 `MemoryServices` 接入被动检索(承重需配 embedding),详见 MEMORY_SYSTEM.md。
+>
+> Reference 基线固定为 `012e37c8b51df045353972bb551d8e868ab52455`。以下为 M0/M1 当时的实现描述。
 
 ## 1. 当前结论
 

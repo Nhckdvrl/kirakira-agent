@@ -16,7 +16,6 @@ Kirakira 不是 Akashic 的等比例缩小版。它采取了三种不同策略�
   embedding 兴趣与 durable outbox 尚未移植；pending ACK 已按 Reference 接入。
 - **Drift：保留“行为由 SKILL.md 定义”的内核。** Kirakira 能跑一次带连续性的后台 Agent run，
   但没有 Akashic 的 journal、self-observation、hazard drive 和完整 lifecycle。
-- **Dify：尚未实现。** 当前仓库没有 Dify adapter、配置、生产调用点或端到端测试。
 
 因此最准确的项目定位是：
 
@@ -64,7 +63,6 @@ tests/eval 后约 10.6 万行。数倍的维护面差异本身正说明两者不
 | 状态与持久化 | 统一 persistence 语义、更多 SQLite/恢复合同 | JSON/SQLite 分散在各模块 | 能运行，但一致性与恢复边界较弱 |
 | 扩展生态 | 插件市场、plugin job、proactive source、lifecycle factory | workspace 插件 + hook/MCP；主动 source 为进程内协议 | 被动可扩展，主动扩展仍是预留位 |
 | 控制面 | app server、control protocol、Dashboard、peer agent | 本进程命令与状态输出 + Memory2 健康/管理 API | 仅记忆控制面轻实现，其余未实现 |
-| Dify 集成 | 当前基线不作为核心链路 | 无 | 未实现；不能列入“已跑通链路” |
 
 Kirakira 的“轻”有真实收益：主链路可在较少文件内追踪，开发和演示成本低，也避免过早复制未被
 使用的抽象。但当需求进入热插拔、跨进程、可靠投递和故障恢复时，这些差异会从“简化”变成必须补的能力。
@@ -87,19 +85,23 @@ Kirakira 的“轻”有真实收益：主链路可在较少文件内追踪，�
 | Channel host | `channels/` | 分项判断 | Telegram 已按 Reference 移植；Web、QQ/OneBot 与官方 QQBot 仍是 Kirakira 实现 |
 | subagent/background | `subagent.py` | 轻实现 | inline/background 与并发上限；无 peer-agent 进程体系 |
 
-### 4.2 记忆系统：M1 已完成 owner 切换，但算法尚未对齐
+### 4.2 记忆系统：引擎已移植 + DI 缝已接线，承重待配 embedding
 
-当前不能再描述为“Memory2 只是镜像”。M1 已从迁移前权威 `items.json` 构建全新 staging
-`memory2.db`，逐条校验后发布 `structured-owner.json`；正式被动检索、显式记忆工具和 Dashboard
-都通过同一个 Memory2 owner，`items.json` 已归档且停止双写。doctor 会核对 Reference pin、依赖、
-schema、数量、向量和 16 个 Memory2 算法文件的源码漂移。
+> **更新(2026-07-25)**:命名已从 `memory2` 折叠进 `coremem`,数据库 `memory2.db → coremem.db`。
+> 下文按当前状态描述,历史见 [MEMORY2_M0_M1.md](./MEMORY2_M0_M1.md),完整架构见
+> [MEMORY_SYSTEM.md](./MEMORY_SYSTEM.md)。
 
-但运行语义还不是 Reference 的 `DefaultMemoryEngine`：当前是 Kirakira 旧同步接口之上的兼容 façade，
-因此类型阈值、scope、answer/timeline、证据/引用、Reference Memorizer 的语义替换、自动失效检测和
-完整四文件 consolidation 尚未进入正式主链。embedding 当前也没有配置，所有数据暂时走词法 lane。
+M1 完成了唯一结构化 owner(`coremem.db`)与可恢复迁移;此后**M2 装配者已补上**:照抄 Reference 的
+`DefaultMemoryEngine`(`coremem/default_engine.py`)已移植完成,契约测试绿,并通过 `MemoryServices`
+依赖注入接入被动检索——被动 turn 现在调 `engine.query(MemoryQuery(intent="context"))`,与 Reference
+`agent/retrieval/default_pipeline.py` 同形。检索智能(HyDE / 改写 / 语义去重 / 自动摄入)搬到引擎后面。
 
-准确状态是：**M1 持久化 owner 对齐，M2+ 算法与事件接线未对齐。** 详细合同与现场证据见
-[MEMORY2_M0_M1.md](./MEMORY2_M0_M1.md)。
+仍是过渡态的部分:①引擎"真正承重"依赖 `[memory.embedding]` 配置(DefaultMemoryEngine 读写都要向量),
+未配时门控为 `DisabledMemoryEngine` + 旧词法路径回退;②显式记忆工具(memorize/recall/forget)仍走旧
+`memory.py`,切引擎属 Stage 5;③主动 `engine.query(interest)` / Drift `read_long_term` 接口已保住,
+Stage 4 切换。doctor 仍比对 `coremem/*.py` 与 `Reference/memory2/*.py` 的源码漂移。
+
+准确状态是：**M2 引擎移植完成 + 检索缝对齐;承重待 embedding(Stage 3),工具/旧栈切换待 Stage 4/5。**
 
 ### 4.3 已确认不是差距的两项
 
@@ -229,7 +231,7 @@ per-plugin generation、proactive phase DAG、多目标调度、app server、Das
 - Telegram/启动：固定 Reference 源码字节一致性测试、原始 Telegram utils 契约测试和真实
   Supervisor → gateway readiness 启动。
 
-当前完整离线回归为 `257 passed, 4 subtests passed`。
+当前完整离线回归为 `274 passed, 4 subtests passed`(含记忆引擎契约、DI 服务、异步 model runtime 测试)。
 
 现有测试证明“进程内闭环贯通到 Channel callback”，尚未证明：真实外部平台最终展示、渠道成功与
 consume/ACK 的跨崩溃原子性、进程恢复、多目标公平调度、插件热换代中的主动 tick 一致性，以及

@@ -11,9 +11,9 @@ import json_repair
 
 from kirakira_agent._compat.provider import LLMProvider
 from kirakira_agent.coremem.events import MemoryWritten, TurnIngested
-from kirakira_agent.memory2.memorizer import Memorizer
-from kirakira_agent.memory2.retriever import Retriever
-from kirakira_agent.memory2.store import MemoryHit, memory_hit_score
+from kirakira_agent.coremem.memorizer import Memorizer
+from kirakira_agent.coremem.retriever import Retriever
+from kirakira_agent.coremem.store import MemoryHit, memory_hit_score
 
 if TYPE_CHECKING:
     from kirakira_agent._compat.bus import EventPublisher

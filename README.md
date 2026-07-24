@@ -33,10 +33,13 @@ in; the reference's heavier machinery (phase-graph kernel, snapshot hot reload,
 semantic-interest vectors) is deliberately deferred. Both are off by default and
 enabled under `[proactive]` in `config.toml`.
 
-Current milestone: Memory2 M0 and M1 are complete (`memory2.db` is the sole
-structured-memory owner); M2–M6 have not started. Telegram's five channel source
-files and the fixed supervisor are byte-identical to the pinned Reference checkout.
-There is currently no Dify adapter or end-to-end Dify chain.
+Current milestone: the memory subsystem (`memory2` folded into a single `coremem`
+package; DB `coremem.db`) has the `DefaultMemoryEngine` ported and wired into the
+passive turn through a `MemoryServices` dependency-injection seam, plus an
+async-native model runtime. The engine carries retrieval once `[memory.embedding]`
+is configured (Stage 3); until then it falls back to the legacy lexical path.
+Telegram's five channel source files and the fixed supervisor are byte-identical to
+the pinned Reference checkout. See docs/MEMORY_SYSTEM.md and docs/MVP_TO_CURRENT.md.
 
 For the unified MVP-to-current roadmap and three-chain verification guide, see
 [docs/MVP_TO_CURRENT.md](docs/MVP_TO_CURRENT.md).

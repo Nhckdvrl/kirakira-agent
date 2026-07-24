@@ -1,3 +1,3 @@
-from kirakira_agent.event_bus import EventBus
+from kirakira_agent.event_bus import EventBus, EventSubscription
 
-__all__ = ["EventBus"]
+__all__ = ["EventBus", "EventSubscription"]
