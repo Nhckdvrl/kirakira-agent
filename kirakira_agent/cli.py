@@ -268,6 +268,7 @@ def _build_proactive(
     memory: MemoryRuntime,
     client: OpenAICompatibleClient,
     passive_busy_fn: Any | None = None,
+    memory_services: Any = None,
 ) -> tuple[ProactiveLoop | None, DriftRunner | None]:
     """按配置装配主动推送链路与 Drift 链路；未启用则返回 (None, None)。"""
     cfg = ProactiveConfig.from_app_config(app_config, default_model=default_model)
@@ -305,6 +306,7 @@ def _build_proactive(
         memory=memory,
         drift_hook=drift_hook,
         passive_busy_fn=passive_busy_fn,
+        memory_services=memory_services,
     )
     return loop, drift_runner
 
@@ -405,7 +407,22 @@ async def build_runtime(
                 )
             ),
         )
-    registry = build_default_registry(workdir, memory=memory, session_manager=session_manager, bus=bus)
+    # 记忆 DI 缝要早于工具注册表建立:显式记忆工具也要走引擎(Stage 5)。
+    memory_provider = ModelClientProvider(client)
+    memory_services = build_memory_services(
+        app_config=app_config,
+        workspace=workdir,
+        provider=memory_provider,
+        light_provider=memory_provider,
+        event_publisher=event_bus,
+    )
+    registry = build_default_registry(
+        workdir,
+        memory=memory,
+        session_manager=session_manager,
+        bus=bus,
+        memory_services=memory_services,
+    )
     # 能力快照：MCP 换代只切换 current 快照，在途 turn 用完旧租约后旧进程才断开。
     snapshot_store = RuntimeSnapshotStore()
     mcp_publisher = McpCatalogPublisher(snapshot_store)
@@ -504,16 +521,6 @@ async def build_runtime(
         bus=bus,
         tools=registry,
     )
-    # Phase 2 记忆 DI 缝:配了 [memory.embedding] → DefaultMemoryEngine 承重检索;
-    # 否则 DisabledMemoryEngine,pipeline 回退旧词法路径。引擎自订阅 TurnCommitted 做对话后摄入。
-    memory_provider = ModelClientProvider(client)
-    memory_services = build_memory_services(
-        app_config=app_config,
-        workspace=workdir,
-        provider=memory_provider,
-        light_provider=memory_provider,
-        event_publisher=event_bus,
-    )
     pipeline = PassiveTurnPipeline(
         bus=bus,
         event_bus=event_bus,
@@ -582,6 +589,7 @@ async def build_runtime(
         memory=memory,
         client=client,
         passive_busy_fn=loop.is_busy,
+        memory_services=memory_services,
     )
     if proactive_loop is not None:
         available_channels = {

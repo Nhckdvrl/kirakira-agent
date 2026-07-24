@@ -16,6 +16,11 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 from uuid import uuid4
 
 from kirakira_agent.bus import MessageBus, OutboundDeliveryError
+from kirakira_agent.coremem.engine import (
+    MemoryCapability,
+    MemoryQuery,
+    MemoryQueryFilters,
+)
 from kirakira_agent.events import OutboundMessage
 from kirakira_agent.models.base import ModelClient
 from kirakira_agent.proactive import energy
@@ -59,6 +64,7 @@ class ProactiveLoop:
         drift_hook: DriftHook | None = None,
         passive_busy_fn: Callable[[str], bool] | None = None,
         rng: random.Random | None = None,
+        memory_services: Any = None,
     ) -> None:
         self._cfg = config
         self._bus = bus
@@ -66,6 +72,8 @@ class ProactiveLoop:
         self._sources = sources
         self._state = state
         self._memory = memory
+        # Stage 4:兴趣检索走引擎(read_only,不强化);未承重时本段为空,不影响判断链路。
+        self._memory_services = memory_services
         self._drift_hook = drift_hook
         self._passive_busy_fn = passive_busy_fn
         self._rng = rng or random.Random()
@@ -229,9 +237,21 @@ class ProactiveLoop:
         if has_new and not self._state.in_cooldown(
             session_key, now, self._cfg.delivery_cooldown_hours
         ):
+            # 兴趣检索用候选标题做 query,把"这个人是否真的关心这类东西"的证据带进判断。
+            interest = await self._interest_hits(
+                " ".join(
+                    str(item.get("title") or "")[:120]
+                    for item in contents[:5]
+                ).strip()
+            )
+            content_memory_text = (
+                "%s\n\n【相关长期记忆】\n%s" % (memory_text, interest)
+                if interest
+                else memory_text
+            )
             try:
                 pushed = await self._push_content(
-                    contents, now, memory_text, recent_conversation,
+                    contents, now, content_memory_text, recent_conversation,
                     proactive_context, context_text, recent_proactive,
                 )
             except OutboundDeliveryError as exc:
@@ -437,6 +457,39 @@ class ProactiveLoop:
             return str(reader() or "")
         except Exception:
             return ""
+
+    async def _interest_hits(self, query: str, limit: int = 6) -> str:
+        """按候选内容做兴趣检索(照 Reference wake_proactive/tools.py)。
+
+        `effect="read_only"` 保证判断阶段不强化记忆;`relevance_floor="strong"` 只要高置信
+        条目,避免把弱相关记忆塞进打扰判断。引擎未承重或失败时返回空串,判断链路照常。
+        """
+        engine = getattr(self._memory_services, "engine", None)
+        if engine is None or not str(query or "").strip():
+            return ""
+        descriptor = getattr(engine, "DESCRIPTOR", None)
+        capabilities = getattr(descriptor, "capabilities", frozenset())
+        if MemoryCapability.RETRIEVE_CONTEXT_BLOCK not in capabilities:
+            return ""
+        try:
+            result = await engine.query(
+                MemoryQuery(
+                    text=query,
+                    intent="interest",
+                    effect="read_only",
+                    filters=MemoryQueryFilters(relevance_floor="strong"),
+                    limit=limit,
+                )
+            )
+        except Exception as exc:  # noqa: BLE001 - 兴趣检索失败不阻断主动判断
+            logger.warning("[proactive] 兴趣检索失败: %s", exc)
+            return ""
+        lines = [
+            "- %s" % str(record.summary).strip()[:300]
+            for record in result.records
+            if str(record.summary).strip()
+        ]
+        return "\n".join(lines)
 
     def _context_file_path(self) -> Path:
         return self._workspace / _PROACTIVE_CONTEXT_FILE

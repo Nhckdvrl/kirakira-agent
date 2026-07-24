@@ -18,12 +18,19 @@ import urllib.request
 import urllib.error
 import zlib
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 from uuid import uuid4
 
 from kirakira_agent.bus import MessageBus
 from kirakira_agent.events import OutboundMessage
 from kirakira_agent.memory import MemoryRuntime
+from kirakira_agent.coremem.engine import (
+    MemoryCapability,
+    MemoryMutation,
+    MemoryQuery,
+    MemoryQueryFilters,
+    MemoryScope,
+)
 from kirakira_agent.schema import ToolSpec
 from kirakira_agent.snapshot import SnapshotToolView, get_current_runtime_snapshot
 from kirakira_agent.session import SessionManager
@@ -231,10 +238,13 @@ class WorkspaceTools:
         session_manager: SessionManager | None = None,
         registry: ToolRegistry | None = None,
         bus: MessageBus | None = None,
+        memory_services: Any = None,
     ) -> None:
         self.workdir = workdir.resolve()
         self.skill_loader = skill_loader
         self.memory = memory
+        # Stage 5:显式记忆工具优先走引擎;引擎未承重(未配 embedding)时回退旧 MemoryRuntime。
+        self.memory_services = memory_services
         self.session_manager = session_manager
         self.registry = registry
         self.bus = bus
@@ -839,21 +849,58 @@ class WorkspaceTools:
         )
         return "已发送"
 
-    def memorize(self, content: str, memory_type: str = "requested_memory") -> str:
+    def _live_memory_engine(self):
+        """返回承重的记忆引擎;未配置或能力不足时返回 None,调用方回退旧路径。"""
+        services = self.memory_services
+        engine = getattr(services, "engine", None) if services is not None else None
+        if engine is None:
+            return None
+        descriptor = getattr(engine, "DESCRIPTOR", None)
+        capabilities = getattr(descriptor, "capabilities", frozenset())
+        return engine if MemoryCapability.RETRIEVE_CONTEXT_BLOCK in capabilities else None
+
+    def _memory_scope(self) -> MemoryScope:
+        if self.registry is None:
+            return MemoryScope()
+        ctx = self.registry.context
+        return MemoryScope(
+            session_key=str(ctx.get("session_key") or ""),
+            channel=str(ctx.get("channel") or ""),
+            chat_id=str(ctx.get("chat_id") or ""),
+        )
+
+    def _next_source_ref(self) -> str:
+        if self.registry is None or self.session_manager is None:
+            return ""
+        session_key = str(self.registry.context.get("session_key") or "")
+        if not session_key:
+            return ""
+        return self.session_manager.peek_next_message_id(session_key)
+
+    async def memorize(self, content: str, memory_type: str = "requested_memory") -> str:
+        source_ref = self._next_source_ref()
+        engine = self._live_memory_engine()
+        if engine is not None:
+            result = await engine.mutate(
+                MemoryMutation(
+                    kind="remember",
+                    summary=content,
+                    memory_kind=memory_type,
+                    source_ref=source_ref or "memorize_tool",
+                    scope=self._memory_scope(),
+                )
+            )
+            if not result.accepted:
+                return "Error: 记忆写入被拒绝"
+            return "记忆已写入: %s (%s)" % (result.item_id, result.actual_kind)
         if self.memory is None:
             return "Error: Memory runtime is not enabled"
-        source_ref = ""
-        if self.registry is not None:
-            ctx = self.registry.context
-            session_key = str(ctx.get("session_key") or "")
-            if session_key and self.session_manager is not None:
-                source_ref = self.session_manager.peek_next_message_id(session_key)
         record = self.memory.memorize(
             content, source_ref=source_ref, memory_type=memory_type
         )
         return "记忆已写入: %s" % record.id
 
-    def recall_memory(
+    async def recall_memory(
         self,
         query: str,
         limit: int = 5,
@@ -861,14 +908,39 @@ class WorkspaceTools:
         since: str = "",
         until: str = "",
     ) -> str:
-        if self.memory is None:
-            return "[]"
         if isinstance(memory_types, str):
             memory_types = [memory_types]
+        kinds = tuple(str(item) for item in (memory_types or []))
+        engine = self._live_memory_engine()
+        if engine is not None:
+            result = await engine.query(
+                MemoryQuery(
+                    text=query,
+                    intent="answer",
+                    scope=self._memory_scope(),
+                    filters=MemoryQueryFilters(kinds=kinds),
+                    limit=max(1, int(limit)),
+                )
+            )
+            return json.dumps(
+                [
+                    {
+                        "id": record.id,
+                        "memory_type": record.kind,
+                        "content": record.summary,
+                        "score": round(float(record.score), 4),
+                    }
+                    for record in result.records
+                ],
+                ensure_ascii=False,
+                indent=2,
+            )
+        if self.memory is None:
+            return "[]"
         records = self.memory.recall(
             query,
             limit=limit,
-            memory_types=[str(item) for item in (memory_types or [])],
+            memory_types=list(kinds),
             since=since,
             until=until,
         )
@@ -876,12 +948,25 @@ class WorkspaceTools:
             [r.to_public_json() for r in records], ensure_ascii=False, indent=2
         )
 
-    def forget_memory(self, ids) -> str:
-        if self.memory is None:
-            return "Error: Memory runtime is not enabled"
+    async def forget_memory(self, ids) -> str:
         if isinstance(ids, str):
             ids = [ids]
-        forgotten = self.memory.forget([str(item) for item in ids])
+        clean = [str(item) for item in ids]
+        engine = self._live_memory_engine()
+        if engine is not None:
+            result = await engine.mutate(
+                MemoryMutation(kind="forget", ids=tuple(clean), scope=self._memory_scope())
+            )
+            return json.dumps(
+                {
+                    "superseded_ids": result.affected_ids,
+                    "missing_ids": result.missing_ids,
+                },
+                ensure_ascii=False,
+            )
+        if self.memory is None:
+            return "Error: Memory runtime is not enabled"
+        forgotten = self.memory.forget(clean)
         return json.dumps({"superseded_ids": forgotten}, ensure_ascii=False)
 
     def search_messages(self, query: str, limit: int = 10) -> str:
@@ -1106,10 +1191,19 @@ def build_default_registry(
     memory: MemoryRuntime | None = None,
     session_manager: SessionManager | None = None,
     bus: MessageBus | None = None,
+    memory_services: Any = None,
 ) -> ToolRegistry:
     skill_loader = SkillLoader(skills_dir or (workdir / "skills"))
     registry = ToolRegistry()
-    handlers = WorkspaceTools(workdir, skill_loader, memory, session_manager, registry, bus)
+    handlers = WorkspaceTools(
+        workdir,
+        skill_loader,
+        memory,
+        session_manager,
+        registry,
+        bus,
+        memory_services=memory_services,
+    )
     registry.add_shutdown_callback(handlers.shutdown)
     registry.register(
         ToolSpec(
