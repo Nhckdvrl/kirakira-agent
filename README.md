@@ -33,13 +33,13 @@ in; the reference's heavier machinery (phase-graph kernel, snapshot hot reload,
 semantic-interest vectors) is deliberately deferred. Both are off by default and
 enabled under `[proactive]` in `config.toml`.
 
-Current milestone: the memory subsystem (`memory2` folded into a single `coremem`
-package; DB `coremem.db`) has the `DefaultMemoryEngine` ported and wired into the
-passive turn through a `MemoryServices` dependency-injection seam, plus an
-async-native model runtime. The engine carries retrieval once `[memory.embedding]`
-is configured (Stage 3); until then it falls back to the legacy lexical path.
+Current milestone: the memory subsystem runs on a ported `DefaultMemoryEngine`
+behind a `MemoryServices` seam (retrieval, explicit tools and proactive interest
+queries all go through it, with embeddings configured), the model runtime is
+async-native, and the plugin system has declarative specs, per-plugin generations
+with in-flight leases, hot reload, restart-free install and slot-ordered phases.
 Telegram's five channel source files and the fixed supervisor are byte-identical to
-the pinned Reference checkout. See docs/MEMORY_SYSTEM.md and docs/MVP_TO_CURRENT.md.
+the pinned Reference checkout. Start at docs/INDEX.md; open work is in docs/NOW.md.
 
 For the unified MVP-to-current roadmap and three-chain verification guide, see
 [docs/MVP_TO_CURRENT.md](docs/MVP_TO_CURRENT.md).

@@ -49,19 +49,18 @@ namespace、MessageBus、SessionManager、message-push 和 interrupt binding。�
 | **未实现** | 运行时能力不存在；即使有协议、文档或预留接口也不算完成 |
 
 评估按五个问题核对：谁触发、谁拥有状态、什么时候提交、失败后怎样恢复、是否有调用点和测试。
-代码行数只说明维护面，不说明覆盖率。当前 `kirakira_agent/` 约 2.3 万行 Python；Reference 排除
-tests/eval 后约 10.6 万行。数倍的维护面差异本身正说明两者不是同一运行时厚度。
+代码行数只说明维护面，不说明覆盖率。当前 `kirakira_agent/` 约 3.0 万行 Python；Reference 排除 tests/eval 后约 10.5 万行。数倍的维护面差异本身正说明两者不是同一运行时厚度。
 
 ## 3. 架构层面的根本差异
 
 | 维度 | Akashic Agent | Kirakira Agent | 判断 |
 | --- | --- | --- | --- |
 | 部署形态 | 多层 bootstrap/infra/control，带 app server、前端与监督能力 | setup/init + supervisor/gateway + 内置 Channel host；有 Memory2 M1 管理 API，无完整 app server/前端 | 进程启动已对齐，控制面仍更轻 |
-| 执行编排 | Turn/proactive lifecycle + slot DAG + side-effect abstraction | 显式顺序 pipeline，少量 phase hooks | 轻实现；固定流程清楚，第三方编排能力弱 |
-| 动态代际 | per-plugin generation、snapshot、lease、quiesce/rollback | 全局单一 snapshot，主要保护被动 turn | 被动基本对齐；主动未绑定 lease |
+| 执行编排 | Turn/proactive lifecycle + slot DAG + side-effect abstraction | `TurnResult` 副作用提交单点 + `phase.py` slot 拓扑排序 | 对齐；模块签名尚未迁到 frame |
+| 动态代际 | per-plugin generation、snapshot、lease、quiesce/rollback | 全局 snapshot + per-plugin 代际与租约、热重载换代 | 对齐；主动 tick 仍未绑定 lease |
 | Provider | 多后端抽象与更完整控制能力 | OpenAI-compatible 一类接口 | 范围收窄；forced tool choice 等能力缺失 |
 | 状态与持久化 | 统一 persistence 语义、更多 SQLite/恢复合同 | JSON/SQLite 分散在各模块 | 能运行，但一致性与恢复边界较弱 |
-| 扩展生态 | 插件市场、plugin job、proactive source、lifecycle factory | workspace 插件 + hook/MCP；主动 source 为进程内协议 | 被动可扩展，主动扩展仍是预留位 |
+| 扩展生态 | 插件市场、plugin job、proactive source、lifecycle factory | 声明式规格 + 作业/服务 host + 插件主动源编译 + 安装免重启 | 骨架对齐；缺包元数据与非 git 源 |
 | 控制面 | app server、control protocol、Dashboard、peer agent | 本进程命令与状态输出 + Memory2 健康/管理 API | 仅记忆控制面轻实现，其余未实现 |
 
 Kirakira 的“轻”有真实收益：主链路可在较少文件内追踪，开发和演示成本低，也避免过早复制未被
@@ -75,8 +74,8 @@ Kirakira 的“轻”有真实收益：主链路可在较少文件内追踪，�
 | --- | --- | --- | --- |
 | `bus/*`、被动 lane | `bus.py`、`event_bus.py` | 对齐 | 同 chat 保序、跨 session 并发、intercept/fanout |
 | `agent/looping/*` | `runtime.AgentLoop` | 轻实现 | 消费、session 串行、中断成立，类型与层次更少 |
-| `agent/core/passive_turn.py`、`turns/*` | `PassiveTurnPipeline` + `DefaultReasoner` | 轻实现 | streaming tool loop、retry、持久化成立；TurnResult/side effect 被内联 |
-| lifecycle phases | `lifecycle.py` + EventBus | 轻实现 | 7 个 phase context；无 slot import/export DAG |
+| `agent/core/passive_turn.py`、`turns/*` | `PassiveTurnPipeline` + `DefaultReasoner` + `turns.py` | 轻实现 | streaming tool loop、retry、持久化成立；TurnResult/副作用已抽出,主动与 Drift 已改用 |
+| lifecycle phases | `lifecycle.py` + EventBus + `phase.py` | 轻实现 | 7 个 phase context 与 slot 拓扑排序已有；模块间尚无 frame.slots 传递 |
 | prompting/context policy | `prompting/`、`context_builder.py`、`context_policy.py` | 对齐 | PromptBlock、预算预检、分级裁切、trace |
 | retrieval pipeline | `retrieval.py` | 对齐 | lexical/vector 多路召回、RRF、热度、注入预算 |
 | session manager/store | `session.py` | 轻实现 | JSON canonical + SQLite FTS；存储抽象更薄 |
@@ -117,7 +116,7 @@ Stage 4 切换。doctor 仍比对 `coremem/*.py` 与 `Reference/memory2/*.py` �
 | --- | --- | --- | --- |
 | energy/scheduler | `proactive/energy.py` + `_next_interval()` | 替代实现 | 衰减与双档间隔沿用 Reference；Kirakira 每轮把 `D_energy` 与 `D_recent` 软或，Reference 还可接 lifecycle/hazard 产出的 base score |
 | 三通道 contracts | `proactive/contracts.py` | 轻实现 | alert/content/context 语义保留，字段更少 |
-| MCP proactive sources | `ProactiveSource` + `FileInboxSource` | 替代实现 | fetch/ack 接口成立，但没有 MCP/plugin 自动装配与 generation |
+| MCP proactive sources | `ProactiveSource` + `FileInboxSource` + `mcp_sources.compile_proactive_sources` | 轻实现 | 插件声明已编译成真实源并进入 SourceRegistry；缺真实 MCP server 端到端证据 |
 | source gateway/reservoir | `SourceRegistry` + `ProactiveStateStore` | 轻实现 | 并发 fetch、稳定 id、未读/消费成立；恢复合同更弱 |
 | wake hazard/ranking | severity/newness 排序 | 轻实现 | 无累计 hazard、兴趣 embedding、turn prototype 校准 |
 | forced tool decision | `ProactiveJudge` 严格 JSON | 替代实现 | provider 通用，但结构保证更弱 |
@@ -143,7 +142,7 @@ Stage 4 切换。doctor 仍比对 `coremem/*.py` 与 `Reference/memory2/*.py` �
 1. **调度不是发送概率。** energy/base score 只选轮询间隔；是否发送由事件、冷却和 LLM 决定。
 2. **单进程发送闭环已打通，但还不是跨崩溃 exactly-once。** 主动链路会等待 Channel callback 成功，
    失败不写 Session/不消费事件；仍缺 durable outbox，进程在渠道成功与本地提交之间崩溃时可能重复发送。
-3. **文件源只是契约样例。** 没有生产级 RSS/日历/MCP source 的自动发现、凭据、健康检查和限流。
+3. **插件源已接线，但缺真实端到端证据。** 插件声明可编译成源并进入 registry；仍没有生产级 RSS/日历 source 的凭据、健康检查和限流。
 4. **主动链路没有代际租约。** 被动 turn 的 snapshot 经验尚未延伸到一次完整 proactive tick。
 5. **单目标配置。** 当前一套 `[proactive.target]` 对应一个 channel/chat，不是多用户调度器。
 
@@ -231,7 +230,7 @@ per-plugin generation、proactive phase DAG、多目标调度、app server、Das
 - Telegram/启动：固定 Reference 源码字节一致性测试、原始 Telegram utils 契约测试和真实
   Supervisor → gateway readiness 启动。
 
-当前完整离线回归为 `274 passed, 4 subtests passed`(含记忆引擎契约、DI 服务、异步 model runtime 测试)。
+当前完整离线回归为 `354 passed, 4 subtests passed`。
 
 现有测试证明“进程内闭环贯通到 Channel callback”，尚未证明：真实外部平台最终展示、渠道成功与
 consume/ACK 的跨崩溃原子性、进程恢复、多目标公平调度、插件热换代中的主动 tick 一致性，以及
