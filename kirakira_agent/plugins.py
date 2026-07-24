@@ -18,6 +18,17 @@ from uuid import uuid4
 
 from kirakira_agent.event_bus import EventBus
 from kirakira_agent.config import load_toml_config
+from kirakira_agent.plugin_jobs import PluginJobHost, PluginJobSpec
+from kirakira_agent.plugin_registry import plugin_registry
+from kirakira_agent.plugin_specs import (
+    ManagedServiceSpec,
+    McpServerSpec,
+    PluginReadinessContext,
+    PluginSemanticCheck,
+    ProactiveSourceSpec,
+    RegisteredProactiveSource,
+    proactive_source_key,
+)
 from kirakira_agent.plugin_manifest import (
     MANIFEST_NAME,
     PluginEnablement,
@@ -163,22 +174,18 @@ class DecoratedToolHook:
         return HookOutcome()
 
 
-@dataclass(frozen=True)
-class McpServerSpec:
-    """插件用代码声明的 MCP server；path 一律相对插件根解析。"""
-
-    name: str
-    command: tuple[str, ...]
-    env: Dict[str, str] = field(default_factory=dict)
-    cwd: str = "."
-
-
 class Plugin:
     api_version: int = 1
     name: str = ""
     version: str = ""
     desc: str = ""
+    author: str = ""
     ConfigModel: Any = None
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        # 照 Reference:插件类定义即注册,manager 不必扫描类名。
+        super().__init_subclass__(**kwargs)
+        plugin_registry.register_class(cls)
 
     async def initialize(self) -> None:
         return None
@@ -186,12 +193,37 @@ class Plugin:
     async def terminate(self) -> None:
         return None
 
+    # --- 语义检查:能力以运行时为准,检查不过的插件不进入可用代际 ---
+
+    def static_semantic_checks(self) -> List[PluginSemanticCheck]:
+        return []
+
+    async def readiness_semantic_checks(
+        self,
+        context: PluginReadinessContext,
+    ) -> List[PluginSemanticCheck]:
+        return []
+
     @classmethod
     def skill_roots(cls) -> tuple[str, ...]:
         return ()
 
     @classmethod
+    def drift_skill_roots(cls) -> tuple[str, ...]:
+        return ()
+
+    @classmethod
     def mcp_servers(cls) -> List[McpServerSpec]:
+        return []
+
+    @classmethod
+    def managed_services(cls) -> List[ManagedServiceSpec]:
+        return []
+
+    def proactive_sources(self) -> List[ProactiveSourceSpec]:
+        return []
+
+    def jobs(self) -> List[PluginJobSpec]:
         return []
 
     def before_turn_modules(self) -> List[object]:
@@ -397,6 +429,105 @@ class PluginManager:
         for plugin in self.instances:
             channels.extend(plugin.channels())
         return channels
+
+    # --- 声明式扩展点:插件只声明,runtime 负责编译与生命周期 ---
+
+    @property
+    def proactive_sources(self) -> List[RegisteredProactiveSource]:
+        """收集插件声明的主动数据源。编译成真实 source 由 proactive.mcp_sources 负责。"""
+
+        sources: List[RegisteredProactiveSource] = []
+        seen: set[str] = set()
+        for record in self.active:
+            if record.instance is None:
+                continue
+            for spec in record.instance.proactive_sources():
+                if not isinstance(spec, ProactiveSourceSpec):
+                    raise ValueError(
+                        "插件 %s.proactive_sources 返回值不是 ProactiveSourceSpec"
+                        % record.plugin_id
+                    )
+                registered = RegisteredProactiveSource(
+                    plugin_id=record.plugin_id, spec=spec
+                )
+                key = proactive_source_key(registered)
+                if key in seen:
+                    logger.warning("duplicate plugin proactive source skipped: %s", key)
+                    continue
+                seen.add(key)
+                sources.append(registered)
+        return sources
+
+    @property
+    def managed_services(self) -> List[tuple[str, ManagedServiceSpec]]:
+        """收集插件声明的长驻服务;命令/工作目录按插件根解析并做越界校验。"""
+
+        services: List[tuple[str, ManagedServiceSpec]] = []
+        seen: set[str] = set()
+        for record in self.active:
+            if record.instance is None:
+                continue
+            for spec in record.instance.managed_services():
+                if not spec.command:
+                    raise ValueError("plugin managed service has no command: %s" % spec.id)
+                key = "%s:%s" % (record.plugin_id, spec.id)
+                if key in seen:
+                    logger.warning("duplicate plugin managed service skipped: %s", key)
+                    continue
+                seen.add(key)
+                safe_child(record.root, spec.cwd or ".")
+                services.append((record.plugin_id, spec))
+        return services
+
+    def register_jobs(self, host: PluginJobHost) -> List[str]:
+        """把插件声明的作业注册进 host。host 拥有生命周期,插件不自己起 task。"""
+
+        keys: List[str] = []
+        for record in self.active:
+            if record.instance is None:
+                continue
+            for spec in record.instance.jobs():
+                if not isinstance(spec, PluginJobSpec):
+                    raise ValueError(
+                        "插件 %s.jobs 返回值不是 PluginJobSpec" % record.plugin_id
+                    )
+                keys.append(host.register(record.plugin_id, spec))
+        return keys
+
+    @property
+    def drift_skill_roots(self) -> List[Path]:
+        roots: List[Path] = []
+        for record in self.active:
+            if record.instance is None:
+                continue
+            roots.extend(resolve_skill_roots(record.root, record.instance.drift_skill_roots()))
+        return roots
+
+    async def semantic_checks(
+        self,
+        context: PluginReadinessContext | None = None,
+    ) -> Dict[str, List[PluginSemanticCheck]]:
+        """收集静态 + 就绪语义检查。失败项交由调用方决定是否降级/停用插件。"""
+
+        readiness = context or PluginReadinessContext(
+            workspace_tool_names=tuple(self.tool_registry.names())
+            if self.tool_registry is not None
+            else (),
+        )
+        report: Dict[str, List[PluginSemanticCheck]] = {}
+        for record in self.active:
+            if record.instance is None:
+                continue
+            checks = list(record.instance.static_semantic_checks())
+            try:
+                checks.extend(await record.instance.readiness_semantic_checks(readiness))
+            except Exception as exc:  # noqa: BLE001 - 检查自身失败也是一次失败结果
+                checks.append(
+                    PluginSemanticCheck.fail("readiness_error", str(exc))
+                )
+            if checks:
+                report[record.plugin_id] = checks
+        return report
 
     async def _initialize_plugin(self, name: str, root: Path, plugin: Plugin) -> None:
         # 能力声明在这里就校验，坏插件在自己的 try 内失败，不牵连其他插件。
