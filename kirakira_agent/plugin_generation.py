@@ -12,9 +12,13 @@
 from __future__ import annotations
 
 import hashlib
+import logging
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Literal, Tuple
+from typing import Any, Dict, Iterator, Literal, Tuple
+
+logger = logging.getLogger(__name__)
 
 from kirakira_agent.plugin_specs import (
     PluginSemanticCheck,
@@ -170,6 +174,29 @@ class PluginGenerationRegistry:
     @property
     def retired(self) -> Tuple[PluginGeneration, ...]:
         return tuple(self._retired)
+
+    @contextmanager
+    def lease_active(self) -> "Iterator[Tuple[PluginGeneration, ...]]":
+        """为一次在途 turn 持有当前所有活跃代际的租约。
+
+        turn 期间即使发生热重载,这些代际也只会转 retired 而不会被销毁,
+        turn 结束释放后才可 quiesce——这就是"换代不抽走在途能力"的实现。
+        """
+        leased: list[PluginGeneration] = []
+        try:
+            for generation in self.active:
+                generation.acquire()
+                leased.append(generation)
+            yield tuple(leased)
+        finally:
+            for generation in reversed(leased):
+                try:
+                    generation.release()
+                except RuntimeError:  # pragma: no cover - 释放期异常不掩盖主错误
+                    logger.warning(
+                        "plugin generation lease release failed: %s",
+                        generation.plugin_id,
+                    )
 
     def drain_quiescible(self) -> Tuple[PluginGeneration, ...]:
         """取出所有租约已归零的退休代际,交由调用方释放资源。"""

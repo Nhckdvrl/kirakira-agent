@@ -28,6 +28,7 @@ from kirakira_agent.models import OpenAICompatibleClient
 from kirakira_agent._compat.provider import ModelClientProvider
 from kirakira_agent.coremem.services import build_memory_services
 from kirakira_agent.plugins import PluginManager
+from kirakira_agent.plugin_watcher import PluginWatcher
 from kirakira_agent.proactive import ProactiveLoop
 from kirakira_agent.proactive.config import ProactiveConfig
 from kirakira_agent.proactive.sources import build_file_inbox_registry
@@ -546,6 +547,9 @@ async def build_runtime(
         skill_loader=context.skills,
     )
     await plugin_manager.load_all()
+    # 在途 turn 持有各插件当前代际租约;热重载换代不会抽走 turn 正在用的能力。
+    pipeline.plugin_generations = plugin_manager.generations
+    plugin_watcher = PluginWatcher(plugin_manager)
     reasoner.add_tool_hooks(plugin_manager.tool_hooks)
     reasoner.add_prompt_render_plugin_modules(plugin_manager.prompt_render_modules)
     reasoner.add_before_step_plugin_modules(plugin_manager.before_step_modules)
@@ -616,6 +620,7 @@ async def build_runtime(
         channel_host=channel_host,
         plugin_manager=plugin_manager,
         mcp_watcher=mcp_watcher,
+        plugin_watcher=plugin_watcher,
         scheduler=scheduler,
         subagents=subagents,
         proactive_loop=proactive_loop,

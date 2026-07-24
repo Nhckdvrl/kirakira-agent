@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import importlib.util
 import inspect
 import json
@@ -65,6 +66,14 @@ from kirakira_agent.tool_hooks import HookContext, HookOutcome, ToolHook
 from kirakira_agent.tools.registry import ToolRegistry, object_schema
 
 logger = logging.getLogger(__name__)
+
+
+def _path_content_digest(path: Path) -> bytes:
+    """按内容取指纹;文件缺失返回固定标记,让"删除"本身也算一次变化。"""
+    try:
+        return hashlib.sha256(path.read_bytes()).digest()
+    except OSError:
+        return b"\x00missing"
 
 
 def _source_plugin_name(source: str) -> str:
@@ -298,6 +307,7 @@ class PluginManager:
         self.job_host = PluginJobHost(event_bus=event_bus)
         # per-plugin 代际:换代时在途 turn 仍持旧代际租约,租约归零才 quiesce。
         self.generations = PluginGenerationRegistry()
+        self._reconcile_lock = asyncio.Lock()
         self._register_management_tools()
 
     async def load_all(self) -> None:
@@ -519,6 +529,78 @@ class PluginManager:
             contributions=self.capture_contributions(record),
             gate_result=gate,
         )
+
+    def watch_revision(self) -> str:
+        """所有插件源码 + 配置 + manifest 的内容指纹,用于热重载变化检测。"""
+
+        digest = hashlib.sha256()
+        digest.update(_path_content_digest(self._manifest_path()))
+        for root in discover_plugin_roots(self.plugin_dirs):
+            digest.update(root.name.encode("utf-8"))
+            digest.update(_path_content_digest(root / "plugin.py"))
+            digest.update(_path_content_digest(root / "config.toml"))
+        return digest.hexdigest()[:32]
+
+    async def reconcile_changed(self) -> List[Dict[str, Any]]:
+        """对 revision 变化的插件重建候选代际并换代。
+
+        逐插件独立处理:某个插件 gate 未过或构建失败时保留它的旧代际,
+        其余插件照常换代——半新状态只局限在单个插件,不污染整个运行时。
+        """
+
+        async with self._reconcile_lock:
+            results: List[Dict[str, Any]] = []
+            for record in self.active:
+                current = self.generations.current(record.plugin_id)
+                try:
+                    candidate = await self.build_generation(record)
+                except Exception as exc:  # noqa: BLE001 - 单插件失败不影响其余
+                    self.errors[record.plugin_id] = str(exc)
+                    logger.exception(
+                        "plugin generation rebuild failed: %s", record.plugin_id
+                    )
+                    results.append(
+                        {"plugin_id": record.plugin_id, "state": "build_failed"}
+                    )
+                    continue
+                if current is not None and candidate.revision == current.revision:
+                    continue
+                if not candidate.gate_result.passed:
+                    self.errors[record.plugin_id] = (
+                        "semantic gate failed: %s"
+                        % candidate.gate_result.failure_reason
+                    )
+                    logger.warning(
+                        "plugin hot reload gate failed, keeping old generation: %s",
+                        record.plugin_id,
+                    )
+                    results.append(
+                        {"plugin_id": record.plugin_id, "state": "gate_failed"}
+                    )
+                    continue
+                previous = self.generations.publish(candidate)
+                self.errors.pop(record.plugin_id, None)
+                results.append(
+                    {
+                        "plugin_id": record.plugin_id,
+                        "state": "swapped",
+                        "generation_id": candidate.generation_id,
+                        "previous_generation_id": (
+                            previous.generation_id if previous else None
+                        ),
+                        "previous_leases": previous.lease_count if previous else 0,
+                    }
+                )
+            # 换代后立刻回收租约已归零的旧代际;仍在服务的等下一轮。
+            drained = self.generations.drain_quiescible()
+            if drained:
+                results.append(
+                    {
+                        "state": "drained",
+                        "generation_ids": [gen.generation_id for gen in drained],
+                    }
+                )
+            return results
 
     async def publish_generations(self) -> List[str]:
         """为所有已装载插件发布代际;gate 未过的插件保留旧代际并记录错误。"""

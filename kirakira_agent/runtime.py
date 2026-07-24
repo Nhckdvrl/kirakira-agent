@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import contextmanager
 from collections import OrderedDict
 from datetime import datetime
 import inspect
@@ -856,6 +857,7 @@ class PassiveTurnPipeline:
         config: RuntimeConfig,
         snapshot_store: RuntimeSnapshotStore | None = None,
         memory_services: "MemoryServices | None" = None,
+        plugin_generations: Any = None,
     ) -> None:
         self.bus = bus
         self.event_bus = event_bus
@@ -868,6 +870,8 @@ class PassiveTurnPipeline:
         self.reasoner = reasoner
         self.config = config
         self.snapshot_store = snapshot_store
+        # 在途 turn 持有各插件当前代际的租约,热重载只换代不抽走能力。
+        self.plugin_generations = plugin_generations
         self._before_turn_modules: List[object] = []
         self._before_reasoning_modules: List[object] = []
         self._after_reasoning_modules: List[object] = []
@@ -885,25 +889,36 @@ class PassiveTurnPipeline:
     def add_after_turn_plugin_modules(self, modules: List[object]) -> None:
         self._after_turn_modules.extend(modules)
 
+    @contextmanager
+    def _plugin_generation_lease(self):
+        """未接插件代际注册表时是空操作,便于测试与最小构造。"""
+        registry = self.plugin_generations
+        if registry is None:
+            yield ()
+            return
+        with registry.lease_active() as leased:
+            yield leased
+
     async def run(self, msg: InboundMessage, key: str, *, dispatch_outbound: bool = True) -> OutboundMessage:
         """整个 turn 锁定一份能力快照，热重载不会在 turn 中途抽走工具。"""
         started_at = datetime.now().astimezone()
         started_clock = time.perf_counter()
         try:
-            if self.snapshot_store is None or self.snapshot_store.current is None:
-                outbound = await self._run_turn(
-                    msg, key, dispatch_outbound=dispatch_outbound
-                )
-            else:
-                lease = self.snapshot_store.lease()
-                token = bind_runtime_snapshot(lease)
-                try:
+            with self._plugin_generation_lease():
+                if self.snapshot_store is None or self.snapshot_store.current is None:
                     outbound = await self._run_turn(
                         msg, key, dispatch_outbound=dispatch_outbound
                     )
-                finally:
-                    reset_runtime_snapshot(token)
-                    await lease.release()
+                else:
+                    lease = self.snapshot_store.lease()
+                    token = bind_runtime_snapshot(lease)
+                    try:
+                        outbound = await self._run_turn(
+                            msg, key, dispatch_outbound=dispatch_outbound
+                        )
+                    finally:
+                        reset_runtime_snapshot(token)
+                        await lease.release()
         except asyncio.CancelledError:
             await self._finish_turn(
                 msg,
@@ -1482,6 +1497,7 @@ class CoreRuntime:
     channel_host: ChannelHost | None = None
     plugin_manager: Any | None = None
     mcp_watcher: Any | None = None
+    plugin_watcher: Any | None = None
     scheduler: Any | None = None
     subagents: Any | None = None
     proactive_loop: Any | None = None
@@ -1541,6 +1557,10 @@ class CoreRuntime:
             tasks.append(
                 asyncio.create_task(self.mcp_watcher.run(), name="workspace_mcp_watcher")
             )
+        if self.plugin_watcher is not None:
+            tasks.append(
+                asyncio.create_task(self.plugin_watcher.run(), name="plugin_watcher")
+            )
         return tasks
 
     async def stop_background(self, tasks: list[asyncio.Task[Any]]) -> None:
@@ -1553,6 +1573,8 @@ class CoreRuntime:
             self.proactive_loop.stop()
         if self.mcp_watcher is not None:
             self.mcp_watcher.stop()
+        if self.plugin_watcher is not None:
+            self.plugin_watcher.stop()
         drained = await self.bus.drain(timeout=10.0)
         if not drained:
             logger.warning("outbound queue did not drain before shutdown")
