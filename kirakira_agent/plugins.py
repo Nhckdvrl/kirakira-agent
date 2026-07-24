@@ -20,6 +20,7 @@ from kirakira_agent.event_bus import EventBus
 from kirakira_agent.config import load_toml_config
 from kirakira_agent.plugin_jobs import PluginJobHost, PluginJobSpec
 from kirakira_agent.plugin_registry import plugin_registry
+from kirakira_agent.plugin_services import PluginServiceHost
 from kirakira_agent.plugin_specs import (
     ManagedServiceSpec,
     McpServerSpec,
@@ -284,6 +285,9 @@ class PluginManager:
         self._terminated = False
         self._decorated_modules: Dict[str, List[tuple[int, object]]] = {}
         self._decorated_hooks: List[DecoratedToolHook] = []
+        # 声明式扩展点的运行时宿主:插件只声明,生命周期由 manager 持有。
+        self.service_host = PluginServiceHost()
+        self.job_host = PluginJobHost(event_bus=event_bus)
         self._register_management_tools()
 
     async def load_all(self) -> None:
@@ -318,11 +322,26 @@ class PluginManager:
         if self.mcp_publisher is not None:
             # 插件 MCP 与 workspace MCP 共用换代语义：整批发布，失败保持旧代际。
             await self.mcp_publisher.publish(self.mcp_servers, source="plugins")
+        # 托管服务整批启动:任一失败会回滚已起的进程,不留半启动状态。
+        self.service_host.bind_plugin_services(self.managed_services)
+        await self.service_host.start_all()
+        # 作业注册后统一由 host 驱动,插件不自己起 task。
+        self.register_jobs(self.job_host)
+        self.job_host.start()
 
     async def terminate_all(self) -> None:
         if self._terminated:
             return
         self._terminated = True
+        # 先停宿主再终止插件:作业/服务不应在插件已 terminate 后还被触发。
+        try:
+            await self.job_host.aclose()
+        except Exception:
+            logger.exception("plugin job host shutdown failed")
+        try:
+            await self.service_host.stop_all()
+        except Exception:
+            logger.exception("plugin managed service shutdown failed")
         for plugin in reversed(self.instances):
             try:
                 await plugin.terminate()
@@ -459,25 +478,43 @@ class PluginManager:
         return sources
 
     @property
-    def managed_services(self) -> List[tuple[str, ManagedServiceSpec]]:
-        """收集插件声明的长驻服务;命令/工作目录按插件根解析并做越界校验。"""
+    def managed_services(self) -> Dict[str, Dict[str, Dict[str, Any]]]:
+        """收集插件声明的长驻服务,规范化成 PluginServiceHost 需要的 binding。
 
-        services: List[tuple[str, ManagedServiceSpec]] = []
-        seen: set[str] = set()
+        命令与 cwd 都按插件根解析并做越界校验,和 MCP 声明同一套安全边界。
+        """
+
+        merged: Dict[str, Dict[str, Dict[str, Any]]] = {}
         for record in self.active:
             if record.instance is None:
                 continue
             for spec in record.instance.managed_services():
                 if not spec.command:
                     raise ValueError("plugin managed service has no command: %s" % spec.id)
-                key = "%s:%s" % (record.plugin_id, spec.id)
-                if key in seen:
-                    logger.warning("duplicate plugin managed service skipped: %s", key)
+                plugin_services = merged.setdefault(record.plugin_id, {})
+                if spec.id in plugin_services:
+                    logger.warning(
+                        "duplicate plugin managed service skipped: %s:%s",
+                        record.plugin_id,
+                        spec.id,
+                    )
                     continue
-                seen.add(key)
-                safe_child(record.root, spec.cwd or ".")
-                services.append((record.plugin_id, spec))
-        return services
+                env = dict(spec.env)
+                env.setdefault(
+                    "KIRAKIRA_PLUGIN_DATA_DIR",
+                    str(self.plugin_data_dir(record.plugin_id)),
+                )
+                plugin_services[spec.id] = {
+                    "command": [
+                        normalize_command_item(record.root, item)
+                        for item in spec.command
+                    ],
+                    "cwd": str(safe_child(record.root, spec.cwd or ".")),
+                    "env": env,
+                    "readiness_url": spec.readiness_url,
+                    "startup_timeout_seconds": spec.startup_timeout_seconds,
+                }
+        return merged
 
     def register_jobs(self, host: PluginJobHost) -> List[str]:
         """把插件声明的作业注册进 host。host 拥有生命周期,插件不自己起 task。"""

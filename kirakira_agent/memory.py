@@ -177,6 +177,7 @@ class MemoryRuntime:
         session_manager: SessionManager | None = None,
         *,
         engine: str = "auto",
+        shared_store: Any = None,
     ) -> None:
         self.workspace = workspace
         self.store = MarkdownMemoryStore(workspace)
@@ -189,18 +190,16 @@ class MemoryRuntime:
         self._locks: Dict[str, asyncio.Lock] = {}
         self.embedding_client: EmbeddingClient | None = None
         self.engine = self._resolve_engine(engine)
-        self.store2 = None
-        if self.engine == "coremem":
-            from kirakira_agent.coremem.store import MemoryStore2
-            self.store2 = MemoryStore2(str(self.store.root / "coremem.db"))
-        else:
-            # Legacy is retained only as an explicit rollback engine during M1.
+        # 引擎承重时由它拥有 coremem.db,这里共享同一连接,避免同库双开导致锁竞争。
+        self._owns_store2 = shared_store is None
+        self.store2 = shared_store
+        if self.store2 is None:
             try:
                 from kirakira_agent.coremem.store import MemoryStore2
 
                 self.store2 = MemoryStore2(str(self.store.root / "coremem.db"))
             except Exception as exc:  # pragma: no cover - rollback compatibility
-                logger.warning("legacy mirror unavailable: %s", exc)
+                logger.warning("structured store unavailable: %s", exc)
         self._load()
         if self.engine == "legacy":
             self._reconcile_store2_forgotten()
@@ -670,7 +669,8 @@ class MemoryRuntime:
                 task.cancel()
             if pending:
                 await asyncio.gather(*pending, return_exceptions=True)
-        if self.store2 is not None:
+        # 共享连接由引擎负责关闭,这里只关自己开的那个,避免提前关掉引擎在用的库。
+        if self.store2 is not None and self._owns_store2:
             self.store2.close()
 
     async def _consolidate_session(

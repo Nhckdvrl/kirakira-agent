@@ -385,10 +385,21 @@ async def build_runtime(
     bus = MessageBus()
     event_bus = EventBus()
     session_manager = SessionManager(workdir)
+    # 记忆 DI 缝先建立:引擎是 coremem.db 的唯一 owner,旧 MemoryRuntime 共享它的连接,
+    # 也让显式记忆工具(Stage 5)能在注册表构建时就拿到引擎。
+    memory_provider = ModelClientProvider(client)
+    memory_services = build_memory_services(
+        app_config=app_config,
+        workspace=workdir,
+        provider=memory_provider,
+        light_provider=memory_provider,
+        event_publisher=event_bus,
+    )
     memory = MemoryRuntime(
         workdir,
         session_manager=session_manager,
         engine=str(config_value(app_config, "memory", "engine", default="auto")),
+        shared_store=memory_services.store,
     )
     embedding_model = os.getenv("EMBEDDING_MODEL_ID") or str(
         config_value(app_config, "memory", "embedding", "model", default="")
@@ -407,15 +418,6 @@ async def build_runtime(
                 )
             ),
         )
-    # 记忆 DI 缝要早于工具注册表建立:显式记忆工具也要走引擎(Stage 5)。
-    memory_provider = ModelClientProvider(client)
-    memory_services = build_memory_services(
-        app_config=app_config,
-        workspace=workdir,
-        provider=memory_provider,
-        light_provider=memory_provider,
-        event_publisher=event_bus,
-    )
     registry = build_default_registry(
         workdir,
         memory=memory,

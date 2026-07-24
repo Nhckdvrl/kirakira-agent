@@ -23,9 +23,15 @@ from kirakira_agent.coremem.plugin import DisabledMemoryEngine
 
 @dataclass
 class MemoryServices:
-    """runtime 消费的记忆服务包。只暴露引擎接口,不暴露实现。"""
+    """runtime 消费的记忆服务包。只暴露引擎接口,不暴露实现。
+
+    `store` 是引擎拥有的 MemoryStore2。暴露它不是为了让业务代码绕过引擎,而是让
+    Dashboard 与过渡期的旧 MemoryRuntime **共享同一个 SQLite 连接**——否则同一个
+    coremem.db 会被打开两次,产生锁竞争与不一致视图。引擎未承重时为 None。
+    """
 
     engine: MemoryEngine | None = None
+    store: Any = None
 
 
 def memory_engine_enabled(config: Config) -> bool:
@@ -74,4 +80,5 @@ def build_memory_services(
         http_resources=http_resources,
         event_publisher=event_publisher,
     )
-    return MemoryServices(engine=engine)
+    # 引擎是 coremem.db 的唯一 owner;把它的 store 一并暴露,过渡期消费者共享同一连接。
+    return MemoryServices(engine=engine, store=getattr(engine, "_v2_store", None))
