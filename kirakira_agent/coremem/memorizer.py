@@ -8,13 +8,13 @@ import logging
 import re
 from collections.abc import Mapping
 
-from kirakira_agent.memory2.embedder import Embedder
-from kirakira_agent.memory2.rule_schema import (
+from kirakira_agent.coremem.embedder import Embedder
+from kirakira_agent.coremem.rule_schema import (
     parse_procedure_steps,
     parse_procedure_tool_requirement,
     resolve_procedure_rule_schema,
 )
-from kirakira_agent.memory2.store import MemoryHit, MemoryStore2, memory_hit_score
+from kirakira_agent.coremem.store import MemoryHit, MemoryStore2, memory_hit_score
 
 logger = logging.getLogger(__name__)
 

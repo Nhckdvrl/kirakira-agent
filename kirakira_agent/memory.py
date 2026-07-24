@@ -190,15 +190,15 @@ class MemoryRuntime:
         self.embedding_client: EmbeddingClient | None = None
         self.engine = self._resolve_engine(engine)
         self.store2 = None
-        if self.engine == "memory2":
-            from kirakira_agent.memory2.store import MemoryStore2
-            self.store2 = MemoryStore2(str(self.store.root / "memory2.db"))
+        if self.engine == "coremem":
+            from kirakira_agent.coremem.store import MemoryStore2
+            self.store2 = MemoryStore2(str(self.store.root / "coremem.db"))
         else:
             # Legacy is retained only as an explicit rollback engine during M1.
             try:
-                from kirakira_agent.memory2.store import MemoryStore2
+                from kirakira_agent.coremem.store import MemoryStore2
 
-                self.store2 = MemoryStore2(str(self.store.root / "memory2.db"))
+                self.store2 = MemoryStore2(str(self.store.root / "coremem.db"))
             except Exception as exc:  # pragma: no cover - rollback compatibility
                 logger.warning("legacy mirror unavailable: %s", exc)
         self._load()
@@ -267,14 +267,14 @@ class MemoryRuntime:
 
     def _resolve_engine(self, requested: str) -> str:
         explicit = os.getenv("KIRAKIRA_MEMORY_ENGINE", requested).strip().lower()
-        if explicit in {"legacy", "memory2"}:
+        if explicit in {"legacy", "coremem"}:
             return explicit
         if explicit not in {"", "auto"}:
-            raise ValueError("memory engine 必须是 auto/legacy/memory2")
+            raise ValueError("memory engine 必须是 auto/legacy/coremem")
         if self.owner_path.exists():
             payload = json.loads(self.owner_path.read_text(encoding="utf-8"))
             owner = str(payload.get("owner") or "").strip().lower()
-            if owner in {"legacy", "memory2"}:
+            if owner in {"legacy", "coremem"}:
                 return owner
             raise RuntimeError("structured-owner.json owner 无效")
         # Pre-M1 workspaces continue on the old owner until an explicit staged
@@ -297,7 +297,7 @@ class MemoryRuntime:
         source_ref: str = "",
         memory_type: str = "requested_memory",
     ) -> MemoryRecord:
-        if self.engine == "memory2":
+        if self.engine == "coremem":
             return self._memorize_memory2(content, source_ref, memory_type)
         with self._record_lock:
             content = content.strip()
@@ -340,7 +340,7 @@ class MemoryRuntime:
             raise ValueError("memory content is empty")
         canonical_type, extra = self._canonical_memory_type(memory_type)
         if canonical_type == "procedure":
-            from kirakira_agent.memory2.rule_schema import build_procedure_rule_schema
+            from kirakira_agent.coremem.rule_schema import build_procedure_rule_schema
 
             extra["rule_schema"] = build_procedure_rule_schema(summary)
         embedding = self._embed_for_store(summary)
@@ -365,7 +365,7 @@ class MemoryRuntime:
     ) -> List[MemoryRecord]:
         """按 type/时间过滤出候选集合；排序交给各 lane。"""
 
-        if self.engine == "memory2":
+        if self.engine == "coremem":
             self._load()
         allowed_types = {
             self._canonical_memory_type(item)[0]
@@ -494,7 +494,7 @@ class MemoryRuntime:
         return selected, trace
 
     def forget(self, ids: List[str]) -> List[str]:
-        if self.engine == "memory2":
+        if self.engine == "coremem":
             if self.store2 is None:
                 raise RuntimeError("Memory2 store 未初始化")
             active = {
@@ -523,7 +523,7 @@ class MemoryRuntime:
         return forgotten
 
     def list_records(self, *, include_forgotten: bool = False) -> List[Dict[str, object]]:
-        if self.engine == "memory2":
+        if self.engine == "coremem":
             self._load()
         with self._record_lock:
             records = [
@@ -541,7 +541,7 @@ class MemoryRuntime:
         content: str | None = None,
         memory_type: str | None = None,
     ) -> bool:
-        if self.engine == "memory2":
+        if self.engine == "coremem":
             if self.store2 is None:
                 raise RuntimeError("Memory2 store 未初始化")
             canonical_type = None
@@ -865,7 +865,7 @@ class MemoryRuntime:
         return ""
 
     def _load(self) -> None:
-        if self.engine == "memory2":
+        if self.engine == "coremem":
             self._load_from_store2()
             return
         if not self.items_path.exists():
@@ -929,7 +929,7 @@ class MemoryRuntime:
         self._records = records
 
     def _save(self) -> None:
-        if self.engine == "memory2":
+        if self.engine == "coremem":
             raise RuntimeError("Memory2 模式禁止写 items.json")
         _atomic_write(
             self.items_path,
@@ -1014,7 +1014,7 @@ class MemoryRuntime:
 
     def _forget_session_memories(self, session_key: str) -> None:
         prefix = session_key + ":"
-        if self.engine == "memory2":
+        if self.engine == "coremem":
             if self.store2 is None:
                 raise RuntimeError("Memory2 store 未初始化")
             items, _ = self.store2.list_items_for_dashboard(

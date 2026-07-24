@@ -42,6 +42,12 @@ from kirakira_agent.lifecycle import (
     TurnState,
 )
 from kirakira_agent.memory import MemoryRuntime
+from kirakira_agent.coremem.engine import (
+    MemoryCapability as _CoreMemCapability,
+    MemoryQuery as _CoreMemQuery,
+    MemoryScope as _CoreMemScope,
+)
+from kirakira_agent.coremem.services import MemoryServices
 from kirakira_agent.models.base import ContentSafetyError, ContextLengthError, ModelClient
 from kirakira_agent.schema import ModelResponse, ToolCall, ToolResult, assistant_message_from_response, tool_result_message
 from kirakira_agent.session import SessionManager
@@ -624,36 +630,59 @@ class DefaultReasoner:
     ) -> ModelResponse:
         timeout = max(1.0, float(self.config.model_timeout_seconds))
         stream_method = getattr(self.model_client, "complete_stream", None)
+        acomplete = getattr(self.model_client, "acomplete", None)
         try:
             if not self.config.stream or not callable(stream_method):
-                return await asyncio.wait_for(
-                    asyncio.to_thread(
+                # 异步原生客户端直接 await；同步 stub 回退到 to_thread(complete)。
+                if callable(acomplete):
+                    call = acomplete(
+                        messages,
+                        specs,
+                        "",
+                        self.config.model,
+                        self.config.max_tokens,
+                    )
+                else:
+                    call = asyncio.to_thread(
                         self.model_client.complete,
                         messages,
                         specs,
                         "",
                         self.config.model,
                         self.config.max_tokens,
-                    ),
-                    timeout=timeout,
-                )
+                    )
+                return await asyncio.wait_for(call, timeout=timeout)
             queue: asyncio.Queue[Tuple[str, str]] = asyncio.Queue()
             loop = asyncio.get_running_loop()
 
             def on_delta(content: str, reasoning: str) -> None:
                 loop.call_soon_threadsafe(queue.put_nowait, (content, reasoning))
 
-            worker = asyncio.create_task(
-                asyncio.to_thread(
-                    stream_method,
-                    messages,
-                    specs,
-                    "",
-                    self.config.model,
-                    self.config.max_tokens,
-                    on_delta,
+            astream = getattr(self.model_client, "acomplete_stream", None)
+            if callable(astream):
+                # 异步原生流:worker 直接在事件循环上跑,on_delta 从循环线程回投 queue。
+                worker = asyncio.create_task(
+                    astream(
+                        messages,
+                        specs,
+                        "",
+                        self.config.model,
+                        self.config.max_tokens,
+                        on_delta,
+                    )
                 )
-            )
+            else:
+                worker = asyncio.create_task(
+                    asyncio.to_thread(
+                        stream_method,
+                        messages,
+                        specs,
+                        "",
+                        self.config.model,
+                        self.config.max_tokens,
+                        on_delta,
+                    )
+                )
             deadline = loop.time() + timeout
             while not worker.done() or not queue.empty():
                 remaining = deadline - loop.time()
@@ -807,6 +836,13 @@ class DefaultReasoner:
         await _run_plugin_modules(self._after_step_modules, ctx)
 
 
+def _engine_can_retrieve(engine: object) -> bool:
+    """引擎是否具备真实上下文检索能力。DisabledMemoryEngine 能力集为空,走旧词法路径。"""
+    descriptor = getattr(engine, "DESCRIPTOR", None)
+    capabilities = getattr(descriptor, "capabilities", frozenset())
+    return _CoreMemCapability.RETRIEVE_CONTEXT_BLOCK in capabilities
+
+
 class PassiveTurnPipeline:
     def __init__(
         self,
@@ -819,11 +855,15 @@ class PassiveTurnPipeline:
         reasoner: DefaultReasoner,
         config: RuntimeConfig,
         snapshot_store: RuntimeSnapshotStore | None = None,
+        memory_services: "MemoryServices | None" = None,
     ) -> None:
         self.bus = bus
         self.event_bus = event_bus
         self.session_manager = session_manager
         self.memory = memory
+        # Phase 2 DI 缝:runtime 只认识 MemoryServices.engine,不认识具体实现。
+        # 未注入服务包时(多数测试)回退到旧 MemoryRuntime.retrieve 的词法路径。
+        self.memory_services = memory_services
         self.tools = tools
         self.reasoner = reasoner
         self.config = config
@@ -966,34 +1006,55 @@ class PassiveTurnPipeline:
             max_messages=self.config.history_window,
             start_index=session.last_consolidated,
         )
-        retrieval_result = (
-            None
-            if msg.metadata.get("skip_memory_retrieval")
-            else await asyncio.to_thread(
-                self.memory.retrieve,
-                RetrievalRequest(
-                    query=msg.content,
-                    session_key=key,
-                    channel=msg.context_channel,
-                    chat_id=msg.context_chat_id,
-                    history=session.get_history(
-                        max_messages=max(1, len(session.messages))
-                    ),
-                    session_metadata=dict(session.metadata),
-                    timestamp=msg.timestamp,
-                ),
+        retrieved = ""
+        if not msg.metadata.get("skip_memory_retrieval"):
+            engine = (
+                self.memory_services.engine if self.memory_services is not None else None
             )
-        )
-        retrieved = retrieval_result.block if retrieval_result is not None else ""
-        if retrieval_result is not None and retrieval_result.trace is not None:
-            trace = retrieval_result.trace
-            state.extra_metadata["retrieval_trace"] = {
-                "lanes": dict(trace.lanes),
-                "fused": trace.fused,
-                "injected": trace.injected,
-                "used_vector": trace.used_vector,
-                "truncated": trace.truncated,
-            }
+            if engine is not None and _engine_can_retrieve(engine):
+                # Phase 2:检索走 DI 服务包里的引擎(异步原生,无 to_thread)。
+                result = await engine.query(
+                    _CoreMemQuery(
+                        text=msg.content,
+                        intent="context",
+                        scope=_CoreMemScope(
+                            session_key=key,
+                            channel=msg.context_channel,
+                            chat_id=msg.context_chat_id,
+                        ),
+                    )
+                )
+                retrieved = result.text_block
+                state.extra_metadata["retrieval_trace"] = {
+                    "engine": result.trace.get("engine"),
+                    "intent": "context",
+                    "records": len(result.records),
+                }
+            else:
+                retrieval_result = await asyncio.to_thread(
+                    self.memory.retrieve,
+                    RetrievalRequest(
+                        query=msg.content,
+                        session_key=key,
+                        channel=msg.context_channel,
+                        chat_id=msg.context_chat_id,
+                        history=session.get_history(
+                            max_messages=max(1, len(session.messages))
+                        ),
+                        session_metadata=dict(session.metadata),
+                        timestamp=msg.timestamp,
+                    ),
+                )
+                retrieved = retrieval_result.block if retrieval_result is not None else ""
+                if retrieval_result is not None and retrieval_result.trace is not None:
+                    trace = retrieval_result.trace
+                    state.extra_metadata["retrieval_trace"] = {
+                        "lanes": dict(trace.lanes),
+                        "fused": trace.fused,
+                        "injected": trace.injected,
+                        "used_vector": trace.used_vector,
+                        "truncated": trace.truncated,
+                    }
         skill_mentions = self._collect_skill_mentions(msg.content)
         if before_turn is None:
             before_turn = BeforeTurnCtx(

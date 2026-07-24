@@ -19,8 +19,8 @@ from typing import Any, Iterator
 from uuid import uuid4
 
 from kirakira_agent._compat.json_store import atomic_write_text
-from kirakira_agent.memory2.rule_schema import build_procedure_rule_schema
-from kirakira_agent.memory2.store import MemoryStore2
+from kirakira_agent.coremem.rule_schema import build_procedure_rule_schema
+from kirakira_agent.coremem.store import MemoryStore2
 
 REFERENCE_PIN = "012e37c8b51df045353972bb551d8e868ab52455"
 CANONICAL_TYPES = {"procedure", "preference", "event", "profile"}
@@ -108,7 +108,9 @@ def _sqlite_report(path: Path) -> dict[str, Any]:
 
 
 def _reference_alignment(root: Path) -> dict[str, Any]:
-    local_dir = root / "kirakira_agent" / "memory2"
+    # coremem 现在同时容纳 Reference 的 core.memory 协议层与 memory2 算法零件；
+    # 漂移审计只覆盖有 Reference/memory2 对应文件的算法零件,其余 coremem 文件自动跳过。
+    local_dir = root / "kirakira_agent" / "coremem"
     reference_dir = root / "Reference" / "memory2"
     matched: list[str] = []
     drifted: list[str] = []
@@ -117,8 +119,11 @@ def _reference_alignment(root: Path) -> dict[str, Any]:
         if not reference.exists():
             continue
         text = local.read_text(encoding="utf-8")
-        text = text.replace("from kirakira_agent.memory2.", "from memory2.")
+        # 先把源自 core.memory 的子模块还原,再把其余 coremem 兄弟零件还原成 memory2.*；
+        # 顺序不能颠倒,否则 events/utils 会被通用规则误判成 memory2.*。
         text = text.replace("from kirakira_agent.coremem.events", "from core.memory.events")
+        text = text.replace("from kirakira_agent.coremem.utils", "from core.memory.utils")
+        text = text.replace("from kirakira_agent.coremem.", "from memory2.")
         text = text.replace("from kirakira_agent._compat.net_http", "from core.net.http")
         text = text.replace("from kirakira_agent._compat.provider", "from agent.provider")
         text = text.replace(
@@ -140,7 +145,7 @@ def _reference_alignment(root: Path) -> dict[str, Any]:
         "checked": len(matched) + len(drifted),
         "matched_after_namespace_adapter_normalization": matched,
         "drifted": drifted,
-        "boundary_adapters": ["memory2/store.py:replace_item_content"],
+        "boundary_adapters": ["coremem/store.py:replace_item_content"],
     }
 
 
@@ -149,7 +154,7 @@ def doctor(workspace: Path, *, project_root: Path | None = None) -> dict[str, An
     root = (project_root or Path(__file__).resolve().parents[1]).resolve()
     memory_dir = workspace / "memory"
     items_path = memory_dir / "items.json"
-    db_path = memory_dir / "memory2.db"
+    db_path = memory_dir / "coremem.db"
     owner_path = memory_dir / "structured-owner.json"
     dependencies = {
         name: importlib.util.find_spec(name) is not None
@@ -157,10 +162,10 @@ def doctor(workspace: Path, *, project_root: Path | None = None) -> dict[str, An
     }
     modules: dict[str, str] = {}
     for name in (
-        "kirakira_agent.memory2.store",
-        "kirakira_agent.memory2.retriever",
-        "kirakira_agent.memory2.memorizer",
-        "kirakira_agent.memory2.post_response_worker",
+        "kirakira_agent.coremem.store",
+        "kirakira_agent.coremem.retriever",
+        "kirakira_agent.coremem.memorizer",
+        "kirakira_agent.coremem.post_response_worker",
         "kirakira_agent.coremem.markdown",
     ):
         try:
@@ -215,7 +220,7 @@ def doctor(workspace: Path, *, project_root: Path | None = None) -> dict[str, An
             "items": len(legacy_items),
             "active": sum(str(item.get("status") or "active") == "active" for item in legacy_items),
         },
-        "memory2": _sqlite_report(db_path),
+        "coremem": _sqlite_report(db_path),
         "embedding_configured": embedding_configured,
         "markdown": markdown,
     }
@@ -224,7 +229,7 @@ def doctor(workspace: Path, *, project_root: Path | None = None) -> dict[str, An
         and all(value == "ok" for value in modules.values())
         and reference.get("matches_pin") is True
         and not report["source_alignment"]["drifted"]
-        and (report["memory2"]["integrity"] in {"ok", "missing"})
+        and (report["coremem"]["integrity"] in {"ok", "missing"})
         and all(markdown.values())
     )
     return report
@@ -238,7 +243,7 @@ def backup(workspace: Path, *, label: str = "manual") -> dict[str, Any]:
     files: dict[str, bool] = {}
     for name in (
         "items.json",
-        "memory2.db",
+        "coremem.db",
         "structured-owner.json",
         "MEMORY.md",
         "SELF.md",
@@ -248,7 +253,7 @@ def backup(workspace: Path, *, label: str = "manual") -> dict[str, Any]:
         source = memory_dir / name
         files[name] = source.exists()
         if source.exists():
-            if name == "memory2.db":
+            if name == "coremem.db":
                 source_db = sqlite3.connect(str(source))
                 target_db = sqlite3.connect(str(target / name))
                 try:
@@ -274,7 +279,7 @@ def backup(workspace: Path, *, label: str = "manual") -> dict[str, Any]:
 
 @contextmanager
 def _offline_lock(memory_dir: Path) -> Iterator[None]:
-    path = memory_dir / ".memory2-migration.lock"
+    path = memory_dir / ".coremem-migration.lock"
     try:
         fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
     except FileExistsError as exc:
@@ -362,13 +367,13 @@ def migrate(workspace: Path) -> dict[str, Any]:
     memory_dir = workspace / "memory"
     memory_dir.mkdir(parents=True, exist_ok=True)
     items_path = memory_dir / "items.json"
-    db_path = memory_dir / "memory2.db"
+    db_path = memory_dir / "coremem.db"
     owner_path = memory_dir / "structured-owner.json"
     _assert_service_offline(workspace)
     with _offline_lock(memory_dir):
         if owner_path.exists():
             current_owner = json.loads(owner_path.read_text(encoding="utf-8"))
-            if current_owner.get("owner") == "memory2":
+            if current_owner.get("owner") == "coremem":
                 raise RuntimeError("workspace 已发布为 Memory2 owner；拒绝重复迁移")
         items = _read_items(items_path)
         snapshot = backup(workspace, label="pre-m1")
@@ -390,7 +395,7 @@ def migrate(workspace: Path) -> dict[str, Any]:
         if len(dims) > 1:
             raise ValueError(f"历史 embedding 维度不一致: {sorted(dims)}")
         vec_dim = next(iter(dims), 1024)
-        staging = memory_dir / f".memory2.db.staging-{uuid4().hex}"
+        staging = memory_dir / f".coremem.db.staging-{uuid4().hex}"
         store = MemoryStore2(staging, vec_dim=vec_dim)
         try:
             with store._lock:
@@ -446,7 +451,7 @@ def migrate(workspace: Path) -> dict[str, Any]:
             legacy_archive = archive.name
         _strip_legacy_managed_markdown(memory_dir / "MEMORY.md")
         owner = {
-            "owner": "memory2",
+            "owner": "coremem",
             "reference_pin": REFERENCE_PIN,
             "published_at": datetime.now(timezone.utc).isoformat(),
             "migration_backup": backup_id,
@@ -477,10 +482,10 @@ def verify(workspace: Path, *, backup_id: str = "") -> dict[str, Any]:
     expected: list[dict[str, Any]] = []
     if selected_backup:
         expected = _read_items(memory_dir / "backups" / selected_backup / "items.json")
-    db_report = _sqlite_report(memory_dir / "memory2.db")
+    db_report = _sqlite_report(memory_dir / "coremem.db")
     mismatches: list[str] = []
     if expected:
-        conn = sqlite3.connect(f"file:{(memory_dir / 'memory2.db').resolve()}?mode=ro", uri=True)
+        conn = sqlite3.connect(f"file:{(memory_dir / 'coremem.db').resolve()}?mode=ro", uri=True)
         try:
             rows = {
                 str(row[0]): row
@@ -507,7 +512,7 @@ def verify(workspace: Path, *, backup_id: str = "") -> dict[str, Any]:
         finally:
             conn.close()
     ok = bool(
-        owner.get("owner") == "memory2"
+        owner.get("owner") == "coremem"
         and db_report.get("integrity") == "ok"
         and int(db_report.get("items") or 0) >= len(expected)
         and not mismatches
@@ -542,13 +547,13 @@ def clear(
         sessions_dir = workspace / "sessions"
         if include_sessions and sessions_dir.exists():
             shutil.copytree(sessions_dir, backup_dir / "sessions")
-        db_path = memory_dir / "memory2.db"
+        db_path = memory_dir / "coremem.db"
         deleted = 0
         if db_path.exists():
             owner = (
                 json.loads(owner_path.read_text(encoding="utf-8"))
                 if owner_path.exists()
-                else {"owner": "memory2"}
+                else {"owner": "coremem"}
             )
             vec_dim = int(owner.get("embedding_dim") or 1024)
             store = MemoryStore2(db_path, vec_dim=vec_dim)
@@ -603,11 +608,11 @@ def clear(
         current_owner = (
             json.loads(owner_path.read_text(encoding="utf-8"))
             if owner_path.exists()
-            else {"owner": "memory2", "reference_pin": REFERENCE_PIN}
+            else {"owner": "coremem", "reference_pin": REFERENCE_PIN}
         )
         current_owner.update(
             {
-                "owner": "memory2",
+                "owner": "coremem",
                 "items": 0,
                 "cleared_at": datetime.now(timezone.utc).isoformat(),
                 "clear_backup": snapshot["backup_id"],
@@ -655,12 +660,12 @@ def rollback(workspace: Path, *, backup_id: str) -> dict[str, Any]:
     _assert_service_offline(workspace)
     with _offline_lock(memory_dir):
         safety = backup(workspace, label="pre-rollback")
-        for name in ("items.json", "memory2.db", "MEMORY.md", "SELF.md", "PENDING.md", "RECENT_CONTEXT.md"):
+        for name in ("items.json", "coremem.db", "MEMORY.md", "SELF.md", "PENDING.md", "RECENT_CONTEXT.md"):
             target = memory_dir / name
             backed = bool((manifest.get("files") or {}).get(name))
             if backed:
                 shutil.copy2(source / name, target)
-            elif name in {"items.json", "memory2.db"} and target.exists():
+            elif name in {"items.json", "coremem.db"} and target.exists():
                 target.unlink()
         atomic_write_text(
             memory_dir / "structured-owner.json",

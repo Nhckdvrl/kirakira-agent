@@ -5,7 +5,7 @@ from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
-    from kirakira_agent.memory2.hyde_enhancer import HyDEAugmentResult, HyDEEnhancer
+    from kirakira_agent.coremem.hyde_enhancer import HyDEAugmentResult, HyDEEnhancer
 
 async def retrieve_procedure_items(
     memory: Any,

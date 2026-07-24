@@ -25,6 +25,8 @@ from kirakira_agent.event_bus import EventBus
 from kirakira_agent.memory import MemoryRuntime
 from kirakira_agent.mcp import McpCatalogPublisher, WorkspaceMcpAdmin, WorkspaceMcpWatcher
 from kirakira_agent.models import OpenAICompatibleClient
+from kirakira_agent._compat.provider import ModelClientProvider
+from kirakira_agent.coremem.services import build_memory_services
 from kirakira_agent.plugins import PluginManager
 from kirakira_agent.proactive import ProactiveLoop
 from kirakira_agent.proactive.config import ProactiveConfig
@@ -502,6 +504,16 @@ async def build_runtime(
         bus=bus,
         tools=registry,
     )
+    # Phase 2 记忆 DI 缝:配了 [memory.embedding] → DefaultMemoryEngine 承重检索;
+    # 否则 DisabledMemoryEngine,pipeline 回退旧词法路径。引擎自订阅 TurnCommitted 做对话后摄入。
+    memory_provider = ModelClientProvider(client)
+    memory_services = build_memory_services(
+        app_config=app_config,
+        workspace=workdir,
+        provider=memory_provider,
+        light_provider=memory_provider,
+        event_publisher=event_bus,
+    )
     pipeline = PassiveTurnPipeline(
         bus=bus,
         event_bus=event_bus,
@@ -511,6 +523,7 @@ async def build_runtime(
         reasoner=reasoner,
         config=config,
         snapshot_store=snapshot_store,
+        memory_services=memory_services,
     )
     loop = AgentLoop(bus=bus, pipeline=pipeline)
     plugin_manager = PluginManager(

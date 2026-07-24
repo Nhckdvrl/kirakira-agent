@@ -11,8 +11,8 @@ import logging
 import re
 from typing import cast
 
-from kirakira_agent.memory2.store import MemoryHit, MemoryStore2, memory_hit_score
-from kirakira_agent.memory2.embedder import Embedder
+from kirakira_agent.coremem.store import MemoryHit, MemoryStore2, memory_hit_score
+from kirakira_agent.coremem.embedder import Embedder
 
 logger = logging.getLogger(__name__)
 

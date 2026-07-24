@@ -1,5 +1,6 @@
 """Kirakira Agent learning harness module."""
 
+import asyncio
 import json
 import os
 import time
@@ -65,51 +66,75 @@ class OpenAICompatibleClient:
     ) -> ModelResponse:
         payload = self._build_payload(messages, tools, system, model, max_tokens)
         payload["stream"] = True
-        text_parts: List[str] = []
-        reasoning_parts: List[str] = []
-        raw_calls: Dict[int, Dict[str, str]] = {}
-        finish_reason = ""
-        chunks: List[JsonDict] = []
+        state = self._new_stream_state()
         with self._open(payload) as response:
             for raw_line in response:
                 line = raw_line.decode("utf-8", errors="replace").strip()
-                if not line or line.startswith(":") or not line.startswith("data:"):
-                    continue
-                data = line[5:].strip()
-                if data == "[DONE]":
+                if not self._consume_stream_line(line, state, on_delta):
                     break
-                try:
-                    chunk = json.loads(data)
-                except ValueError:
-                    continue
-                chunks.append(chunk)
-                choices = chunk.get("choices") or []
-                if not choices:
-                    continue
-                choice = choices[0]
-                delta = choice.get("delta") or {}
-                content_delta = str(delta.get("content") or "")
-                reasoning_delta = str(delta.get("reasoning_content") or "")
-                if content_delta:
-                    text_parts.append(content_delta)
-                if reasoning_delta:
-                    reasoning_parts.append(reasoning_delta)
-                if on_delta and (content_delta or reasoning_delta):
-                    on_delta(content_delta, reasoning_delta)
-                for item in delta.get("tool_calls") or []:
-                    index = int(item.get("index") or 0)
-                    current = raw_calls.setdefault(
-                        index, {"id": "", "name": "", "arguments": ""}
-                    )
-                    if item.get("id"):
-                        current["id"] = str(item["id"])
-                    function = item.get("function") or {}
-                    current["name"] += str(function.get("name") or "")
-                    current["arguments"] += str(function.get("arguments") or "")
-                finish_reason = str(choice.get("finish_reason") or finish_reason)
+        return self._finalize_stream(state)
+
+    # SSE 流解析在同步 complete_stream 与异步 acomplete_stream 之间共用,保证两条路一致。
+    def _new_stream_state(self) -> Dict[str, Any]:
+        return {
+            "text_parts": [],
+            "reasoning_parts": [],
+            "raw_calls": {},
+            "finish_reason": "",
+            "chunks": [],
+        }
+
+    def _consume_stream_line(
+        self,
+        line: str,
+        state: Dict[str, Any],
+        on_delta: Optional[Callable[[str, str], None]],
+    ) -> bool:
+        """处理一行(已 strip 的)SSE。返回 False 表示流结束([DONE])。"""
+        if not line or line.startswith(":") or not line.startswith("data:"):
+            return True
+        data = line[5:].strip()
+        if data == "[DONE]":
+            return False
+        try:
+            chunk = json.loads(data)
+        except ValueError:
+            return True
+        state["chunks"].append(chunk)
+        choices = chunk.get("choices") or []
+        if not choices:
+            return True
+        choice = choices[0]
+        delta = choice.get("delta") or {}
+        content_delta = str(delta.get("content") or "")
+        reasoning_delta = str(delta.get("reasoning_content") or "")
+        if content_delta:
+            state["text_parts"].append(content_delta)
+        if reasoning_delta:
+            state["reasoning_parts"].append(reasoning_delta)
+        if on_delta and (content_delta or reasoning_delta):
+            on_delta(content_delta, reasoning_delta)
+        for item in delta.get("tool_calls") or []:
+            index = int(item.get("index") or 0)
+            current = state["raw_calls"].setdefault(
+                index, {"id": "", "name": "", "arguments": ""}
+            )
+            if item.get("id"):
+                current["id"] = str(item["id"])
+            function = item.get("function") or {}
+            current["name"] += str(function.get("name") or "")
+            current["arguments"] += str(function.get("arguments") or "")
+        state["finish_reason"] = str(
+            choice.get("finish_reason") or state["finish_reason"]
+        )
+        return True
+
+    def _finalize_stream(self, state: Dict[str, Any]) -> ModelResponse:
+        chunks = state["chunks"]
+        finish_reason = state["finish_reason"]
         calls = []
-        for index in sorted(raw_calls):
-            item = raw_calls[index]
+        for index in sorted(state["raw_calls"]):
+            item = state["raw_calls"][index]
             raw_arguments = item["arguments"] or "{}"
             try:
                 arguments = json.loads(raw_arguments)
@@ -119,8 +144,8 @@ class OpenAICompatibleClient:
                 ToolCall(item["id"] or "call_%d" % (index + 1), item["name"], arguments)
             )
         return ModelResponse(
-            text="".join(text_parts),
-            reasoning_content="".join(reasoning_parts),
+            text="".join(state["text_parts"]),
+            reasoning_content="".join(state["reasoning_parts"]),
             tool_calls=calls,
             stop_reason="tool_use" if calls or finish_reason == "tool_calls" else "end_turn",
             raw={"stream_chunks": chunks[-20:]},
@@ -133,6 +158,118 @@ class OpenAICompatibleClient:
                 {},
             ),
         )
+
+    async def acomplete_stream(
+        self,
+        messages: List[JsonDict],
+        tools: List[ToolSpec],
+        system: str,
+        model: str,
+        max_tokens: int,
+        on_delta: Optional[Callable[[str, str], None]] = None,
+    ) -> ModelResponse:
+        import httpx
+
+        payload = self._build_payload(messages, tools, system, model, max_tokens)
+        payload["stream"] = True
+        url = self._chat_completions_url()
+        headers = self._headers()
+        content = json.dumps(payload).encode("utf-8")
+        state = self._new_stream_state()
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with client.stream(
+                "POST", url, content=content, headers=headers
+            ) as response:
+                if response.status_code >= 400:
+                    detail = (await response.aread()).decode("utf-8", errors="replace")
+                    raise self._http_error_for(
+                        response.status_code, detail
+                    ) or RuntimeError(
+                        "Model request failed: HTTP %s %s"
+                        % (response.status_code, detail)
+                    )
+                async for raw_line in response.aiter_lines():
+                    if not self._consume_stream_line(raw_line.strip(), state, on_delta):
+                        break
+        return self._finalize_stream(state)
+
+    # --- async-native transport (Phase 1): 直接 await，去掉 to_thread 阻抗 ---
+
+    async def acomplete(
+        self,
+        messages: List[JsonDict],
+        tools: List[ToolSpec],
+        system: str,
+        model: str,
+        max_tokens: int,
+    ) -> ModelResponse:
+        payload = self._build_payload(messages, tools, system, model, max_tokens)
+        body = await self._arequest(payload)
+        return self.parse_response(json.loads(body))
+
+    def _http_error_for(self, code: int, detail: str) -> Optional[Exception]:
+        """分类 HTTP 错误。返回 None 表示该状态码可重试(429/5xx),否则返回要抛的异常。"""
+        lowered = detail.lower()
+        if any(
+            marker in lowered
+            for marker in (
+                "context length",
+                "context_length",
+                "maximum context",
+                "too many tokens",
+            )
+        ):
+            return ContextLengthError(
+                "Model context is too long: HTTP %s %s" % (code, detail)
+            )
+        if any(
+            marker in lowered
+            for marker in ("content safety", "content_filter", "safety policy")
+        ):
+            return ContentSafetyError(
+                "Model content safety rejection: HTTP %s %s" % (code, detail)
+            )
+        if code in (429, 500, 502, 503, 504):
+            return None
+        return RuntimeError("Model request failed: HTTP %s %s" % (code, detail))
+
+    async def _arequest(self, payload: Dict[str, Any]) -> str:
+        import httpx
+
+        url = self._chat_completions_url()
+        headers = self._headers()
+        content = json.dumps(payload).encode("utf-8")
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            for attempt in range(3):
+                try:
+                    resp = await client.post(url, content=content, headers=headers)
+                except httpx.RequestError as exc:
+                    if attempt < 2:
+                        await asyncio.sleep(2**attempt)
+                        continue
+                    raise RuntimeError(
+                        "Model request failed for %s: %s. Check OPENAI_COMPATIBLE_BASE_URL, "
+                        "network/DNS/proxy settings, API key, and MODEL_ID."
+                        % (url, exc)
+                    ) from exc
+                if resp.status_code < 400:
+                    return resp.text
+                detail = resp.text
+                error = self._http_error_for(resp.status_code, detail)
+                if error is not None:
+                    raise error
+                if attempt < 2:
+                    retry_after = resp.headers.get("Retry-After")
+                    try:
+                        delay = float(retry_after) if retry_after else 2**attempt
+                    except ValueError:
+                        delay = 2**attempt
+                    await asyncio.sleep(min(10.0, max(0.1, delay)))
+                    continue
+                raise RuntimeError(
+                    "Model request failed: HTTP %s %s" % (resp.status_code, detail)
+                )
+        raise RuntimeError("Model request failed after retries")
 
     def parse_response(self, payload: JsonDict) -> ModelResponse:
         choices = payload.get("choices") or []
