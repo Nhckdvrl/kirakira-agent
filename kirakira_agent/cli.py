@@ -31,6 +31,7 @@ from kirakira_agent.plugins import PluginManager
 from kirakira_agent.plugin_watcher import PluginWatcher
 from kirakira_agent.proactive import ProactiveLoop
 from kirakira_agent.proactive.config import ProactiveConfig
+from kirakira_agent.proactive.mcp_sources import compile_proactive_sources
 from kirakira_agent.proactive.sources import build_file_inbox_registry
 from kirakira_agent.proactive.state import ProactiveStateStore
 from kirakira_agent.drift import DriftRunner
@@ -259,6 +260,27 @@ def _build_channel_host(
     return host if added else None
 
 
+def _build_source_registry(
+    workdir: Path,
+    plugin_sources: Any = None,
+    tool_registry: Any = None,
+):
+    """内置文件源 + 插件声明编译出的 MCP 源。
+
+    插件只声明 ProactiveSourceSpec,由这里编译成真实 ProactiveSource——
+    这是主动链路可扩展的接线点。单个源注册失败不阻断其余源与整条链路。
+    """
+    registry = build_file_inbox_registry(workdir)
+    for source in compile_proactive_sources(list(plugin_sources or []), tool_registry):
+        try:
+            registry.add(source)
+        except ValueError as error:
+            logging.getLogger(__name__).warning(
+                "plugin proactive source skipped: %s", error
+            )
+    return registry
+
+
 def _build_proactive(
     *,
     workdir: Path,
@@ -270,6 +292,8 @@ def _build_proactive(
     client: OpenAICompatibleClient,
     passive_busy_fn: Any | None = None,
     memory_services: Any = None,
+    plugin_sources: Any = None,
+    tool_registry: Any = None,
 ) -> tuple[ProactiveLoop | None, DriftRunner | None]:
     """按配置装配主动推送链路与 Drift 链路；未启用则返回 (None, None)。"""
     cfg = ProactiveConfig.from_app_config(app_config, default_model=default_model)
@@ -302,7 +326,7 @@ def _build_proactive(
         bus=bus,
         session_manager=session_manager,
         model_client=client,
-        sources=build_file_inbox_registry(workdir),
+        sources=_build_source_registry(workdir, plugin_sources, tool_registry),
         state=ProactiveStateStore(workdir / "proactive.db"),
         memory=memory,
         drift_hook=drift_hook,
@@ -603,6 +627,8 @@ async def build_runtime(
         client=client,
         passive_busy_fn=loop.is_busy,
         memory_services=memory_services,
+        plugin_sources=plugin_manager.proactive_sources,
+        tool_registry=registry,
     )
     if proactive_loop is not None:
         available_channels = {

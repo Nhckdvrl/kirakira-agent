@@ -10,6 +10,9 @@ kirakira 现有的 lifecycle 是 7 个相位钩子 + 插件按注册顺序 appen
 - 依赖的 slot 不存在时**级联禁用**该模块,而不是让它带着坏假设跑——
   这与本仓既有的"能力以运行时为准""宁可全旧不要半新"是同一取向。
 
+Reference 的 PhaseFrame(模块间用 frame.slots 传中间产物)暂未移植:kirakira 的相位模块
+目前还是 ctx 对象签名,等模块签名迁移时再一起引入,不先摆一个没人用的结构。
+
 内置 slot(`before_turn.` 等前缀)不参与禁用:它们是 runtime 自带的,缺依赖说明是
 配置问题,不该被静默摘掉。
 """
@@ -17,13 +20,9 @@ kirakira 现有的 lifecycle 是 7 个相位钩子 + 插件按注册顺序 appen
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from typing import Any, Dict, Generic, List, Mapping, Protocol, Sequence, TypeVar, cast
+from typing import Dict, List, Mapping, Protocol, Sequence, cast
 
 logger = logging.getLogger(__name__)
-
-I = TypeVar("I")
-O = TypeVar("O")
 
 _BUILTIN_SLOT_PREFIXES = (
     "before_turn.",
@@ -34,15 +33,6 @@ _BUILTIN_SLOT_PREFIXES = (
     "after_reasoning.",
     "after_turn.",
 )
-
-
-@dataclass
-class PhaseFrame(Generic[I, O]):
-    """一个相位的执行帧。slots 是模块之间传递中间产物的共享位。"""
-
-    input: I
-    slots: Dict[str, Any] = field(default_factory=dict)
-    output: O | None = None
 
 
 class SlotModule(Protocol):

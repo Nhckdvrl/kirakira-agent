@@ -269,3 +269,76 @@ class PluginSpecTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PluginSourceRuntimeWiringTests(unittest.TestCase):
+    """插件声明的主动源必须真正进入 runtime 的 SourceRegistry。
+
+    编译器早先就写好了,但一度没有接线——声明了却没通电等于没有这个能力。
+    """
+
+    def test_cli_source_registry_includes_plugin_declared_sources(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        from kirakira_agent.cli import _build_source_registry
+
+        tools = _FakeToolRegistry({"mcp_feed__pull": []})
+        registered = [
+            _registered(
+                id="feed", channels=("alert",), server="feed", fetch_tool="pull"
+            )
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            registry = _build_source_registry(Path(tmp), registered, tools)
+        ids = [source.id for source in registry.sources]
+        self.assertIn("demo:feed", ids)
+
+    def test_registry_survives_duplicate_source_ids(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        from kirakira_agent.cli import _build_source_registry
+
+        tools = _FakeToolRegistry({"mcp_feed__pull": []})
+        dup = _registered(
+            id="feed", channels=("alert",), server="feed", fetch_tool="pull"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            registry = _build_source_registry(Path(tmp), [dup, dup], tools)
+        # 重复 id 只跳过冲突的那个,不影响整条链路
+        self.assertEqual(
+            len([s for s in registry.sources if s.id == "demo:feed"]), 1
+        )
+
+    def test_no_plugin_sources_still_prepares_file_inbox(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        from kirakira_agent.cli import _build_source_registry
+
+        with tempfile.TemporaryDirectory() as tmp:
+            registry = _build_source_registry(Path(tmp), None, None)
+            # 没有 *.jsonl 时源为空是既有语义;关键是 inbox 目录被准备好且不报错
+            self.assertEqual(registry.sources, [])
+            self.assertTrue((Path(tmp) / "proactive" / "inbox").is_dir())
+
+    def test_plugin_sources_coexist_with_file_inbox_sources(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        from kirakira_agent.cli import _build_source_registry
+
+        tools = _FakeToolRegistry({"mcp_feed__pull": []})
+        with tempfile.TemporaryDirectory() as tmp:
+            inbox = Path(tmp) / "proactive" / "inbox"
+            inbox.mkdir(parents=True, exist_ok=True)
+            (inbox / "local.jsonl").write_text("", encoding="utf-8")
+            registry = _build_source_registry(
+                Path(tmp),
+                [_registered(id="feed", channels=("alert",), server="feed", fetch_tool="pull")],
+                tools,
+            )
+        ids = {source.id for source in registry.sources}
+        self.assertIn("local", ids)
+        self.assertIn("demo:feed", ids)

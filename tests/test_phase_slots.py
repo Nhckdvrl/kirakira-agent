@@ -9,7 +9,6 @@ from __future__ import annotations
 import unittest
 
 from kirakira_agent.phase import (
-    PhaseFrame,
     inspect_phase,
     is_builtin_slot,
     topo_sort_modules,
@@ -104,11 +103,6 @@ class HelperTests(unittest.TestCase):
     def test_is_builtin_slot(self) -> None:
         self.assertTrue(is_builtin_slot("after_turn.persist"))
         self.assertFalse(is_builtin_slot("plug.custom"))
-
-    def test_phase_frame_defaults(self) -> None:
-        frame: PhaseFrame[str, str] = PhaseFrame(input="x")
-        self.assertEqual(frame.slots, {})
-        self.assertIsNone(frame.output)
 
     def test_inspect_phase_renders_order_and_edges(self) -> None:
         a = _Module("plug.a")

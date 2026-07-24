@@ -19,7 +19,7 @@ from uuid import uuid4
 
 from kirakira_agent.event_bus import EventBus
 from kirakira_agent.config import load_toml_config
-from kirakira_agent.phase import topo_sort_modules
+from kirakira_agent.phase import inspect_phase, topo_sort_modules
 from kirakira_agent.plugin_generation import (
     GateResult,
     PluginContributions,
@@ -1219,7 +1219,39 @@ class PluginManager:
                     "warnings": warnings,
                 }
             )
-        return json.dumps({"plugins": reports}, ensure_ascii=False, indent=2)
+        return json.dumps(
+            {"plugins": reports, "phases": self.phase_report()},
+            ensure_ascii=False,
+            indent=2,
+        )
+
+    def phase_report(self) -> Dict[str, str]:
+        """各相位的实际执行顺序与依赖关系,用于排查"插件为什么没按预期顺序跑"。"""
+
+        report: Dict[str, str] = {}
+        for phase in (
+            "before_turn",
+            "before_reasoning",
+            "prompt_render",
+            "before_step",
+            "after_step",
+            "after_reasoning",
+            "after_turn",
+        ):
+            modules = self._collect("%s_modules" % phase)
+            if not modules:
+                continue
+            if all(getattr(module, "slot", None) for module in modules):
+                try:
+                    report[phase] = inspect_phase(modules)
+                except RuntimeError as error:
+                    report[phase] = "slot ordering failed: %s" % error
+            else:
+                report[phase] = "注册顺序(未全员声明 slot): %s" % ", ".join(
+                    str(getattr(module, "slot", type(module).__name__))
+                    for module in modules
+                )
+        return report
 
     def _check_declared_skills(
         self, record: ActivePlugin, warnings: List[str]
