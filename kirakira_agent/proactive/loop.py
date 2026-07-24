@@ -22,6 +22,14 @@ from kirakira_agent.coremem.engine import (
     MemoryQueryFilters,
 )
 from kirakira_agent.events import OutboundMessage
+from kirakira_agent.turns import (
+    BusOutboundPort,
+    CallableSideEffect,
+    TurnOutbound,
+    TurnResult,
+    TurnTrace,
+    commit_turn_result,
+)
 from kirakira_agent.models.base import ModelClient
 from kirakira_agent.proactive import energy
 from kirakira_agent.proactive.config import ProactiveConfig
@@ -345,20 +353,35 @@ class ProactiveLoop:
         if not message:
             raise OutboundDeliveryError("主动决策未生成可发送内容")
         delivery_id = uuid4().hex
-        await self._bus.publish_outbound_and_wait(
-            OutboundMessage(
-                channel=self._cfg.channel,
-                chat_id=self._cfg.chat_id,
-                content=message,
-                metadata={
-                    "proactive": True,
-                    "delivery_id": delivery_id,
-                    "evidence_item_ids": list(evidence_item_ids),
-                },
-            )
+
+        async def commit_delivery() -> None:
+            # 只在渠道确认送达后才落地:写 Session 供后续 tick 防重复,并起推送冷却。
+            self._record_proactive_message(message, delivery_id, evidence_item_ids)
+            self._state.mark_push(self._cfg.session_key, now)
+
+        result = TurnResult(
+            decision="reply",
+            outbound=TurnOutbound(session_key=self._cfg.session_key, content=message),
+            evidence=list(evidence_item_ids),
+            trace=TurnTrace(source="proactive", extra={"delivery_id": delivery_id}),
+            success_side_effects=[
+                CallableSideEffect(name="proactive_commit", action=commit_delivery)
+            ],
         )
-        self._record_proactive_message(message, delivery_id, evidence_item_ids)
-        self._state.mark_push(self._cfg.session_key, now)
+        outcome = await commit_turn_result(
+            result,
+            port=BusOutboundPort(self._bus),
+            channel=self._cfg.channel,
+            chat_id=self._cfg.chat_id,
+            metadata={
+                "proactive": True,
+                "delivery_id": delivery_id,
+                "evidence_item_ids": list(evidence_item_ids),
+            },
+        )
+        if not outcome.dispatched:
+            # 保持既有契约:调用方靠这个异常决定"保留未读、不消费事件"。
+            raise OutboundDeliveryError("主动消息渠道发送失败")
         logger.info("[proactive] 已推送 message=%r", message[:120])
 
     def _record_proactive_message(
