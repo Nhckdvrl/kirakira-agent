@@ -623,6 +623,7 @@ async def build_runtime(
         plugin_manager=plugin_manager,
         mcp_watcher=mcp_watcher,
         plugin_watcher=plugin_watcher,
+        memory_services=memory_services,
         scheduler=scheduler,
         subagents=subagents,
         proactive_loop=proactive_loop,

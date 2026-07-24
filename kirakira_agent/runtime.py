@@ -1498,6 +1498,7 @@ class CoreRuntime:
     plugin_manager: Any | None = None
     mcp_watcher: Any | None = None
     plugin_watcher: Any | None = None
+    memory_services: Any = None
     scheduler: Any | None = None
     subagents: Any | None = None
     proactive_loop: Any | None = None
@@ -1595,5 +1596,11 @@ class CoreRuntime:
         if self.proactive_loop is not None:
             self.proactive_loop.close()
         await self.memory.shutdown()
+        # 引擎持有 coremem.db 与 embedder,必须在旧 MemoryRuntime 之后关闭。
+        if self.memory_services is not None:
+            try:
+                await self.memory_services.aclose()
+            except Exception:
+                logger.exception("memory services shutdown failed")
         await self.event_bus.shutdown()
         self.session_manager.close()

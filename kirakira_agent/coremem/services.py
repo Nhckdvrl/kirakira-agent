@@ -8,6 +8,8 @@ memory 启用且配了 embedding 就用 DefaultMemoryEngine,否则退化成 Disa
 
 from __future__ import annotations
 
+import inspect
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -19,6 +21,8 @@ from kirakira_agent.coremem.default_engine import DefaultMemoryEngine
 from kirakira_agent.coremem.default_memory_config import DefaultMemoryConfig
 from kirakira_agent.coremem.engine import MemoryEngine
 from kirakira_agent.coremem.plugin import DisabledMemoryEngine
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -32,6 +36,33 @@ class MemoryServices:
 
     engine: MemoryEngine | None = None
     store: Any = None
+
+    async def aclose(self) -> None:
+        """关闭引擎持有的资源(store / embedder / 事件订阅)。
+
+        照 Reference `core/memory/runtime.py:MemoryRuntime.aclose`:逆序释放,
+        单个 closeable 失败不掩盖其余,首个异常在全部尝试后抛出。
+        """
+        closeables = list(getattr(self.engine, "closeables", []) or [])
+        first_error: BaseException | None = None
+        for closeable in reversed(closeables):
+            try:
+                if hasattr(closeable, "aclose"):
+                    result = closeable.aclose()
+                    if inspect.isawaitable(result):
+                        await result
+                elif hasattr(closeable, "close"):
+                    closeable.close()
+            except Exception as exc:  # noqa: BLE001 - 关停期不因单个资源中断
+                if first_error is None:
+                    first_error = exc
+                logger.warning(
+                    "memory closeable shutdown failed for %s: %s",
+                    type(closeable).__name__,
+                    exc,
+                )
+        if first_error is not None:
+            raise first_error
 
 
 def memory_engine_enabled(config: Config) -> bool:
