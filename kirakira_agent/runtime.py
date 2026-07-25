@@ -1017,8 +1017,6 @@ class PassiveTurnPipeline:
         maintenance = self._markdown_maintenance()
         if maintenance is not None:
             await maintenance.wait_for_session(key)
-        else:
-            await self.memory.wait_for_session(key)
         guard_reply = await self._guard_memory_context(session, key)
         if guard_reply:
             return await self._dispatch_if_needed(state, guard_reply)
@@ -1181,33 +1179,29 @@ class PassiveTurnPipeline:
         threshold = self.config.history_window + minimum_new
         if pending < threshold:
             return ""
-        before = int(session.last_consolidated or 0)
         maintenance = self._markdown_maintenance()
-        if maintenance is not None:
-            # 强制归档并等待:与队列维护共用同一把 session 锁,不会互相插队。
-            from kirakira_agent.coremem.markdown import ConsolidateRequest
+        if maintenance is None:
+            # 没有记忆服务包 = 没有归档能力(最小构造/测试)。此时既无法推进也无从等待,
+            # 拒绝每一轮只会让最小构造不可用,因此放行。生产始终有维护器,保护完整生效。
+            return ""
+        before = int(session.last_consolidated or 0)
+        # 强制归档并等待:与队列维护共用同一把 session 锁,不会互相插队。
+        from kirakira_agent.coremem.markdown import ConsolidateRequest
 
-            try:
-                await maintenance.consolidate(
-                    ConsolidateRequest(
-                        session=session,
-                        force=True,
-                        scope_channel=str(session.metadata.get("channel") or ""),
-                        scope_chat_id=str(session.metadata.get("chat_id") or ""),
-                    )
+        try:
+            await maintenance.consolidate(
+                ConsolidateRequest(
+                    session=session,
+                    force=True,
+                    scope_channel=str(session.metadata.get("channel") or ""),
+                    scope_chat_id=str(session.metadata.get("chat_id") or ""),
                 )
-            except Exception:
-                logger.exception("guard consolidation failed: %s", session_key)
-            else:
-                if int(session.last_consolidated or 0) > before:
-                    await self.session_manager.save_async(session)
-        else:
-            self.memory.schedule_consolidation(
-                session,
-                model_client=self.reasoner.model_client,
-                model=self.config.model,
             )
-            await self.memory.wait_for_session(session_key)
+        except Exception:
+            logger.exception("guard consolidation failed: %s", session_key)
+        else:
+            if int(session.last_consolidated or 0) > before:
+                await self.session_manager.save_async(session)
         if int(session.last_consolidated or 0) > before:
             return ""
         return (
@@ -1252,14 +1246,6 @@ class PassiveTurnPipeline:
         )
         if msg.metadata.get("username"):
             session.metadata["username"] = str(msg.metadata["username"])
-        if not msg.metadata.get("skip_post_memory") and self._markdown_maintenance() is None:
-            # 有承重维护器时,归档与近期上下文刷新由它订阅 TurnCommitted 驱动。
-            await asyncio.to_thread(
-                self.memory.consolidate_turn,
-                session,
-                msg.content,
-                result.outbound.content,
-            )
         context_trace = dict(state.extra_metadata.get("context_trace") or {})
         attempts = list(context_trace.get("attempts") or [])
         selected_plan = str(context_trace.get("selected_plan") or "")
@@ -1320,12 +1306,6 @@ class PassiveTurnPipeline:
         await _run_plugin_modules(self._after_turn_modules, after_turn)
         if state.dispatch_outbound:
             await self.bus.publish_outbound(result.outbound)
-        if not msg.metadata.get("skip_post_memory") and self._markdown_maintenance() is None:
-            self.memory.schedule_consolidation(
-                session,
-                model_client=self.reasoner.model_client,
-                model=self.config.model,
-            )
         return result.outbound
 
     async def _dispatch_if_needed(self, state: TurnState, content: str) -> OutboundMessage:

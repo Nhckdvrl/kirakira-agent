@@ -603,65 +603,8 @@ class MemoryRuntime:
         trace.truncated = truncated
         return RetrievalResult(block=block, records=records, trace=trace)
 
-    def consolidate_turn(self, session: Session, user_content: str, assistant_reply: str) -> None:
-        summary = "user: %s | assistant: %s" % (
-            user_content.strip().replace("\n", " ")[:220],
-            assistant_reply.strip().replace("\n", " ")[:220],
-        )
-        self.store.append_recent(summary)
-        source_ref = self._latest_user_source_ref(session)
-        self.store.append_history(source_ref, summary)
-        if self._last_assistant_used_memorize(session):
-            return
-        maybe_memory = self._extract_explicit_memory(user_content)
-        if maybe_memory:
-            self.memorize(maybe_memory, source_ref=source_ref)
 
-    async def wait_for_session(self, session_key: str, timeout: float = 30.0) -> None:
-        task = self._tasks.get(session_key)
-        if task is None or task.done():
-            return
-        try:
-            await asyncio.wait_for(asyncio.shield(task), timeout=max(0.1, timeout))
-        except asyncio.TimeoutError:
-            task.cancel()
-            await asyncio.gather(task, return_exceptions=True)
 
-    def schedule_consolidation(
-        self,
-        session: Session,
-        *,
-        model_client: Any,
-        model: str,
-        min_messages: int = 2,
-        keep_messages: int = 2,
-    ) -> None:
-        existing = self._tasks.get(session.key)
-        if existing is not None and not existing.done():
-            return
-        task = asyncio.create_task(
-            self._consolidate_session(
-                session,
-                model_client=model_client,
-                model=model,
-                min_messages=min_messages,
-                keep_messages=keep_messages,
-            ),
-            name="memory-consolidation:%s" % session.key,
-        )
-        self._tasks[session.key] = task
-
-        def done(completed: asyncio.Task[None]) -> None:
-            if self._tasks.get(session.key) is completed:
-                self._tasks.pop(session.key, None)
-            try:
-                completed.result()
-            except asyncio.CancelledError:
-                return
-            except Exception:
-                logger.exception("memory consolidation failed for %s", session.key)
-
-        task.add_done_callback(done)
 
     async def shutdown(self, timeout: float = 30.0) -> None:
         tasks = [task for task in self._tasks.values() if not task.done()]
@@ -675,94 +618,6 @@ class MemoryRuntime:
         if self.store2 is not None and self._owns_store2:
             self.store2.close()
 
-    async def _consolidate_session(
-        self,
-        session: Session,
-        *,
-        model_client: Any,
-        model: str,
-        min_messages: int,
-        keep_messages: int,
-    ) -> None:
-        lock = self._locks.setdefault(session.key, asyncio.Lock())
-        async with lock:
-            total = len(session.messages)
-            start = max(0, min(int(session.last_consolidated), total))
-            end = max(start, total - max(0, keep_messages))
-            if end - start < max(2, min_messages):
-                return
-            selected = session.messages[start:end]
-            first_user = next(
-                (
-                    index
-                    for index, message in enumerate(selected)
-                    if message.get("role") == "user"
-                ),
-                None,
-            )
-            if first_user is None:
-                session.last_consolidated = end
-                if self.session_manager is not None:
-                    self.session_manager.save(session)
-                return
-            start += first_user
-            selected = selected[first_user:]
-            transcript = "\n".join(
-                "[%s] %s" % (
-                    str(message.get("role") or "unknown"),
-                    str(message.get("content") or "")[:3000],
-                )
-                for message in selected
-            )
-            # 把已记事实喂给同一次调用：抽取和去重合并成一次判断，不额外打模型。
-            # 词法阈值去重不安全（否定句相似度比真重复还高），只有语义判断做得了这件事。
-            known = self._known_memory_digest(session.key, selected)
-            prompt = (
-                "从下面对话中提取可长期保留的信息。只把用户明确表达的稳定事实、偏好、"
-                "身份、反复可用的操作规则写入 memories；不要把 assistant 的建议当用户事实。"
-                "同时生成 1-3 条简短时间线摘要。仅返回 JSON："
-                '{"memories":[{"content":"...","memory_type":"identity|preference|procedure|event"}],'
-                '"history":["..."]}。没有可提取内容时数组留空。'
-                + known
-                + "\n\n对话：\n"
-                + transcript
-            )
-            response = await asyncio.to_thread(
-                model_client.complete,
-                [{"role": "user", "content": prompt}],
-                [],
-                "",
-                model,
-                1200,
-            )
-            text = str(getattr(response, "text", "") or "").strip()
-            payload = self._parse_consolidation_json(text)
-            source_ref = "%s:%d-%d" % (session.key, start, end - 1)
-            for item in payload.get("memories", [])[:10]:
-                if not isinstance(item, dict):
-                    continue
-                content = str(item.get("content") or "").strip()
-                memory_type = str(item.get("memory_type") or "event").strip()
-                if content:
-                    await asyncio.to_thread(
-                        self.memorize,
-                        content,
-                        source_ref,
-                        memory_type,
-                    )
-            history_entries: List[str] = []
-            for index, summary in enumerate(payload.get("history", [])[:3]):
-                value = str(summary or "").strip()
-                if value:
-                    self.store.append_history(
-                        "%s:summary:%d" % (source_ref, index), value
-                    )
-                    history_entries.append(value)
-            session.last_consolidated = end
-            if self.session_manager is not None:
-                self.session_manager.save(session)
-            # consolidation 提交后广播,引擎据此做长期 profile/preference/procedure 提取。
-            self._publish_consolidation(session, source_ref, history_entries, selected)
 
     def _publish_consolidation(
         self,
@@ -797,89 +652,7 @@ class MemoryRuntime:
         except Exception:  # noqa: BLE001 - 归档已提交,下游失败不回滚
             logger.warning("consolidation event publish failed", exc_info=True)
 
-    def _known_memory_digest(
-        self,
-        session_key: str,
-        selected: List[JsonDict],
-        limit: int = 30,
-    ) -> str:
-        """列出已记事实，让 consolidation 只抽新的。
 
-        为什么要有这个：`memorize` 的去重是精确字符串匹配，而 consolidation 的 LLM 每次都会
-        改写措辞，所以同一个事实会被存两遍（memorize 一条、consolidation 一条）。词法相似度
-        阈值修不了——实测否定句"CI 不跑在 X"和"CI 跑在 X"的相似度(0.833)比真重复(0.727)还高，
-        任何有效阈值都会把它们合并掉，让 agent 说反话。只有语义判断做得了，而 consolidation
-        本来就要打一次 LLM，所以把去重并进这次调用，零额外往返。
-
-        取两部分：本 session 已记的（`memorize` 刚写的，最可能被重复抽取），以及与本轮内容
-        词法相关的旧记忆（跨 session 复述的情况）。
-        """
-
-        query = " ".join(
-            str(message.get("content") or "")
-            for message in selected
-            if message.get("role") == "user"
-        )[:2000]
-
-        picked: List[MemoryRecord] = []
-        seen: set[str] = set()
-        with self._record_lock:
-            same_session = [
-                record
-                for record in self._records
-                if record.status == "active"
-                and record.source_ref.startswith("%s:" % session_key)
-            ]
-        for record in reversed(same_session):
-            if record.id not in seen:
-                seen.add(record.id)
-                picked.append(record)
-            if len(picked) >= limit:
-                break
-        if query.strip() and len(picked) < limit:
-            for record in self.recall(query, limit=limit - len(picked)):
-                if record.id not in seen:
-                    seen.add(record.id)
-                    picked.append(record)
-        if not picked:
-            return ""
-
-        lines = "\n".join(
-            "- [%s] %s" % (record.memory_type, record.content[:160])
-            for record in picked[:limit]
-        )
-        return (
-            "\n\n以下事实**已经记录过**，不要再抽取：\n"
-            + lines
-            + "\n规则：\n"
-            "- 只是换个说法表达上面某条事实 → 跳过，不要输出。\n"
-            "- 上面某条事实需要修正或补充细节 → 输出完整的新版本，并沿用它原来的 memory_type。\n"
-            "- 与上面某条**语义相反**（例如否定）→ 必须输出，这是修正，不是重复。\n"
-            "- 只输出上面没有的新信息。"
-        )
-
-    @staticmethod
-    def _parse_consolidation_json(text: str) -> Dict[str, Any]:
-        if text.startswith("```"):
-            text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
-        try:
-            payload = json.loads(text)
-        except ValueError:
-            match = re.search(r"\{.*\}", text, flags=re.S)
-            if not match:
-                return {"memories": [], "history": []}
-            try:
-                payload = json.loads(match.group(0))
-            except ValueError:
-                return {"memories": [], "history": []}
-        if not isinstance(payload, dict):
-            return {"memories": [], "history": []}
-        memories = payload.get("memories")
-        history = payload.get("history")
-        return {
-            "memories": memories if isinstance(memories, list) else [],
-            "history": history if isinstance(history, list) else [],
-        }
 
     def search_messages(self, query: str, limit: int = 10) -> List[Dict[str, str]]:
         if self.session_manager is None:
@@ -891,17 +664,6 @@ class MemoryRuntime:
             return []
         return self.session_manager.fetch_messages(source_ref, context=context)  # type: ignore[return-value]
 
-    def _extract_explicit_memory(self, text: str) -> str:
-        patterns = [
-            r"(?:请)?记住[:：]\s*(.+)",
-            r"以后(?:你)?要记得[:：]?\s*(.+)",
-            r"下次(?:你)?要记得[:：]?\s*(.+)",
-        ]
-        for pattern in patterns:
-            match = re.search(pattern, text, flags=re.S)
-            if match:
-                return match.group(1).strip()
-        return ""
 
     def _load(self) -> None:
         if self.engine == "coremem":
@@ -984,17 +746,6 @@ class MemoryRuntime:
                 highest = max(highest, int(match.group(1)))
         return "mem_%04d" % (highest + 1)
 
-    def _last_assistant_used_memorize(self, session: Session) -> bool:
-        if not session.messages:
-            return False
-        message = session.messages[-1]
-        if message.get("role") != "assistant":
-            return False
-        for group in message.get("tool_chain") or []:
-            for call in group.get("calls") or []:
-                if call.get("name") == "memorize":
-                    return True
-        return False
 
     def _embed_for_query(self, text: str) -> List[float] | None:
         """检索侧可以降级：拿不到向量就退回词法召回，本轮仍然有答案。"""
@@ -1044,12 +795,6 @@ class MemoryRuntime:
             return None
         return parsed if parsed.tzinfo is not None else parsed.astimezone()
 
-    @staticmethod
-    def _latest_user_source_ref(session: Session) -> str:
-        for index in range(len(session.messages) - 1, -1, -1):
-            if session.messages[index].get("role") == "user":
-                return "%s:%d" % (session.key, index)
-        return "%s:%d" % (session.key, len(session.messages))
 
     def _forget_session_memories(self, session_key: str) -> None:
         prefix = session_key + ":"
