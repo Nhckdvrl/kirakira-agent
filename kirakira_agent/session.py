@@ -14,7 +14,7 @@ from uuid import uuid4
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 JsonDict = Dict[str, Any]
 logger = logging.getLogger(__name__)
@@ -208,6 +208,27 @@ class SessionManager:
             session = Session(key=key)
         self._cache[key] = session
         return session
+
+    def session_exists(self, key: str) -> bool:
+        """判断会话是否已经存在,不像 ``get_or_create`` 那样顺带创建。
+
+        控制面用它区分"resume 一个已有 thread"和"thread 不存在"。
+        """
+        if key in self._cache:
+            return True
+        return self._path(key).exists() or self._legacy_path(key).exists()
+
+    def get_session_meta(self, key: str) -> Optional[JsonDict]:
+        """读取会话元数据;不存在时返回 None(= Reference SessionStore 同名方法)。"""
+        if not self.session_exists(key):
+            return None
+        session = self.get_or_create(key)
+        return {
+            "key": session.key,
+            "created_at": session.created_at,
+            "updated_at": session.updated_at,
+            "metadata": dict(session.metadata),
+        }
 
     def peek_next_message_id(self, session_key: str) -> str:
         session = self.get_or_create(session_key)

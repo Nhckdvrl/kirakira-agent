@@ -16,11 +16,12 @@
 | 主动推送 | MVP 已跑通 | Tick / Source / 判断 / Channel callback / Session / ACK 闭环 |
 | Drift | MVP 已跑通 | 空转后执行 `SKILL.md`、用工具、发送并保存连续状态 |
 | Telegram / Supervisor | Reference 对齐 | 源文件逐字节一致,差异在文件外 binding |
+| **控制面** | **已跑通** | JSON-RPC 2.0 over NDJSON;起 turn / 中断 / 观测 / 排空插件 |
 
 完整离线回归:
 
 ```text
-429 passed, 4 subtests passed
+454 passed, 4 subtests passed
 ```
 
 离线回归之外的**真实模型/真实渠道**验证结果单独记在
@@ -92,7 +93,7 @@ PassiveTurnPipeline
 
 ## 3. 与 Reference 的架构对齐:进度与路线
 
-Kirakira ≈3.1 万行,Reference ≈10.5 万行(产品代码)。差距的核心不是"少了功能",而是 **4 个地基抽象需要重构**,其余多是坐在地基上的"加法"。
+Kirakira ≈3.4 万行,Reference ≈10.5 万行(产品代码)。差距的核心不是"少了功能",而是 **4 个地基抽象需要重构**,其余多是坐在地基上的"加法"。
 
 | 地基(必须重构) | 状态 |
 | --- | --- |
@@ -103,7 +104,7 @@ Kirakira ≈3.1 万行,Reference ≈10.5 万行(产品代码)。差距的核心�
 
 | 加法(依赖地基,可增量) | 状态 |
 | --- | --- |
-| control plane / app server | 无 |
+| control plane | **已完成**(JSON-RPC over NDJSON,见 [design/control-plane.md](./design/control-plane.md));app server / 前端未做 |
 | 前端 Dashboard | 无(仅 Memory 管理 API) |
 | peer-agent 进程管理 | 无 |
 | 插件/MCP 主动源 | **已接线**(插件声明→编译→SourceRegistry);真实 MCP 端到端验证见 NOW.md 第 4 项 |
@@ -143,6 +144,7 @@ control plane / 前端 / peer-agent / eval、主动多目标调度。
 - [INDEX.md](./INDEX.md):文档索引与阅读顺序。
 - [NOW.md](./NOW.md):未完成工作与接手点。
 - [design/live-verification.md](./design/live-verification.md):实弹验证记录与未验证边界。
+- [design/control-plane.md](./design/control-plane.md):控制面分层、turn 状态机与认证。
 - [PLUGIN_SYSTEM.md](./PLUGIN_SYSTEM.md):插件声明、代际、热重载、安装。
 - [decisions/](./decisions/):架构选择的理由与替代方案。
 - [design/](./design/):单次重构的调用链、失败语义与验收。

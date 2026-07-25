@@ -62,10 +62,22 @@ deepseek 会返回 `{"intent": []}`,已由 `coremem/compat_worker.py` 在 kiraki
 | --- | --- |
 | QQ 两渠道逐字节对齐 Reference(Telegram 已对齐) | 未做 |
 | 插件包元数据 manifest、非 git 源解析、独立 doctor 模块 | 未做 |
-| control plane / app server、前端 Dashboard、peer-agent、eval | 未做 |
+| 前端 Dashboard、peer-agent、eval | 未做 |
 | 主动多目标调度(当前单 `[proactive.target]`) | 未做 |
 
-## 7. 仍未实弹验证的边界
+## 7. agent_restart 与准入协调器
+
+**现状**:控制面已落地(见 [design/control-plane.md](./design/control-plane.md)),
+但 Reference 的 `agent_restart` 工具与配套的 `RestartCoordinator` 未移植——
+移植控制面时把 `quiesce_for_restart` / `resume_after_restart_cancel` 一并删掉了,
+因为没有调用方就是死代码。
+
+**接手点**:补 `agent_restart` 工具时,同时恢复 `ConversationRuntime` 的准入冻结
+(caller 必须是唯一在途 turn 才允许冻结),并把 supervisor 的私有重启管道接上。
+
+**验收**:agent 能自己请求换代重启,重启期间不接受新 turn,在途 turn 跑完才退出。
+
+## 8. 仍未实弹验证的边界
 
 代码已完成、但尚未在真实环境跑过的项(渠道、崩溃恢复、长跑等)统一记在
-[design/live-verification.md](./design/live-verification.md) 第 7 节,本文不重复。
+[design/live-verification.md](./design/live-verification.md) 第 8 节,本文不重复。

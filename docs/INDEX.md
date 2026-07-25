@@ -27,6 +27,7 @@
 | 改插件:声明、代际、热重载、安装 | [PLUGIN_SYSTEM.md](./PLUGIN_SYSTEM.md) |
 | 改主动推送或 Drift | [PROACTIVE_ARCHITECTURE.md](./PROACTIVE_ARCHITECTURE.md) + [design/proactive-lifecycle.md](./design/proactive-lifecycle.md) |
 | 改启动、Supervisor 或渠道 | [STARTUP_AND_CHANNELS.md](./STARTUP_AND_CHANNELS.md) |
+| 程序化观测/驱动运行中的 agent | [design/control-plane.md](./design/control-plane.md) |
 | 查某个架构选择当初为什么这么定 | [decisions/](./decisions/) |
 | 准备面试/对外讲这个项目 | [RESUME_INTERVIEW_GUIDE.md](./RESUME_INTERVIEW_GUIDE.md) |
 
@@ -55,6 +56,7 @@
 | 文档 | 主题 |
 | --- | --- |
 | [proactive-lifecycle.md](./design/proactive-lifecycle.md) | 主动链路从扁平 tick 重构成模块流水线 |
+| [control-plane.md](./design/control-plane.md) | 控制面分层、turn 状态机、事件流与认证 |
 | [live-verification.md](./design/live-verification.md) | 实弹验证记录与仍未验证的边界 |
 
 ## 历史记录

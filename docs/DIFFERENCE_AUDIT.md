@@ -50,7 +50,7 @@ namespace、MessageBus、SessionManager、message-push 和 interrupt binding。�
 | **未实现** | 运行时能力不存在；即使有协议、文档或预留接口也不算完成 |
 
 评估按五个问题核对：谁触发、谁拥有状态、什么时候提交、失败后怎样恢复、是否有调用点和测试。
-代码行数只说明维护面，不说明覆盖率。当前 `kirakira_agent/` 约 3.1 万行 Python；Reference 排除 tests/eval 后约 10.5 万行。数倍的维护面差异本身正说明两者不是同一运行时厚度。
+代码行数只说明维护面，不说明覆盖率。当前 `kirakira_agent/` 约 3.4 万行 Python；Reference 排除 tests/eval 后约 10.5 万行。数倍的维护面差异本身正说明两者不是同一运行时厚度。
 
 ## 3. 架构层面的根本差异
 
@@ -62,7 +62,7 @@ namespace、MessageBus、SessionManager、message-push 和 interrupt binding。�
 | Provider | 多后端抽象与更完整控制能力 | OpenAI-compatible 一类接口 | 范围收窄；forced tool choice 等能力缺失 |
 | 状态与持久化 | 统一 persistence 语义、更多 SQLite/恢复合同 | JSON/SQLite 分散在各模块 | 能运行，但一致性与恢复边界较弱 |
 | 扩展生态 | 插件市场、plugin job、proactive source、lifecycle factory | 声明式规格 + 作业/服务 host + 插件主动源编译 + 安装免重启 | 骨架对齐；缺包元数据与非 git 源 |
-| 控制面 | app server、control protocol、Dashboard、peer agent | 本进程命令与状态输出 + Memory2 健康/管理 API | 仅记忆控制面轻实现，其余未实现 |
+| 控制面 | app server、control protocol、Dashboard、peer agent | **control protocol 已对齐**(JSON-RPC/NDJSON/Unix socket)+ Memory 管理 API | 协议与 turn 编排对齐;app server、Dashboard、peer agent 未实现 |
 
 Kirakira 的“轻”有真实收益：主链路可在较少文件内追踪，开发和演示成本低，也避免过早复制未被
 使用的抽象。但当需求进入热插拔、跨进程、可靠投递和故障恢复时，这些差异会从“简化”变成必须补的能力。
@@ -232,7 +232,7 @@ per-plugin generation、proactive phase DAG、多目标调度、app server、Das
 - Telegram/启动：固定 Reference 源码字节一致性测试、原始 Telegram utils 契约测试和真实
   Supervisor → gateway readiness 启动。
 
-当前完整离线回归为 `429 passed, 4 subtests passed`。
+当前完整离线回归为 `454 passed, 4 subtests passed`。
 
 现有测试证明“进程内闭环贯通到 Channel callback”，尚未证明：真实外部平台最终展示、渠道成功与
 consume/ACK 的跨崩溃原子性、进程恢复、多目标公平调度、插件热换代中的主动 tick 一致性，以及

@@ -36,6 +36,7 @@ from kirakira_agent.proactive.mcp_sources import compile_proactive_sources
 from kirakira_agent.proactive.sources import build_file_inbox_registry
 from kirakira_agent.proactive.state import ProactiveStateStore
 from kirakira_agent.drift import DriftRunner
+from kirakira_agent.control.binding import build_control_plane
 from kirakira_agent.runtime import (
     AgentLoop,
     CoreRuntime,
@@ -643,6 +644,41 @@ async def build_runtime(
                 "proactive target channel %r is not configured; available channels: %s"
                 % (target_channel, ", ".join(sorted(available_channels)) or "(none)")
             )
+    async def _control_consolidate(thread_id: str) -> bool:
+        """thread/consolidate/start 的执行体:强制归档一个 thread 并报告是否有变化。"""
+        maintenance = getattr(memory_services, "markdown", None)
+        maintenance = getattr(maintenance, "maintenance", None)
+        if maintenance is None:
+            raise RuntimeError("当前 runtime 没有配置记忆归档能力")
+        from kirakira_agent.coremem.markdown import ConsolidateRequest
+
+        session = session_manager.get_or_create(thread_id)
+        before = int(session.last_consolidated or 0)
+        await maintenance.consolidate(
+            ConsolidateRequest(
+                session=session,
+                force=True,
+                scope_channel=str(session.metadata.get("channel") or ""),
+                scope_chat_id=str(session.metadata.get("chat_id") or ""),
+            )
+        )
+        changed = int(session.last_consolidated or 0) > before
+        if changed:
+            await session_manager.save_async(session)
+        return changed
+
+    # 控制面:workspace 私有 Unix socket 上的 JSON-RPC,让外部程序观测/驱动 agent。
+    control_store, control_runtime, control_service, control_server = (
+        build_control_plane(
+            workspace=workdir,
+            pipeline=pipeline,
+            sessions=session_manager,
+            endpoint=os.getenv("KIRAKIRA_CONTROL_ENDPOINT", "").strip() or None,
+            workspace_token=os.getenv("KIRAKIRA_CONTROL_TOKEN", "").strip() or None,
+            plugin_drain=plugin_manager.reconcile_disabled_and_drain,
+            consolidate=_control_consolidate,
+        )
+    )
     return CoreRuntime(
         bus=bus,
         event_bus=event_bus,
@@ -662,6 +698,10 @@ async def build_runtime(
         subagents=subagents,
         proactive_loop=proactive_loop,
         drift_runner=drift_runner,
+        control_store=control_store,
+        control_runtime=control_runtime,
+        control_service=control_service,
+        control_server=control_server,
     )
 
 

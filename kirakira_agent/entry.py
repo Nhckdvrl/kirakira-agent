@@ -22,6 +22,8 @@ HELP = """\
   supervise                     显式进入 supervisor（兼容别名）
   memory doctor|backup|migrate|verify|rollback|clear
                                 Memory2 M0/M1 管理与恢复
+  control <子命令>              连接已在跑的 Agent:看状态、跑一轮、中断、排空插件
+                                (control -h 看完整子命令)
 
 通用选项:
   --config PATH                 配置文件，默认 config.toml
@@ -85,11 +87,12 @@ def _print_summary(summary) -> None:
 
 def main(argv: list[str] | None = None) -> None:
     args = list(sys.argv[1:] if argv is None else argv)
-    if "-h" in args or "--help" in args:
+    command = args[0] if args and not args[0].startswith("-") else ""
+    # 子命令自己的 -h 归子命令,不能被全局帮助吞掉。
+    if ("-h" in args or "--help" in args) and command != "control":
         print(HELP)
         return
-    command = args[0] if args and not args[0].startswith("-") else ""
-    if command not in {"", "setup", "init", "gateway", "supervise", "memory"}:
+    if command not in {"", "setup", "init", "gateway", "supervise", "memory", "control"}:
         raise SystemExit(f"未知命令: {command}\n\n{HELP}")
 
     config_path = Path(_flag_value(args, "--config") or "config.toml").expanduser().resolve()
@@ -120,6 +123,11 @@ def main(argv: list[str] | None = None) -> None:
             forwarded.append("--clear-self")
         runtime_main(forwarded)
         return
+    if command == "control":
+        # 只连已在跑的 agent,不加载 runtime,也不需要 config 存在。
+        from kirakira_agent.control.cli import main as control_main
+
+        raise SystemExit(control_main(args[1:], workspace))
     if command == "supervise":
         _validate_supervise_args(args[1:])
     if not config_path.exists():

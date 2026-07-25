@@ -26,6 +26,9 @@ class ToolResult:
     tool_call_id: str
     content: str
     is_error: bool = False
+    # 工具声明"本轮需要用户明确确认"。唯一合法值是 "confirmation"(照 Reference
+    # agent/tools/base.py)。只有成功的工具可以声明,由 reasoner 聚合到 turn 级。
+    mobile_attention: Optional[str] = None
 
 
 @dataclass

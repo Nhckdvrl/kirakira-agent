@@ -31,7 +31,7 @@ from kirakira_agent.coremem.engine import (
     MemoryQueryFilters,
     MemoryScope,
 )
-from kirakira_agent.schema import ToolSpec
+from kirakira_agent.schema import ToolResult, ToolSpec
 from kirakira_agent.snapshot import SnapshotToolView, get_current_runtime_snapshot
 from kirakira_agent.session import SessionManager
 from kirakira_agent.skills import SkillLoader
@@ -433,6 +433,25 @@ class WorkspaceTools:
 
     def load_skill(self, name: str) -> str:
         return self.skill_loader.load(name)
+
+    def request_user_confirmation(self, prompt: str) -> ToolResult:
+        """显式标记本轮需要用户确认后才能继续。
+
+        照 Reference agent/tools/request_user_confirmation.py:这是一个**标记**,
+        不是执行前闸门——它不阻止任何工具运行,只把 ``mobile_attention`` 抬到
+        turn 级,让渠道能把这一轮渲染成"等待确认"。真正的拦截能力是
+        ``tool_hooks`` 的 pre-hook ``deny``。
+        """
+        text = str(prompt).strip()
+        if not text:
+            return ToolResult("", "Error: prompt 不能为空", is_error=True)
+        if len(text) > 500:
+            return ToolResult("", "Error: prompt 不能超过 500 字符", is_error=True)
+        return ToolResult(
+            "",
+            "已标记等待用户确认：%s" % text,
+            mobile_attention="confirmation",
+        )
 
     async def vision(self, image_paths, prompt: str = "请详细描述并分析图片。") -> str:
         from kirakira_agent.models.openai_compatible import OpenAICompatibleClient
@@ -1305,6 +1324,24 @@ def build_default_registry(
             object_schema({"name": {"type": "string"}}, ["name"]),
         ),
         handlers.load_skill,
+    )
+    registry.register(
+        ToolSpec(
+            "request_user_confirmation",
+            "当任务必须等待用户做出明确选择、授权或确认时调用。"
+            "调用后，在本轮最终回复中清楚列出要确认的事项；"
+            "普通提问、补充信息或修辞问句不要调用。",
+            object_schema(
+                {
+                    "prompt": {
+                        "type": "string",
+                        "description": "需要用户明确确认的具体事项。",
+                    }
+                },
+                ["prompt"],
+            ),
+        ),
+        handlers.request_user_confirmation,
     )
     registry.register(
         ToolSpec(
