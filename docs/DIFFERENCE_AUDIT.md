@@ -12,10 +12,10 @@ Kirakira 不是 Akashic 的等比例缩小版。它采取了三种不同策略�
 - **被动链路：语义对齐、结构压平。** 工具循环、Session、记忆检索、上下文治理、多渠道、MCP、
   插件 snapshot 等核心行为已覆盖，但用单进程和更少的抽象层实现。
 - **主动推送：保留产品语义，运行时只做到 MVP。** 电量调频、alert/content/context、LLM 判断、
-  去重冷却和消息交付已经贯通；Akashic 的 phase kernel、snapshot lease、插件数据源、hazard、
-  embedding 兴趣与 durable outbox 尚未移植；pending ACK 已按 Reference 接入。
+  去重冷却和消息交付已经贯通；插件数据源已可编译接线,跨崩溃投递去重已按 Reference 的
+  deliveries 表实现;仍缺 phase kernel、snapshot lease、hazard 与 embedding 兴趣。
 - **Drift：保留“行为由 SKILL.md 定义”的内核。** Kirakira 能跑一次带连续性的后台 Agent run，
-  但没有 Akashic 的 journal、self-observation、hazard drive 和完整 lifecycle。
+  journal 与 self-observation 已补(append-only skill_journal + 注入 briefing);仍缺 hazard drive 与完整 lifecycle。
 
 因此最准确的项目定位是：
 
@@ -122,7 +122,7 @@ Stage 4 切换。doctor 仍比对 `coremem/*.py` 与 `Reference/memory2/*.py` �
 | forced tool decision | `ProactiveJudge` 严格 JSON | 替代实现 | provider 通用，但结构保证更弱 |
 | `ProactiveKernel` + lifecycle | `ProactiveLoop._tick()` | 轻实现 | 显式顺序链，无 slot DAG、factory、start/stop rollback |
 | proactive snapshot lease | 无 | 未实现 | tick 期间 source/tool/skill 可能不具备同代际保证 |
-| delivery + pending ACK | Channel receipt + delivery id + pending ACK | 轻实现 | 对齐 orchestrator 的成功后提交与 wake state 的 ACK 队列；无 durable outbox |
+| delivery + pending ACK | Channel receipt + delivery id + pending ACK + deliveries 去重表 | 对齐 | 成功后提交、ACK 队列,以及内容指纹+时间窗的跨崩溃去重(照 Reference proactive_v2/state.py) |
 | trace/diagnostics | `decisions` 表 + `status()` | 轻实现 | 能回看动作，缺完整 strategy/lifecycle trace |
 
 ### 5.2 产品语义已经成立的部分
@@ -140,8 +140,9 @@ Stage 4 切换。doctor 仍比对 `coremem/*.py` 与 `Reference/memory2/*.py` �
 ### 5.3 MVP 仍需明确承认的边界
 
 1. **调度不是发送概率。** energy/base score 只选轮询间隔；是否发送由事件、冷却和 LLM 决定。
-2. **单进程发送闭环已打通，但还不是跨崩溃 exactly-once。** 主动链路会等待 Channel callback 成功，
-   失败不写 Session/不消费事件；仍缺 durable outbox，进程在渠道成功与本地提交之间崩溃时可能重复发送。
+2. **跨崩溃不重复,但不是 exactly-once。** 发送前落地投递意图、渠道明确失败才撤销,因此进程在
+   渠道成功与本地提交之间崩溃不会重复发送;代价是标记后、发送前崩溃会漏发这一条,语义是
+   **至多一次 + 窗口内不重复**。见 [decisions/0004](./decisions/0004-delivery-dedup.md)。
 3. **插件源已接线，但缺真实端到端证据。** 插件声明可编译成源并进入 registry；仍没有生产级 RSS/日历 source 的凭据、健康检查和限流。
 4. **主动链路没有代际租约。** 被动 turn 的 snapshot 经验尚未延伸到一次完整 proactive tick。
 5. **单目标配置。** 当前一套 `[proactive.target]` 对应一个 channel/chat，不是多用户调度器。
