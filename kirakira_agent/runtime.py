@@ -1013,7 +1013,12 @@ class PassiveTurnPipeline:
             if core_reply is not None:
                 return await self._dispatch_if_needed(state, core_reply)
 
-        await self.memory.wait_for_session(key)
+        # 等上一轮归档收口再读历史:归档会推进 last_consolidated,没等会读到错位窗口。
+        maintenance = self._markdown_maintenance()
+        if maintenance is not None:
+            await maintenance.wait_for_session(key)
+        else:
+            await self.memory.wait_for_session(key)
         guard_reply = await self._guard_memory_context(session, key)
         if guard_reply:
             return await self._dispatch_if_needed(state, guard_reply)

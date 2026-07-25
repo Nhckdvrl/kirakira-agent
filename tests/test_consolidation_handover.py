@@ -126,5 +126,70 @@ class ContextGuardTests(unittest.TestCase):
         asyncio.run(scenario())
 
 
+class MaintenanceWaitTests(unittest.TestCase):
+    """下一轮读历史前必须等上一轮归档收口,否则会读到错位的历史窗口。"""
+
+    def _maintenance(self):
+        from kirakira_agent.coremem.markdown import MarkdownMemoryMaintenance
+
+        m = MarkdownMemoryMaintenance.__new__(MarkdownMemoryMaintenance)
+        m._maintenance_tasks = {}
+        return m
+
+    def test_no_task_returns_immediately(self) -> None:
+        async def scenario() -> None:
+            await self._maintenance().wait_for_session("absent")
+
+        asyncio.run(scenario())
+
+    def test_waits_until_maintenance_finishes(self) -> None:
+        async def scenario() -> None:
+            m = self._maintenance()
+            done: list[str] = []
+
+            async def work() -> None:
+                await asyncio.sleep(0.05)
+                done.append("finished")
+
+            m._maintenance_tasks["s"] = asyncio.create_task(work())
+            await m.wait_for_session("s")
+            self.assertEqual(done, ["finished"])
+
+        asyncio.run(scenario())
+
+    def test_timeout_does_not_cancel_the_running_maintenance(self) -> None:
+        async def scenario() -> None:
+            m = self._maintenance()
+            done: list[str] = []
+
+            async def slow() -> None:
+                await asyncio.sleep(0.3)
+                done.append("finished")
+
+            task = asyncio.create_task(slow())
+            m._maintenance_tasks["s"] = task
+            await m.wait_for_session("s", timeout=0.05)
+            # 超时只放弃等待;取消会让归档停在半途,比等不到更糟
+            self.assertFalse(task.done())
+            await task
+            self.assertEqual(done, ["finished"])
+
+        asyncio.run(scenario())
+
+    def test_failed_maintenance_does_not_propagate_to_the_turn(self) -> None:
+        async def scenario() -> None:
+            m = self._maintenance()
+
+            async def boom() -> None:
+                raise RuntimeError("maintenance exploded")
+
+            m._maintenance_tasks["s"] = asyncio.create_task(boom())
+            await asyncio.sleep(0)
+            # 上一轮归档失败不该把本轮 turn 打挂
+            await m.wait_for_session("s")
+
+        asyncio.run(scenario())
+
+
 if __name__ == "__main__":
     unittest.main()

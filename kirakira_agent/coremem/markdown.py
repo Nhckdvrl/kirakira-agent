@@ -1137,6 +1137,29 @@ class MarkdownMemoryMaintenance:
                         RefreshRecentTurnsRequest(session=session)
                     )
 
+    async def wait_for_session(self, session_key: str, timeout: float = 30.0) -> None:
+        """等待该 session 的维护队列收口。
+
+        下一轮 turn 读历史之前必须等上一轮归档写完:归档会推进 last_consolidated,
+        没等就读会拿到错位的历史窗口。超时则放弃等待并保留任务继续跑,不取消——
+        取消会让归档停在半途,比等不到更糟。
+        """
+        task = self._maintenance_tasks.get(session_key)
+        if task is None or task.done():
+            return
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=max(0.1, timeout))
+        except (asyncio.TimeoutError, TimeoutError):
+            logger.warning(
+                "markdown memory maintenance wait timed out: session=%s", session_key
+            )
+        except Exception:
+            logger.warning(
+                "markdown memory maintenance failed while waiting: session=%s",
+                session_key,
+                exc_info=True,
+            )
+
     def _on_maintenance_done(
         self,
         task: asyncio.Task[None],
