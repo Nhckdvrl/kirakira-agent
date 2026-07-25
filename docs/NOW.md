@@ -34,7 +34,9 @@
 ## 4. 插件源的真实端到端验证
 
 **现状**:插件声明的 `ProactiveSourceSpec` 已编译成真实源并进入 `SourceRegistry`
-(`cli._build_source_registry`),但只有替身工具的契约测试,没有真实 MCP server 的端到端证据。
+(`cli._build_source_registry`)。编译、注册与插件声明收集已实弹验过(见
+[design/live-verification.md](./design/live-verification.md) 第 5 节),但用的是替身 gateway,
+没有真实 MCP server 的 fetch/ack 证据。
 
 **接手点**:用一个真实 MCP server 声明一个源,验证 fetch/ack 全链路。
 
@@ -46,17 +48,24 @@
 deepseek 会返回 `{"intent": []}`,已由 `coremem/compat_worker.py` 在 kirakira 边界容错
 (镜像文件保持与 Reference 逐字节一致)。
 
-**接手点**:`ProactiveJudge` 的严格 JSON 决策、Drift 的 `finish_drift` 参数解析走的是
-另外的解析路径,尚未用真实模型逐一验证过同类偏差。
+`ProactiveJudge` 的严格 JSON 与 `finish_drift` 参数解析已在真实模型下跑过(见
+[design/live-verification.md](./design/live-verification.md) 第 4、5 节),未出现同类偏差。
 
-**验收**:这些路径在真实模型下连续跑若干轮不因格式偏差抛异常;偏差被记录而不是被猜测吞掉。
+**接手点**:仍未覆盖的是**换模型**之后的回归——不同 provider 的 JSON 顺从度不同,
+换 provider 时这三处解析都要重验。
+
+**验收**:换 provider 后连续跑若干轮不因格式偏差抛异常;偏差被记录而不是被猜测吞掉。
 
 ## 6. 其余已知差距(未排期)
 
 | 项 | 状态 |
 | --- | --- |
-| Drift 的 journal / self-observation / hazard drive | 已完成 |
 | QQ 两渠道逐字节对齐 Reference(Telegram 已对齐) | 未做 |
 | 插件包元数据 manifest、非 git 源解析、独立 doctor 模块 | 未做 |
 | control plane / app server、前端 Dashboard、peer-agent、eval | 未做 |
 | 主动多目标调度(当前单 `[proactive.target]`) | 未做 |
+
+## 7. 仍未实弹验证的边界
+
+代码已完成、但尚未在真实环境跑过的项(渠道、崩溃恢复、长跑等)统一记在
+[design/live-verification.md](./design/live-verification.md) 第 7 节,本文不重复。

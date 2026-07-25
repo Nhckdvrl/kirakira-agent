@@ -1,7 +1,8 @@
 # Kirakira Agent 与 Akashic Agent 差异性评估
 
 > 基准：本地 `Reference/` 的 Akashic Agent commit `012e37c`（2026-07-21）。本文评估当前工作树，
-> 不把文件同名、类型声明或代码行数当成功能等价的证据。被动链路的工程演进见
+> 不把文件同名、类型声明或代码行数当成功能等价的证据。本文的"已对齐/已跑通"以离线测试为准,
+> 其中哪些另有真实模型与真实渠道的证据,见 [design/live-verification.md](./design/live-verification.md)。被动链路的工程演进见
 > [VERSION_EVOLUTION.md](./VERSION_EVOLUTION.md)，主动链路自身的结构见
 > [PROACTIVE_ARCHITECTURE.md](./PROACTIVE_ARCHITECTURE.md)。
 
@@ -49,7 +50,7 @@ namespace、MessageBus、SessionManager、message-push 和 interrupt binding。�
 | **未实现** | 运行时能力不存在；即使有协议、文档或预留接口也不算完成 |
 
 评估按五个问题核对：谁触发、谁拥有状态、什么时候提交、失败后怎样恢复、是否有调用点和测试。
-代码行数只说明维护面，不说明覆盖率。当前 `kirakira_agent/` 约 3.0 万行 Python；Reference 排除 tests/eval 后约 10.5 万行。数倍的维护面差异本身正说明两者不是同一运行时厚度。
+代码行数只说明维护面，不说明覆盖率。当前 `kirakira_agent/` 约 3.1 万行 Python；Reference 排除 tests/eval 后约 10.5 万行。数倍的维护面差异本身正说明两者不是同一运行时厚度。
 
 ## 3. 架构层面的根本差异
 
@@ -231,7 +232,7 @@ per-plugin generation、proactive phase DAG、多目标调度、app server、Das
 - Telegram/启动：固定 Reference 源码字节一致性测试、原始 Telegram utils 契约测试和真实
   Supervisor → gateway readiness 启动。
 
-当前完整离线回归为 `419 passed, 4 subtests passed`。
+当前完整离线回归为 `429 passed, 4 subtests passed`。
 
 现有测试证明“进程内闭环贯通到 Channel callback”，尚未证明：真实外部平台最终展示、渠道成功与
 consume/ACK 的跨崩溃原子性、进程恢复、多目标公平调度、插件热换代中的主动 tick 一致性，以及

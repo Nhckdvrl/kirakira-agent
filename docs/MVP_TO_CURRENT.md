@@ -20,8 +20,11 @@
 完整离线回归:
 
 ```text
-419 passed, 4 subtests passed
+429 passed, 4 subtests passed
 ```
+
+离线回归之外的**真实模型/真实渠道**验证结果单独记在
+[design/live-verification.md](./design/live-verification.md):哪些链路真跑过、哪些只是测过。
 
 ## 2. 从 MVP 到当前的被动链路(重点看这里)
 
@@ -139,6 +142,7 @@ control plane / 前端 / peer-agent / eval、主动多目标调度。
 
 - [INDEX.md](./INDEX.md):文档索引与阅读顺序。
 - [NOW.md](./NOW.md):未完成工作与接手点。
+- [design/live-verification.md](./design/live-verification.md):实弹验证记录与未验证边界。
 - [PLUGIN_SYSTEM.md](./PLUGIN_SYSTEM.md):插件声明、代际、热重载、安装。
 - [decisions/](./decisions/):架构选择的理由与替代方案。
 - [design/](./design/):单次重构的调用链、失败语义与验收。

@@ -1,6 +1,9 @@
 # Local secrets and config — copy the .example files and edit those.
+# The *.before-setup.bak backups the setup wizard writes hold the same secrets.
 .env
 config.toml
+.env.*.bak
+config.toml.*.bak
 
 # Reference checkout used only for auditing; not part of this project.
 Reference/
@@ -19,6 +22,14 @@ Reference/
 /proactive.db-wal
 /drift/
 /PROACTIVE_CONTEXT.md
+/coremem.db
+/coremem.db-shm
+/coremem.db-wal
+
+# Supervisor / boot handshake state, written next to the workspace root.
+/.runtime-ready.json
+/.supervisor.lock
+/.supervisor.pid
 
 # Python
 __pycache__/
