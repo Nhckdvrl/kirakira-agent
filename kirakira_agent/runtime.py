@@ -49,6 +49,7 @@ from kirakira_agent.coremem.engine import (
     MemoryScope as _CoreMemScope,
 )
 from kirakira_agent.coremem.services import MemoryServices
+from kirakira_agent.ports import ContextServices, SessionServices
 from kirakira_agent.models.base import ContentSafetyError, ContextLengthError, ModelClient
 from kirakira_agent.schema import ModelResponse, ToolCall, ToolResult, assistant_message_from_response, tool_result_message
 from kirakira_agent.session import SessionManager
@@ -858,13 +859,19 @@ class PassiveTurnPipeline:
         snapshot_store: RuntimeSnapshotStore | None = None,
         memory_services: "MemoryServices | None" = None,
         plugin_generations: Any = None,
+        session_services: "SessionServices | None" = None,
+        context_services: "ContextServices | None" = None,
     ) -> None:
         self.bus = bus
         self.event_bus = event_bus
-        self.session_manager = session_manager
+        # 服务包优先;未注入时用具体对象兜底,便于最小构造与测试。
+        # 两条路都收敛到同一个属性,pipeline 内部只认服务包。
+        self.session_services = session_services or SessionServices(
+            session_manager=session_manager
+        )
+        self.context_services = context_services
         self.memory = memory
-        # Phase 2 DI 缝:runtime 只认识 MemoryServices.engine,不认识具体实现。
-        # 未注入服务包时(多数测试)回退到旧 MemoryRuntime.retrieve 的词法路径。
+        # 记忆 DI 缝:runtime 只认识 MemoryServices.engine,不认识具体实现。
         self.memory_services = memory_services
         self.tools = tools
         self.reasoner = reasoner
@@ -876,6 +883,11 @@ class PassiveTurnPipeline:
         self._before_reasoning_modules: List[object] = []
         self._after_reasoning_modules: List[object] = []
         self._after_turn_modules: List[object] = []
+
+    @property
+    def session_manager(self) -> SessionManager:
+        """pipeline 通过服务包拿 session,换实现不必改这里的调用点。"""
+        return self.session_services.session_manager
 
     def add_before_turn_plugin_modules(self, modules: List[object]) -> None:
         self._before_turn_modules.extend(modules)

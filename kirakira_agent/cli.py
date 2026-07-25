@@ -27,6 +27,7 @@ from kirakira_agent.mcp import McpCatalogPublisher, WorkspaceMcpAdmin, Workspace
 from kirakira_agent.models import OpenAICompatibleClient
 from kirakira_agent._compat.provider import ModelClientProvider
 from kirakira_agent.coremem.services import build_memory_services
+from kirakira_agent.ports import ContextServices, LLMServices, SessionServices
 from kirakira_agent.plugins import PluginManager
 from kirakira_agent.plugin_watcher import PluginWatcher
 from kirakira_agent.proactive import ProactiveLoop
@@ -563,6 +564,8 @@ async def build_runtime(
         config=config,
         snapshot_store=snapshot_store,
         memory_services=memory_services,
+        session_services=SessionServices(session_manager=session_manager),
+        context_services=ContextServices(context=context),
     )
     loop = AgentLoop(bus=bus, pipeline=pipeline)
     plugin_manager = PluginManager(

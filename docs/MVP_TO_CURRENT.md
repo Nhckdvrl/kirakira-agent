@@ -94,7 +94,7 @@ Kirakira ≈2.6 万行,Reference ≈10.5 万行(产品代码)。差距的核心�
 | 地基(必须重构) | 状态 |
 | --- | --- |
 | ① 异步原生 model runtime | 完成 |
-| ② 依赖注入(Services/Ports) | 记忆缝已落地;context/session 待推广,见 NOW.md 第 2 项 |
+| ② 依赖注入(Services/Ports) | `ports.py` 分开配置与服务对象,pipeline 消费 SessionServices/ContextServices/MemoryServices |
 | ③ Turn 抽象 + lifecycle slot DAG | 完成(模块 frame 签名待迁移,见 NOW.md 第 3 项) |
 | ④ 记忆 seam(引擎藏在干净接口后) | 完成 |
 
