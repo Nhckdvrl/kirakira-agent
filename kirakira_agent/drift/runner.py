@@ -12,14 +12,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
+import math
+import random
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, List
+from typing import Any, List, Optional
 from uuid import uuid4
 
 from kirakira_agent.agent import Agent
 from kirakira_agent.bus import MessageBus
 from kirakira_agent.drift.skills import DriftSkill, discover_skills, ensure_example_skill
+from kirakira_agent.drift.drive import sample_drift_delay_hours
 from kirakira_agent.drift.state import DriftStateStore
 from kirakira_agent.drift.tools import DriftRunContext, register_drift_tools
 from kirakira_agent.events import OutboundMessage
@@ -65,6 +68,7 @@ class DriftRunner:
         self._chat_id = target_chat_id
         self._max_tokens = max_tokens
         self._state = DriftStateStore(self._workspace / "drift" / "drift.db")
+        self._rng = random.Random()
 
     def close(self) -> None:
         self._state.close()
@@ -77,7 +81,10 @@ class DriftRunner:
         skills = discover_skills(self._workspace)
         if not skills:
             return False
+        # min_interval 仍是硬下限(安全阀);到期采样在此之上决定"闲下来了才去做"。
         if not self._state.can_run(now, self._cfg.min_interval_hours):
+            return False
+        if not self._hazard_due(now, session_key):
             return False
 
         skill = self._select_skill(skills)
@@ -129,6 +136,77 @@ class DriftRunner:
             message_result,
         )
         return True
+
+    def _hazard_due(self, now: datetime, session_key: str) -> bool:
+        """按 hazard 采样的到期时刻决定本轮是否尝试。
+
+        用采样到期而不是轮询判阈:后者会让"检查得越频繁越容易触发"这种采样假象
+        混进来(照 Reference:到期事件只负责开启一次判别)。
+        """
+        last_user_at = self._last_user_at(session_key)
+        if last_user_at is None:
+            # 没有任何用户消息 = 没有"空闲多久"的基准,hazard 无从计算。
+            # 此时不额外设卡,交回 min_interval 判断,而不是永远不跑。
+            return True
+        last_drift_at = self._state.last_drift_at()
+        anchor = "%s|%s" % (
+            last_user_at.isoformat() if last_user_at else "",
+            last_drift_at.isoformat() if last_drift_at else "",
+        )
+        stored = self._state.load_schedule(session_key)
+        if stored is None or stored["timer_anchor"] != anchor:
+            # 用户又说话了 / 刚跑过 Drift → 锚点变化,按新的空闲状态重新采样
+            idle_hours = (
+                max(0.0, (now - last_user_at).total_seconds() / 3600)
+                if last_user_at is not None
+                else 0.0
+            )
+            recent_drift = (
+                math.exp(-max(0.0, (now - last_drift_at).total_seconds()) / (6 * 3600))
+                if last_drift_at is not None
+                else 0.0
+            )
+            delay = sample_drift_delay_hours(
+                random_draw=self._rng.random(),
+                idle_hours=idle_hours,
+                recent_drift_suppression=recent_drift,
+                repetition_suppression=0.0,
+            )
+            if not math.isfinite(delay):
+                return False
+            next_at = now + timedelta(hours=delay)
+            self._state.save_schedule(session_key, anchor, next_at, now)
+            logger.info(
+                "[drift] 采样下一次到期 idle=%.1fh delay=%.2fh at=%s",
+                idle_hours,
+                delay,
+                next_at.isoformat(),
+            )
+            return False
+        if now < stored["next_attempt_at"]:
+            return False
+        # 到期并将要真的跑一轮 → 清掉排程,下一轮按新的空闲状态重新采样
+        self._state.clear_schedule(session_key)
+        return True
+
+    def _last_user_at(self, session_key: str) -> Optional[datetime]:
+        """最近一条用户消息时间;没有则返回 None(视作没有空闲基准)。"""
+        try:
+            session = self._sessions.get_or_create(session_key)
+        except Exception:
+            return None
+        for message in reversed(session.messages):
+            if message.get("role") != "user":
+                continue
+            raw = str(message.get("timestamp") or "")
+            if not raw:
+                continue
+            try:
+                parsed = datetime.fromisoformat(raw)
+            except ValueError:
+                continue
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        return None
 
     def _select_skill(self, skills: List[DriftSkill]) -> DriftSkill:
         """每轮重新比较，选最久没跑过的 skill（从未跑过的优先）。

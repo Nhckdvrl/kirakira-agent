@@ -24,6 +24,12 @@ CREATE TABLE IF NOT EXISTS runs (
     message_result TEXT NOT NULL DEFAULT 'silent'
 );
 CREATE INDEX IF NOT EXISTS idx_runs_skill ON runs(skill, run_at);
+CREATE TABLE IF NOT EXISTS drift_schedule (
+    session_key TEXT PRIMARY KEY,
+    timer_anchor TEXT NOT NULL DEFAULT '',
+    next_attempt_at TEXT NOT NULL,
+    sampled_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS skill_journal (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     skill TEXT NOT NULL,
@@ -115,6 +121,44 @@ class DriftStateStore:
             (limit,),
         ).fetchall()
         return [dict(row) for row in rows]
+
+    # ── hazard 到期调度(照 Reference wake_proactive)─────────────────────────
+
+    def load_schedule(self, session_key: str) -> Optional[dict]:
+        row = self._db.execute(
+            "SELECT timer_anchor, next_attempt_at, sampled_at FROM drift_schedule "
+            "WHERE session_key = ?",
+            (session_key,),
+        ).fetchone()
+        if row is None:
+            return None
+        try:
+            next_at = datetime.fromisoformat(str(row["next_attempt_at"]))
+        except ValueError:
+            # 到期时刻损坏 → 当作没有排程,下一轮重新采样
+            return None
+        return {"timer_anchor": str(row["timer_anchor"] or ""), "next_attempt_at": next_at}
+
+    def save_schedule(
+        self, session_key: str, timer_anchor: str, next_attempt_at: datetime, now: datetime
+    ) -> None:
+        self._db.execute(
+            """
+            INSERT INTO drift_schedule (session_key, timer_anchor, next_attempt_at, sampled_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(session_key) DO UPDATE SET
+                timer_anchor = excluded.timer_anchor,
+                next_attempt_at = excluded.next_attempt_at,
+                sampled_at = excluded.sampled_at
+            """,
+            (session_key, timer_anchor, next_attempt_at.isoformat(), now.isoformat()),
+        )
+        self._db.commit()
+
+    def clear_schedule(self, session_key: str) -> None:
+        """到期并真的跑了之后清掉,下一轮按新的空闲状态重新采样。"""
+        self._db.execute("DELETE FROM drift_schedule WHERE session_key = ?", (session_key,))
+        self._db.commit()
 
     # ── skill journal(照 Reference plugins/drift_flow/state.py)──────────────
 
