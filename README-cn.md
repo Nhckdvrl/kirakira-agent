@@ -4,6 +4,8 @@ Kirakira Agent 是一个参考 `akashic-agent` 实现的多渠道 AI Agent Runti
 
 > 想先看清“从最小 MVP 做到了哪里、三条链路怎么验收”，直接看
 > [docs/MVP_TO_CURRENT.md](./docs/MVP_TO_CURRENT.md)。
+> 想学“怎么把一个 MVP 养成不塌的系统”，看
+> [docs/ENGINEERING_METHOD.md](./docs/ENGINEERING_METHOD.md)。
 > 启动、初始化向导及 Web/Telegram/两种 QQ 的完整合同见
 > [docs/STARTUP_AND_CHANNELS.md](./docs/STARTUP_AND_CHANNELS.md)。
 
@@ -474,8 +476,11 @@ drift/drift.db                Drift run 记录、跨轮连续性、min_interval 
 
 | 我想知道 | 看这里 |
 | --- | --- |
-| 从 MVP 到当前进度、三条链路如何启动验收 | [docs/MVP_TO_CURRENT.md](./docs/MVP_TO_CURRENT.md) |
+| **怎么把 MVP 养成不塌的系统(判断信号、五种腐坏方式、验证纪律)** | [docs/ENGINEERING_METHOD.md](./docs/ENGINEERING_METHOD.md) |
+| 从 MVP 到当前进度、三条链路如何启动验收(含全景图) | [docs/MVP_TO_CURRENT.md](./docs/MVP_TO_CURRENT.md) |
 | 简历文案与面试追问（含三链路差异化，**面试先看这篇**） | [docs/RESUME_INTERVIEW_GUIDE.md](./docs/RESUME_INTERVIEW_GUIDE.md) |
 | 与 Reference 的能力级差异、主动 MVP 边界与差距优先级 | [docs/DIFFERENCE_AUDIT.md](./docs/DIFFERENCE_AUDIT.md) |
 | 主动链路的总体架构、状态机、提交边界与演进顺序 | [docs/PROACTIVE_ARCHITECTURE.md](./docs/PROACTIVE_ARCHITECTURE.md) |
-| 被动链路如何从 Function Calling MVP 一步步工程化 | [docs/VERSION_EVOLUTION.md](./docs/VERSION_EVOLUTION.md) |
+| 被动链路如何从 Function Calling MVP 一步步工程化(至第 13 轮) | [docs/VERSION_EVOLUTION.md](./docs/VERSION_EVOLUTION.md) |
+| 程序化观测/驱动运行中的 agent | [docs/design/control-plane.md](./docs/design/control-plane.md) |
+| 哪些链路是"真跑过"而不只是"测过" | [docs/design/live-verification.md](./docs/design/live-verification.md) |

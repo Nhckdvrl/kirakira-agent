@@ -26,14 +26,27 @@ MVP：模型能调用一个工具
   ↓
 追平 reference：对齐工具、迁移 memory2 核心状态与行为、按运行时分层搬 skill
   ↓
-当前：完整被动式 Agent Runtime
+四个地基一次做完：异步 runtime、依赖注入、Turn+slot 图、记忆 seam（第 12 节）
+  ↓
+可扩展与可运维：插件代际热重载、主动链路 lifecycle 化、控制面（第 13 节）
+  ↓
+当前：完整被动式 Agent Runtime + 可程序化驱动
   ↓
 下一版：评测驱动的工具编排与回归体系
   ↓
 后续：100–200 用户、多租户和后台管理
 ```
 
+**为什么第 12 节是一道分水岭**:前十一节都是"遇到问题补一层",到第七轮末尾出现了
+新症状——**补不动了**。那说明剩下的问题不再是"少了功能",而是"抽象的形状不对"。
+把"该加代码"和"该动地基"分开判断的方法,单独写在
+[ENGINEERING_METHOD.md](./ENGINEERING_METHOD.md)。
+
 下面的“版本”是工程演进阶段，不是为了包装而虚构的发布标签。每一阶段都回答四个问题：最小目标是什么、为什么要加下一层、实际解决了什么、还留下什么问题。
+
+> **配套阅读**:本文是编年史(先后发生了什么)。把这些经历提炼成可迁移判断的,
+> 是 [ENGINEERING_METHOD.md](./ENGINEERING_METHOD.md)——它讲复杂系统的五种腐坏方式、
+> 怎么判断该重构还是该加功能、以及"测试绿 ≠ 系统能跑"这一课的代价。
 
 ## 2. MVP：先让模型正确调用工具
 
@@ -648,6 +661,27 @@ output_reserve = max(4096, min(32768, ...))
 
 修复：Memory 记录 source_ref，Session delete callback 将对应记录标记 forgotten 并重写托管 Markdown。
 
+### 9.9 后来又抓到的四个（按发现方式分类）
+
+前八个都是"跑着跑着发现不对"。后面这四个的价值在于**发现方式各不相同**，
+它们对应 [ENGINEERING_METHOD.md 第 4 节](./ENGINEERING_METHOD.md)的四种腐坏方式：
+
+| Bug | 发现方式 | 类型 |
+| --- | --- | --- |
+| `compile_proactive_sources` 引用数为 0，"缺口已闭合"是假的 | **自查调用点** | 死代码 |
+| 引擎 `closeables` 从未被遍历；`coremem.db` 被打开两次 | **DI 分层后追问"谁关它"** | 资源泄漏 |
+| consolidation 移交时丢了"等上一轮收口"的 guard | **移交清单逐条勾对** | 移交丢行为 |
+| `PostResponseMemoryWorker` 在真实模型下整条路抛 ValueError | **实弹（mock 抓不到）** | 契约偏差 |
+
+最后一个值得展开：Reference 的 `_parse_json_string_array` 要求裸 JSON 数组，
+deepseek 在同一段 prompt 下会返回 `{"intent": []}`——单键对象包着数组。
+mock provider 永远按约定返回，所以 429 个测试全绿；而且这条路要配好 embedding
+才会走到，双重掩盖。
+
+修法有一条**边界纪律**：容错写在 kirakira 自己的 `coremem/compat_worker.py`，
+镜像 Reference 的文件保持逐字节一致，doctor 漂移审计仍报 `drifted=[]`。
+**在别人的代码里打补丁，会让你永远无法判断自己漂了多远。**
+
 ## 10. 上下文从“拼得出来”到“可治理”
 
 ### 10.1 旧实现为什么不够
@@ -902,11 +936,190 @@ context / session 也服务化的模板。
 import 具体类 ≠ 可替换        依赖注入让 runtime 只认接口；换实现不连锁改，才谈得上"照 reference 演进"
 ```
 
-## 12. 下一版：工具编排 + LangSmith 评测回归
+## 12. 第八轮：把四个地基一次做完
+
+前七轮是"遇到问题补一层"。到第七轮末尾出现了一个新症状:**补不动了**——
+接记忆引擎要绕线程,单测一个模块要构造整个 runtime,主动链路想插一步做不到。
+这说明剩下的问题不再是"少了什么功能",而是"抽象的形状不对"。
+
+于是这一轮不加任何功能,只做四件事,并且**按依赖顺序做完才碰上层**。
+判断这四件事为什么是"地基"而不是"加法",见
+[ENGINEERING_METHOD.md 第 3 节](./ENGINEERING_METHOD.md)。
+
+### 12.1 地基①:异步原生 model runtime
+
+**之前**:客户端只有同步 `complete`(urllib + `time.sleep`),runtime 里满地
+`asyncio.to_thread(model_client.complete)`。
+
+**问题不在性能,在缝**。记忆引擎、主动判断、Drift 的 LLM 调用全是 async 接口,
+每接一个都要在边界裹一层线程。裹线程本身能跑,但它让每一个 seam 都变得别扭,
+而"别扭"会诱导人再加一层适配——债务就是这样滚起来的。
+
+**做法**:客户端补 `acomplete` / `acomplete_stream`(httpx),runtime 与
+`_compat.provider` **优先 await 异步、只有同步 stub 才回退线程**。
+SSE 解析在同步/异步两条流之间共用一份实现,保证行为一致。
+
+**收获**:这一改之后,记忆接线时那种"处处费劲"的感觉直接消失了。
+症状出现在记忆,病根在模型运行时——这是本项目最典型的一次"别在症状处打补丁"。
+
+### 12.2 地基②:依赖注入(Services / Ports)
+
+**关键设计是把两类东西分开**:
+
+```python
+LLMConfig / MemoryConfig        # 值:可序列化、可比较、进得了配置文件
+LLMServices / SessionServices   # 对象:有生命周期、要关闭、不可序列化
+ContextServices / MemoryServices
+```
+
+混在一个 dict 里传是最常见的退化形式。一旦混了,你就回答不了
+"**关停时该释放什么**"——本项目正因为分开了,才发现引擎的 `closeables`
+从来没被遍历过(一个真实的资源泄漏)。
+
+**验收标准**是可操作的:单测一个模块时,不需要构造整个 runtime。
+
+### 12.3 地基③:Turn 抽象 + lifecycle slot DAG
+
+分两部分。
+
+**Turn 结果与副作用**:一轮的产出不再是"随手改几个地方",而是一个
+`TurnResult`,副作用分三类显式声明:
+
+```python
+side_effects           # 无论成败都执行(发送前的状态落地)
+success_side_effects   # 仅在出站成功后执行
+failure_side_effects   # 仅在出站失败后执行
+```
+
+这个三分不是设计洁癖。主动推送原本在 alert / content / drift 三条路径上
+各手写一遍"发送→成功写 session→失败回滚",三处的回滚逻辑还不完全一致。
+收敛到 `commit_turn_result()` 单点后,跨崩溃去重才有唯一的挂载位置。
+
+**slot 依赖图**:模块声明 `slot` / `requires` / `produces`,拓扑排序决定顺序;
+依赖缺失的模块**级联禁用**而不是静默乱序。内置 slot 豁免。
+
+这里有一个刻意的克制:Reference 的 `PhaseFrame` **没有移植**。因为我们的相位
+模块签名还是 ctx 对象,引入 frame 却没有模块用 `frame.slots` 传递产物,
+它就会是 §4.1 说的那种"声明了但没通电"的代码。缺口写在
+[NOW.md](./NOW.md) 第 3 项,而不是先摆一个空壳。
+
+### 12.4 地基④:记忆 seam
+
+**之前**:`memory2` 的算法零件全部搬进来了——retriever、memorizer、HyDE、
+embedder、rule schema……**但没有装配者**。被动 turn 调的还是旧的
+`MemoryRuntime.retrieve`(同步词法)。
+
+这就是"零件都在,却还停在 M1"的根因:**缺的是把零件装起来的 engine**。
+
+**做法**:照抄 Reference 的 `DefaultMemoryEngine`(约 1520 行),
+runtime 只看到一条缝:
+
+```text
+PassiveTurnPipeline
+  → memory_services.engine.query(MemoryQuery(intent="context", scope=…))
+  → 引擎内部:HyDE / 改写 / 多路召回 / RRF / 注入预算(runtime 完全不感知)
+  → text_block 注入上下文
+```
+
+**门控**:配了 `[memory.embedding]` → 引擎承重;没配 → `DisabledMemoryEngine`,
+回退旧词法路径(因为引擎读写都要向量)。
+
+**这一轮学到最贵的一课**:搬一个子系统,意味着搬它的**持久状态和恢复合同**,
+不只是算法。记忆迁移分 M0→M1→M2→Stage 3/4/5 六步,其中算法反而是最容易的,
+难的是"唯一 owner、迁移、回滚、资源释放"。
+
+### 12.5 这一轮的收获
+
+```text
+地基有依赖顺序          ①异步 → ②DI → ③Turn/slot → ④记忆 seam,顺序错了会返工
+不做的比做的更重要      PhaseFrame 明确不移植,因为没有消费者;空壳比缺口更有害
+症状处 ≠ 病根处          记忆难接,病根在模型运行时
+搬子系统 = 搬持久状态    算法最容易,恢复合同最难
+```
+
+## 13. 第九轮：可扩展与可运维
+
+四个地基就位之后,上层"加法"才第一次变得便宜。这一轮做的都是坐在地基上的东西。
+
+### 13.1 插件扩展体系:从"能加工具"到"能热换代"
+
+原本插件只能注册工具和 hook。这一轮照 Reference 补齐成完整体系:
+
+- **声明式规格**:`plugin.py` 程序化声明能力(工具、MCP server、托管服务、
+  作业、主动源、相位模块),`manifest.toml` 只管启停;
+- **per-plugin 代际 + 租约**:在途 turn 持有当前代际的租约,
+  热重载**不会抽走 turn 正在用的工具**;退役代际要等租约归零才能排空;
+- **热重载与安装免重启**:watcher 唤醒 → reconcile 增删 → 原子替换升级;
+- **gate**:语义检查不过的插件**不发布代际**,而不是半启动。
+
+代际租约是这一轮最重要的一课:**"边跑边改"的系统里,唯一安全的模型是
+"在途请求看到的是它开始时那一代"**。没有这条,热重载就是在给自己埋竞态。
+
+### 13.2 主动链路 lifecycle 化
+
+主动 tick 从一个扁平大函数,改成模块流水线:
+
+```text
+gate → fetch → ingest → judge_context → alert → content → drift
+```
+
+顺序由各模块的 `requires` 依赖图决定,**插件可以声明依赖后插进中间任意位置**。
+Drift 从"主循环末尾的一个 if 分支"变成流水线上的一个模块 `proactive.drift`。
+
+同期把 Drift 的触发从固定 `min_interval` 改成 **hazard 采样到期**:
+开销驱动 × 内容/近期/重复抑制,解 `∫rate dt = -ln(1-u)` 得到下次到期时刻。
+这样做的理由写在 [decisions/0005](./decisions/0005-drift-hazard-sampled-expiry.md):
+轮询判阈会产生"查得越勤触发越频繁"的伪影,采样到期没有这个问题。
+
+### 13.3 跨崩溃投递去重
+
+主动消息在"渠道发送成功"和"本地状态提交"之间崩溃,重启后会重复发送。
+
+选的方案是 **内容 sha256 + 时间窗**(照 Reference 的 `deliveries` 表),
+**明确不做两阶段 outbox**。代价写在
+[decisions/0004](./decisions/0004-delivery-dedup.md):
+语义是"**至多一次 + 窗口内不重复**",不是 exactly-once——标记后、发送前崩溃
+会漏发这一条。把代价写清楚,比含糊地说"已解决可靠性"有用。
+
+### 13.4 控制面:从"能跑"到"能运维"
+
+在此之前,一个跑着的 agent 只能通过渠道对话或看日志。**没有任何程序化入口**
+可以问"你在忙什么"、"把这轮掐掉"、"跑一轮但别发到群里"——一切干预都要重启进程。
+
+控制面提供这条缝:workspace 私有 Unix socket 上的 JSON-RPC 2.0 over NDJSON,
+与渠道链路完全并行。分层、turn 状态机(SQLite CAS)、慢消费者隔离、认证细节见
+[design/control-plane.md](./design/control-plane.md)。
+
+两个值得记的设计:
+
+- **`ConversationRuntime` 不知道 agent 怎么跑**,它只拿一个 `TurnExecutor`。
+  正因为如此,控制面能在不改被动链路一行的前提下接上去。
+- **慢消费者只毒死自己**:订阅队列满时不阻塞发布方,而是清空该队列、
+  塞进 `SlowConsumerError` 并把它踢出订阅集。一个卡住的客户端不能拖慢 turn。
+
+同轮补上 `request_user_confirmation`。这里有一个**认知修正**值得记录:
+我一开始以为它是"危险工具的执行前闸门",读了 Reference 实现才发现
+**它是标记,不是闸门**——它不阻止任何工具执行,只把 `mobile_attention` 抬到
+turn 级供渠道渲染。真正的拦截原语是 `tool_hooks` 的 pre-hook `deny`,
+而那个我们本来就有。
+
+> 教训:**读实现,不要从名字推断语义**。"confirmation" 这个词让我先入为主地
+> 以为它是闸门,如果不是去读了那 30 行代码,就会把一个错误结论写进文档。
+
+### 13.5 这一轮的收获
+
+```text
+地基就位后加法才便宜     控制面接上去没改被动链路一行
+边跑边改必须有代际        在途请求看到它开始时那一代,否则热重载=埋竞态
+把代价写清楚              "至多一次+窗口内不重复" 比 "已解决可靠性" 有用
+读实现,别从名字推断      request_user_confirmation 差点被我写成闸门
+```
+
+## 14. 下一版：工具编排 + LangSmith 评测回归
 
 下一版最重要的不是继续加普通工具，而是证明“工具选择更准、参数更稳、改动不会让旧场景退化”。
 
-### 12.1 Trace 接入
+### 14.1 Trace 接入
 
 将以下节点记录到 LangSmith 或兼容 trace runner：
 
@@ -920,7 +1133,7 @@ import 具体类 ≠ 可替换        依赖注入让 runtime 只认接口；换
 
 敏感字段必须脱敏，API key、完整私密附件和高风险工具参数不能原样上传。
 
-### 12.2 工具系统评测集
+### 14.2 工具系统评测集
 
 至少覆盖：
 
@@ -934,7 +1147,7 @@ import 具体类 ≠ 可替换        依赖注入让 runtime 只认接口；换
 - 高风险工具是否被 Hook 拦截。
 - 工具成功后最终回复是否忠于结果。
 
-### 12.3 记忆评测集
+### 14.3 记忆评测集
 
 - 应记住的稳定偏好是否写入。
 - 短期状态是否不会被误存为长期事实。
@@ -945,7 +1158,7 @@ import 具体类 ≠ 可替换        依赖注入让 runtime 只认接口；换
 - 无关问题是否不会注入噪声记忆。
 - consolidation 重放是否幂等。
 
-### 12.4 基线、回归与回滚
+### 14.4 基线、回归与回滚
 
 ```text
 固定 Dataset
@@ -959,7 +1172,7 @@ import 具体类 ≠ 可替换        依赖注入让 runtime 只认接口；换
 
 每次运行记录 commit SHA、模型、Prompt 版本、工具 schema 版本、memory strategy 和 evaluator 版本。回滚不是“凭感觉改回 Prompt”，而是回到最后一个通过 gate 的版本和配置。
 
-### 12.5 下一版验收指标
+### 14.5 下一版验收指标
 
 - 工具选择准确率。
 - 工具参数一次通过率。
@@ -971,11 +1184,11 @@ import 具体类 ≠ 可替换        依赖注入让 runtime 只认接口；换
 
 具体阈值应在第一批真实数据跑完后确定，不能在没有 baseline 时随意编百分比。
 
-## 13. 再下一版：100–200 用户的后端化
+## 15. 再下一版：100–200 用户的后端化
 
 这一层目前是设计方向，不应写进当前简历的“已完成”部分。
 
-### 13.1 服务拆分建议
+### 15.1 服务拆分建议
 
 ```text
 FastAPI / WebSocket / SSE Gateway
@@ -991,7 +1204,7 @@ Worker：Agent Turn / Memory Consolidation / Embedding
 LLM、Tool/MCP、pgvector、对象存储
 ```
 
-### 13.2 多用户隔离
+### 15.2 多用户隔离
 
 - 所有业务表带 `tenant_id/user_id`。
 - Repository 查询默认注入用户作用域。
@@ -1000,7 +1213,7 @@ LLM、Tool/MCP、pgvector、对象存储
 - PostgreSQL 可增加 Row Level Security 作为第二层隔离。
 - Tool workspace、插件数据和附件路径按用户隔离。
 
-### 13.3 数据模型
+### 15.3 数据模型
 
 - `users`：身份、状态、配额。
 - `sessions`：channel、owner、metadata、version。
@@ -1010,7 +1223,7 @@ LLM、Tool/MCP、pgvector、对象存储
 - `memories`：type、summary、embedding、source、status、confidence。
 - `jobs`：schedule/subagent/consolidation 的统一状态机。
 
-### 13.4 Worker 与并发
+### 15.4 Worker 与并发
 
 - API 只负责提交 turn 和返回 turn id。
 - Worker 异步执行 AgentLoop。
@@ -1019,7 +1232,7 @@ LLM、Tool/MCP、pgvector、对象存储
 - 结果通过 SSE/WebSocket 或轮询回传。
 - Tool call 和 memory write 使用幂等 key。
 
-### 13.5 内容审查
+### 15.5 内容审查
 
 - 入站文本、附件和出站回复分别审查。
 - 高风险工具调用走 policy engine，而不是只审查最终文本。
@@ -1027,7 +1240,7 @@ LLM、Tool/MCP、pgvector、对象存储
 - 对误杀提供人工复核和申诉状态。
 - 管理后台展示用户、turn、tool call、memory、moderation 和 trace。
 
-### 13.6 什么时候可以写进简历
+### 15.6 什么时候可以写进简历
 
 至少完成：
 
@@ -1039,7 +1252,7 @@ LLM、Tool/MCP、pgvector、对象存储
 
 完成后再把简历前两条升级为“FastAPI + PostgreSQL + Worker”，否则面试追问很容易露出没有真正实现。
 
-## 14. 被动链路如何讲
+## 16. 被动链路如何讲
 
 项目主线应是：
 

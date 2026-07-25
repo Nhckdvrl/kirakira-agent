@@ -146,10 +146,13 @@ It changes in the same commit as the code it documents.
 
 | | |
 | --- | --- |
+| [ENGINEERING_METHOD.md](docs/ENGINEERING_METHOD.md) | **how to grow an MVP into a system that doesn't collapse** — refactor-vs-add signals, five decay modes, "green tests ≠ it runs" |
 | [MVP_TO_CURRENT.md](docs/MVP_TO_CURRENT.md) | unified MVP-to-current progress and verification guide for all three chains |
-| [VERSION_EVOLUTION.md](docs/VERSION_EVOLUTION.md) | Function Calling MVP → passive runtime, one problem at a time |
+| [VERSION_EVOLUTION.md](docs/VERSION_EVOLUTION.md) | Function Calling MVP → passive runtime → four foundation refactors → control plane, one problem at a time |
 | [PROACTIVE_ARCHITECTURE.md](docs/PROACTIVE_ARCHITECTURE.md) | the proactive runtime architecture, state machine, commit boundary and roadmap |
 | [DIFFERENCE_AUDIT.md](docs/DIFFERENCE_AUDIT.md) | capability-level comparison with Akashic, deliberate choices, and prioritized gaps |
+| [design/control-plane.md](docs/design/control-plane.md) | JSON-RPC control plane: layering, turn state machine, auth |
+| [design/live-verification.md](docs/design/live-verification.md) | what was actually run against real models/channels, and what wasn't |
 | [RESUME_INTERVIEW_GUIDE.md](docs/RESUME_INTERVIEW_GUIDE.md) | résumé wording and interview Q&A, incl. the three-chain differentiator |
 
 [中文 README](README-cn.md) has the detailed configuration and channel setup.
