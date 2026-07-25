@@ -5,6 +5,11 @@
 > 被动链路的演进过程见 [VERSION_EVOLUTION.md](./VERSION_EVOLUTION.md)，日常配置与操作见
 > [_handbook/proactive.md](../_handbook/proactive.md) 和 [_handbook/drift.md](../_handbook/drift.md)。
 
+> **结构更新(2026-07-25)**:主动 tick 已从扁平顺序链改为模块流水线,
+> 顺序由各模块 `requires` 依赖图决定,Drift 是其中一个模块。调用链、失败语义与验收见
+> [design/proactive-lifecycle.md](./design/proactive-lifecycle.md)。下文的分步描述仍成立,
+> 只是每一步现在对应一个可被插件依赖的模块。
+
 ## 1. 先划清边界
 
 被动链路和主动链路共享模型、记忆、Session、工具与 MessageBus，但有不同的触发器和提交语义：

@@ -1,7 +1,8 @@
 # Kirakira Agent 与 Akashic Agent 差异性评估
 
 > 基准：本地 `Reference/` 的 Akashic Agent commit `012e37c`（2026-07-21）。本文评估当前工作树，
-> 不把文件同名、类型声明或代码行数当成功能等价的证据。被动链路的工程演进见
+> 不把文件同名、类型声明或代码行数当成功能等价的证据。本文的"已对齐/已跑通"以离线测试为准,
+> 其中哪些另有真实模型与真实渠道的证据,见 [design/live-verification.md](./design/live-verification.md)。被动链路的工程演进见
 > [VERSION_EVOLUTION.md](./VERSION_EVOLUTION.md)，主动链路自身的结构见
 > [PROACTIVE_ARCHITECTURE.md](./PROACTIVE_ARCHITECTURE.md)。
 
@@ -15,7 +16,7 @@ Kirakira 不是 Akashic 的等比例缩小版。它采取了三种不同策略�
   去重冷却和消息交付已经贯通；插件数据源已可编译接线,跨崩溃投递去重已按 Reference 的
   deliveries 表实现;仍缺 phase kernel、snapshot lease、hazard 与 embedding 兴趣。
 - **Drift：保留“行为由 SKILL.md 定义”的内核。** Kirakira 能跑一次带连续性的后台 Agent run，
-  journal 与 self-observation 已补(append-only skill_journal + 注入 briefing);仍缺 hazard drive 与完整 lifecycle。
+  journal / self-observation / hazard 采样到期已补,Drift 也已成为主动流水线上的一个模块;仍缺 Reference 的 module factory 与 start/stop rollback。
 
 因此最准确的项目定位是：
 
@@ -49,7 +50,7 @@ namespace、MessageBus、SessionManager、message-push 和 interrupt binding。�
 | **未实现** | 运行时能力不存在；即使有协议、文档或预留接口也不算完成 |
 
 评估按五个问题核对：谁触发、谁拥有状态、什么时候提交、失败后怎样恢复、是否有调用点和测试。
-代码行数只说明维护面，不说明覆盖率。当前 `kirakira_agent/` 约 3.0 万行 Python；Reference 排除 tests/eval 后约 10.5 万行。数倍的维护面差异本身正说明两者不是同一运行时厚度。
+代码行数只说明维护面，不说明覆盖率。当前 `kirakira_agent/` 约 3.1 万行 Python；Reference 排除 tests/eval 后约 10.5 万行。数倍的维护面差异本身正说明两者不是同一运行时厚度。
 
 ## 3. 架构层面的根本差异
 
@@ -118,9 +119,9 @@ Stage 4 切换。doctor 仍比对 `coremem/*.py` 与 `Reference/memory2/*.py` �
 | 三通道 contracts | `proactive/contracts.py` | 轻实现 | alert/content/context 语义保留，字段更少 |
 | MCP proactive sources | `ProactiveSource` + `FileInboxSource` + `mcp_sources.compile_proactive_sources` | 轻实现 | 插件声明已编译成真实源并进入 SourceRegistry；缺真实 MCP server 端到端证据 |
 | source gateway/reservoir | `SourceRegistry` + `ProactiveStateStore` | 轻实现 | 并发 fetch、稳定 id、未读/消费成立；恢复合同更弱 |
-| wake hazard/ranking | severity/newness 排序 | 轻实现 | 无累计 hazard、兴趣 embedding、turn prototype 校准 |
+| wake hazard/ranking | severity/newness 排序 + Drift hazard 采样到期 | 轻实现 | Drift 侧已有 hazard 与采样到期;主动侧仍无累计 hazard、兴趣 embedding 与 turn prototype 校准 |
 | forced tool decision | `ProactiveJudge` 严格 JSON | 替代实现 | provider 通用，但结构保证更弱 |
-| `ProactiveKernel` + lifecycle | `ProactiveLoop._tick()` | 轻实现 | 显式顺序链，无 slot DAG、factory、start/stop rollback |
+| `ProactiveKernel` + lifecycle | `ProactiveLoop._tick()` + `proactive/modules.py` + `frame.py` | 轻实现 | 模块流水线,顺序由 slot 依赖图决定,插件可插模块;无 factory 与 start/stop rollback |
 | proactive snapshot lease | 无 | 未实现 | tick 期间 source/tool/skill 可能不具备同代际保证 |
 | delivery + pending ACK | Channel receipt + delivery id + pending ACK + deliveries 去重表 | 对齐 | 成功后提交、ACK 队列,以及内容指纹+时间窗的跨崩溃去重(照 Reference proactive_v2/state.py) |
 | trace/diagnostics | `decisions` 表 + `status()` | 轻实现 | 能回看动作，缺完整 strategy/lifecycle trace |
@@ -153,10 +154,10 @@ Stage 4 切换。doctor 仍比对 `coremem/*.py` 与 `Reference/memory2/*.py` �
 
 | Akashic | Kirakira | 状态 | 说明 |
 | --- | --- | --- | --- |
-| `plugins/drift_flow` skill 驱动 | `drift/skills.py` + `runner.py` | 轻实现 | SKILL.md 决定行为，每次是一轮 Agent run |
+| `plugins/drift_flow` skill 驱动 | `drift/skills.py` + `runner.py` + `proactive/modules.py:DriftModule` | 轻实现 | SKILL.md 决定行为,每次一轮 Agent run;Drift 已是流水线模块而非 hook |
 | run/cursor/continuum | `drift.db` | 轻实现 | run 记录、skill continuum、min interval 已有 |
 | message/finish tools | `drift/tools.py` | 替代实现 | 线程内生成草稿，主 event loop 等 Channel；成功记 sent，失败记 silent |
-| hazard drive | 直接在 no-push 后 `maybe_run` | 替代实现 | 简单确定性门控，无到期采样 |
+| hazard drive | `drift/drive.py` + `drift_schedule` 表 | 轻实现 | 空闲驱动 × 三项抑制 → hazard,并按分布**采样到期时刻**;min_interval 保留为硬下限 |
 | journal/self-observation | `drift.db:skill_journal` + `journal_append` 工具 | 轻实现 | append-only journal 按 entry_type 分类,self_observation 跨 skill 汇总并注入 briefing;无 question/reinforce/revise 的结构化条目类型 |
 | proactive lifecycle integration | 函数 hook | 轻实现 | 无 module factory、slot 和 snapshot binding |
 
@@ -231,7 +232,7 @@ per-plugin generation、proactive phase DAG、多目标调度、app server、Das
 - Telegram/启动：固定 Reference 源码字节一致性测试、原始 Telegram utils 契约测试和真实
   Supervisor → gateway readiness 启动。
 
-当前完整离线回归为 `354 passed, 4 subtests passed`。
+当前完整离线回归为 `429 passed, 4 subtests passed`。
 
 现有测试证明“进程内闭环贯通到 Channel callback”，尚未证明：真实外部平台最终展示、渠道成功与
 consume/ACK 的跨崩溃原子性、进程恢复、多目标公平调度、插件热换代中的主动 tick 一致性，以及

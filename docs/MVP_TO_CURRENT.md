@@ -1,6 +1,6 @@
 # Kirakira Agent：从 MVP 到当前架构
 
-> 快照:2026-07-25(插件体系与地基③ 落地后)。Reference 固定为 `012e37c8b51df045353972bb551d8e868ab52455`。
+> 快照:2026-07-25(四个地基完成、主动链路 lifecycle 化之后)。Reference 固定为 `012e37c8b51df045353972bb551d8e868ab52455`。
 > 本文只写已进入正式入口并有测试证据的能力;源码存在但没有生产调用点的不算完成。
 > 目标定位:**先照 Reference 对齐架构、跑通完整链路(MVP),细节后补。**
 
@@ -20,8 +20,11 @@
 完整离线回归:
 
 ```text
-354 passed, 4 subtests passed
+429 passed, 4 subtests passed
 ```
+
+离线回归之外的**真实模型/真实渠道**验证结果单独记在
+[design/live-verification.md](./design/live-verification.md):哪些链路真跑过、哪些只是测过。
 
 ## 2. 从 MVP 到当前的被动链路(重点看这里)
 
@@ -89,7 +92,7 @@ PassiveTurnPipeline
 
 ## 3. 与 Reference 的架构对齐:进度与路线
 
-Kirakira ≈2.6 万行,Reference ≈10.5 万行(产品代码)。差距的核心不是"少了功能",而是 **4 个地基抽象需要重构**,其余多是坐在地基上的"加法"。
+Kirakira ≈3.1 万行,Reference ≈10.5 万行(产品代码)。差距的核心不是"少了功能",而是 **4 个地基抽象需要重构**,其余多是坐在地基上的"加法"。
 
 | 地基(必须重构) | 状态 |
 | --- | --- |
@@ -103,8 +106,8 @@ Kirakira ≈2.6 万行,Reference ≈10.5 万行(产品代码)。差距的核心�
 | control plane / app server | 无 |
 | 前端 Dashboard | 无(仅 Memory 管理 API) |
 | peer-agent 进程管理 | 无 |
-| 插件/MCP 主动源 | **已接线**(插件声明→编译→SourceRegistry);真实 MCP 端到端验证见 NOW.md 第 5 项 |
-| durable outbox、多目标调度 | 未做,见 NOW.md 第 4 项 |
+| 插件/MCP 主动源 | **已接线**(插件声明→编译→SourceRegistry);真实 MCP 端到端验证见 NOW.md 第 4 项 |
+| 跨崩溃投递去重 | **已完成**(deliveries 表,见 [decisions/0004](./decisions/0004-delivery-dedup.md));多目标调度未做 |
 | 插件安装/升级/卸载免重启 | **已完成**;包元数据与非 git 源未做 |
 
 **顺序原则**:上层"加法"依赖下层"重构",先地基后上层,才不会"接个东西搞半天"。
@@ -121,26 +124,28 @@ Kirakira ≈2.6 万行,Reference ≈10.5 万行(产品代码)。差距的核心�
 | Stage 5 工具切引擎 | 完成 | memorize/recall/forget 走 `engine.mutate/query`;`coremem.db` 单 owner;关停释放资源 |
 | Stage 5 收尾:consolidation 移交 | 完成 | 归档由 `MarkdownMemoryMaintenance` 驱动,guard 改用可等待的 `consolidate(force=True)`;见 [decisions/0003](./decisions/0003-consolidation-handover.md) |
 
-## 5. 主动推送 / Drift(MVP,未变)
+## 5. 主动推送 / Drift
 
-主动:后台 Tick → Gate → `SourceRegistry.fetch_all()` → alert/content/context 去重 → LLM 判断 → 真实 Channel callback → 成功后写 Session + ACK。内置文件 Source(`<workspace>/proactive/inbox/*.jsonl`)。缺 plugin source、durable outbox、多目标、跨崩溃恢复。
+主动:后台 Tick 跑一条**模块流水线**(gate → fetch → ingest → judge_context → alert → content → drift),顺序由各模块 `requires` 依赖图决定,插件可声明依赖后插进中间;详见 [design/proactive-lifecycle.md](./design/proactive-lifecycle.md)。投递走 `TurnResult` 单一提交点,含跨崩溃去重。内置文件 Source 与插件声明源都进同一 registry。缺多目标调度与 tick 代际租约。
 
-Drift:主动空转 → 选 `drift/skills/*/SKILL.md` → 注入记忆/近期/continuum → 复用 Agent + 默认工具 → `message_push`/`finish_drift` → 成功记 sent 否则 silent。缺 Reference 的 journal / self-observation / hazard drive。
+Drift:现在是流水线上的 `proactive.drift` 模块。触发由 **hazard 采样到期**决定(空闲驱动 × 内容/近期/重复抑制),不再是固定 min_interval;跨轮连续性有 continuum + **append-only journal 与自我观察**;投递走 `TurnResult`,成功记 sent 否则 silent。
 
 ## 6. 明确未完成
 
 未完成事项、接手点与验收边界统一维护在 [NOW.md](./NOW.md),本文不重复列举。
 
-摘要:删除旧 consolidation 回退路径、DI 推广到 context/session、模块 frame 签名、
-durable outbox、插件源真实端到端验证;以及未排期的 Drift journal、QQ 逐字节对齐、
-control plane / 前端 / peer-agent / eval。
+摘要:主动链路模块的服务化、主动 tick 的代际租约、Phase 模块 frame 签名、
+插件源真实端到端验证;以及未排期的 QQ 逐字节对齐、插件包元数据、
+control plane / 前端 / peer-agent / eval、主动多目标调度。
 
 ## 7. 文档导航
 
 - [INDEX.md](./INDEX.md):文档索引与阅读顺序。
 - [NOW.md](./NOW.md):未完成工作与接手点。
+- [design/live-verification.md](./design/live-verification.md):实弹验证记录与未验证边界。
 - [PLUGIN_SYSTEM.md](./PLUGIN_SYSTEM.md):插件声明、代际、热重载、安装。
 - [decisions/](./decisions/):架构选择的理由与替代方案。
+- [design/](./design/):单次重构的调用链、失败语义与验收。
 - [STARTUP_AND_CHANNELS.md](./STARTUP_AND_CHANNELS.md):启动、Telegram、渠道现状。
 - [MEMORY2_M0_M1.md](./MEMORY2_M0_M1.md):记忆 M0/M1 owner、迁移、恢复(注:命名已从 memory2→coremem)。
 - [DIFFERENCE_AUDIT.md](./DIFFERENCE_AUDIT.md):与 Reference 的差异审计。

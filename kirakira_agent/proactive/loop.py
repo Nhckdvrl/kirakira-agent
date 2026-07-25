@@ -41,7 +41,10 @@ from kirakira_agent.proactive.contracts import (
     rank_alerts,
     rank_content,
 )
+from kirakira_agent.phase import topo_sort_modules
+from kirakira_agent.proactive.frame import new_proactive_frame
 from kirakira_agent.proactive.judge import Decision, ProactiveJudge, format_context
+from kirakira_agent.proactive.modules import build_default_proactive_modules
 from kirakira_agent.proactive.sources import SourceRegistry
 from kirakira_agent.proactive.state import ProactiveStateStore
 from kirakira_agent.session import SessionManager
@@ -94,6 +97,8 @@ class ProactiveLoop:
         self._running = False
         self._wake = asyncio.Event()
         self._workspace = Path(session_manager.workspace)
+        # 主动链路是模块流水线;默认模块覆盖原有 tick 的每一步。
+        self._modules: List[object] = build_default_proactive_modules(self)
 
     # ── 生命周期 ──────────────────────────────────────────────────
 
@@ -186,102 +191,26 @@ class ProactiveLoop:
     # ── tick 主链路 ──────────────────────────────────────────────
 
     async def _tick(self) -> None:
-        session_key = self._cfg.session_key
-        now = datetime.now(timezone.utc)
+        """跑一遍模块流水线。
 
-        # 1. Gate：目标就绪、被动链路空闲
-        if not self._cfg.target_ready:
-            return
-        # 对齐 Reference：每轮都先重试已落库的 source ACK，与本轮是否被动忙无关。
-        await self._flush_pending_acknowledgements()
-        if self._passive_busy_fn is not None and self._passive_busy_fn(session_key):
-            logger.info("[proactive] 被动链路忙，跳过本轮")
-            self._state.record_decision(now, "gated", "被动链路忙")
-            return
+        顺序由各模块的 `requires` 依赖图决定(`phase.topo_sort_modules`),不是这里的行序;
+        提前结束由 `frame.terminal` 表达,而不是 return——因此插件可以声明依赖后插进中间,
+        不必改这个函数。
+        """
+        frame = new_proactive_frame(self._cfg.session_key)
+        try:
+            modules = topo_sort_modules(self._modules)
+        except RuntimeError as error:
+            # 模块声明成环/重复是装配错误,大声报出来但保持注册顺序,不把主动链路打挂。
+            logger.error("[proactive] 模块依赖排序失败: %s", error)
+            modules = list(self._modules)
+        for module in modules:
+            frame = await module.run(frame)
+        return None
 
-        # 2. Fetch + Ingest（三通道去重入库）
-        channels = await self._sources.fetch_all()
-        self._state.ingest("alert", channels["alert"], now)
-        new_content = set(self._state.ingest("content", channels["content"], now))
-        self._state.queue_acknowledgements(
-            self._group_acknowledgements(channels["content"]), now
-        )
-        await self._flush_pending_acknowledgements()
-        # 淘汰陈旧未读 content，防止从不被引用的候选无界堆积
-        self._state.expire_old("content", now, self._cfg.content_max_age_days)
-        # context 不入库、不触发推送，只在本轮作为判断背景
-        context_text = format_context(
-            [normalize_context(item) for item in channels["context"]]
-        )
-
-        memory_text = self._read_memory()
-        recent_conversation = self._recent_conversation(session_key)
-        recent_proactive = self._recent_proactive(session_key)
-        proactive_context = self._read_context_file()
-
-        # 3. Decide：alert 按严重度优先直推；还有 alert 时尽快再来一轮排空
-        alerts = rank_alerts(self._state.unread("alert"))
-        if alerts:
-            try:
-                await self._push_alert(
-                    alerts[0], now, memory_text, recent_conversation,
-                    proactive_context, context_text, recent_proactive,
-                )
-            except OutboundDeliveryError as exc:
-                logger.error("[proactive] alert 渠道发送失败，保留未读: %s", exc)
-                self._state.record_decision(
-                    now, "delivery_failed", "alert: %s" % str(exc)
-                )
-                return
-            self._state.record_decision(
-                now, "alert_pushed", str(alerts[0].get("title") or "")[:120]
-            )
-            if len(alerts) > 1:
-                self._wake.set()
-            return
-
-        # 4. content：只有出现新内容、且不在冷却期时才做兴趣判断
-        contents = self._state.unread("content")
-        has_new = bool(contents and new_content)
-        if has_new and not self._state.in_cooldown(
-            session_key, now, self._cfg.delivery_cooldown_hours
-        ):
-            # 兴趣检索用候选标题做 query,把"这个人是否真的关心这类东西"的证据带进判断。
-            interest = await self._interest_hits(
-                " ".join(
-                    str(item.get("title") or "")[:120]
-                    for item in contents[:5]
-                ).strip()
-            )
-            content_memory_text = (
-                "%s\n\n【相关长期记忆】\n%s" % (memory_text, interest)
-                if interest
-                else memory_text
-            )
-            try:
-                pushed = await self._push_content(
-                    contents, now, content_memory_text, recent_conversation,
-                    proactive_context, context_text, recent_proactive,
-                )
-            except OutboundDeliveryError as exc:
-                logger.error("[proactive] content 渠道发送失败，保留未读: %s", exc)
-                self._state.record_decision(
-                    now, "delivery_failed", "content: %s" % str(exc)
-                )
-                return
-            self._state.record_decision(
-                now,
-                "content_pushed" if pushed else "content_skipped",
-                "候选 %d 条" % len(contents),
-            )
-            if pushed:
-                return
-
-        # 5. 三路都没推 → 交给 Drift 用空闲时间干活
-        drifted = False
-        if self._drift_hook is not None:
-            drifted = await self._drift_hook(now, session_key)
-        self._state.record_decision(now, "drift" if drifted else "idle", "")
+    def add_modules(self, modules: List[object]) -> None:
+        """插件把自己的模块插进主动链路;顺序仍由 requires 决定。"""
+        self._modules.extend(modules)
 
     async def _push_alert(
         self,

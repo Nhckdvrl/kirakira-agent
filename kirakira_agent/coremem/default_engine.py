@@ -40,7 +40,10 @@ from kirakira_agent.coremem.utils import (
 from core.net.http import SharedHttpResources
 from kirakira_agent.coremem.embedder import Embedder
 from kirakira_agent.coremem.memorizer import Memorizer
-from kirakira_agent.coremem.post_response_worker import PostResponseMemoryWorker
+from kirakira_agent.coremem.compat_worker import (
+    # 模型兼容边界:deepseek 会用单键对象包裹 JSON 数组。见 compat_worker 模块说明。
+    CompatPostResponseMemoryWorker as PostResponseMemoryWorker,
+)
 from kirakira_agent.coremem.procedure_tagger import ProcedureTagger
 from kirakira_agent.coremem.query_builder import build_procedure_queries
 from kirakira_agent.coremem.retriever import Retriever
