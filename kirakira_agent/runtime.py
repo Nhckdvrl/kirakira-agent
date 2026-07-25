@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import contextmanager
 from collections import OrderedDict
 from datetime import datetime
 import inspect
@@ -48,6 +49,7 @@ from kirakira_agent.coremem.engine import (
     MemoryScope as _CoreMemScope,
 )
 from kirakira_agent.coremem.services import MemoryServices
+from kirakira_agent.ports import ContextServices, SessionServices
 from kirakira_agent.models.base import ContentSafetyError, ContextLengthError, ModelClient
 from kirakira_agent.schema import ModelResponse, ToolCall, ToolResult, assistant_message_from_response, tool_result_message
 from kirakira_agent.session import SessionManager
@@ -856,22 +858,36 @@ class PassiveTurnPipeline:
         config: RuntimeConfig,
         snapshot_store: RuntimeSnapshotStore | None = None,
         memory_services: "MemoryServices | None" = None,
+        plugin_generations: Any = None,
+        session_services: "SessionServices | None" = None,
+        context_services: "ContextServices | None" = None,
     ) -> None:
         self.bus = bus
         self.event_bus = event_bus
-        self.session_manager = session_manager
+        # 服务包优先;未注入时用具体对象兜底,便于最小构造与测试。
+        # 两条路都收敛到同一个属性,pipeline 内部只认服务包。
+        self.session_services = session_services or SessionServices(
+            session_manager=session_manager
+        )
+        self.context_services = context_services
         self.memory = memory
-        # Phase 2 DI 缝:runtime 只认识 MemoryServices.engine,不认识具体实现。
-        # 未注入服务包时(多数测试)回退到旧 MemoryRuntime.retrieve 的词法路径。
+        # 记忆 DI 缝:runtime 只认识 MemoryServices.engine,不认识具体实现。
         self.memory_services = memory_services
         self.tools = tools
         self.reasoner = reasoner
         self.config = config
         self.snapshot_store = snapshot_store
+        # 在途 turn 持有各插件当前代际的租约,热重载只换代不抽走能力。
+        self.plugin_generations = plugin_generations
         self._before_turn_modules: List[object] = []
         self._before_reasoning_modules: List[object] = []
         self._after_reasoning_modules: List[object] = []
         self._after_turn_modules: List[object] = []
+
+    @property
+    def session_manager(self) -> SessionManager:
+        """pipeline 通过服务包拿 session,换实现不必改这里的调用点。"""
+        return self.session_services.session_manager
 
     def add_before_turn_plugin_modules(self, modules: List[object]) -> None:
         self._before_turn_modules.extend(modules)
@@ -885,25 +901,36 @@ class PassiveTurnPipeline:
     def add_after_turn_plugin_modules(self, modules: List[object]) -> None:
         self._after_turn_modules.extend(modules)
 
+    @contextmanager
+    def _plugin_generation_lease(self):
+        """未接插件代际注册表时是空操作,便于测试与最小构造。"""
+        registry = self.plugin_generations
+        if registry is None:
+            yield ()
+            return
+        with registry.lease_active() as leased:
+            yield leased
+
     async def run(self, msg: InboundMessage, key: str, *, dispatch_outbound: bool = True) -> OutboundMessage:
         """整个 turn 锁定一份能力快照，热重载不会在 turn 中途抽走工具。"""
         started_at = datetime.now().astimezone()
         started_clock = time.perf_counter()
         try:
-            if self.snapshot_store is None or self.snapshot_store.current is None:
-                outbound = await self._run_turn(
-                    msg, key, dispatch_outbound=dispatch_outbound
-                )
-            else:
-                lease = self.snapshot_store.lease()
-                token = bind_runtime_snapshot(lease)
-                try:
+            with self._plugin_generation_lease():
+                if self.snapshot_store is None or self.snapshot_store.current is None:
                     outbound = await self._run_turn(
                         msg, key, dispatch_outbound=dispatch_outbound
                     )
-                finally:
-                    reset_runtime_snapshot(token)
-                    await lease.release()
+                else:
+                    lease = self.snapshot_store.lease()
+                    token = bind_runtime_snapshot(lease)
+                    try:
+                        outbound = await self._run_turn(
+                            msg, key, dispatch_outbound=dispatch_outbound
+                        )
+                    finally:
+                        reset_runtime_snapshot(token)
+                        await lease.release()
         except asyncio.CancelledError:
             await self._finish_turn(
                 msg,
@@ -998,7 +1025,10 @@ class PassiveTurnPipeline:
             if core_reply is not None:
                 return await self._dispatch_if_needed(state, core_reply)
 
-        await self.memory.wait_for_session(key)
+        # 等上一轮归档收口再读历史:归档会推进 last_consolidated,没等会读到错位窗口。
+        maintenance = self._markdown_maintenance()
+        if maintenance is not None:
+            await maintenance.wait_for_session(key)
         guard_reply = await self._guard_memory_context(session, key)
         if guard_reply:
             return await self._dispatch_if_needed(state, guard_reply)
@@ -1143,6 +1173,16 @@ class PassiveTurnPipeline:
         result = AfterReasoningResult(ctx=after_ctx, outbound=outbound)
         return await self._commit_and_dispatch(state, result)
 
+    def _markdown_maintenance(self):
+        """承重的 markdown 维护器;未接服务包时返回 None,回退旧 consolidation 路径。"""
+        services = self.memory_services
+        markdown = getattr(services, "markdown", None) if services is not None else None
+        maintenance = getattr(markdown, "maintenance", None)
+        # 未绑定 session 生命周期的维护器不能驱动归档。
+        if maintenance is None or getattr(maintenance, "_get_session", None) is None:
+            return None
+        return maintenance
+
     async def _guard_memory_context(self, session: Any, session_key: str) -> str:
         total = len(session.messages)
         last = max(0, min(int(session.last_consolidated or 0), total))
@@ -1151,13 +1191,29 @@ class PassiveTurnPipeline:
         threshold = self.config.history_window + minimum_new
         if pending < threshold:
             return ""
+        maintenance = self._markdown_maintenance()
+        if maintenance is None:
+            # 没有记忆服务包 = 没有归档能力(最小构造/测试)。此时既无法推进也无从等待,
+            # 拒绝每一轮只会让最小构造不可用,因此放行。生产始终有维护器,保护完整生效。
+            return ""
         before = int(session.last_consolidated or 0)
-        self.memory.schedule_consolidation(
-            session,
-            model_client=self.reasoner.model_client,
-            model=self.config.model,
-        )
-        await self.memory.wait_for_session(session_key)
+        # 强制归档并等待:与队列维护共用同一把 session 锁,不会互相插队。
+        from kirakira_agent.coremem.markdown import ConsolidateRequest
+
+        try:
+            await maintenance.consolidate(
+                ConsolidateRequest(
+                    session=session,
+                    force=True,
+                    scope_channel=str(session.metadata.get("channel") or ""),
+                    scope_chat_id=str(session.metadata.get("chat_id") or ""),
+                )
+            )
+        except Exception:
+            logger.exception("guard consolidation failed: %s", session_key)
+        else:
+            if int(session.last_consolidated or 0) > before:
+                await self.session_manager.save_async(session)
         if int(session.last_consolidated or 0) > before:
             return ""
         return (
@@ -1202,13 +1258,6 @@ class PassiveTurnPipeline:
         )
         if msg.metadata.get("username"):
             session.metadata["username"] = str(msg.metadata["username"])
-        if not msg.metadata.get("skip_post_memory"):
-            await asyncio.to_thread(
-                self.memory.consolidate_turn,
-                session,
-                msg.content,
-                result.outbound.content,
-            )
         context_trace = dict(state.extra_metadata.get("context_trace") or {})
         attempts = list(context_trace.get("attempts") or [])
         selected_plan = str(context_trace.get("selected_plan") or "")
@@ -1269,12 +1318,6 @@ class PassiveTurnPipeline:
         await _run_plugin_modules(self._after_turn_modules, after_turn)
         if state.dispatch_outbound:
             await self.bus.publish_outbound(result.outbound)
-        if not msg.metadata.get("skip_post_memory"):
-            self.memory.schedule_consolidation(
-                session,
-                model_client=self.reasoner.model_client,
-                model=self.config.model,
-            )
         return result.outbound
 
     async def _dispatch_if_needed(self, state: TurnState, content: str) -> OutboundMessage:
@@ -1482,6 +1525,8 @@ class CoreRuntime:
     channel_host: ChannelHost | None = None
     plugin_manager: Any | None = None
     mcp_watcher: Any | None = None
+    plugin_watcher: Any | None = None
+    memory_services: Any = None
     scheduler: Any | None = None
     subagents: Any | None = None
     proactive_loop: Any | None = None
@@ -1541,6 +1586,10 @@ class CoreRuntime:
             tasks.append(
                 asyncio.create_task(self.mcp_watcher.run(), name="workspace_mcp_watcher")
             )
+        if self.plugin_watcher is not None:
+            tasks.append(
+                asyncio.create_task(self.plugin_watcher.run(), name="plugin_watcher")
+            )
         return tasks
 
     async def stop_background(self, tasks: list[asyncio.Task[Any]]) -> None:
@@ -1553,6 +1602,8 @@ class CoreRuntime:
             self.proactive_loop.stop()
         if self.mcp_watcher is not None:
             self.mcp_watcher.stop()
+        if self.plugin_watcher is not None:
+            self.plugin_watcher.stop()
         drained = await self.bus.drain(timeout=10.0)
         if not drained:
             logger.warning("outbound queue did not drain before shutdown")
@@ -1573,5 +1624,11 @@ class CoreRuntime:
         if self.proactive_loop is not None:
             self.proactive_loop.close()
         await self.memory.shutdown()
+        # 引擎持有 coremem.db 与 embedder,必须在旧 MemoryRuntime 之后关闭。
+        if self.memory_services is not None:
+            try:
+                await self.memory_services.aclose()
+            except Exception:
+                logger.exception("memory services shutdown failed")
         await self.event_bus.shutdown()
         self.session_manager.close()

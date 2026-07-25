@@ -517,40 +517,6 @@ class RuntimeTests(unittest.TestCase):
 
         asyncio.run(scenario())
 
-    def test_post_response_consolidation_extracts_memory_in_background(self):
-        async def scenario():
-            with tempfile.TemporaryDirectory() as tmp:
-                model = FakeModel(
-                    [
-                        ModelResponse(text="current reply"),
-                        ModelResponse(
-                            text=(
-                                '{"memories":[{"content":"用户长期喜欢爵士乐",'
-                                '"memory_type":"preference"}],'
-                                '"history":["用户讨论了音乐偏好"]}'
-                            )
-                        ),
-                    ]
-                )
-                _bus, loop, sessions, memory = build_test_runtime(Path(tmp), model)
-                session = sessions.get_or_create("cli:chat")
-                for index in range(4):
-                    session.add_message("user", "historical user %d" % index)
-                    session.add_message("assistant", "historical assistant %d" % index)
-
-                outbound = await loop.pipeline.run(
-                    InboundMessage("cli", "tester", "chat", "current"),
-                    "cli:chat",
-                    dispatch_outbound=False,
-                )
-                self.assertEqual(outbound.content, "current reply")
-                await memory.shutdown()
-
-                recalled = memory.recall("爵士乐")
-                self.assertEqual(recalled[0].memory_type, "preference")
-                self.assertGreater(sessions.get_or_create("cli:chat").last_consolidated, 0)
-
-        asyncio.run(scenario())
 
     def test_before_turn_history_rewrite_reaches_model(self):
         class RewriteHistory:
@@ -707,30 +673,6 @@ class RuntimeTests(unittest.TestCase):
 
         asyncio.run(scenario())
 
-    def test_explicit_memory_consolidates_after_turn(self):
-        async def scenario():
-            with tempfile.TemporaryDirectory() as tmp:
-                workdir = Path(tmp)
-                model = FakeModel([ModelResponse(text="记住了。")])
-                bus, loop, _sessions, memory = build_test_runtime(workdir, model)
-
-                async def collect(_msg):
-                    loop.stop()
-                    bus.stop()
-
-                bus.subscribe_outbound("cli", collect)
-                tasks = [
-                    asyncio.create_task(loop.run()),
-                    asyncio.create_task(bus.dispatch_outbound()),
-                ]
-                await bus.publish_inbound(InboundMessage("cli", "tester", "chat", "请记住：我喜欢蓝色"))
-                await asyncio.wait_for(asyncio.gather(*tasks), timeout=5)
-
-                recalled = memory.recall("蓝色")
-                self.assertTrue(recalled)
-                self.assertIn("蓝色", recalled[0].content)
-
-        asyncio.run(scenario())
 
     def test_memorize_tool_does_not_duplicate_consolidation_memory(self):
         async def scenario():

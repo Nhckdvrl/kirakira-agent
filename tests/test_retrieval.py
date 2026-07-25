@@ -203,8 +203,8 @@ class RecallIntegrationTests(unittest.TestCase):
         """`memorize()` 是原语：只挡逐字重复，不做语义去重。
 
         改写后的同一事实在这一层会产生两条记录——这是**有意的**，因为词法比对分不清
-        "改写"和"否定"（见下一个用例）。语义去重发生在 consolidation 那次 LLM 调用里，
-        由 `_known_memory_digest()` 把已记事实喂进 prompt。
+        "改写"和"否定"。语义去重不在这一层:它由 coremem 的 dedup_decider 在
+        consolidation / post-response 摄入时用 LLM 判断。
         """
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -222,34 +222,7 @@ class RecallIntegrationTests(unittest.TestCase):
             )
             self.assertEqual(len(memory.list_records()), 2)
 
-    def test_consolidation_prompt_lists_known_facts_and_protects_corrections(self):
-        """consolidation 的 prompt 必须带上已记事实，并且明确允许"语义相反"的更正。
 
-        少了前者就会重复抽取；少了后者，去重会把更正压掉，让 agent 卡在过时事实上——
-        那比冗余更糟。
-        """
-
-        with tempfile.TemporaryDirectory() as tmp:
-            memory = self._memory(tmp)
-            memory.memorize(
-                "CI 跑在 GitHub Actions 上。",
-                source_ref="direct:local:0",
-                memory_type="preference",
-            )
-
-            digest = memory._known_memory_digest(
-                "direct:local", [{"role": "user", "content": "CI 现在改成 GitLab 了"}]
-            )
-
-            self.assertIn("已经记录过", digest)
-            self.assertIn("CI 跑在 GitHub Actions 上。", digest)
-            self.assertIn("语义相反", digest)  # 更正必须能写进去
-            self.assertIn("沿用它原来的 memory_type", digest)
-
-    def test_known_digest_is_empty_when_nothing_recorded(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            memory = self._memory(tmp)
-            self.assertEqual(memory._known_memory_digest("direct:local", []), "")
 
     def test_lexical_similarity_cannot_safely_dedupe_negation(self):
         """不要用词法相似度做去重：否定句的相似度比真重复还高。

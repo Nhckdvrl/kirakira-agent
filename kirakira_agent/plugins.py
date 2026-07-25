@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import importlib.util
 import inspect
 import json
@@ -18,6 +19,27 @@ from uuid import uuid4
 
 from kirakira_agent.event_bus import EventBus
 from kirakira_agent.config import load_toml_config
+from kirakira_agent.phase import inspect_phase, topo_sort_modules
+from kirakira_agent.plugin_generation import (
+    GateResult,
+    PluginContributions,
+    PluginGeneration,
+    PluginGenerationRegistry,
+    compute_generation_id,
+    file_revision,
+)
+from kirakira_agent.plugin_jobs import PluginJobHost, PluginJobSpec
+from kirakira_agent.plugin_registry import plugin_registry
+from kirakira_agent.plugin_services import PluginServiceHost
+from kirakira_agent.plugin_specs import (
+    ManagedServiceSpec,
+    McpServerSpec,
+    PluginReadinessContext,
+    PluginSemanticCheck,
+    ProactiveSourceSpec,
+    RegisteredProactiveSource,
+    proactive_source_key,
+)
 from kirakira_agent.plugin_manifest import (
     MANIFEST_NAME,
     PluginEnablement,
@@ -45,6 +67,14 @@ from kirakira_agent.tool_hooks import HookContext, HookOutcome, ToolHook
 from kirakira_agent.tools.registry import ToolRegistry, object_schema
 
 logger = logging.getLogger(__name__)
+
+
+def _path_content_digest(path: Path) -> bytes:
+    """按内容取指纹;文件缺失返回固定标记,让"删除"本身也算一次变化。"""
+    try:
+        return hashlib.sha256(path.read_bytes()).digest()
+    except OSError:
+        return b"\x00missing"
 
 
 def _source_plugin_name(source: str) -> str:
@@ -163,22 +193,18 @@ class DecoratedToolHook:
         return HookOutcome()
 
 
-@dataclass(frozen=True)
-class McpServerSpec:
-    """插件用代码声明的 MCP server；path 一律相对插件根解析。"""
-
-    name: str
-    command: tuple[str, ...]
-    env: Dict[str, str] = field(default_factory=dict)
-    cwd: str = "."
-
-
 class Plugin:
     api_version: int = 1
     name: str = ""
     version: str = ""
     desc: str = ""
+    author: str = ""
     ConfigModel: Any = None
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        # 照 Reference:插件类定义即注册,manager 不必扫描类名。
+        super().__init_subclass__(**kwargs)
+        plugin_registry.register_class(cls)
 
     async def initialize(self) -> None:
         return None
@@ -186,12 +212,37 @@ class Plugin:
     async def terminate(self) -> None:
         return None
 
+    # --- 语义检查:能力以运行时为准,检查不过的插件不进入可用代际 ---
+
+    def static_semantic_checks(self) -> List[PluginSemanticCheck]:
+        return []
+
+    async def readiness_semantic_checks(
+        self,
+        context: PluginReadinessContext,
+    ) -> List[PluginSemanticCheck]:
+        return []
+
     @classmethod
     def skill_roots(cls) -> tuple[str, ...]:
         return ()
 
     @classmethod
+    def drift_skill_roots(cls) -> tuple[str, ...]:
+        return ()
+
+    @classmethod
     def mcp_servers(cls) -> List[McpServerSpec]:
+        return []
+
+    @classmethod
+    def managed_services(cls) -> List[ManagedServiceSpec]:
+        return []
+
+    def proactive_sources(self) -> List[ProactiveSourceSpec]:
+        return []
+
+    def jobs(self) -> List[PluginJobSpec]:
         return []
 
     def before_turn_modules(self) -> List[object]:
@@ -252,27 +303,59 @@ class PluginManager:
         self._terminated = False
         self._decorated_modules: Dict[str, List[tuple[int, object]]] = {}
         self._decorated_hooks: List[DecoratedToolHook] = []
+        # 声明式扩展点的运行时宿主:插件只声明,生命周期由 manager 持有。
+        self.service_host = PluginServiceHost()
+        self.job_host = PluginJobHost(event_bus=event_bus)
+        # per-plugin 代际:换代时在途 turn 仍持旧代际租约,租约归零才 quiesce。
+        self.generations = PluginGenerationRegistry()
+        self._reconcile_lock = asyncio.Lock()
+        # watcher 注入的唤醒回调:安装/卸载/启停后立即热重载,不必重启进程。
+        self.reload_hook: Optional[Any] = None
         self._register_management_tools()
+
+    async def _activate_plugin(self, root: Path, manifest: Dict[str, Any]) -> str | None:
+        """装载并初始化单个插件目录;返回激活后的 plugin_id,跳过时返回 None。"""
+
+        plugin = self._load_one(root / "plugin.py")
+        if plugin is None:
+            raise ValueError("plugin.py declares no Plugin subclass")
+        name = str(getattr(plugin, "name", "") or root.name).strip()
+        if any(record.plugin_id == name for record in self.active):
+            logger.warning("duplicate plugin name skipped: %s", name)
+            return None
+        if not is_enabled(manifest, name):
+            logger.info("plugin disabled by manifest: %s", name)
+            return None
+        await self._initialize_plugin(name, root, plugin)
+        self.active.append(ActivePlugin(name, root, plugin))
+        return name
+
+    async def _deactivate_plugin(self, plugin_id: str) -> None:
+        """卸载/禁用一个插件:终止实例并退休它的代际,不影响其余插件。"""
+
+        record = next(
+            (item for item in self.active if item.plugin_id == plugin_id), None
+        )
+        if record is None:
+            return
+        if record.instance is not None:
+            try:
+                await record.instance.terminate()
+            except Exception:
+                logger.exception("plugin terminate failed: %s", plugin_id)
+            if record.instance in self.instances:
+                self.instances.remove(record.instance)
+        self.active.remove(record)
+        current = self.generations.current(plugin_id)
+        if current is not None:
+            self.generations.retire(plugin_id)
 
     async def load_all(self) -> None:
         # 清单只决定启停；损坏时整体失败，不静默退化成“全部启用”。
         manifest = load_manifest(self.workspace / ".kirakira" / MANIFEST_NAME)
-        seen_names: set[str] = set()
         for root in discover_plugin_roots(self.plugin_dirs):
             try:
-                plugin = self._load_one(root / "plugin.py")
-                if plugin is None:
-                    raise ValueError("plugin.py declares no Plugin subclass")
-                name = str(getattr(plugin, "name", "") or root.name).strip()
-                if name in seen_names:
-                    logger.warning("duplicate plugin name skipped: %s", name)
-                    continue
-                seen_names.add(name)
-                if not is_enabled(manifest, name):
-                    logger.info("plugin disabled by manifest: %s", name)
-                    continue
-                await self._initialize_plugin(name, root, plugin)
-                self.active.append(ActivePlugin(name, root, plugin))
+                await self._activate_plugin(root, manifest)
             except Exception as exc:
                 self.errors[root.name] = str(exc)
                 logger.exception("plugin failed to load: %s", root)
@@ -286,11 +369,28 @@ class PluginManager:
         if self.mcp_publisher is not None:
             # 插件 MCP 与 workspace MCP 共用换代语义：整批发布，失败保持旧代际。
             await self.mcp_publisher.publish(self.mcp_servers, source="plugins")
+        # 冻结每个插件这一代的贡献;gate 未过的插件不发布代际。
+        await self.publish_generations()
+        # 托管服务整批启动:任一失败会回滚已起的进程,不留半启动状态。
+        self.service_host.bind_plugin_services(self.managed_services)
+        await self.service_host.start_all()
+        # 作业注册后统一由 host 驱动,插件不自己起 task。
+        self.register_jobs(self.job_host)
+        self.job_host.start()
 
     async def terminate_all(self) -> None:
         if self._terminated:
             return
         self._terminated = True
+        # 先停宿主再终止插件:作业/服务不应在插件已 terminate 后还被触发。
+        try:
+            await self.job_host.aclose()
+        except Exception:
+            logger.exception("plugin job host shutdown failed")
+        try:
+            await self.service_host.stop_all()
+        except Exception:
+            logger.exception("plugin managed service shutdown failed")
         for plugin in reversed(self.instances):
             try:
                 await plugin.terminate()
@@ -347,7 +447,28 @@ class PluginManager:
                 self._decorated_modules.get(phase, []), key=lambda item: -item[0]
             )
         )
-        return modules
+        return self._order_phase_modules(phase, modules)
+
+    @staticmethod
+    def _order_phase_modules(phase: str, modules: List[object]) -> List[object]:
+        """全部模块都声明了 slot 时按依赖图排序,否则保持注册/优先级顺序。
+
+        只在"全员声明"时启用是刻意的:混用会让未声明 slot 的老模块被隐式重排,
+        那种偶然的顺序变化比顺序不可控更难排查。插件全部迁移到 slot 后自动生效。
+        """
+        if not modules or not all(
+            isinstance(getattr(module, "slot", None), str)
+            and getattr(module, "slot")
+            for module in modules
+        ):
+            return modules
+        try:
+            return topo_sort_modules(modules)
+        except RuntimeError as error:
+            # 依赖成环/重复 slot 是插件的声明错误:保持原顺序并大声报错,
+            # 不能让一个坏插件把整个相位打挂。
+            logger.error("phase %s slot ordering failed: %s", phase, error)
+            return modules
 
     @property
     def mcp_servers(self) -> Dict[str, Dict[str, Any]]:
@@ -379,6 +500,250 @@ class PluginManager:
     def plugin_data_dir(self, plugin_id: str) -> Path:
         return self.workspace / ".kirakira" / "plugin-data" / plugin_id
 
+    # --- per-plugin 代际 ---
+
+    def capture_contributions(self, record: ActivePlugin) -> PluginContributions:
+        """冻结一个插件当前贡献的全部能力,作为它这一代的不可变内容。"""
+
+        plugin = record.instance
+        if plugin is None:
+            return PluginContributions()
+        services = self.managed_services.get(record.plugin_id, {})
+        mcp = {
+            name: spec
+            for name, spec in self.mcp_servers.items()
+            if any(
+                declared.name == name for declared in plugin.mcp_servers()
+            )
+        }
+        return PluginContributions(
+            skill_roots=tuple(resolve_skill_roots(record.root, plugin.skill_roots())),
+            drift_skill_roots=tuple(
+                resolve_skill_roots(record.root, plugin.drift_skill_roots())
+            ),
+            mcp_servers=mcp,
+            managed_services=dict(services),
+            before_turn_modules=tuple(plugin.before_turn_modules()),
+            before_reasoning_modules=tuple(plugin.before_reasoning_modules()),
+            prompt_render_modules=tuple(plugin.prompt_render_modules()),
+            before_step_modules=tuple(plugin.before_step_modules()),
+            after_step_modules=tuple(plugin.after_step_modules()),
+            after_reasoning_modules=tuple(plugin.after_reasoning_modules()),
+            after_turn_modules=tuple(plugin.after_turn_modules()),
+            tool_hooks=tuple(plugin.tool_hooks()),
+            proactive_sources=tuple(
+                RegisteredProactiveSource(plugin_id=record.plugin_id, spec=spec)
+                for spec in plugin.proactive_sources()
+            ),
+            jobs=tuple(plugin.jobs()),
+            channels=tuple(plugin.channels()),
+        )
+
+    async def build_generation(self, record: ActivePlugin) -> PluginGeneration:
+        """为一个已装载插件编译候选代际,并跑语义检查决定是否准入。"""
+
+        plugin = record.instance
+        source_revision = file_revision(record.root / "plugin.py")
+        config_revision = file_revision(record.root / "config.toml")
+        checks: List[PluginSemanticCheck] = []
+        if plugin is not None:
+            checks.extend(plugin.static_semantic_checks())
+            readiness = PluginReadinessContext(
+                workspace_tool_names=tuple(self.tool_registry.names())
+                if self.tool_registry is not None
+                else (),
+                mcp_server_names=tuple(self.mcp_servers),
+            )
+            try:
+                checks.extend(await plugin.readiness_semantic_checks(readiness))
+            except Exception as exc:  # noqa: BLE001 - 检查失败本身就是一次失败结果
+                checks.append(PluginSemanticCheck.fail("readiness_error", str(exc)))
+        gate = GateResult.from_checks(
+            plugin_id=record.plugin_id,
+            candidate_revision="%s:%s" % (source_revision, config_revision),
+            checks=tuple(checks),
+        )
+        return PluginGeneration(
+            plugin_id=record.plugin_id,
+            generation_id=compute_generation_id(
+                plugin_id=record.plugin_id,
+                source_revision=source_revision,
+                config_revision=config_revision,
+            ),
+            module_path=type(plugin).__module__ if plugin is not None else "",
+            source_revision=source_revision,
+            config_revision=config_revision,
+            instance=plugin,
+            contributions=self.capture_contributions(record),
+            gate_result=gate,
+        )
+
+    def _request_reload(self) -> None:
+        """请求 watcher 立即热重载。未接 watcher 时是空操作(退回轮询/重启)。"""
+        hook = self.reload_hook
+        if hook is None:
+            return
+        try:
+            hook()
+        except Exception:
+            logger.exception("plugin reload hook failed")
+
+    def watch_revision(self) -> str:
+        """所有插件源码 + 配置 + manifest 的内容指纹,用于热重载变化检测。"""
+
+        digest = hashlib.sha256()
+        digest.update(_path_content_digest(self._manifest_path()))
+        for root in discover_plugin_roots(self.plugin_dirs):
+            digest.update(root.name.encode("utf-8"))
+            digest.update(_path_content_digest(root / "plugin.py"))
+            digest.update(_path_content_digest(root / "config.toml"))
+        return digest.hexdigest()[:32]
+
+    async def reconcile_changed(self) -> List[Dict[str, Any]]:
+        """对 revision 变化的插件重建候选代际并换代。
+
+        逐插件独立处理:某个插件 gate 未过或构建失败时保留它的旧代际,
+        其余插件照常换代——半新状态只局限在单个插件,不污染整个运行时。
+        """
+
+        async with self._reconcile_lock:
+            results: List[Dict[str, Any]] = []
+            manifest = load_manifest(self._manifest_path())
+            discovered = {
+                root.name: root for root in discover_plugin_roots(self.plugin_dirs)
+            }
+            active_ids = {record.plugin_id for record in self.active}
+            # 目录还在但被 manifest 关掉,等价于卸载。
+            desired = {
+                name for name in discovered if is_enabled(manifest, name)
+            }
+
+            # 1. 消失或被禁用的插件先下线,释放它们占的名字与资源。
+            for plugin_id in sorted(active_ids - desired):
+                await self._deactivate_plugin(plugin_id)
+                results.append({"plugin_id": plugin_id, "state": "deactivated"})
+
+            # 2. 新出现的插件上线——安装后免重启就靠这一步。
+            for plugin_id in sorted(desired - active_ids):
+                try:
+                    activated = await self._activate_plugin(
+                        discovered[plugin_id], manifest
+                    )
+                except Exception as exc:  # noqa: BLE001 - 单插件失败不影响其余
+                    self.errors[plugin_id] = str(exc)
+                    logger.exception("plugin activation failed: %s", plugin_id)
+                    results.append({"plugin_id": plugin_id, "state": "activate_failed"})
+                    continue
+                if activated is not None:
+                    results.append({"plugin_id": plugin_id, "state": "activated"})
+
+            # 3. 仍在线的插件按 revision 变化换代。
+            for record in list(self.active):
+                current = self.generations.current(record.plugin_id)
+                try:
+                    candidate = await self.build_generation(record)
+                except Exception as exc:  # noqa: BLE001 - 单插件失败不影响其余
+                    self.errors[record.plugin_id] = str(exc)
+                    logger.exception(
+                        "plugin generation rebuild failed: %s", record.plugin_id
+                    )
+                    results.append(
+                        {"plugin_id": record.plugin_id, "state": "build_failed"}
+                    )
+                    continue
+                if current is not None and candidate.revision == current.revision:
+                    continue
+                if not candidate.gate_result.passed:
+                    self.errors[record.plugin_id] = (
+                        "semantic gate failed: %s"
+                        % candidate.gate_result.failure_reason
+                    )
+                    logger.warning(
+                        "plugin hot reload gate failed, keeping old generation: %s",
+                        record.plugin_id,
+                    )
+                    results.append(
+                        {"plugin_id": record.plugin_id, "state": "gate_failed"}
+                    )
+                    continue
+                previous = self.generations.publish(candidate)
+                self.errors.pop(record.plugin_id, None)
+                results.append(
+                    {
+                        "plugin_id": record.plugin_id,
+                        "state": "swapped",
+                        "generation_id": candidate.generation_id,
+                        "previous_generation_id": (
+                            previous.generation_id if previous else None
+                        ),
+                        "previous_leases": previous.lease_count if previous else 0,
+                    }
+                )
+            # 有增删或换代时,同步 skill 链接与 MCP/服务发布,让新能力真正可用。
+            if any(
+                item.get("state") in {"activated", "deactivated", "swapped"}
+                for item in results
+            ):
+                await self._republish_after_reconcile()
+
+            # 换代后立刻回收租约已归零的旧代际;仍在服务的等下一轮。
+            drained = self.generations.drain_quiescible()
+            if drained:
+                results.append(
+                    {
+                        "state": "drained",
+                        "generation_ids": [gen.generation_id for gen in drained],
+                    }
+                )
+            return results
+
+    async def _republish_after_reconcile(self) -> None:
+        """换代后把 skill / MCP / 托管服务重新发布到当前活跃集合。"""
+
+        try:
+            self._sync_skill_links()
+            if self.skill_loader is not None:
+                self.skill_loader.reload()
+        except Exception:
+            logger.exception("plugin skill resync failed")
+        if self.mcp_publisher is not None:
+            try:
+                await self.mcp_publisher.publish(self.mcp_servers, source="plugins")
+            except Exception:
+                logger.exception("plugin MCP republish failed")
+        try:
+            # 服务按新集合整批重启:先停旧的再起新的,失败会回滚。
+            await self.service_host.stop_all()
+            self.service_host.bind_plugin_services(self.managed_services)
+            await self.service_host.start_all()
+        except Exception:
+            logger.exception("plugin managed service republish failed")
+
+    async def publish_generations(self) -> List[str]:
+        """为所有已装载插件发布代际;gate 未过的插件保留旧代际并记录错误。"""
+
+        published: List[str] = []
+        for record in self.active:
+            try:
+                generation = await self.build_generation(record)
+                if not generation.gate_result.passed:
+                    self.errors[record.plugin_id] = (
+                        "semantic gate failed: %s"
+                        % generation.gate_result.failure_reason
+                    )
+                    logger.warning(
+                        "plugin semantic gate failed, keeping previous generation: %s (%s)",
+                        record.plugin_id,
+                        generation.gate_result.failure_reason,
+                    )
+                    continue
+                self.generations.publish(generation)
+                published.append(generation.generation_id)
+            except Exception as exc:  # noqa: BLE001 - 单插件代际失败不影响其余插件
+                self.errors[record.plugin_id] = str(exc)
+                logger.exception("plugin generation build failed: %s", record.plugin_id)
+        return published
+
     @staticmethod
     def _validate_declarations(root: Path, plugin: Plugin) -> None:
         """在插件自己的加载边界内校验声明路径，越界立即失败。"""
@@ -397,6 +762,123 @@ class PluginManager:
         for plugin in self.instances:
             channels.extend(plugin.channels())
         return channels
+
+    # --- 声明式扩展点:插件只声明,runtime 负责编译与生命周期 ---
+
+    @property
+    def proactive_sources(self) -> List[RegisteredProactiveSource]:
+        """收集插件声明的主动数据源。编译成真实 source 由 proactive.mcp_sources 负责。"""
+
+        sources: List[RegisteredProactiveSource] = []
+        seen: set[str] = set()
+        for record in self.active:
+            if record.instance is None:
+                continue
+            for spec in record.instance.proactive_sources():
+                if not isinstance(spec, ProactiveSourceSpec):
+                    raise ValueError(
+                        "插件 %s.proactive_sources 返回值不是 ProactiveSourceSpec"
+                        % record.plugin_id
+                    )
+                registered = RegisteredProactiveSource(
+                    plugin_id=record.plugin_id, spec=spec
+                )
+                key = proactive_source_key(registered)
+                if key in seen:
+                    logger.warning("duplicate plugin proactive source skipped: %s", key)
+                    continue
+                seen.add(key)
+                sources.append(registered)
+        return sources
+
+    @property
+    def managed_services(self) -> Dict[str, Dict[str, Dict[str, Any]]]:
+        """收集插件声明的长驻服务,规范化成 PluginServiceHost 需要的 binding。
+
+        命令与 cwd 都按插件根解析并做越界校验,和 MCP 声明同一套安全边界。
+        """
+
+        merged: Dict[str, Dict[str, Dict[str, Any]]] = {}
+        for record in self.active:
+            if record.instance is None:
+                continue
+            for spec in record.instance.managed_services():
+                if not spec.command:
+                    raise ValueError("plugin managed service has no command: %s" % spec.id)
+                plugin_services = merged.setdefault(record.plugin_id, {})
+                if spec.id in plugin_services:
+                    logger.warning(
+                        "duplicate plugin managed service skipped: %s:%s",
+                        record.plugin_id,
+                        spec.id,
+                    )
+                    continue
+                env = dict(spec.env)
+                env.setdefault(
+                    "KIRAKIRA_PLUGIN_DATA_DIR",
+                    str(self.plugin_data_dir(record.plugin_id)),
+                )
+                plugin_services[spec.id] = {
+                    "command": [
+                        normalize_command_item(record.root, item)
+                        for item in spec.command
+                    ],
+                    "cwd": str(safe_child(record.root, spec.cwd or ".")),
+                    "env": env,
+                    "readiness_url": spec.readiness_url,
+                    "startup_timeout_seconds": spec.startup_timeout_seconds,
+                }
+        return merged
+
+    def register_jobs(self, host: PluginJobHost) -> List[str]:
+        """把插件声明的作业注册进 host。host 拥有生命周期,插件不自己起 task。"""
+
+        keys: List[str] = []
+        for record in self.active:
+            if record.instance is None:
+                continue
+            for spec in record.instance.jobs():
+                if not isinstance(spec, PluginJobSpec):
+                    raise ValueError(
+                        "插件 %s.jobs 返回值不是 PluginJobSpec" % record.plugin_id
+                    )
+                keys.append(host.register(record.plugin_id, spec))
+        return keys
+
+    @property
+    def drift_skill_roots(self) -> List[Path]:
+        roots: List[Path] = []
+        for record in self.active:
+            if record.instance is None:
+                continue
+            roots.extend(resolve_skill_roots(record.root, record.instance.drift_skill_roots()))
+        return roots
+
+    async def semantic_checks(
+        self,
+        context: PluginReadinessContext | None = None,
+    ) -> Dict[str, List[PluginSemanticCheck]]:
+        """收集静态 + 就绪语义检查。失败项交由调用方决定是否降级/停用插件。"""
+
+        readiness = context or PluginReadinessContext(
+            workspace_tool_names=tuple(self.tool_registry.names())
+            if self.tool_registry is not None
+            else (),
+        )
+        report: Dict[str, List[PluginSemanticCheck]] = {}
+        for record in self.active:
+            if record.instance is None:
+                continue
+            checks = list(record.instance.static_semantic_checks())
+            try:
+                checks.extend(await record.instance.readiness_semantic_checks(readiness))
+            except Exception as exc:  # noqa: BLE001 - 检查自身失败也是一次失败结果
+                checks.append(
+                    PluginSemanticCheck.fail("readiness_error", str(exc))
+                )
+            if checks:
+                report[record.plugin_id] = checks
+        return report
 
     async def _initialize_plugin(self, name: str, root: Path, plugin: Plugin) -> None:
         # 能力声明在这里就校验，坏插件在自己的 try 内失败，不牵连其他插件。
@@ -586,7 +1068,7 @@ class PluginManager:
         self.tool_registry.register(
             ToolSpec(
                 "plugin_install",
-                "Install an Akashic-compatible plugin from a local directory or HTTPS Git repository. Restart is required.",
+                "Install an Akashic-compatible plugin from a local directory or HTTPS Git repository. Applied by hot reload, no restart needed.",
                 object_schema({"source": {"type": "string"}}, ["source"]),
             ),
             self.install,
@@ -595,7 +1077,7 @@ class PluginManager:
         self.tool_registry.register(
             ToolSpec(
                 "plugin_enable",
-                "Enable an installed plugin in the manifest. Restart is required to load it.",
+                "Enable an installed plugin in the manifest. Applied by hot reload, no restart needed.",
                 object_schema({"name": {"type": "string"}}, ["name"]),
             ),
             self.enable_plugin,
@@ -604,7 +1086,7 @@ class PluginManager:
         self.tool_registry.register(
             ToolSpec(
                 "plugin_disable",
-                "Disable an installed plugin in the manifest. Restart is required to unload it.",
+                "Disable an installed plugin in the manifest. Applied by hot reload, no restart needed.",
                 object_schema({"name": {"type": "string"}}, ["name"]),
             ),
             self.disable_plugin,
@@ -613,7 +1095,7 @@ class PluginManager:
         self.tool_registry.register(
             ToolSpec(
                 "plugin_uninstall",
-                "Remove an installed plugin directory and its manifest entry. Plugin data is preserved. Restart is required.",
+                "Remove an installed plugin directory and its manifest entry. Plugin data is preserved. Applied by hot reload.",
                 object_schema({"name": {"type": "string"}}, ["name"]),
             ),
             self.uninstall,
@@ -648,7 +1130,8 @@ class PluginManager:
         manifest[name] = PluginEnablement(name, enabled)
         self._write_manifest(manifest)
         verb = "enabled" if enabled else "disabled"
-        return "Plugin %r %s in manifest. Restart kirakira-agent to apply." % (name, verb)
+        self._request_reload()
+        return "Plugin %r %s in manifest. Hot reload will apply it shortly." % (name, verb)
 
     def enable_plugin(self, name: str) -> str:
         return self._set_enabled(name, True)
@@ -668,9 +1151,10 @@ class PluginManager:
         if name in manifest:
             del manifest[name]
             self._write_manifest(manifest)
+        self._request_reload()
         return (
             "Uninstalled plugin %r. Data under .kirakira/plugin-data/%s is preserved. "
-            "Restart kirakira-agent to apply." % (name, name)
+            "Hot reload will unload it shortly." % (name, name)
         )
 
     def list_plugins(self) -> str:
@@ -735,7 +1219,39 @@ class PluginManager:
                     "warnings": warnings,
                 }
             )
-        return json.dumps({"plugins": reports}, ensure_ascii=False, indent=2)
+        return json.dumps(
+            {"plugins": reports, "phases": self.phase_report()},
+            ensure_ascii=False,
+            indent=2,
+        )
+
+    def phase_report(self) -> Dict[str, str]:
+        """各相位的实际执行顺序与依赖关系,用于排查"插件为什么没按预期顺序跑"。"""
+
+        report: Dict[str, str] = {}
+        for phase in (
+            "before_turn",
+            "before_reasoning",
+            "prompt_render",
+            "before_step",
+            "after_step",
+            "after_reasoning",
+            "after_turn",
+        ):
+            modules = self._collect("%s_modules" % phase)
+            if not modules:
+                continue
+            if all(getattr(module, "slot", None) for module in modules):
+                try:
+                    report[phase] = inspect_phase(modules)
+                except RuntimeError as error:
+                    report[phase] = "slot ordering failed: %s" % error
+            else:
+                report[phase] = "注册顺序(未全员声明 slot): %s" % ", ".join(
+                    str(getattr(module, "slot", type(module).__name__))
+                    for module in modules
+                )
+        return report
 
     def _check_declared_skills(
         self, record: ActivePlugin, warnings: List[str]
@@ -810,15 +1326,26 @@ class PluginManager:
             if not re.fullmatch(r"[A-Za-z0-9_.-]+", plugin_name):
                 return "Error: invalid plugin name: %s" % plugin_name
             target = install_root / plugin_name
-            if target.exists():
-                return "Error: plugin %r is already installed" % plugin_name
+            upgrading = target.exists()
             git_dir = staging / ".git"
             if git_dir.exists():
                 await asyncio.to_thread(shutil.rmtree, git_dir)
-            os.replace(staging, target)
+            if upgrading:
+                # 升级:旧目录先挪走再原子换入,失败可回滚,不会留下半个插件。
+                backup = install_root / (".backup-%s-%s" % (plugin_name, uuid4().hex))
+                os.replace(target, backup)
+                try:
+                    os.replace(staging, target)
+                except BaseException:
+                    os.replace(backup, target)
+                    raise
+                await asyncio.to_thread(shutil.rmtree, backup, True)
+            else:
+                os.replace(staging, target)
+            self._request_reload()
             return (
-                "Installed plugin %r at %s. Restart kirakira-agent to activate it."
-                % (plugin_name, target)
+                "%s plugin %r at %s. Hot reload will apply it shortly."
+                % ("Upgraded" if upgrading else "Installed", plugin_name, target)
             )
         finally:
             if staging.exists():

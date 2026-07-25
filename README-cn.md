@@ -446,8 +446,9 @@ drift/drift.db                Drift run 记录、跨轮连续性、min_interval 
 /home/xiang/.conda/envs/xingshu-vllm/bin/python -m unittest discover -s tests -v
 ```
 
-当前离线回归为 `274 passed, 4 subtests passed`，覆盖工具、Session、并发、MCP、snapshot、
-上下文、记忆引擎契约 + DI 服务、异步 model runtime、Reference Telegram/Supervisor 一致性、主动链路与 Drift。另已使用
+当前离线回归为 `354 passed, 4 subtests passed`，覆盖工具、Session、并发、MCP、snapshot、
+上下文、记忆引擎契约 + DI 服务、异步 model runtime、插件代际/热重载/安装、Turn 副作用提交、
+相位 slot 依赖图、Reference Telegram/Supervisor 一致性、主动链路与 Drift。另已使用
 `deepseek-v4-flash` 在线验证普通响应、SSE 工具循环、后台记忆 consolidation，以及 context
 估算/实际 usage/下一轮 baseline 的完整观测链。API key 不进入仓库。
 

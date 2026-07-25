@@ -23,6 +23,14 @@ from kirakira_agent.drift.skills import DriftSkill, discover_skills, ensure_exam
 from kirakira_agent.drift.state import DriftStateStore
 from kirakira_agent.drift.tools import DriftRunContext, register_drift_tools
 from kirakira_agent.events import OutboundMessage
+from kirakira_agent.turns import (
+    BusOutboundPort,
+    CallableSideEffect,
+    TurnOutbound,
+    TurnResult,
+    TurnTrace,
+    commit_turn_result,
+)
 from kirakira_agent.models.base import ModelClient
 from kirakira_agent.proactive.config import DriftConfig
 from kirakira_agent.session import SessionManager
@@ -162,40 +170,43 @@ class DriftRunner:
             asyncio.run(registry.shutdown())
 
     async def _commit(self, ctx: DriftRunContext, session_key: str) -> str:
-        """把 Drift 草稿投递，并按 Reference 修正为 sent / silent。"""
+        """把 Drift 草稿投递，并按 Reference 修正为 sent / silent。
+
+        用 TurnResult 显式声明副作用:写 Session 只挂在 success 分支,
+        所以"渠道没送到就不留痕"这条语义由提交器保证,不再依赖手写分支。
+        """
         if not (ctx.message_pushed and ctx.draft_message and self._channel and self._chat_id):
             return "silent"
-        delivered = await self._deliver_message(ctx.draft_message, session_key)
-        return "sent" if delivered else "silent"
-
-    async def _deliver_message(self, message: str, session_key: str) -> bool:
         delivery_id = uuid4().hex
-        try:
-            await self._bus.publish_outbound_and_wait(
-                OutboundMessage(
-                    channel=self._channel,
-                    chat_id=self._chat_id,
-                    content=message,
-                    metadata={
-                        "proactive": True,
-                        "drift": True,
-                        "delivery_id": delivery_id,
-                    },
-                )
+        message = ctx.draft_message
+
+        async def record_session() -> None:
+            session = self._sessions.get_or_create(session_key)
+            session.add_message(
+                "assistant",
+                message,
+                proactive=True,
+                drift=True,
+                delivery_id=delivery_id,
             )
-        except Exception:
-            logger.exception("[drift] 投递草稿消息失败")
-            return False
-        session = self._sessions.get_or_create(session_key)
-        session.add_message(
-            "assistant",
-            message,
-            proactive=True,
-            drift=True,
-            delivery_id=delivery_id,
+            self._sessions.save(session)
+
+        result = TurnResult(
+            decision="reply",
+            outbound=TurnOutbound(session_key=session_key, content=message),
+            trace=TurnTrace(source="drift", extra={"delivery_id": delivery_id}),
+            success_side_effects=[
+                CallableSideEffect(name="drift_record_session", action=record_session)
+            ],
         )
-        self._sessions.save(session)
-        return True
+        outcome = await commit_turn_result(
+            result,
+            port=BusOutboundPort(self._bus),
+            channel=self._channel,
+            chat_id=self._chat_id,
+            metadata={"proactive": True, "drift": True, "delivery_id": delivery_id},
+        )
+        return "sent" if outcome.dispatched else "silent"
 
     def _build_briefing(self, skill: DriftSkill, session_key: str) -> str:
         """拼一份 Drift Briefing：记忆 + 近期上下文 + 本 skill 连续性 + 最近 run。"""

@@ -27,9 +27,12 @@ from kirakira_agent.mcp import McpCatalogPublisher, WorkspaceMcpAdmin, Workspace
 from kirakira_agent.models import OpenAICompatibleClient
 from kirakira_agent._compat.provider import ModelClientProvider
 from kirakira_agent.coremem.services import build_memory_services
+from kirakira_agent.ports import ContextServices, LLMServices, SessionServices
 from kirakira_agent.plugins import PluginManager
+from kirakira_agent.plugin_watcher import PluginWatcher
 from kirakira_agent.proactive import ProactiveLoop
 from kirakira_agent.proactive.config import ProactiveConfig
+from kirakira_agent.proactive.mcp_sources import compile_proactive_sources
 from kirakira_agent.proactive.sources import build_file_inbox_registry
 from kirakira_agent.proactive.state import ProactiveStateStore
 from kirakira_agent.drift import DriftRunner
@@ -258,6 +261,27 @@ def _build_channel_host(
     return host if added else None
 
 
+def _build_source_registry(
+    workdir: Path,
+    plugin_sources: Any = None,
+    tool_registry: Any = None,
+):
+    """内置文件源 + 插件声明编译出的 MCP 源。
+
+    插件只声明 ProactiveSourceSpec,由这里编译成真实 ProactiveSource——
+    这是主动链路可扩展的接线点。单个源注册失败不阻断其余源与整条链路。
+    """
+    registry = build_file_inbox_registry(workdir)
+    for source in compile_proactive_sources(list(plugin_sources or []), tool_registry):
+        try:
+            registry.add(source)
+        except ValueError as error:
+            logging.getLogger(__name__).warning(
+                "plugin proactive source skipped: %s", error
+            )
+    return registry
+
+
 def _build_proactive(
     *,
     workdir: Path,
@@ -268,6 +292,9 @@ def _build_proactive(
     memory: MemoryRuntime,
     client: OpenAICompatibleClient,
     passive_busy_fn: Any | None = None,
+    memory_services: Any = None,
+    plugin_sources: Any = None,
+    tool_registry: Any = None,
 ) -> tuple[ProactiveLoop | None, DriftRunner | None]:
     """按配置装配主动推送链路与 Drift 链路；未启用则返回 (None, None)。"""
     cfg = ProactiveConfig.from_app_config(app_config, default_model=default_model)
@@ -300,11 +327,12 @@ def _build_proactive(
         bus=bus,
         session_manager=session_manager,
         model_client=client,
-        sources=build_file_inbox_registry(workdir),
+        sources=_build_source_registry(workdir, plugin_sources, tool_registry),
         state=ProactiveStateStore(workdir / "proactive.db"),
         memory=memory,
         drift_hook=drift_hook,
         passive_busy_fn=passive_busy_fn,
+        memory_services=memory_services,
     )
     return loop, drift_runner
 
@@ -383,10 +411,26 @@ async def build_runtime(
     bus = MessageBus()
     event_bus = EventBus()
     session_manager = SessionManager(workdir)
+    # 记忆 DI 缝先建立:引擎是 coremem.db 的唯一 owner,旧 MemoryRuntime 共享它的连接,
+    # 也让显式记忆工具(Stage 5)能在注册表构建时就拿到引擎。
+    memory_provider = ModelClientProvider(client)
+    memory_services = build_memory_services(
+        app_config=app_config,
+        workspace=workdir,
+        provider=memory_provider,
+        light_provider=memory_provider,
+        event_publisher=event_bus,
+        session_manager=session_manager,
+        memory_window=int(
+            config_value(app_config, "agent", "context", "memory_window", default=40)
+        ),
+    )
     memory = MemoryRuntime(
         workdir,
         session_manager=session_manager,
         engine=str(config_value(app_config, "memory", "engine", default="auto")),
+        shared_store=memory_services.store,
+        event_bus=event_bus,
     )
     embedding_model = os.getenv("EMBEDDING_MODEL_ID") or str(
         config_value(app_config, "memory", "embedding", "model", default="")
@@ -405,7 +449,13 @@ async def build_runtime(
                 )
             ),
         )
-    registry = build_default_registry(workdir, memory=memory, session_manager=session_manager, bus=bus)
+    registry = build_default_registry(
+        workdir,
+        memory=memory,
+        session_manager=session_manager,
+        bus=bus,
+        memory_services=memory_services,
+    )
     # 能力快照：MCP 换代只切换 current 快照，在途 turn 用完旧租约后旧进程才断开。
     snapshot_store = RuntimeSnapshotStore()
     mcp_publisher = McpCatalogPublisher(snapshot_store)
@@ -504,16 +554,6 @@ async def build_runtime(
         bus=bus,
         tools=registry,
     )
-    # Phase 2 记忆 DI 缝:配了 [memory.embedding] → DefaultMemoryEngine 承重检索;
-    # 否则 DisabledMemoryEngine,pipeline 回退旧词法路径。引擎自订阅 TurnCommitted 做对话后摄入。
-    memory_provider = ModelClientProvider(client)
-    memory_services = build_memory_services(
-        app_config=app_config,
-        workspace=workdir,
-        provider=memory_provider,
-        light_provider=memory_provider,
-        event_publisher=event_bus,
-    )
     pipeline = PassiveTurnPipeline(
         bus=bus,
         event_bus=event_bus,
@@ -524,6 +564,8 @@ async def build_runtime(
         config=config,
         snapshot_store=snapshot_store,
         memory_services=memory_services,
+        session_services=SessionServices(session_manager=session_manager),
+        context_services=ContextServices(context=context),
     )
     loop = AgentLoop(bus=bus, pipeline=pipeline)
     plugin_manager = PluginManager(
@@ -537,6 +579,11 @@ async def build_runtime(
         skill_loader=context.skills,
     )
     await plugin_manager.load_all()
+    # 在途 turn 持有各插件当前代际租约;热重载换代不会抽走 turn 正在用的能力。
+    pipeline.plugin_generations = plugin_manager.generations
+    plugin_watcher = PluginWatcher(plugin_manager)
+    # 安装/卸载/启停后立即热重载,不必重启进程。
+    plugin_manager.reload_hook = plugin_watcher.wake
     reasoner.add_tool_hooks(plugin_manager.tool_hooks)
     reasoner.add_prompt_render_plugin_modules(plugin_manager.prompt_render_modules)
     reasoner.add_before_step_plugin_modules(plugin_manager.before_step_modules)
@@ -582,6 +629,9 @@ async def build_runtime(
         memory=memory,
         client=client,
         passive_busy_fn=loop.is_busy,
+        memory_services=memory_services,
+        plugin_sources=plugin_manager.proactive_sources,
+        tool_registry=registry,
     )
     if proactive_loop is not None:
         available_channels = {
@@ -606,6 +656,8 @@ async def build_runtime(
         channel_host=channel_host,
         plugin_manager=plugin_manager,
         mcp_watcher=mcp_watcher,
+        plugin_watcher=plugin_watcher,
+        memory_services=memory_services,
         scheduler=scheduler,
         subagents=subagents,
         proactive_loop=proactive_loop,

@@ -1,6 +1,6 @@
 # Kirakira Agent：从 MVP 到当前架构
 
-> 快照:2026-07-25。Reference 固定为 `012e37c8b51df045353972bb551d8e868ab52455`。
+> 快照:2026-07-25(插件体系与地基③ 落地后)。Reference 固定为 `012e37c8b51df045353972bb551d8e868ab52455`。
 > 本文只写已进入正式入口并有测试证据的能力;源码存在但没有生产调用点的不算完成。
 > 目标定位:**先照 Reference 对齐架构、跑通完整链路(MVP),细节后补。**
 
@@ -10,7 +10,9 @@
 | --- | --- | --- |
 | 被动回复 | 已跑通,工程化基座 | Web / Telegram / QQ / CLI 进同一 AgentLoop |
 | **异步原生 model runtime** | **已对齐(Phase 1)** | 客户端 `acomplete`/`acomplete_stream`,去掉 `to_thread` 阻抗 |
-| **记忆引擎 + DI 缝** | **架构已对齐(Phase 0/2)** | `DefaultMemoryEngine` 移植完成,`MemoryServices` 注入,pipeline 走 `engine.query` |
+| **记忆引擎 + DI 缝** | **已对齐** | `DefaultMemoryEngine` + `MemoryServices`,检索/工具/兴趣检索都走引擎;embedding 已实配 |
+| **插件扩展体系** | **骨架已对齐** | 声明式规格、作业/服务 host、代际租约、热重载、安装免重启、slot 依赖图 |
+| **Turn 抽象 + 相位 slot 图** | **已对齐** | `TurnResult` 副作用提交单点;`phase.py` 拓扑排序 |
 | 主动推送 | MVP 已跑通 | Tick / Source / 判断 / Channel callback / Session / ACK 闭环 |
 | Drift | MVP 已跑通 | 空转后执行 `SKILL.md`、用工具、发送并保存连续状态 |
 | Telegram / Supervisor | Reference 对齐 | 源文件逐字节一致,差异在文件外 binding |
@@ -18,7 +20,7 @@
 完整离线回归:
 
 ```text
-274 passed, 4 subtests passed
+354 passed, 4 subtests passed
 ```
 
 ## 2. 从 MVP 到当前的被动链路(重点看这里)
@@ -75,7 +77,7 @@ PassiveTurnPipeline
   → text_block 注入上下文
 ```
 
-**门控(MVP 关键)**:配了 `[memory.embedding]` → `DefaultMemoryEngine` 承重检索;没配 → `DisabledMemoryEngine`,pipeline 回退旧词法路径。因为 DefaultMemoryEngine 读写都要 embedding,所以"引擎真正承重"依赖 embedding 配置(下一步 Stage 3)。DI 缝、工厂、pipeline 消费服务包这套**架构已经和 Reference 一致**,回退路径是过渡细节。
+**门控**:配了 `[memory.embedding]` → `DefaultMemoryEngine` 承重检索;没配 → `DisabledMemoryEngine`,pipeline 回退旧词法路径(因为引擎读写都要向量)。当前已实配并验证:写入"用户偏好用中文回复"后,用几乎无共同词的"我应该用什么语言回复?"能召回——向量 lane 在工作,不是词法。
 
 对照 Reference:`MemoryServices(engine)` = `agent/looping/ports.py`;工厂门控 = `bootstrap/memory.py`(启用→engine,否则 `DisabledMemoryEngine`);pipeline 调 `engine.query` = `agent/retrieval/default_pipeline.py`。
 
@@ -91,18 +93,19 @@ Kirakira ≈2.6 万行,Reference ≈10.5 万行(产品代码)。差距的核心�
 
 | 地基(必须重构) | 状态 |
 | --- | --- |
-| ① 异步原生 model runtime | ✅ Phase 1 完成 |
-| ② 依赖注入(Services/Ports) | 🟡 记忆缝已落地(Phase 2),其余子系统待推广 |
-| ③ Turn 抽象 + lifecycle slot DAG | ⬜ 未开始 |
-| ④ 记忆 seam(引擎藏在干净接口后) | ✅ 检索缝已对齐;工具/摄入全量切换见 Stage 5 |
+| ① 异步原生 model runtime | 完成 |
+| ② 依赖注入(Services/Ports) | `ports.py` 分开配置与服务对象,pipeline 消费 SessionServices/ContextServices/MemoryServices |
+| ③ Turn 抽象 + lifecycle slot DAG | 完成(模块 frame 签名待迁移,见 NOW.md 第 3 项) |
+| ④ 记忆 seam(引擎藏在干净接口后) | 完成 |
 
 | 加法(依赖地基,可增量) | 状态 |
 | --- | --- |
-| control plane / app server | ⬜ 无 |
-| 前端 Dashboard | ⬜ 无(仅 Memory 管理 API) |
-| peer-agent 进程管理 | ⬜ 无 |
-| 主动 plugin/MCP source、durable outbox、多目标 | ⬜ MVP 文件源 |
-| 插件市场 | ⬜ workspace 插件 |
+| control plane / app server | 无 |
+| 前端 Dashboard | 无(仅 Memory 管理 API) |
+| peer-agent 进程管理 | 无 |
+| 插件/MCP 主动源 | **已接线**(插件声明→编译→SourceRegistry);真实 MCP 端到端验证见 NOW.md 第 5 项 |
+| durable outbox、多目标调度 | 未做,见 NOW.md 第 4 项 |
+| 插件安装/升级/卸载免重启 | **已完成**;包元数据与非 git 源未做 |
 
 **顺序原则**:上层"加法"依赖下层"重构",先地基后上层,才不会"接个东西搞半天"。
 
@@ -113,9 +116,10 @@ Kirakira ≈2.6 万行,Reference ≈10.5 万行(产品代码)。差距的核心�
 | M0 差距审计 | 完成 | doctor / Reference pin / 漂移检查 |
 | M1 唯一结构化 owner | 完成 | 迁移 / 回滚 / Dashboard(数据现已清空重来) |
 | **M2 DefaultMemoryEngine** | **移植完成 + 检索缝已接** | 引擎照抄 Reference,契约测试绿;经 `MemoryServices` 注入 pipeline |
-| Stage 3 embedding 配置 | 未开始 | 配 `[memory.embedding]` 后引擎从 Disabled 切到承重;需外部 embedding 端点 |
-| Stage 4 主动/Drift 走 `engine.query(interest)` + `read_long_term` | 未开始 | 保住两条链路接口 |
-| Stage 5 切除旧栈 | 未开始 | 删旧 `MemoryRuntime` 检索/consolidation、工具改走引擎 |
+| Stage 3 embedding 配置 | 完成 | 已实配并现场验证:1024 维,语义召回可用 |
+| Stage 4 主动兴趣检索 | 完成 | content 判断前 `engine.query(intent="interest", read_only, strong)` |
+| Stage 5 工具切引擎 | 完成 | memorize/recall/forget 走 `engine.mutate/query`;`coremem.db` 单 owner;关停释放资源 |
+| Stage 5 收尾:consolidation 移交 | 完成 | 归档由 `MarkdownMemoryMaintenance` 驱动,guard 改用可等待的 `consolidate(force=True)`;见 [decisions/0003](./decisions/0003-consolidation-handover.md) |
 
 ## 5. 主动推送 / Drift(MVP,未变)
 
@@ -125,21 +129,18 @@ Drift:主动空转 → 选 `drift/skills/*/SKILL.md` → 注入记忆/近期/con
 
 ## 6. 明确未完成
 
-- 记忆引擎"真正承重"依赖 embedding 配置(Stage 3);当前默认 `DisabledMemoryEngine` + 旧词法回退。
-- 显式记忆工具(memorize/recall/forget)仍走旧 `memory.py`,未切引擎;旧栈完整切除是 Stage 5。
-- 引擎 closeables 目前未在关停时统一关闭(进程退出兜底),Stage 5 收口。
-- 地基 ③(Turn/lifecycle DAG)未开始;control plane / 前端 / peer-agent / 插件市场未做。
-- QQ 两渠道能跑,未像 Telegram 逐字节复刻。
+未完成事项、接手点与验收边界统一维护在 [NOW.md](./NOW.md),本文不重复列举。
 
-## 7. 下一步优先级
+摘要:删除旧 consolidation 回退路径、DI 推广到 context/session、模块 frame 签名、
+durable outbox、插件源真实端到端验证;以及未排期的 Drift journal、QQ 逐字节对齐、
+control plane / 前端 / peer-agent / eval。
 
-1. **Stage 3:配 embedding**,让 `DefaultMemoryEngine` 从 Disabled 切到承重,第一次看到引擎真正做检索/摄入。
-2. **Stage 4/5:把工具、主动 interest、Drift long-term 切到引擎,删旧栈**,记忆子系统彻底对齐。
-3. **地基 ②推广 + ③开工**:把 Services/Ports 推广到 context/session,再上 Turn 抽象与 lifecycle DAG。
-4. 之后才是 control plane / 前端 / 主动 source 等"加法"。
+## 7. 文档导航
 
-## 8. 文档导航
-
+- [INDEX.md](./INDEX.md):文档索引与阅读顺序。
+- [NOW.md](./NOW.md):未完成工作与接手点。
+- [PLUGIN_SYSTEM.md](./PLUGIN_SYSTEM.md):插件声明、代际、热重载、安装。
+- [decisions/](./decisions/):架构选择的理由与替代方案。
 - [STARTUP_AND_CHANNELS.md](./STARTUP_AND_CHANNELS.md):启动、Telegram、渠道现状。
 - [MEMORY2_M0_M1.md](./MEMORY2_M0_M1.md):记忆 M0/M1 owner、迁移、恢复(注:命名已从 memory2→coremem)。
 - [DIFFERENCE_AUDIT.md](./DIFFERENCE_AUDIT.md):与 Reference 的差异审计。

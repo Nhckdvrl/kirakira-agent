@@ -8,6 +8,7 @@ MVP 把重型的 phase-graph kernel / snapshot 压平成一个直白的 async ti
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import random
 from datetime import datetime, timezone
@@ -16,7 +17,20 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 from uuid import uuid4
 
 from kirakira_agent.bus import MessageBus, OutboundDeliveryError
+from kirakira_agent.coremem.engine import (
+    MemoryCapability,
+    MemoryQuery,
+    MemoryQueryFilters,
+)
 from kirakira_agent.events import OutboundMessage
+from kirakira_agent.turns import (
+    BusOutboundPort,
+    CallableSideEffect,
+    TurnOutbound,
+    TurnResult,
+    TurnTrace,
+    commit_turn_result,
+)
 from kirakira_agent.models.base import ModelClient
 from kirakira_agent.proactive import energy
 from kirakira_agent.proactive.config import ProactiveConfig
@@ -59,6 +73,7 @@ class ProactiveLoop:
         drift_hook: DriftHook | None = None,
         passive_busy_fn: Callable[[str], bool] | None = None,
         rng: random.Random | None = None,
+        memory_services: Any = None,
     ) -> None:
         self._cfg = config
         self._bus = bus
@@ -66,6 +81,8 @@ class ProactiveLoop:
         self._sources = sources
         self._state = state
         self._memory = memory
+        # Stage 4:兴趣检索走引擎(read_only,不强化);未承重时本段为空,不影响判断链路。
+        self._memory_services = memory_services
         self._drift_hook = drift_hook
         self._passive_busy_fn = passive_busy_fn
         self._rng = rng or random.Random()
@@ -229,9 +246,21 @@ class ProactiveLoop:
         if has_new and not self._state.in_cooldown(
             session_key, now, self._cfg.delivery_cooldown_hours
         ):
+            # 兴趣检索用候选标题做 query,把"这个人是否真的关心这类东西"的证据带进判断。
+            interest = await self._interest_hits(
+                " ".join(
+                    str(item.get("title") or "")[:120]
+                    for item in contents[:5]
+                ).strip()
+            )
+            content_memory_text = (
+                "%s\n\n【相关长期记忆】\n%s" % (memory_text, interest)
+                if interest
+                else memory_text
+            )
             try:
                 pushed = await self._push_content(
-                    contents, now, memory_text, recent_conversation,
+                    contents, now, content_memory_text, recent_conversation,
                     proactive_context, context_text, recent_proactive,
                 )
             except OutboundDeliveryError as exc:
@@ -325,20 +354,62 @@ class ProactiveLoop:
         if not message:
             raise OutboundDeliveryError("主动决策未生成可发送内容")
         delivery_id = uuid4().hex
-        await self._bus.publish_outbound_and_wait(
-            OutboundMessage(
-                channel=self._cfg.channel,
-                chat_id=self._cfg.chat_id,
-                content=message,
-                metadata={
-                    "proactive": True,
-                    "delivery_id": delivery_id,
-                    "evidence_item_ids": list(evidence_item_ids),
-                },
-            )
+        # 内容指纹:同一条内容跨进程重启仍得到同一个 key,这是去重的依据。
+        delivery_key = hashlib.sha256(message.encode("utf-8")).hexdigest()
+        if self._state.is_delivery_duplicate(
+            self._cfg.session_key,
+            delivery_key,
+            self._cfg.delivery_cooldown_hours,
+            now,
+        ):
+            logger.info("[proactive] 命中投递去重,跳过发送")
+            self._state.record_decision(now, "delivery_deduped", message[:120])
+            return
+
+        async def mark_intent() -> None:
+            # **发送前**落地投递意图:进程若在渠道成功与本地提交之间崩溃,
+            # 重启后同一内容会命中去重而不会重复打扰。代价是"标记后崩溃"会漏发这一条——
+            # 对主动推送而言,重复打扰比偶尔漏发更伤,所以取这一侧。
+            self._state.mark_delivery(self._cfg.session_key, delivery_key, now)
+
+        async def rollback_intent() -> None:
+            # 渠道明确失败 → 撤销标记,让下一轮能重试。
+            self._state.unmark_delivery(self._cfg.session_key, delivery_key)
+
+        async def commit_delivery() -> None:
+            # 只在渠道确认送达后才落地:写 Session 供后续 tick 防重复,并起推送冷却。
+            self._record_proactive_message(message, delivery_id, evidence_item_ids)
+            self._state.mark_push(self._cfg.session_key, now)
+
+        result = TurnResult(
+            decision="reply",
+            outbound=TurnOutbound(session_key=self._cfg.session_key, content=message),
+            evidence=list(evidence_item_ids),
+            trace=TurnTrace(source="proactive", extra={"delivery_id": delivery_id}),
+            side_effects=[
+                CallableSideEffect(name="proactive_mark_intent", action=mark_intent)
+            ],
+            success_side_effects=[
+                CallableSideEffect(name="proactive_commit", action=commit_delivery)
+            ],
+            failure_side_effects=[
+                CallableSideEffect(name="proactive_rollback", action=rollback_intent)
+            ],
         )
-        self._record_proactive_message(message, delivery_id, evidence_item_ids)
-        self._state.mark_push(self._cfg.session_key, now)
+        outcome = await commit_turn_result(
+            result,
+            port=BusOutboundPort(self._bus),
+            channel=self._cfg.channel,
+            chat_id=self._cfg.chat_id,
+            metadata={
+                "proactive": True,
+                "delivery_id": delivery_id,
+                "evidence_item_ids": list(evidence_item_ids),
+            },
+        )
+        if not outcome.dispatched:
+            # 保持既有契约:调用方靠这个异常决定"保留未读、不消费事件"。
+            raise OutboundDeliveryError("主动消息渠道发送失败")
         logger.info("[proactive] 已推送 message=%r", message[:120])
 
     def _record_proactive_message(
@@ -437,6 +508,39 @@ class ProactiveLoop:
             return str(reader() or "")
         except Exception:
             return ""
+
+    async def _interest_hits(self, query: str, limit: int = 6) -> str:
+        """按候选内容做兴趣检索(照 Reference wake_proactive/tools.py)。
+
+        `effect="read_only"` 保证判断阶段不强化记忆;`relevance_floor="strong"` 只要高置信
+        条目,避免把弱相关记忆塞进打扰判断。引擎未承重或失败时返回空串,判断链路照常。
+        """
+        engine = getattr(self._memory_services, "engine", None)
+        if engine is None or not str(query or "").strip():
+            return ""
+        descriptor = getattr(engine, "DESCRIPTOR", None)
+        capabilities = getattr(descriptor, "capabilities", frozenset())
+        if MemoryCapability.RETRIEVE_CONTEXT_BLOCK not in capabilities:
+            return ""
+        try:
+            result = await engine.query(
+                MemoryQuery(
+                    text=query,
+                    intent="interest",
+                    effect="read_only",
+                    filters=MemoryQueryFilters(relevance_floor="strong"),
+                    limit=limit,
+                )
+            )
+        except Exception as exc:  # noqa: BLE001 - 兴趣检索失败不阻断主动判断
+            logger.warning("[proactive] 兴趣检索失败: %s", exc)
+            return ""
+        lines = [
+            "- %s" % str(record.summary).strip()[:300]
+            for record in result.records
+            if str(record.summary).strip()
+        ]
+        return "\n".join(lines)
 
     def _context_file_path(self) -> Path:
         return self._workspace / _PROACTIVE_CONTEXT_FILE
