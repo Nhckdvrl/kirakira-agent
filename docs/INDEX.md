@@ -15,13 +15,14 @@
 | 改主动推送或 Drift | [PROACTIVE_ARCHITECTURE.md](./PROACTIVE_ARCHITECTURE.md) |
 | 改启动、Supervisor 或渠道 | [STARTUP_AND_CHANNELS.md](./STARTUP_AND_CHANNELS.md) |
 | 查某个架构选择当初为什么这么定 | [decisions/](./decisions/) |
+| 查某次重构的调用链、失败语义与验收 | [design/](./design/) |
 
 ## 阅读顺序(新接手)
 
 1. [MVP_TO_CURRENT.md](./MVP_TO_CURRENT.md) —— 当前整体形态与四个地基的状态。
 2. [NOW.md](./NOW.md) —— 还没做完的是什么、边界在哪。
 3. 按你要动的子系统读对应专题文档。
-4. 动手前查 [decisions/](./decisions/) 里有没有相关约束。
+4. 动手前查 [decisions/](./decisions/) 与 [design/](./design/) 里有没有相关约束。
 
 ## 历史记录
 
