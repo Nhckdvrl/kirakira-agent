@@ -9,6 +9,7 @@
 | --- | --- | --- |
 | **现状** | 现在是什么形态、还差什么 | `MVP_TO_CURRENT.md`、`NOW.md`、各子系统专题 |
 | **历程** | 为什么长成这样、每一步解决了什么问题 | `VERSION_EVOLUTION.md` |
+| **方法** | 这些经历提炼出的可迁移判断 | `ENGINEERING_METHOD.md` |
 | **判断** | 与 Reference 差在哪、哪些是有意取舍 | `DIFFERENCE_AUDIT.md` |
 | **依据** | 某个选择的理由、某次重构的调用链与验收 | `decisions/`、`design/` |
 
@@ -21,22 +22,36 @@
 | 接手未完成的工作、找当前阻塞 | [NOW.md](./NOW.md) |
 | 了解项目从 MVP 长到现在的整体形态 | [MVP_TO_CURRENT.md](./MVP_TO_CURRENT.md) |
 | 了解被动链路每一轮工程化解决了什么问题 | [VERSION_EVOLUTION.md](./VERSION_EVOLUTION.md) |
+| **学怎么判断"该重构还是该加功能"** | [ENGINEERING_METHOD.md](./ENGINEERING_METHOD.md) |
+| 想知道复杂系统会怎么腐坏、怎么更早发现 | [ENGINEERING_METHOD.md §4](./ENGINEERING_METHOD.md) |
 | 查与 Reference(Akashic)的差距与定位 | [DIFFERENCE_AUDIT.md](./DIFFERENCE_AUDIT.md) |
 | **确认某条链路是"测过"还是"真跑过"** | [design/live-verification.md](./design/live-verification.md) |
 | 改记忆:引擎、检索、摄入、embedding | [MEMORY_SYSTEM.md](./MEMORY_SYSTEM.md) |
 | 改插件:声明、代际、热重载、安装 | [PLUGIN_SYSTEM.md](./PLUGIN_SYSTEM.md) |
 | 改主动推送或 Drift | [PROACTIVE_ARCHITECTURE.md](./PROACTIVE_ARCHITECTURE.md) + [design/proactive-lifecycle.md](./design/proactive-lifecycle.md) |
 | 改启动、Supervisor 或渠道 | [STARTUP_AND_CHANNELS.md](./STARTUP_AND_CHANNELS.md) |
+| 程序化观测/驱动运行中的 agent | [design/control-plane.md](./design/control-plane.md) |
 | 查某个架构选择当初为什么这么定 | [decisions/](./decisions/) |
 | 准备面试/对外讲这个项目 | [RESUME_INTERVIEW_GUIDE.md](./RESUME_INTERVIEW_GUIDE.md) |
 
-## 阅读顺序(新接手)
+## 阅读顺序
 
-1. [MVP_TO_CURRENT.md](./MVP_TO_CURRENT.md) —— 当前整体形态与四个地基的状态。
+### 如果你要接手开发
+
+1. [MVP_TO_CURRENT.md](./MVP_TO_CURRENT.md) —— 当前整体形态(第 3 节有一张全景图)与四个地基的状态。
 2. [design/live-verification.md](./design/live-verification.md) —— 哪些是真跑过的,哪些只是测过。
 3. [NOW.md](./NOW.md) —— 还没做完的是什么、接手点与验收边界在哪。
 4. 按你要动的子系统读对应专题文档。
 5. 动手前查 [decisions/](./decisions/) 与 [design/](./design/) 有没有相关约束。
+
+### 如果你是来学"怎么构建复杂系统"的
+
+1. [ENGINEERING_METHOD.md](./ENGINEERING_METHOD.md) —— 先看方法:判断信号、地基识别、
+   五种腐坏方式、"测过 ≠ 跑过"。每条都挂着真实 commit。
+2. [VERSION_EVOLUTION.md](./VERSION_EVOLUTION.md) —— 再看编年史,把方法对应回具体阶段。
+   第 12 节(四个地基)是分水岭:从"补一层"转向"改形状"。
+3. [decisions/](./decisions/) —— 看具体决策怎么写下理由与被否决的替代方案。
+4. [design/live-verification.md](./design/live-verification.md) —— 看"诚实报告状态"长什么样。
 
 ## 决策记录
 
@@ -55,6 +70,7 @@
 | 文档 | 主题 |
 | --- | --- |
 | [proactive-lifecycle.md](./design/proactive-lifecycle.md) | 主动链路从扁平 tick 重构成模块流水线 |
+| [control-plane.md](./design/control-plane.md) | 控制面分层、turn 状态机、事件流与认证 |
 | [live-verification.md](./design/live-verification.md) | 实弹验证记录与仍未验证的边界 |
 
 ## 历史记录

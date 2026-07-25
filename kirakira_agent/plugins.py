@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 import hashlib
 import importlib.util
 import inspect
@@ -1138,6 +1139,38 @@ class PluginManager:
 
     def disable_plugin(self, name: str) -> str:
         return self._set_enabled(name, False)
+
+    async def reconcile_disabled_and_drain(
+        self, plugin_id: str, *, timeout: float = 30.0
+    ) -> str:
+        """停用插件并**等到它的代际真正排空**才返回。
+
+        与 ``disable_plugin`` 的区别是后者只改清单就返回,在途 turn 可能还握着
+        这个插件的租约。控制面 ``plugin/disable-and-drain`` 需要"返回即已下线"
+        的强语义(照 Reference bootstrap/app.py:_disable_and_drain_plugin)。
+        """
+        plugin_id = plugin_id.strip()
+        if not plugin_id:
+            raise ValueError("缺少插件 ID")
+        known = {record.plugin_id for record in self.active}
+        if plugin_id not in known:
+            raise ValueError("插件未加载: %s" % plugin_id)
+        self.disable_plugin(plugin_id)
+        self.generations.retire(plugin_id)
+        deadline = time.monotonic() + max(0.0, timeout)
+        while True:
+            retired = {
+                generation.plugin_id
+                for generation in self.generations.retired()
+                if not generation.can_quiesce
+            }
+            if plugin_id not in retired:
+                return "插件已停用并排空: %s" % plugin_id
+            if time.monotonic() >= deadline:
+                raise TimeoutError(
+                    "插件 %s 仍有在途 turn 持有租约,排空超时" % plugin_id
+                )
+            await asyncio.sleep(0.05)
 
     async def uninstall(self, name: str) -> str:
         name = name.strip()

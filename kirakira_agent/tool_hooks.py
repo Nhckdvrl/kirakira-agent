@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 import logging
-from typing import Any, Dict, List, Literal, Protocol
+from typing import Any, Dict, List, Literal, Optional, Protocol
 
 from kirakira_agent.schema import ToolResult
 
@@ -57,6 +57,9 @@ class ToolExecutionResult:
     output: str
     final_arguments: JsonDict
     extra_messages: List[str] = field(default_factory=list)
+    # 工具自己声明的 turn 级注意力标记;聚合与合法性校验在 runtime 侧
+    # (照 Reference agent/core/passive_turn.py:1656)。
+    mobile_attention: Optional[str] = None
 
 
 class ToolExecutor:
@@ -111,11 +114,15 @@ class ToolExecutor:
             error = str(exc)
             await self._run_error_hooks(request, args, error, extra)
             return ToolExecutionResult("error", "工具执行出错: %s" % error, args, extra)
+        attention: Optional[str] = None
         if isinstance(invoked, ToolResult):
             output = invoked.content
+            attention = invoked.mobile_attention
             if invoked.is_error:
                 await self._run_error_hooks(request, args, output, extra)
-                return ToolExecutionResult("error", output, args, extra)
+                return ToolExecutionResult(
+                    "error", output, args, extra, mobile_attention=attention
+                )
         else:
             output = str(invoked)
         for hook in self._hooks:
@@ -128,7 +135,9 @@ class ToolExecutor:
                             extra.append(outcome.extra_message)
                 except Exception:
                     logger.exception("post-tool hook failed: %s", hook.name)
-        return ToolExecutionResult("success", str(output), args, extra)
+        return ToolExecutionResult(
+            "success", str(output), args, extra, mobile_attention=attention
+        )
 
     async def _run_error_hooks(
         self,

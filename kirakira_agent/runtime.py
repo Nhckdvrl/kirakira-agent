@@ -95,6 +95,8 @@ class ReasonerResult:
     tool_chain: List[JsonDict] = field(default_factory=list)
     thinking: str = ""
     context_trace: JsonDict = field(default_factory=dict)
+    # 本轮是否有工具声明需要用户确认;None 表示没有。
+    mobile_attention: Optional[str] = None
 
 
 async def _run_plugin_modules(modules: List[object], ctx: Any) -> Any:
@@ -307,6 +309,7 @@ class DefaultReasoner:
         react_input_samples: List[int] = []
         model_usages: List[JsonDict] = []
         empty_thinking_retry_used = False
+        mobile_attention: Optional[str] = None
         iteration = 0
         iteration_limit = (
             self.config.max_iterations
@@ -336,6 +339,7 @@ class DefaultReasoner:
                     tools_used=tools_used,
                     tool_chain=tool_chain,
                     thinking=final_thinking,
+                    mobile_attention=mobile_attention,
                 )
             if before_step.extra_hints:
                 messages.append(
@@ -392,6 +396,7 @@ class DefaultReasoner:
                             react_input_samples, model_usages
                         )
                     },
+                    mobile_attention=mobile_attention,
                 )
 
             group = {
@@ -444,6 +449,8 @@ class DefaultReasoner:
                         tools,
                     )
                 tools_used.append(call.name)
+                if result.get("mobile_attention") is not None:
+                    mobile_attention = str(result["mobile_attention"])
                 group["calls"].append(
                     {
                         "call_id": call.id,
@@ -522,6 +529,7 @@ class DefaultReasoner:
             context_trace={
                 "react_stats": self._react_stats(react_input_samples, model_usages)
             },
+            mobile_attention=mobile_attention,
         )
 
     @staticmethod
@@ -753,6 +761,15 @@ class DefaultReasoner:
         content = result.output
         if result.extra_messages:
             content += "\n\n" + "\n".join(result.extra_messages)
+        # 照 Reference passive_turn.py:1656——只有成功的工具可以声明注意力标记,
+        # 失败的工具声明属于工具实现 bug,必须 fail loud 而不是静默丢弃。
+        if result.mobile_attention is not None:
+            if result.status != "success":
+                raise RuntimeError("失败工具不能声明 mobile_attention")
+            if result.mobile_attention != "confirmation":
+                raise RuntimeError(
+                    "无效 mobile_attention: %s" % result.mobile_attention
+                )
         await self.event_bus.fanout(
             ToolCallCompleted(
                 session_key=session_key,
@@ -766,7 +783,12 @@ class DefaultReasoner:
                 iteration=iteration,
             )
         )
-        return {"content": content, "status": result.status, "arguments": result.final_arguments}
+        return {
+            "content": content,
+            "status": result.status,
+            "arguments": result.final_arguments,
+            "mobile_attention": result.mobile_attention,
+        }
 
     async def _deny_tool(
         self,
@@ -1147,6 +1169,11 @@ class PassiveTurnPipeline:
             state.extra_metadata["context_trace"] = dict(turn.context_trace)
         finally:
             self.tools.reset_context(context_token)
+        # 入站 metadata 里的 mobile_attention 一律丢弃,只认本轮工具自己声明的
+        # (照 Reference lifecycle/phases/after_reasoning.py:68)——否则渠道客户端
+        # 可以伪造"需要确认"标记。
+        inbound_metadata = dict(msg.metadata or {})
+        inbound_metadata.pop("mobile_attention", None)
         after_ctx = AfterReasoningCtx(
             session_key=key,
             channel=msg.channel,
@@ -1155,6 +1182,18 @@ class PassiveTurnPipeline:
             thinking=turn.thinking,
             tool_chain=tuple(turn.tool_chain),
             reply=turn.reply,
+            # 照 Reference lifecycle/phases/after_reasoning.py:把本轮做了什么带出去。
+            # 控制面据此投影 toolCall item,Web 端据此渲染工具时间线。
+            outbound_metadata={
+                **inbound_metadata,
+                "tools_used": list(turn.tools_used),
+                "tool_chain": list(turn.tool_chain),
+                **(
+                    {"mobile_attention": turn.mobile_attention}
+                    if turn.mobile_attention is not None
+                    else {}
+                ),
+            },
         )
         after_ctx = await self.event_bus.emit(after_ctx)
         after_ctx = await _run_plugin_modules(self._after_reasoning_modules, after_ctx)
@@ -1531,6 +1570,10 @@ class CoreRuntime:
     subagents: Any | None = None
     proactive_loop: Any | None = None
     drift_runner: Any | None = None
+    control_store: Any | None = None
+    control_runtime: Any | None = None
+    control_service: Any | None = None
+    control_server: Any | None = None
 
     def add_tool_hooks(self, hooks: List[ToolHook]) -> None:
         self.reasoner.add_tool_hooks(hooks)
@@ -1590,9 +1633,24 @@ class CoreRuntime:
             tasks.append(
                 asyncio.create_task(self.plugin_watcher.run(), name="plugin_watcher")
             )
+        if self.control_server is not None:
+            # 控制面自己管连接 task,不进 tasks 列表;失败不能拖垮主链路。
+            try:
+                await self.control_server.start()
+            except Exception:
+                logger.exception("control plane failed to start; continuing without it")
+                self.control_server = None
         return tasks
 
     async def stop_background(self, tasks: list[asyncio.Task[Any]]) -> None:
+        # 先停控制面:不再接受新的 programmatic turn,在途 turn 由
+        # ConversationRuntime.shutdown 取消并写入终态。
+        if self.control_server is not None:
+            await self.control_server.stop()
+        if self.control_service is not None:
+            await self.control_service.shutdown()
+        if self.control_runtime is not None:
+            await self.control_runtime.shutdown()
         if self.subagents is not None:
             await self.subagents.shutdown()
         await self.loop.shutdown()
@@ -1631,4 +1689,6 @@ class CoreRuntime:
             except Exception:
                 logger.exception("memory services shutdown failed")
         await self.event_bus.shutdown()
+        if self.control_store is not None:
+            self.control_store.close()
         self.session_manager.close()

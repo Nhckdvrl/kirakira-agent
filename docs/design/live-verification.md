@@ -1,6 +1,6 @@
 # 实弹验证记录:哪些链路真的跑过
 
-- 状态:accepted;下表为 2026-07-25 一次集中实弹的结果
+- 状态:accepted;第 2–6 节为 2026-07-25 一轮,第 7 节为 2026-07-26 控制面一轮
 - 核对基线:`Reference/` @ `012e37c8b51df045353972bb551d8e868ab52455`
 - 目标读者:维护者、评审者、接手做下一轮验证的人
 - 关联:[NOW.md](../NOW.md)、[decisions/0004](../decisions/0004-delivery-dedup.md)
@@ -9,7 +9,7 @@
 
 ## 1. 为什么单独记这一份
 
-离线回归 429 passed 只说明**单测口径**下的行为成立。它抓不到两类问题:
+离线回归 454 passed 只说明**单测口径**下的行为成立。它抓不到两类问题:
 
 1. **跨组件的真实链路**——测试用 mock provider 与替身渠道,组件之间的真实交互没被走过;
 2. **真实模型的输出偏差**——mock 永远按约定返回,真实模型不会。
@@ -74,7 +74,40 @@
   (doctor 漂移审计 16 个文件 `drifted=[]`);
 - 容错只放宽"单键对象且值是数组"一种,其余坏响应仍报错。
 
-## 7. 仍未验证(G)
+## 7. 控制面与确认工具(F,2026-07-26)
+
+对**真实运行中的 agent**(`main.py gateway`,真实 deepseek)通过
+`main.py control` 驱动,见 [control-plane.md](./control-plane.md)。
+
+| 项 | 结果 |
+| --- | --- |
+| socket 建立 | `.kirakira/control.sock`,权限 `srw-------`(0600) |
+| `server/status` | `ready=true`,workspace 正确 |
+| 新建 thread + 一轮问答 | `programmatic:e8dbe5fb…`,真实模型回复 JSON-RPC 定义 |
+| 带工具的一轮 | `toolCall: list_dir -> success` 落进 turn record |
+| **中断在途 turn** | 6s 后 interrupt → `status=interrupted`,`completedAt` 已写;**重读一致** |
+| 中断后 thread 复用 | 同 thread 新起一轮 → `completed`,回复"恢复正常" |
+| 同 thread 并发 | 拒绝,`-32011` 且 `retryable=true` |
+| 不同 thread 并行 | 正常完成 |
+| 未知 thread | `-32010` |
+| `thread/consolidate/start` | 返回 operation handle,异步执行 |
+| 关停 | socket 文件被清理,无残留 |
+
+**`request_user_confirmation`**:模型调用后,turn 的 assistant item 带
+`mobileAttention: confirmation`;普通轮次不带。
+
+### 这一轮抓到的问题
+
+`outbound.metadata` 从来没有携带过 `tools_used` / `tool_chain`——Reference 的
+`after_reasoning` 阶段会写,我们的没有。后果是控制面的 toolCall item 投影是**死代码**:
+写了,但永远拿不到数据。第一次实弹跑就暴露了(turn 里只有 assistantMessage,没有
+toolCall)。已按 Reference 补齐 `outbound_metadata`,重跑后 toolCall 正常出现。
+
+同一类错误第二次出现(上一次是 `compile_proactive_sources` 没有调用点):
+**写了投影逻辑但没验证上游真的产出数据**。单测里我用的是自己构造的 metadata,
+所以测试是绿的——只有实弹能发现上游根本不填这个字段。
+
+## 8. 仍未验证(G)
 
 | 项 | 缺什么 |
 | --- | --- |
@@ -83,3 +116,5 @@
 | 热重载与在途 turn 的竞争 | 代际租约有单测,但没在真实并发下观察过 |
 | 跨崩溃去重的真实崩溃场景 | 用重开库模拟过,没有真正 kill -9 之后重启验证 |
 | 长时间运行 | 没有连续跑数小时观察内存、连接与调度漂移 |
+| 控制面 TCP 模式与 token 认证 | 只验过 Unix socket 无 token 路径 |
+| `plugin/disable-and-drain` 真实排空 | 当前 workspace 没装插件,只验过错误路径 |

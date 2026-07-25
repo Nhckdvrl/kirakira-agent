@@ -4,6 +4,8 @@ Kirakira Agent 是一个参考 `akashic-agent` 实现的多渠道 AI Agent Runti
 
 > 想先看清“从最小 MVP 做到了哪里、三条链路怎么验收”，直接看
 > [docs/MVP_TO_CURRENT.md](./docs/MVP_TO_CURRENT.md)。
+> 想学“怎么把一个 MVP 养成不塌的系统”，看
+> [docs/ENGINEERING_METHOD.md](./docs/ENGINEERING_METHOD.md)。
 > 启动、初始化向导及 Web/Telegram/两种 QQ 的完整合同见
 > [docs/STARTUP_AND_CHANNELS.md](./docs/STARTUP_AND_CHANNELS.md)。
 
@@ -87,6 +89,7 @@ Web / Telegram / QQ / CLI
 ## 已实现能力
 
 - **主动推送链路（MVP）**：电量模型（多时间尺度指数衰减）自适应轮询节流；三通道 `alert`/`content`/`context` 语义；可插拔 `ProactiveSource` 协议 + 内置文件源；`proactive.db` 事件去重/pending ACK/冷却；LLM 兴趣判断决定推送或跳过；交付等待真实 Channel callback，成功后才带 `delivery_id` 写 Session 并消费事件。
+- **控制面（Control Plane）**：workspace 私有 Unix socket 上的 JSON-RPC 2.0 over NDJSON；起 thread、跑一轮 programmatic turn（不产生渠道出站）、实时订阅 turn 事件、精确中断在途 turn、强制归档记忆、停用并排空插件；turn 状态机以 SQLite CAS 持久化，慢消费者只毒死自己不拖慢 turn。`main.py control` 是自带客户端。
 - **Drift 空闲任务链路（MVP）**：主动链路本轮未产生推送时尝试进入；发现 `drift/skills/*/SKILL.md` 并每轮重新选择；一轮 Drift 复用同步 Agent 与默认工具集跑成一次 run，SKILL.md 当 system prompt + 注入 Briefing；`message_push` / `finish_drift` 收尾；`drift.db` 保存 run 记录、跨轮连续性与 `min_interval_hours` 门控。
 - Web、Telegram、QQ/OneBot、CLI 被动消息入口。
 - 按 session 串行、跨 session 并行的 AgentLoop；`/stop` 中断并保存续跑标记。
@@ -114,6 +117,7 @@ Web / Telegram / QQ / CLI
 - QQ 图片入站、私聊/群聊策略、群发送者标识、OneBot 状态校验和出站媒体。
 - Web 并发请求关联、主动消息长轮询、会话/记忆管理 API。
 - Shell 进程组超时/取消、文件原子写入、编辑歧义保护、二进制检测。
+- `request_user_confirmation` 把"本轮需要你确认"抬到 turn 级 `mobile_attention`；入站伪造的标记会被丢弃。
 - `web_fetch` 私网/重定向 SSRF 防护、响应类型和 5 MB 上限。
 - `vision` 独立视觉模型工具，校验图片真实 magic bytes。
 
@@ -446,7 +450,7 @@ drift/drift.db                Drift run 记录、跨轮连续性、min_interval 
 /home/xiang/.conda/envs/xingshu-vllm/bin/python -m unittest discover -s tests -v
 ```
 
-当前离线回归为 `429 passed, 4 subtests passed`，覆盖工具、Session、并发、MCP、snapshot、
+当前离线回归为 `454 passed, 4 subtests passed`，覆盖工具、Session、并发、MCP、snapshot、
 上下文、记忆引擎契约 + DI 服务、异步 model runtime、插件代际/热重载/安装、Turn 副作用提交、
 相位 slot 依赖图、Reference Telegram/Supervisor 一致性、主动链路与 Drift。另已使用
 `deepseek-v4-flash` 在线验证普通响应、SSE 工具循环、后台记忆 consolidation，以及 context
@@ -472,8 +476,11 @@ drift/drift.db                Drift run 记录、跨轮连续性、min_interval 
 
 | 我想知道 | 看这里 |
 | --- | --- |
-| 从 MVP 到当前进度、三条链路如何启动验收 | [docs/MVP_TO_CURRENT.md](./docs/MVP_TO_CURRENT.md) |
+| **怎么把 MVP 养成不塌的系统(判断信号、五种腐坏方式、验证纪律)** | [docs/ENGINEERING_METHOD.md](./docs/ENGINEERING_METHOD.md) |
+| 从 MVP 到当前进度、三条链路如何启动验收(含全景图) | [docs/MVP_TO_CURRENT.md](./docs/MVP_TO_CURRENT.md) |
 | 简历文案与面试追问（含三链路差异化，**面试先看这篇**） | [docs/RESUME_INTERVIEW_GUIDE.md](./docs/RESUME_INTERVIEW_GUIDE.md) |
 | 与 Reference 的能力级差异、主动 MVP 边界与差距优先级 | [docs/DIFFERENCE_AUDIT.md](./docs/DIFFERENCE_AUDIT.md) |
 | 主动链路的总体架构、状态机、提交边界与演进顺序 | [docs/PROACTIVE_ARCHITECTURE.md](./docs/PROACTIVE_ARCHITECTURE.md) |
-| 被动链路如何从 Function Calling MVP 一步步工程化 | [docs/VERSION_EVOLUTION.md](./docs/VERSION_EVOLUTION.md) |
+| 被动链路如何从 Function Calling MVP 一步步工程化(至第 13 轮) | [docs/VERSION_EVOLUTION.md](./docs/VERSION_EVOLUTION.md) |
+| 程序化观测/驱动运行中的 agent | [docs/design/control-plane.md](./docs/design/control-plane.md) |
+| 哪些链路是"真跑过"而不只是"测过" | [docs/design/live-verification.md](./docs/design/live-verification.md) |

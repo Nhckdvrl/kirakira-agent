@@ -13,6 +13,7 @@
 | `uv run python main.py init` | 非交互复制模板并初始化 workspace |
 | `uv run python main.py gateway` | 绕开 supervisor，直接启动完整服务，供调试 |
 | `uv run python main.py supervise` | 显式进入与默认入口相同的 supervisor |
+| `uv run python main.py control <子命令>` | **连接已在跑的 agent**,不启动 runtime;见第 5 节 |
 
 `uv.lock` 固定 Python 依赖；`uv run` 首次运行会创建隔离环境，不要求用户手工创建 `.venv`。
 
@@ -26,6 +27,7 @@ main.py
       → 启动 main.py gateway
           → 构建 Agent/Bus/Channel/Proactive/Drift
           → 所有已配置 Channel start 成功
+          → 控制面在 <workspace>/.kirakira/control.sock 上监听(0600)
           → 原子写 .runtime-ready.json（bootId + pid + ready）
       → SIGINT/SIGTERM 精确转发给当前 child
       → 普通退出：supervisor 同步退出
@@ -115,3 +117,30 @@ Proactive / Drift
 
 因此“配置成功”的验收标准不是 TOML 能解析，而是：Channel 能在 gateway 启动阶段真实就绪、被动消息
 可往返、主动消息完成 sender callback，失败时不提交主动状态。
+
+## 5. 控制面入口
+
+agent 跑起来之后,`main.py control` 从**另一个终端**连上它的私有 socket。
+它不启动 runtime,也不要求 `config.toml` 存在——只需要 workspace 指对。
+
+```text
+uv run python main.py control status                 看 ready / workspace
+uv run python main.py control threads --limit 10     列会话
+uv run python main.py control new --ask "你好"        新建 thread 并跑一轮
+uv run python main.py control ask <threadId> "..."   在已有 thread 上继续
+uv run python main.py control read <threadId> --turns 看这个 thread 的历史 turn
+uv run python main.py control interrupt <threadId> <turnId>
+uv run python main.py control consolidate <threadId> 强制归档记忆
+uv run python main.py control plugin-drain <pluginId>
+```
+
+控制面 turn 走 `programmatic:<uuid>` 命名空间,**不会与渠道会话串台,也不产生
+渠道出站消息**。协议细节、状态机与认证见
+[design/control-plane.md](./design/control-plane.md)。
+
+环境变量:
+
+| 变量 | 作用 |
+| --- | --- |
+| `KIRAKIRA_CONTROL_ENDPOINT` | 改监听/连接地址;支持 loopback TCP(`127.0.0.1:9800`) |
+| `KIRAKIRA_CONTROL_TOKEN` | 配置后 `initialize` 必须带匹配的 `workspaceToken` |

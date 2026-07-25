@@ -16,11 +16,12 @@
 | 主动推送 | MVP 已跑通 | Tick / Source / 判断 / Channel callback / Session / ACK 闭环 |
 | Drift | MVP 已跑通 | 空转后执行 `SKILL.md`、用工具、发送并保存连续状态 |
 | Telegram / Supervisor | Reference 对齐 | 源文件逐字节一致,差异在文件外 binding |
+| **控制面** | **已跑通** | JSON-RPC 2.0 over NDJSON;起 turn / 中断 / 观测 / 排空插件 |
 
 完整离线回归:
 
 ```text
-429 passed, 4 subtests passed
+454 passed, 4 subtests passed
 ```
 
 离线回归之外的**真实模型/真实渠道**验证结果单独记在
@@ -90,9 +91,56 @@ PassiveTurnPipeline
 
 **现在**:客户端加了异步原生 `acomplete` / `acomplete_stream`(httpx),runtime 与 `_compat.provider` 都**优先 await 异步、同步 stub 才回退线程**。memory / proactive / drift 的 LLM 调用现在都是异步原生,不再裹线程——记忆接线感到的"阻抗"从根上没了。SSE 解析在同步/异步两条流之间共用一份,保证一致。
 
-## 3. 与 Reference 的架构对齐:进度与路线
+### 2.5 控制面:第四个入口
 
-Kirakira ≈3.1 万行,Reference ≈10.5 万行(产品代码)。差距的核心不是"少了功能",而是 **4 个地基抽象需要重构**,其余多是坐在地基上的"加法"。
+前面三节讲的都是**消息怎么进来**。还有一条不产生消息的入口:
+
+```text
+外部程序 ──JSON-RPC over NDJSON──→ .kirakira/control.sock (0600)
+    → ConversationRuntime(每 thread 至多一个 active turn)
+    → 同一个 PassiveTurnPipeline(dispatch_outbound=False)
+    → 事件流实时回给调用方,不产生 OutboundMessage
+```
+
+它与渠道链路**完全并行**:thread id 是 `programmatic:<uuid>`,与
+`telegram:123` 天然不同名,不会串台。用途是在不打断真实用户的前提下
+观测、驱动、中断。详见 [design/control-plane.md](./design/control-plane.md)。
+
+## 3. 一张图看清当前形态
+
+```text
+                      ┌──────────────────────────────────────┐
+  Telegram / QQ /     │            MessageBus                │
+  QQBot / Web / CLI ─→│  (同 session 保序,跨 session 并发)   │
+                      └───────────────┬──────────────────────┘
+                                      ↓
+  control.sock ──→ ConversationRuntime ─┐
+  (programmatic)                        ↓
+                          ┌─────────────────────────────┐
+                          │    PassiveTurnPipeline      │
+                          │  BeforeTurn → BeforeReasoning│
+                          │  → PromptRender → Reasoner   │
+                          │  → ToolExecutor(hook/超时)  │
+                          │  → AfterReasoning → commit   │
+                          └──────┬───────────────┬───────┘
+                                 ↓               ↓
+                       MemoryServices      ToolRegistry
+                       (engine.query)      (+MCP 快照代际)
+                                 ↓               ↓
+                          coremem.db      PluginManager
+                                          (per-plugin 代际+租约)
+
+  ProactiveLoop(后台时钟,与 AgentLoop 并列)
+    energy → 模块流水线 gate→fetch→ingest→judge→alert→content→drift
+    → TurnResult 单点提交(含跨崩溃去重)→ 原 Channel
+```
+
+四条竖线是四个地基的位置:模型调用(异步原生)、服务注入(Services/Ports)、
+一轮的提交(TurnResult + slot 图)、记忆(engine seam)。
+
+## 4. 与 Reference 的架构对齐:进度与路线
+
+Kirakira ≈3.4 万行,Reference ≈10.5 万行(产品代码)。差距的核心不是"少了功能",而是 **4 个地基抽象需要重构**,其余多是坐在地基上的"加法"。
 
 | 地基(必须重构) | 状态 |
 | --- | --- |
@@ -103,7 +151,7 @@ Kirakira ≈3.1 万行,Reference ≈10.5 万行(产品代码)。差距的核心�
 
 | 加法(依赖地基,可增量) | 状态 |
 | --- | --- |
-| control plane / app server | 无 |
+| control plane | **已完成**(JSON-RPC over NDJSON,见 [design/control-plane.md](./design/control-plane.md));app server / 前端未做 |
 | 前端 Dashboard | 无(仅 Memory 管理 API) |
 | peer-agent 进程管理 | 无 |
 | 插件/MCP 主动源 | **已接线**(插件声明→编译→SourceRegistry);真实 MCP 端到端验证见 NOW.md 第 4 项 |
@@ -112,7 +160,7 @@ Kirakira ≈3.1 万行,Reference ≈10.5 万行(产品代码)。差距的核心�
 
 **顺序原则**:上层"加法"依赖下层"重构",先地基后上层,才不会"接个东西搞半天"。
 
-## 4. 记忆里程碑进度(细化)
+## 5. 记忆里程碑进度(细化)
 
 | 里程碑 | 状态 | 说明 |
 | --- | --- | --- |
@@ -124,13 +172,13 @@ Kirakira ≈3.1 万行,Reference ≈10.5 万行(产品代码)。差距的核心�
 | Stage 5 工具切引擎 | 完成 | memorize/recall/forget 走 `engine.mutate/query`;`coremem.db` 单 owner;关停释放资源 |
 | Stage 5 收尾:consolidation 移交 | 完成 | 归档由 `MarkdownMemoryMaintenance` 驱动,guard 改用可等待的 `consolidate(force=True)`;见 [decisions/0003](./decisions/0003-consolidation-handover.md) |
 
-## 5. 主动推送 / Drift
+## 6. 主动推送 / Drift
 
 主动:后台 Tick 跑一条**模块流水线**(gate → fetch → ingest → judge_context → alert → content → drift),顺序由各模块 `requires` 依赖图决定,插件可声明依赖后插进中间;详见 [design/proactive-lifecycle.md](./design/proactive-lifecycle.md)。投递走 `TurnResult` 单一提交点,含跨崩溃去重。内置文件 Source 与插件声明源都进同一 registry。缺多目标调度与 tick 代际租约。
 
 Drift:现在是流水线上的 `proactive.drift` 模块。触发由 **hazard 采样到期**决定(空闲驱动 × 内容/近期/重复抑制),不再是固定 min_interval;跨轮连续性有 continuum + **append-only journal 与自我观察**;投递走 `TurnResult`,成功记 sent 否则 silent。
 
-## 6. 明确未完成
+## 7. 明确未完成
 
 未完成事项、接手点与验收边界统一维护在 [NOW.md](./NOW.md),本文不重复列举。
 
@@ -138,11 +186,13 @@ Drift:现在是流水线上的 `proactive.drift` 模块。触发由 **hazard 采
 插件源真实端到端验证;以及未排期的 QQ 逐字节对齐、插件包元数据、
 control plane / 前端 / peer-agent / eval、主动多目标调度。
 
-## 7. 文档导航
+## 8. 文档导航
 
+- [ENGINEERING_METHOD.md](./ENGINEERING_METHOD.md):**怎么把 MVP 养成不塌的系统**——判断信号、五种腐坏方式、验证纪律。
 - [INDEX.md](./INDEX.md):文档索引与阅读顺序。
 - [NOW.md](./NOW.md):未完成工作与接手点。
 - [design/live-verification.md](./design/live-verification.md):实弹验证记录与未验证边界。
+- [design/control-plane.md](./design/control-plane.md):控制面分层、turn 状态机与认证。
 - [PLUGIN_SYSTEM.md](./PLUGIN_SYSTEM.md):插件声明、代际、热重载、安装。
 - [decisions/](./decisions/):架构选择的理由与替代方案。
 - [design/](./design/):单次重构的调用链、失败语义与验收。

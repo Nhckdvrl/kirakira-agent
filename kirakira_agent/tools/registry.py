@@ -103,7 +103,12 @@ class ToolRegistry:
                 else:
                     raise RuntimeError("Async tool '%s' requires execute_async" % call.name)
             if isinstance(output, ToolResult):
-                return ToolResult(call.id, output.content, output.is_error)
+                return ToolResult(
+                    call.id,
+                    output.content,
+                    output.is_error,
+                    mobile_attention=output.mobile_attention,
+                )
             text = str(output)
             return ToolResult(call.id, text, is_error=_looks_like_error(text))
         except Exception as exc:
@@ -124,7 +129,12 @@ class ToolRegistry:
                 if inspect.isawaitable(output):
                     output = await output
             if isinstance(output, ToolResult):
-                return ToolResult(call.id, output.content, output.is_error)
+                return ToolResult(
+                    call.id,
+                    output.content,
+                    output.is_error,
+                    mobile_attention=output.mobile_attention,
+                )
             text = str(output)
             return ToolResult(call.id, text, is_error=_looks_like_error(text))
         except Exception as exc:
