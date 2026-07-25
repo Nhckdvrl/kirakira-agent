@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import List
 
 from kirakira_agent.schema import ToolSpec
 from kirakira_agent.tools.registry import ToolRegistry, object_schema
@@ -27,9 +28,25 @@ class DriftRunContext:
     briefing: str = ""
     scratchpad_update: str = ""
     next_tendency: str = ""
+    # run 期间只收集意图,由 runner 在收尾时统一落库——与 message_push 同一取向:
+    # 工具不直接碰持久状态,避免半途中断留下半条记录。
+    journal_entries: List[dict] = field(default_factory=list)
 
 
 def register_drift_tools(registry: ToolRegistry, ctx: DriftRunContext) -> None:
+    def journal_append(entry_type: str, note: str, key: str = "") -> str:
+        """让 Drift 把本轮的事实与自我观察写进 journal。"""
+        clean_type = str(entry_type or "").strip()
+        clean_note = str(note or "").strip()
+        if not clean_type or not clean_note:
+            return "Error: entry_type 与 note 都不能为空"
+        if len(ctx.journal_entries) >= 20:
+            return "Error: 本轮 journal 条目已达上限(20)"
+        ctx.journal_entries.append(
+            {"entry_type": clean_type, "note": clean_note, "key": str(key or "").strip()}
+        )
+        return "已记录 journal(%s)。" % clean_type
+
     def message_push(message: str) -> str:
         text = str(message or "").strip()
         if not text:
@@ -62,6 +79,23 @@ def register_drift_tools(registry: ToolRegistry, ctx: DriftRunContext) -> None:
     # 所以这里改成同步记录草稿，真正投递交给 runner 在主循环上完成。
     if registry.has("message_push"):
         registry.unregister("message_push")
+    registry.register(
+        ToolSpec(
+            "journal_append",
+            "把本轮发现的事实或对自己表现的观察写进 skill journal。"
+            "entry_type 用 progress 记进展、self_observation 记自我观察;"
+            "key 可选,用于把同一主题的多次记录归拢。",
+            object_schema(
+                {
+                    "entry_type": {"type": "string"},
+                    "note": {"type": "string"},
+                    "key": {"type": "string"},
+                },
+                ["entry_type", "note"],
+            ),
+        ),
+        journal_append,
+    )
     registry.register(
         ToolSpec(
             "message_push",
