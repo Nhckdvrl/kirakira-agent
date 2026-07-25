@@ -9,9 +9,12 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Sequence
+
+logger = logging.getLogger(__name__)
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS events (
@@ -34,6 +37,12 @@ CREATE TABLE IF NOT EXISTS pending_acknowledgements (
 CREATE TABLE IF NOT EXISTS push_state (
     session_key TEXT PRIMARY KEY,
     last_push_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS deliveries (
+    session_key TEXT NOT NULL,
+    delivery_key TEXT NOT NULL,
+    sent_at TEXT NOT NULL,
+    PRIMARY KEY (session_key, delivery_key)
 );
 CREATE TABLE IF NOT EXISTS decisions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -251,6 +260,71 @@ class ProactiveStateStore:
             ON CONFLICT(session_key) DO UPDATE SET last_push_at = excluded.last_push_at
             """,
             (session_key, now.isoformat()),
+        )
+        self._db.commit()
+
+    # ── 投递去重(照 Reference proactive_v2/state.py)────────────────────────
+
+    def is_delivery_duplicate(
+        self,
+        session_key: str,
+        delivery_key: str,
+        window_hours: int,
+        now: datetime,
+    ) -> bool:
+        """窗口内是否已投递过同一内容。
+
+        这是"跨崩溃不重复发送"的实际手段:进程若在渠道发送成功与本地提交之间崩溃,
+        重启后同样的内容会算出同样的 delivery_key,这里命中即跳过。
+        """
+        row = self._db.execute(
+            "SELECT sent_at FROM deliveries WHERE session_key = ? AND delivery_key = ?",
+            (session_key, delivery_key),
+        ).fetchone()
+        if row is None:
+            return False
+        cutoff = now - timedelta(hours=max(int(window_hours), 1))
+        try:
+            sent_at = datetime.fromisoformat(str(row["sent_at"]))
+        except ValueError:
+            # 记录损坏时按"未投递"处理:宁可重发一次,也不要因为脏数据永久静默。
+            logger.warning(
+                "[proactive.state] deliveries.sent_at 无法解析 session=%s key=%s",
+                session_key,
+                delivery_key[:16],
+            )
+            return False
+        if sent_at < cutoff:
+            return False
+        logger.info(
+            "[proactive.state] 命中发送去重 session=%s key=%s sent_at=%s window_h=%d",
+            session_key,
+            delivery_key[:16],
+            row["sent_at"],
+            window_hours,
+        )
+        return True
+
+    def mark_delivery(self, session_key: str, delivery_key: str, now: datetime) -> None:
+        self._db.execute(
+            """
+            INSERT INTO deliveries (session_key, delivery_key, sent_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(session_key, delivery_key) DO UPDATE SET sent_at = excluded.sent_at
+            """,
+            (session_key, delivery_key, now.isoformat()),
+        )
+        self._db.commit()
+
+    def unmark_delivery(self, session_key: str, delivery_key: str) -> None:
+        """撤销投递标记。
+
+        只在**渠道明确报告失败**时调用:这类失败没有送达,必须允许下一轮重试。
+        进程崩溃走不到这里,标记因此保留——这正是跨崩溃去重生效的路径。
+        """
+        self._db.execute(
+            "DELETE FROM deliveries WHERE session_key = ? AND delivery_key = ?",
+            (session_key, delivery_key),
         )
         self._db.commit()
 

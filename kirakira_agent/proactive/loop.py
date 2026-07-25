@@ -8,6 +8,7 @@ MVP 把重型的 phase-graph kernel / snapshot 压平成一个直白的 async ti
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import random
 from datetime import datetime, timezone
@@ -353,6 +354,27 @@ class ProactiveLoop:
         if not message:
             raise OutboundDeliveryError("主动决策未生成可发送内容")
         delivery_id = uuid4().hex
+        # 内容指纹:同一条内容跨进程重启仍得到同一个 key,这是去重的依据。
+        delivery_key = hashlib.sha256(message.encode("utf-8")).hexdigest()
+        if self._state.is_delivery_duplicate(
+            self._cfg.session_key,
+            delivery_key,
+            self._cfg.delivery_cooldown_hours,
+            now,
+        ):
+            logger.info("[proactive] 命中投递去重,跳过发送")
+            self._state.record_decision(now, "delivery_deduped", message[:120])
+            return
+
+        async def mark_intent() -> None:
+            # **发送前**落地投递意图:进程若在渠道成功与本地提交之间崩溃,
+            # 重启后同一内容会命中去重而不会重复打扰。代价是"标记后崩溃"会漏发这一条——
+            # 对主动推送而言,重复打扰比偶尔漏发更伤,所以取这一侧。
+            self._state.mark_delivery(self._cfg.session_key, delivery_key, now)
+
+        async def rollback_intent() -> None:
+            # 渠道明确失败 → 撤销标记,让下一轮能重试。
+            self._state.unmark_delivery(self._cfg.session_key, delivery_key)
 
         async def commit_delivery() -> None:
             # 只在渠道确认送达后才落地:写 Session 供后续 tick 防重复,并起推送冷却。
@@ -364,8 +386,14 @@ class ProactiveLoop:
             outbound=TurnOutbound(session_key=self._cfg.session_key, content=message),
             evidence=list(evidence_item_ids),
             trace=TurnTrace(source="proactive", extra={"delivery_id": delivery_id}),
+            side_effects=[
+                CallableSideEffect(name="proactive_mark_intent", action=mark_intent)
+            ],
             success_side_effects=[
                 CallableSideEffect(name="proactive_commit", action=commit_delivery)
+            ],
+            failure_side_effects=[
+                CallableSideEffect(name="proactive_rollback", action=rollback_intent)
             ],
         )
         outcome = await commit_turn_result(
