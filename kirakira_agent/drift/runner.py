@@ -106,6 +106,15 @@ class DriftRunner:
             briefing=ctx.briefing or "(未填写)",
             message_result=message_result,
         )
+        # run 期间只收集意图,这里统一落库:中途异常不会留下半条 journal。
+        for entry in ctx.journal_entries:
+            self._state.append_journal(
+                skill.name,
+                entry.get("entry_type", ""),
+                {"note": entry.get("note", "")},
+                now,
+                key=entry.get("key", ""),
+            )
         if ctx.scratchpad_update or ctx.next_tendency:
             self._state.save_continuum(
                 skill=skill.name,
@@ -220,6 +229,20 @@ class DriftRunner:
         recent_context = self._read_recent_context()
         if recent_context:
             sections.append("【近期上下文】\n" + recent_context.strip()[:2000])
+        journal = self._state.load_journal(skill.name, limit=8)
+        if journal:
+            lines = [
+                "- [%s] %s" % (e["entry_type"], str(e["payload"].get("note") or "")[:200])
+                for e in journal
+            ]
+            sections.append("【本技能 journal】\n" + "\n".join(lines))
+        observations = self._state.recent_self_observations(limit=6)
+        if observations:
+            lines = [
+                "- %s: %s" % (o["skill"], str(o["payload"].get("note") or "")[:200])
+                for o in observations
+            ]
+            sections.append("【最近自我观察】\n" + "\n".join(lines))
         continuum = self._state.get_continuum(skill.name)
         if continuum.get("scratchpad") or continuum.get("next_tendency"):
             sections.append(

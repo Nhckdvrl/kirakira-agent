@@ -156,7 +156,7 @@ Stage 4 切换。doctor 仍比对 `coremem/*.py` 与 `Reference/memory2/*.py` �
 | run/cursor/continuum | `drift.db` | 轻实现 | run 记录、skill continuum、min interval 已有 |
 | message/finish tools | `drift/tools.py` | 替代实现 | 线程内生成草稿，主 event loop 等 Channel；成功记 sent，失败记 silent |
 | hazard drive | 直接在 no-push 后 `maybe_run` | 替代实现 | 简单确定性门控，无到期采样 |
-| journal/self-observation | 无 | 未实现 | 无 question/reinforce/revise 与 recent journal |
+| journal/self-observation | `drift.db:skill_journal` + `journal_append` 工具 | 轻实现 | append-only journal 按 entry_type 分类,self_observation 跨 skill 汇总并注入 briefing;无 question/reinforce/revise 的结构化条目类型 |
 | proactive lifecycle integration | 函数 hook | 轻实现 | 无 module factory、slot 和 snapshot binding |
 
 一个重要措辞边界是：Kirakira Drift **复用 Agent 和默认工具集**，并不完整复用

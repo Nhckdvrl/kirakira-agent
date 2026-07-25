@@ -25,7 +25,7 @@
 
 | 项 | 状态 |
 | --- | --- |
-| Drift 的 journal / self-observation / hazard drive | 未实现 |
+| Drift 的 hazard drive(到期采样触发) | 未实现;journal 与 self-observation 已完成 |
 | QQ 两渠道逐字节对齐 Reference(Telegram 已对齐) | 未做 |
 | 插件包元数据 manifest、非 git 源解析、独立 doctor 模块 | 未做 |
 | control plane / app server、前端 Dashboard、peer-agent、eval | 未做 |
