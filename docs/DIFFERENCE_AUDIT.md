@@ -85,23 +85,25 @@ Kirakira 的“轻”有真实收益：主链路可在较少文件内追踪，�
 | Channel host | `channels/` | 分项判断 | Telegram 已按 Reference 移植；Web、QQ/OneBot 与官方 QQBot 仍是 Kirakira 实现 |
 | subagent/background | `subagent.py` | 轻实现 | inline/background 与并发上限；无 peer-agent 进程体系 |
 
-### 4.2 记忆系统：引擎已移植 + DI 缝已接线，承重待配 embedding
+### 4.2 记忆系统：M0–M2 与 Stage 3/4/5 全部完成
 
-> **更新(2026-07-25)**:命名已从 `memory2` 折叠进 `coremem`,数据库 `memory2.db → coremem.db`。
-> 下文按当前状态描述,历史见 [MEMORY2_M0_M1.md](./MEMORY2_M0_M1.md),完整架构见
-> [MEMORY_SYSTEM.md](./MEMORY_SYSTEM.md)。
+> **更新(2026-07-26)**:命名已从 `memory2` 折叠进 `coremem`,数据库 `memory2.db → coremem.db`。
+> 历史见 [MEMORY2_M0_M1.md](./MEMORY2_M0_M1.md),完整架构与当前状态见
+> [MEMORY_SYSTEM.md](./MEMORY_SYSTEM.md),本文不再重复维护状态表。
 
-M1 完成了唯一结构化 owner(`coremem.db`)与可恢复迁移;此后**M2 装配者已补上**:照抄 Reference 的
-`DefaultMemoryEngine`(`coremem/default_engine.py`)已移植完成,契约测试绿,并通过 `MemoryServices`
-依赖注入接入被动检索——被动 turn 现在调 `engine.query(MemoryQuery(intent="context"))`,与 Reference
-`agent/retrieval/default_pipeline.py` 同形。检索智能(HyDE / 改写 / 语义去重 / 自动摄入)搬到引擎后面。
+引擎(照抄 Reference `DefaultMemoryEngine`)+ DI 缝(`MemoryServices`)+ 被动检索
+`engine.query(intent="context")` + 对话后摄入 + 显式工具(schema 由 `engine.tool_profile()`
+声明,返回带 `§cited:` 引用协议)+ 主动兴趣检索(`intent="interest"`)均已接线并有测试;
+embedding 已实配(1024 维语义召回现场验证)。Drift/主动的 `read_long_term` 绑定 coremem 的
+markdown store——Reference 里它读的就是 `MEMORY.md`(`MemoryProfileApi`),不是引擎,早期文档
+把它写成"切引擎"是误述。doctor 比对 `coremem/*.py` 与 `Reference/memory2/*.py`,当前 `drifted=[]`。
 
-仍是过渡态的部分:①引擎"真正承重"依赖 `[memory.embedding]` 配置(DefaultMemoryEngine 读写都要向量),
-未配时门控为 `DisabledMemoryEngine` + 旧词法路径回退;②显式记忆工具(memorize/recall/forget)仍走旧
-`memory.py`,切引擎属 Stage 5;③主动 `engine.query(interest)` / Drift `read_long_term` 接口已保住,
-Stage 4 切换。doctor 仍比对 `coremem/*.py` 与 `Reference/memory2/*.py` 的源码漂移。
+有意保留的偏离:引擎 Disabled(未配 embedding)时,kirakira 仍注册词法回退版记忆工具,
+Reference 则完全不注册;门控在 kirakira 是 `embedding.base_url`,不沿用 Reference 的
+light/main 端点回退链(聊天端点通常没有 /embeddings,静默回退只会制造失败请求)。
 
-准确状态是：**M2 引擎移植完成 + 检索缝对齐;承重待 embedding(Stage 3),工具/旧栈切换待 Stage 4/5。**
+记忆侧仍未对齐的项(引擎插件路由 `config.memory.engine`、Dashboard 改走 `MemoryAdminApi`、
+RecallInspector 观测面板)记录在 [NOW.md](./NOW.md)。
 
 ### 4.3 已确认不是差距的两项
 
@@ -120,9 +122,9 @@ Stage 4 切换。doctor 仍比对 `coremem/*.py` 与 `Reference/memory2/*.py` �
 | MCP proactive sources | `ProactiveSource` + `FileInboxSource` + `mcp_sources.compile_proactive_sources` | 轻实现 | 插件声明已编译成真实源并进入 SourceRegistry；缺真实 MCP server 端到端证据 |
 | source gateway/reservoir | `SourceRegistry` + `ProactiveStateStore` | 轻实现 | 并发 fetch、稳定 id、未读/消费成立；恢复合同更弱 |
 | wake hazard/ranking | severity/newness 排序 + Drift hazard 采样到期 | 轻实现 | Drift 侧已有 hazard 与采样到期;主动侧仍无累计 hazard、兴趣 embedding 与 turn prototype 校准 |
-| forced tool decision | `ProactiveJudge` 严格 JSON | 替代实现 | provider 通用，但结构保证更弱 |
+| forced tool decision | `ProactiveJudge` 严格 JSON;`ModelClient` 已支持 `tool_choice`,Drift 主循环已用 required+具名强制收尾 | 替代实现(判断)+ 对齐(Drift 收尾) | 判断链路仍是 JSON;能力已具备,切换属行为变更待实弹 |
 | `ProactiveKernel` + lifecycle | `ProactiveLoop._tick()` + `proactive/modules.py` + `frame.py` | 轻实现 | 模块流水线,顺序由 slot 依赖图决定,插件可插模块;无 factory 与 start/stop rollback |
-| proactive snapshot lease | 无 | 未实现 | tick 期间 source/tool/skill 可能不具备同代际保证 |
+| proactive snapshot lease | tick 双租约(plugin generation + runtime snapshot)+ gateway 快照钉定 | 对齐 | tick 中途换代仍用开始时的模块集合与工具代际;kirakira 把 Reference 的一份 snapshot 租约拆成两个对象,故取两份 |
 | delivery + pending ACK | Channel receipt + delivery id + pending ACK + deliveries 去重表 | 对齐 | 成功后提交、ACK 队列,以及内容指纹+时间窗的跨崩溃去重(照 Reference proactive_v2/state.py) |
 | trace/diagnostics | `decisions` 表 + `status()` | 轻实现 | 能回看动作，缺完整 strategy/lifecycle trace |
 
@@ -186,11 +188,11 @@ lease 与提交语义。
 | 能力 | 当前处置 | 原因 |
 | --- | --- | --- |
 | 完整 Dashboard / frontend | 轻实现 | Memory2 已有分页、过滤、详情、编辑、相似项、删除和健康 API；尚无 Reference 完整前端 |
-| app server / control protocol | 未实现 | 当前以本进程 CLI/TUI 为入口 |
-| Agent 发起的 restart / rolling backup | 未实现 | 固定 Supervisor 已对齐；尚缺 Agent 自重启准入工具与 rolling backup |
+| app server / control protocol | **已对齐**(JSON-RPC/NDJSON/Unix socket) | stdio 版 app_server 与 Dashboard HTTP API 未做 |
+| Agent 发起的 restart | **已实现并实弹换代成功**(2026-07-26) | RestartCoordinator + 准入冻结 + supervisor 私有管道提交,见 [design/agent-restart.md](./design/agent-restart.md);rolling backup 未做 |
 | peer-agent 进程管理 | 未实现 | 当前 subagent 已满足本地委派范围 |
 | 插件 marketplace | 未实现 | 现有 workspace 插件满足开发阶段 |
-| 多 Provider backend | 未实现 | 当前只承诺 OpenAI-compatible |
+| 多 Provider backend | 未实现 | 当前只承诺 OpenAI-compatible;`tool_choice`(auto/required/具名)已补上 |
 
 “不在当前范围”不等于永远不需要。若目标从个人本地 Agent 变成多用户长期服务，control、backup、
 租户隔离和可靠队列会立即变为核心要求。
@@ -232,7 +234,8 @@ per-plugin generation、proactive phase DAG、多目标调度、app server、Das
 - Telegram/启动：固定 Reference 源码字节一致性测试、原始 Telegram utils 契约测试和真实
   Supervisor → gateway readiness 启动。
 
-当前完整离线回归为 `454 passed, 4 subtests passed`。
+当前完整离线回归为 `477 passed, 4 subtests passed`(2026-07-26,含 agent_restart、
+tick 双租约、tool_choice、scheduler misfire 恢复与记忆工具对齐的新增用例)。
 
 现有测试证明“进程内闭环贯通到 Channel callback”，尚未证明：真实外部平台最终展示、渠道成功与
 consume/ACK 的跨崩溃原子性、进程恢复、多目标公平调度、插件热换代中的主动 tick 一致性，以及

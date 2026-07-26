@@ -83,10 +83,17 @@ turn 提交 → TurnCommitted 事件
 
 主回复链路不等待摄入(异步后处理)。这条在引擎承重时自动生效。
 
-### 4.3 显式记忆工具
+### 4.3 显式记忆工具(已走引擎)
 
-`memorize / recall_memory / forget_memory` 目标是走 `engine.mutate(remember/forget)` /
-`engine.query(intent="answer")`。**当前过渡态**:这三个工具仍走旧 `memory.py`,切引擎属 Stage 5。
+`memorize / recall_memory / forget_memory` 在引擎承重时走 `engine.mutate(remember/forget)` /
+`engine.query(intent=answer/timeline)`(`tools/builtins.py`),未承重时回退旧词法路径。
+schema 与描述由 `engine.tool_profile()` 声明(对照 Reference `agent/tools/meta/register.py`),
+返回格式对齐 Reference:recall 带 evidence/source_ref/trace 与 `§cited:` 引用协议,
+`time_filter` 预设串解析为时间窗,limit 钳制 1..200;memorize 的 `tool_requirement`/`steps`
+进 mutation metadata,procedure 记忆靠它们生成 rule_schema。
+
+与 Reference 的显式偏离:Reference 在引擎 Disabled 时不注册记忆工具;kirakira 保留词法
+回退注册,使未配 embedding 也能用基础记忆。
 
 ## 5. 门控与 embedding 配置(关键)
 
@@ -118,12 +125,14 @@ base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 | --- | --- |
 | 引擎本体 `DefaultMemoryEngine` | ✅ 照抄移植,契约测试 `test_coremem_engine_contract.py` 绿 |
 | DI 缝 `MemoryServices` + 工厂 | ✅ 对齐 `ports.py` + `bootstrap/memory.py` |
-| 被动检索 `engine.query(context)` | ✅ pipeline 已接线(承重需 embedding) |
+| 被动检索 `engine.query(context)` | ✅ pipeline 已接线 |
 | 对话后摄入 `TurnCommitted→ingest` | ✅ 引擎自订阅(承重时生效) |
-| 显式工具走引擎 | ⬜ 过渡态仍走旧 `memory.py`(Stage 5) |
-| 主动 `engine.query(interest)` / Drift `read_long_term` | ⬜ 保住接口,Stage 4 切换 |
-| 旧 `MemoryRuntime` 检索/consolidation 栈 | ⬜ Stage 5 删除 |
-| embedding 实配 | ⬜ Stage 3(需外部端点) |
+| 显式工具走引擎 + tool_profile schema | ✅ 见 §4.3;Disabled 时词法回退是显式偏离 |
+| 主动 `engine.query(interest)` | ✅ `proactive/loop.py:_interest_hits`(read_only + strong floor) |
+| Drift/主动 `read_long_term` | ✅ 绑定 coremem markdown store(Reference 里它读的就是 MEMORY.md,不是引擎) |
+| 旧 consolidation 路径 | ✅ 已删,驱动权移交 `MarkdownMemoryMaintenance`(见 decisions/0003) |
+| embedding 实配 | ✅ 已配并现场验证(1024 维语义召回);`model` 未配时落 Reference 同款默认 `text-embedding-v3` |
+| 旧 `MemoryRuntime` 词法回退栈 | 保留:作为引擎未承重时的检索回退与 subagent/context_builder 依赖 |
 
 ## 7. 里程碑
 
@@ -131,10 +140,13 @@ base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 | --- | --- | --- |
 | M0 差距审计 | 完成 | doctor / Reference pin / 漂移检查 / 契约测试 |
 | M1 唯一结构化 owner | 完成 | 迁移 / 回滚 / Dashboard(数据已清空重来) |
-| M2 DefaultMemoryEngine | **移植完成 + 检索缝已接** | 引擎装配、DI 注入、pipeline 消费 |
-| Stage 3 embedding | 未开始 | 配 `[memory.embedding]` → 引擎承重 |
-| Stage 4 主动/Drift 切引擎 | 未开始 | 保住 interest / read_long_term 接口 |
-| Stage 5 切除旧栈 | 未开始 | 工具改走引擎、删旧检索/consolidation |
+| M2 DefaultMemoryEngine | 完成 | 引擎装配、DI 注入、pipeline 消费 |
+| Stage 3 embedding | 完成 | 已实配并现场验证;1024 维语义召回可用 |
+| Stage 4 主动兴趣检索 | 完成 | content 判断前 `engine.query(intent="interest")` |
+| Stage 5 工具切引擎 + consolidation 移交 | 完成 | 工具走 `engine.mutate/query`;旧 consolidation 路径已删 |
+
+全部里程碑完成。后续记忆侧的未完成项(引擎插件路由、Dashboard 走 `MemoryAdminApi` 等)
+只维护在 [NOW.md](./NOW.md)。
 
 ## 8. 管理与现场检查
 

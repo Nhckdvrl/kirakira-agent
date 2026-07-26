@@ -32,10 +32,10 @@ Reference 的形态是模块流水线(`proactive_v2/lifecycle.py` 318 行 + `fra
 ProactiveLoop.run()  ── 电量模型决定 tick 间隔(未改动)
         │
         ▼
-    _tick()
+    _tick()  ── 持 plugin generation + snapshot 双租约(见 §6)
         │  new_proactive_frame(session_key)
         ▼
-  topo_sort_modules(self._modules)      ← 顺序由 requires 决定,不是注册行序
+  self._modules(装配期已按 requires 拓扑排序,见 §6;不再每 tick 重排)
         │
         ├─ proactive.gate           → gate:passed        （目标就绪 + 被动空闲 + ACK 重试）
         ├─ proactive.fetch          → fetch:channels     （并发拉源）
@@ -73,11 +73,11 @@ frame.finish("alert_pushed")     ← 模块声明"本轮到此为止",并记下�
 
 | 情况 | 行为 |
 | --- | --- |
-| 模块声明成环 / slot 重复 | 记 error 并**保持注册顺序**继续跑,不把主动链路打挂 |
+| 模块声明成环 / slot 重复 | **装配处 fail loud**(构造期 / `add_modules` 插入时抛错),已编译流水线不受影响;不再有"每 tick 静默降级为注册顺序"的路径(2026-07-26 改,见 §6) |
 | 渠道投递失败 | 模块 `finish("*_delivery_failed")`,未读保留,不消费事件(与重构前一致) |
 | 单个 source 拉取失败 | 由 `SourceRegistry` 吸收,本轮其余源照常(未改动) |
 
-装配错误不阻断运行,这与插件体系既有取向一致:一个坏声明只应影响它自己。**F**
+坏声明只影响它自己的注册操作——比原先"错误进运行时再降级"更贴近这句取向。**F**
 
 ## 5. 迁移与验收
 
@@ -87,12 +87,23 @@ frame.finish("alert_pushed")     ← 模块声明"本轮到此为止",并记下�
 **乱序注册后顺序不变**(证明顺序真由 requires 决定)、插件模块按 requires 落位、
 terminal 短路跳过后续模块、Drift 模块的记录与声明形状。
 
-## 6. 仍未解决(G)
+## 6. 2026-07-26 更新:tick 代际租约与装配期编译
 
-- **模块仍持有整个 `loop`。** 理想形态是每个模块只依赖自己需要的服务包(如记忆链路的
-  `MemoryServices`)。现在先把顺序与依赖显式化,服务拆分留到主动链路也做 DI 时一起做。
-- **`frame.output` 未使用。** Reference 的 `ProactiveTickResult`(base_score /
-  next_interval_seconds)让模块能反过来影响调度;我们的电量调度仍在 `_tick()` 之外独立计算。
-  按"不摆没人用的结构"的既有取向,暂不引入该字段。
-- **主动 tick 没有代际租约。** 被动 turn 已有 per-plugin 代际租约,一次完整 proactive tick
-  尚未绑定,热重载可能在 tick 中途换掉模块。
+- **tick 已绑定双租约(F)。** tick 开始取 `PluginGenerationRegistry.lease_active()` 与
+  `RuntimeSnapshotStore.lease()` 两份(kirakira 把 Reference 的一份 snapshot 租约拆成了
+  两个对象),并把租到的快照钉在共享 MCP gateway 上——本轮所有 source 的 fetch/ack 用
+  同一代工具视图。tick 中途换代,本轮仍用开始时的模块集合与工具跑完。契约测试见
+  `tests/test_proactive_lifecycle.py:TickGenerationLeaseTests`。
+- **排序移到装配期(F)。** 照 Reference `ProactiveKernel`:构造时 `topo_sort_modules`
+  编译一次,排序失败在装配处 fail loud;`add_modules` 在插入时重排,坏声明只影响它自己的
+  注册操作,已编译流水线保持原样。原先"每 tick 重排 + 失败静默降级为注册顺序"的行为
+  已删除——它与 `phase.py` 的 fail-loud 契约相矛盾。
+
+## 7. 仍未解决(G)
+
+- **模块仍持有整个 `loop`。** 理想形态是 loop→scope→runtime→modules 的服务分层
+  (Reference `proactive_v2/runtime_scope.py`)。结构工程,已按用户指示推迟,见
+  [NOW.md](../NOW.md) 第 2 节。
+- **`frame.output` 未使用 / 调度权未反转。** Reference 的 `run:next_wakeup` terminal slot
+  让模块决定下次唤醒;kirakira 的电量调度仍在 `_tick()` 之外独立计算,模块只有
+  `_wake.set()` 二值旁路。见 NOW 1.5。
