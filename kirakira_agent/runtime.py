@@ -1077,6 +1077,10 @@ class PassiveTurnPipeline:
                             channel=msg.context_channel,
                             chat_id=msg.context_chat_id,
                         ),
+                        # timestamp 对 DefaultMemoryEngine 不承重,但 akasha 用它
+                        # 算图激活的时间衰减——不传会直接返回 missing_query_timestamp。
+                        # 照 Reference `agent/retrieval/default_pipeline.py` 一并传。
+                        timestamp=msg.timestamp,
                     )
                 )
                 retrieved = result.text_block

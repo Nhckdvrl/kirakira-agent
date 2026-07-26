@@ -1,6 +1,6 @@
 # 实弹验证记录:哪些链路真的跑过
 
-- 状态:accepted;第 2–6 节为 2026-07-25 一轮,第 7 节为 2026-07-26 控制面一轮,第 9–11 节为 2026-07-26 换代/tool_choice、仪表盘与检索回放三轮
+- 状态:accepted;第 2–6 节为 2026-07-25 一轮,第 7 节为 2026-07-26 控制面一轮,第 9–11 节为 2026-07-26 换代/tool_choice、仪表盘与检索回放三轮,第 12 节为 2026-07-27 akasha 引擎
 - 核对基线:`Reference/` @ `012e37c8b51df045353972bb551d8e868ab52455`
 - 目标读者:维护者、评审者、接手做下一轮验证的人
 - 关联:[NOW.md](../NOW.md)、[decisions/0004](../decisions/0004-delivery-dedup.md)
@@ -9,7 +9,7 @@
 
 ## 1. 为什么单独记这一份
 
-离线回归(2026-07-26 起为 504 passed)只说明**单测口径**下的行为成立。它抓不到两类问题:
+离线回归(2026-07-27 起为 515 passed)只说明**单测口径**下的行为成立。它抓不到两类问题:
 
 1. **跨组件的真实链路**——测试用 mock provider 与替身渠道,组件之间的真实交互没被走过;
 2. **真实模型的输出偏差**——mock 永远按约定返回,真实模型不会。
@@ -207,3 +207,36 @@ thinking 后需重验,见 [NOW.md](../NOW.md)。
 没有这个面板,现象只有最后那句"没找到",只能猜是哪一环出的问题。有了它可以直接读出:
 召回没问题,是**注入阈值与 answer intent 的阈值**把它挡掉了。这条留作调阈值时的依据,
 本轮不改——改检索阈值属于行为变更,应当单独评估。
+
+## 12. akasha RAR 引擎(F,2026-07-27)
+
+隔离 workspace(关渠道与主动)+ `[memory].plugin = "akasha"` + 真实 deepseek。
+
+| 项 | 结果 |
+| --- | --- |
+| 引擎路由 | 仪表盘 `engine-info` 报 `akasha`,`load_bearing=true` |
+| 工具面 | `recall_memory` + **`reinforce_memory`**(engine 自定义工具槽真的生效) |
+| 第一轮 | 告知"部署脚本在 scripts/rollout.sh",正常回复;检索回放记录召回 0(库空) |
+| **跨 session 检索** | **新 session、零历史**问"我发版要跑哪个脚本",答出 `scripts/rollout.sh` |
+| 回放证据 | 引擎=akasha,召回 1 条,注入 True,score **0.7593**,命中项类型是 `turn` |
+| 镜像保真 | `memory doctor` 报 akasha `checked=12, drifted=[]` |
+
+命中项类型是 `turn` 而不是 `item`——这正是 akasha 与默认引擎的语义差:它把**整轮对话**
+存成图节点,靠涟漪激活召回,而不是抽取成条目再做向量检索。
+
+### 这一轮抓到的四个问题
+
+1. **`timestamp` 从"不承重"变成"承重"(预测命中)**:审计里写过"Reference 传了
+   `timestamp`,但 DefaultMemoryEngine 全文不读,**只有换 engine 才会承重**"。换到 akasha
+   后第一次 query 就返回 `missing_query_timestamp`。三处 `MemoryQuery` 构造点已补。
+2. **工具面不能有回退**:此前"profile 没声明就退回旧 schema 注册",导致 akasha 下模型
+   看得到 `memorize`、调用后被引擎拒绝写入(akasha 从 turn 自动摄入,本就没有 memorize)。
+   改为**声明什么注册什么**,并支持 `profile.tools` 自定义工具槽。
+3. **真相源错配**:akasha 的 `DESCRIPTOR.notes` 写着 `truth=sessions.db/messages`,而
+   kirakira 的会话是 per-session JSON。解法是在派生索引库里加一张 Reference 同形的
+   `messages` 投影表 + 外部内容 `messages_fts`(三个触发器),并把索引库路径对齐到
+   `workspace/sessions.db`。JSON 仍是唯一 canonical。
+4. **外部内容 FTS 的 malformed 陷阱**:老库里 `messages` 先于 `messages_fts` 存在时,
+   `DELETE FROM messages` 会触发删除不存在的索引项,SQLite 直接报
+   `database disk image is malformed`(`integrity_check` 却是 ok)。派生物应当能无条件
+   重置,故改为"先拆触发器与索引、清表、再原样建回"。

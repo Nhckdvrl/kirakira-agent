@@ -178,13 +178,30 @@ class SessionManager:
         self._cache: Dict[str, Session] = {}
         self._delete_callbacks: List[Callable[[str], None]] = []
         self._index_lock = threading.Lock()
+        # 派生索引库放在 workspace 根的 sessions.db,与 Reference 的命名一致——
+        # akasha 引擎把它当真相源读(见 messages 投影表)。canonical 仍是 per-session
+        # JSON;这个库每次启动都由 _rebuild_index 从 JSON 重建,所以换路径是自愈的。
         self._index = sqlite3.connect(
-            str(self.session_dir / "message_index.sqlite3"),
+            str(workspace / "sessions.db"),
             check_same_thread=False,
         )
         self._fts_enabled = self._initialize_index()
         self._closed = False
         self._rebuild_index()
+        self._drop_legacy_index()
+
+    def _drop_legacy_index(self) -> None:
+        """删掉换路径前的旧索引库(sessions/message_index.sqlite3)。
+
+        它是纯派生物,新库已在 __init__ 里从 JSON 全量重建过,留着只会让人误以为
+        还有第二份真相。删不掉不影响运行,忽略即可。
+        """
+        for suffix in ("", "-wal", "-shm"):
+            legacy = self.session_dir / ("message_index.sqlite3%s" % suffix)
+            try:
+                legacy.unlink(missing_ok=True)
+            except OSError:
+                pass
 
     def get_or_create(self, key: str) -> Session:
         if key in self._cache:
@@ -345,6 +362,9 @@ class SessionManager:
                 self._index.execute(
                     "DELETE FROM message_fts WHERE session_key = ?", (key,)
                 )
+                self._index.execute(
+                    "DELETE FROM messages WHERE session_key = ?", (key,)
+                )
                 self._index.commit()
         if existed:
             for callback in list(self._delete_callbacks):
@@ -385,6 +405,21 @@ class SessionManager:
         with self._index_lock:
             self._index.execute("PRAGMA journal_mode=WAL")
             self._index.execute("PRAGMA synchronous=NORMAL")
+            # messages 投影表:akasha 引擎的真相源是"会话消息的关系表"
+            # (它的 DESCRIPTOR.notes 写着 truth=sessions.db/messages),而 kirakira 的
+            # canonical 存储是 per-session JSON。这里把消息投影成 Reference 同形的表,
+            # 与 FTS 共用同一个派生索引库和同一个维护点——JSON 仍是唯一权威,
+            # 这张表和 FTS 一样是可重建的派生物(_rebuild_index 会一起重建)。
+            self._index.execute(
+                "CREATE TABLE IF NOT EXISTS messages ("
+                "id TEXT PRIMARY KEY, session_key TEXT NOT NULL, seq INTEGER NOT NULL, "
+                "role TEXT NOT NULL, content TEXT NOT NULL, ts TEXT NOT NULL)"
+            )
+            self._index.execute(
+                "CREATE INDEX IF NOT EXISTS idx_messages_session_seq "
+                "ON messages(session_key, seq)"
+            )
+            self._initialize_messages_fts()
             try:
                 self._index.execute(
                     "CREATE VIRTUAL TABLE IF NOT EXISTS message_fts USING fts5("
@@ -407,6 +442,72 @@ class SessionManager:
                     self._index.rollback()
                     return False
 
+    def _reset_messages_projection(self) -> None:
+        """把 messages 投影与它的外部内容 FTS 一起清空重建。
+
+        不能只 `DELETE FROM messages`:那会触发 `messages_ad` 去删 FTS 索引项,
+        而外部内容 FTS 一旦与内容表不同步(例如投影表先于 FTS 存在的老库),
+        SQLite 会直接报 `database disk image is malformed`。投影是纯派生物,
+        所以做法是**先拆掉触发器与索引,清表,再原样建回来**——无论之前多不一致都能收敛。
+        """
+        for statement in (
+            "DROP TRIGGER IF EXISTS messages_ai",
+            "DROP TRIGGER IF EXISTS messages_ad",
+            "DROP TRIGGER IF EXISTS messages_au",
+            "DROP TABLE IF EXISTS messages_fts",
+            "DELETE FROM messages",
+        ):
+            try:
+                self._index.execute(statement)
+            except sqlite3.DatabaseError:
+                # 连 DELETE 都失败说明表本身坏了,重建它比抢救更省事。
+                self._index.rollback()
+                self._index.execute("DROP TABLE IF EXISTS messages")
+                self._index.execute(
+                    "CREATE TABLE messages ("
+                    "id TEXT PRIMARY KEY, session_key TEXT NOT NULL, seq INTEGER NOT NULL, "
+                    "role TEXT NOT NULL, content TEXT NOT NULL, ts TEXT NOT NULL)"
+                )
+                self._index.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_messages_session_seq "
+                    "ON messages(session_key, seq)"
+                )
+                break
+        self._initialize_messages_fts()
+
+    def _initialize_messages_fts(self) -> None:
+        """messages 的外部内容 FTS(照 Reference `session/store.py`)。
+
+        akasha 的关键词 lane 直接查 `messages_fts`,所以表名、`content='messages'`
+        外部内容模式与三个同步触发器都要一致。触发器让它随投影表增量维护,
+        不必每次全量重扫。trigram 不可用时退回默认分词。
+        """
+        for tokenize in ("tokenize='trigram'", ""):
+            try:
+                self._index.execute(
+                    "CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5("
+                    "content, content='messages', content_rowid='rowid'%s)"
+                    % ((", " + tokenize) if tokenize else "")
+                )
+                break
+            except sqlite3.OperationalError:
+                self._index.rollback()
+        else:
+            return
+        for statement in (
+            "CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN "
+            "INSERT INTO messages_fts(rowid, content) VALUES (new.rowid, new.content); END",
+            "CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages BEGIN "
+            "INSERT INTO messages_fts(messages_fts, rowid, content) "
+            "VALUES('delete', old.rowid, old.content); END",
+            "CREATE TRIGGER IF NOT EXISTS messages_au AFTER UPDATE ON messages BEGIN "
+            "INSERT INTO messages_fts(messages_fts, rowid, content) "
+            "VALUES('delete', old.rowid, old.content); "
+            "INSERT INTO messages_fts(rowid, content) VALUES (new.rowid, new.content); END",
+        ):
+            self._index.execute(statement)
+        self._index.commit()
+
     def _rebuild_index(self) -> None:
         if not self._fts_enabled:
             return
@@ -420,6 +521,7 @@ class SessionManager:
                 continue
         with self._index_lock:
             self._index.execute("DELETE FROM message_fts")
+            self._reset_messages_projection()
             for session in sessions:
                 self._insert_index_rows(session)
             self._index.commit()
@@ -431,24 +533,35 @@ class SessionManager:
             self._index.execute(
                 "DELETE FROM message_fts WHERE session_key = ?", (session.key,)
             )
+            self._index.execute(
+                "DELETE FROM messages WHERE session_key = ?", (session.key,)
+            )
             self._insert_index_rows(session)
             self._index.commit()
 
     def _insert_index_rows(self, session: Session) -> None:
+        rows = [
+            (
+                "%s:%d" % (session.key, index),
+                session.key,
+                index,
+                str(message.get("role") or ""),
+                str(message.get("content") or ""),
+                str(message.get("timestamp") or ""),
+            )
+            for index, message in enumerate(session.messages)
+            if str(message.get("content") or "")
+        ]
         self._index.executemany(
             "INSERT INTO message_fts(source_ref, session_key, role, content, timestamp) "
             "VALUES (?, ?, ?, ?, ?)",
-            [
-                (
-                    "%s:%d" % (session.key, index),
-                    session.key,
-                    str(message.get("role") or ""),
-                    str(message.get("content") or ""),
-                    str(message.get("timestamp") or ""),
-                )
-                for index, message in enumerate(session.messages)
-                if str(message.get("content") or "")
-            ],
+            [(row[0], row[1], row[3], row[4], row[5]) for row in rows],
+        )
+        # messages 投影与 FTS 同一事务写入,两者不会出现只更新一边的中间态。
+        self._index.executemany(
+            "INSERT OR REPLACE INTO messages(id, session_key, seq, role, content, ts) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            rows,
         )
 
     def _search_index(self, query: str, limit: int) -> List[JsonDict] | None:

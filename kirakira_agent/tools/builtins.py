@@ -3,7 +3,7 @@
 import asyncio
 import base64
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import gzip
 import ipaddress
 import json
@@ -1157,6 +1157,8 @@ class WorkspaceTools:
                         time_end=time_window[1] if time_window else None,
                     ),
                     limit=max(1, min(int(limit), 200)),
+                    # akasha 用它算图激活的时间衰减;DefaultMemoryEngine 忽略。
+                    timestamp=datetime.now(timezone.utc),
                 )
             )
             return _render_recall_records(result.records, trace=result.trace)
@@ -1198,6 +1200,14 @@ class WorkspaceTools:
             return "Error: Memory runtime is not enabled"
         forgotten = self.memory.forget(clean)
         return json.dumps({"superseded_ids": forgotten}, ensure_ascii=False)
+
+    async def memory_signal(self, **kwargs: Any) -> str:
+        """engine 自定义记忆工具的通用回执(对照 Reference `_MemorySignalTool`)。
+
+        这类工具的真实语义在引擎侧的副作用里(例如 akasha 的 `reinforce_memory`
+        是给激活图加权),工具本身只确认收到——所以一个 handler 覆盖所有自定义工具。
+        """
+        return "已记录。"
 
     def search_messages(self, query: str, limit: int = 10) -> str:
         if self.session_manager is None:
@@ -1418,85 +1428,99 @@ class WorkspaceTools:
 def _register_memory_tools(registry: ToolRegistry, handlers: "WorkspaceTools") -> None:
     """注册显式记忆工具。
 
-    引擎承重时,schema 与描述取自 `engine.tool_profile()`(照 Reference
-    `agent/tools/meta/register.py`:记忆工具面由 engine 声明,runtime 不写死记忆语义,
-    换 engine 即换工具面)。引擎未承重时回退 kirakira 词法路径的旧 schema——这是与
-    Reference 的显式偏离:Reference 在 Disabled 时干脆不注册记忆工具,kirakira 保留
-    词法降级,使未配 embedding 也能用基础记忆。
+    引擎承重时,**工具面完全由 `engine.tool_profile()` 决定**(照 Reference
+    `agent/tools/meta/register.py`):声明了哪个就注册哪个,没声明的一律不注册,
+    并把 `profile.tools` 里的自定义工具一并注册。这条很重要——akasha 只声明
+    `recall` 与自定义的 `reinforce_memory`,**没有 memorize/forget**(它从 turn 自动
+    摄入)。此前这里"profile 没有就退回旧 schema 注册",导致 akasha 下模型能看到
+    memorize,调用后被引擎拒绝写入。
+
+    引擎未承重时才注册 kirakira 词法路径的旧 schema——这是与 Reference 的显式偏离:
+    Reference 在 Disabled 时干脆不注册记忆工具,kirakira 保留词法降级。
     """
     engine = handlers._live_memory_engine()
-    profile = engine.tool_profile() if engine is not None else None
-    if profile is not None and profile.memorize is not None:
+    if engine is None:
+        _register_legacy_memory_tools(registry, handlers)
+        return
+
+    profile = engine.tool_profile()
+    if profile.memorize is not None:
         registry.register(
             ToolSpec("memorize", profile.memorize.description, profile.memorize.parameters),
             handlers.memorize,
         )
-    else:
-        registry.register(
-            ToolSpec(
-                "memorize",
-                "Write a stable user fact or preference into long-term memory.",
-                object_schema(
-                    {
-                        "content": {"type": "string"},
-                        "memory_type": {
-                            "type": "string",
-                            "enum": [
-                                "requested_memory",
-                                "identity",
-                                "preference",
-                                "procedure",
-                                "event",
-                            ],
-                        },
-                    },
-                    ["content"],
-                ),
-            ),
-            handlers.memorize,
-        )
-    if profile is not None and profile.recall is not None:
+    if profile.recall is not None:
         registry.register(
             ToolSpec("recall_memory", profile.recall.description, profile.recall.parameters),
             handlers.recall_memory,
         )
-    else:
-        registry.register(
-            ToolSpec(
-                "recall_memory",
-                "Search long-term memory semantically/lexically.",
-                object_schema(
-                    {
-                        "query": {"type": "string"},
-                        "limit": {"type": "integer"},
-                        "memory_types": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                        },
-                        "since": {"type": "string"},
-                        "until": {"type": "string"},
-                    },
-                    ["query"],
-                ),
-            ),
-            handlers.recall_memory,
-        )
-    if profile is not None and profile.forget is not None:
+    if profile.forget is not None:
         registry.register(
             ToolSpec("forget_memory", profile.forget.description, profile.forget.parameters),
             handlers.forget_memory,
         )
-    else:
+    # engine 自定义工具槽(对照 Reference 的 `_MemorySignalTool`):引擎可以追加任意工具,
+    # 语义由引擎在自己的副作用里实现,工具本身只回执。
+    for spec in getattr(profile, "tools", ()) or ():
+        name = str(getattr(spec, "name", "") or "").strip()
+        if not name:
+            raise ValueError("自定义 memory 工具缺少 name")
         registry.register(
-            ToolSpec(
-                "forget_memory",
-                "Mark memory items as forgotten by id.",
-                object_schema(
-                    {"ids": {"type": "array", "items": {"type": "string"}}}, ["ids"]
-                ),
-            ),
-            handlers.forget_memory,
+            ToolSpec(name, spec.description, spec.parameters),
+            handlers.memory_signal,
         )
+
+
+def _register_legacy_memory_tools(registry: ToolRegistry, handlers: "WorkspaceTools") -> None:
+    """引擎未承重时的词法降级工具面。"""
+    registry.register(
+        ToolSpec(
+            "memorize",
+            "Write a stable user fact or preference into long-term memory.",
+            object_schema(
+                {
+                    "content": {"type": "string"},
+                    "memory_type": {
+                        "type": "string",
+                        "enum": [
+                            "requested_memory",
+                            "identity",
+                            "preference",
+                            "procedure",
+                            "event",
+                        ],
+                    },
+                },
+                ["content"],
+            ),
+        ),
+        handlers.memorize,
+    )
+    registry.register(
+        ToolSpec(
+            "recall_memory",
+            "Search long-term memory semantically/lexically.",
+            object_schema(
+                {
+                    "query": {"type": "string"},
+                    "limit": {"type": "integer"},
+                    "memory_types": {"type": "array", "items": {"type": "string"}},
+                    "since": {"type": "string"},
+                    "until": {"type": "string"},
+                },
+                ["query"],
+            ),
+        ),
+        handlers.recall_memory,
+    )
+    registry.register(
+        ToolSpec(
+            "forget_memory",
+            "Mark memory items as forgotten by id.",
+            object_schema({"ids": {"type": "array", "items": {"type": "string"}}}, ["ids"]),
+        ),
+        handlers.forget_memory,
+    )
 
 
 def build_default_registry(

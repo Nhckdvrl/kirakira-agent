@@ -28,10 +28,10 @@
 | --- | --- | --- |
 | 产品代码 | ≈91,000 行 | ≈39,000 行(`kirakira_agent/` 36.1k + 顶层镜像 2.9k) |
 | 测试代码 | ≈69,100 行 / 185 个文件 | 11,556 行 / 54 个文件 |
-| 离线回归 | — | 504 passed, 4 subtests |
+| 离线回归 | — | 515 passed, 4 subtests |
 
-差距的大头在三处:`infra/mobile_realtime`(9.0k)、`plugins/akasha`(7.4k,第二套记忆引擎)、
-`agent/plugins`(8.4k)。这三块合计约 25k,占两边差距的一半。
+差距的大头(akasha 已移植后)在两处:`infra/mobile_realtime`(9.0k)与 `agent/plugins`(8.4k)。
+`plugins/akasha`(7.4k)原是第三块,现已移植。
 
 ## 2. 逐模块清单:Reference → kirakira
 
@@ -77,13 +77,20 @@
 
 | Reference 插件 | 行数 | kirakira 对应 | 状态 | 差在哪 |
 | --- | --- | --- | --- | --- |
-| `akasha/` | 7,353 | — | **未实现** | 第二套记忆引擎。它的存在证明 engine 插件路由是活的缝,不是摆设 |
+| `akasha/` | 7,353 | `akasha/`(12 文件镜像 + `_compat.py`) | **对齐** | RAR 图激活引擎已移植,doctor 报 `drifted=[]`;跨 session 检索已实弹。未移植 `plugin.py`(依赖 PhaseFrame 与 MobileUI)与 `dashboard.py`(FastAPI),见下 |
 | `wake_proactive/` | 3,755 | `proactive/` 部分 | 轻实现 | 缺累计 hazard、embedding 兴趣、turn 原型校准、ack 分类反馈 |
 | `drift_flow/` | 2,769 | `drift/` | 轻实现 | SKILL 驱动、journal、hazard 采样、强制收尾已对齐;缺 module factory 与 start/stop rollback |
 | `default_memory/` | 2,493 | `coremem/default_engine.py` + `observe.py` | 对齐 | 引擎照抄;RecallInspector 已补(命中项取结构化 records,比 Reference 的正则反解更直接) |
 | `default_proactive/` | 2,357 | `proactive/modules.py` | 轻实现 | **缺多层限流**:`AnyActionGate`(日配额+最小间隔+空闲概率门)、`count_deliveries_in_window` 硬闸、context-only 独立限流 |
 | `proactive_flow/` | 1,093 | 部分 | 轻实现 | — |
 | `wake_*_flow/` | 42 | — | 有意不做 | 只是 21 行的 wake 变体壳 |
+
+**akasha 未移植的两个文件(有意)**:
+
+| 文件 | 行数 | 不移植的理由 |
+| --- | --- | --- |
+| `plugin.py` | 543 | 依赖 `PhaseFrame`(kirakira 相位模块仍是 ctx 直传)与 `MobileUiContribution`(移动端实时未移植)。它提供的是 `/akashalast` 命令与移动 UI 面板,不是引擎能力 |
+| `dashboard.py` | 542 | FastAPI 实现的记忆图面板;kirakira 用零依赖仪表盘,要做应重写而非移植 |
 
 ### 2.4 其余顶层(约 14,000 行)
 
@@ -92,7 +99,7 @@
 | `bootstrap/` | 6,652 | `cli.py` + `bootstrap.py` | 轻实现 | setup 向导、init、装配已有;缺 `dashboard_api.py`(1,352,kirakira 用零依赖仪表盘替代)、`chat_api.py`、`app_server.py`(stdio) |
 | `memory2/` | 5,618 | `coremem/` | **对齐** | 16 个算法文件逐字节镜像,doctor 报 `drifted=[]` |
 | `proactive_v2/` | 3,310 | `proactive/` | 轻实现 | 见 §2.3;另缺 `tick_log`/`tick_step_log` 审计表、strategy trace 落盘、调度权反转 |
-| `session/` | 2,815 | `session.py` | 轻实现 | JSON + 独立 FTS(Reference 是单一 SQLite 同事务);**缺跨进程 session admission**、presence、消息稳定 id |
+| `session/` | 2,815 | `session.py` + `coremem/embedding_store.py` | 轻实现 | JSON canonical + `sessions.db` 派生库(含 Reference 同形的 `messages` 投影与 `messages_fts`,akasha 靠它工作);`embedding_store.py` 逐字节移植;**仍缺跨进程 session admission**、presence、消息稳定 id |
 | `core/` | 2,443 | `coremem/engine.py` + `core/net` | 对齐 | 记忆协议逐字节一致 |
 | `bus/` | 1,139 | `bus.py` + `event_bus.py` | 轻实现 | MessageBus 对齐;EventBus 缺 snapshot 租约、异常上报、`on_any`、observe 串行队列 |
 | `scripts/` | 1,162 | — | 有意不做 | 构建/迁移脚本(含 node 构建链) |
@@ -125,7 +132,7 @@
 | `web_fetch` / `web_search` | 同名 | 对齐;`web_search` schema 更窄 |
 | `workspace_mcp_*` | `mcp_apply`/`mcp_remove`/`mcp_status` | 对齐(改名) |
 | `agent_restart` | 同名 | **对齐**;deferred 近似 Ref 的 `requires_turn_search` |
-| engine 自定义工具槽(`profile.tools`) | — | **未实现**;engine 无法追加自定义工具 |
+| engine 自定义工具槽(`profile.tools`) | 已支持 | **对齐**;akasha 的 `reinforce_memory` 经此注册,handler 是通用回执(对照 Reference `_MemorySignalTool`) |
 | — | `compact` | kirakira 独有(接真实归档) |
 | — | `plugin_list/doctor/install/enable/disable/uninstall` | kirakira 独有(Reference 只在 CLI) |
 
@@ -154,7 +161,6 @@
    `search_hint` / 强制 `description` 进度字段全缺。影响全工具面。
 2. **scheduler 无 cron / 无 soft tier**:"每天早上 9 点告诉我天气"这类需求**无法表达**。
 3. **工具描述密度**:Reference 是决策树式长描述(spawn 40 行、shell 15 行),kirakira 多为单行英文。
-4. **engine 自定义工具槽**:`MemoryToolProfile.tools` / `tool_class` 未移植,engine 无法追加工具。
 5. **检索注入阈值**:实测召回到但未注入(见 [live-verification](./design/live-verification.md) §11)。
 
 ### P1 — 可靠性
@@ -172,7 +178,6 @@
 
 14. **PhaseFrame 与 7 个相位模块**(1,533 行):模块间无 slots 通道,`produces` 声明是死约定。
 15. **主动链路服务化**:模块仍持有整个 loop。
-16. **记忆 engine 插件路由**:`config.memory.engine` 从未被读,akasha 那条缝在 kirakira 是断的。
 17. **主动调度权反转**:模块无法影响下次唤醒间隔。
 18. **主动审计厚度**:无 `tick_log`/`tick_step_log`/strategy trace。
 19. **ack 无分类反馈**:不区分 interesting/not_interesting/discarded。
@@ -184,7 +189,6 @@
 ### P3 — 整块未实现的子系统
 
 24. **`mobile_realtime`(8,992 行)**:移动端实时网关全套。
-25. **`akasha`(7,353 行)**:第二套记忆引擎。
 26. **`peer_agent`(1,094 行)**:跨进程 peer 管理。
 27. **`sdk/python`(526 行)**:外部程序客户端 SDK。
 28. **`eval`**:评测体系。

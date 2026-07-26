@@ -80,7 +80,6 @@ tick 现在把租到的 snapshot 钉在共享 gateway 上,源在本轮用同一�
 | spawn 回传缺 exit_reason 六态与重试协议 | Reference `agent/subagent.py:114` |
 | SkillRecord 缺 root_dir(带附属资源的 skill 无法自定位);`create-drift-skill` 未移植 | Reference `agent/skills.py` |
 | EventBus 事件路径不持 snapshot 租约,observer 异常静默 | Reference `bus/event_bus.py:190,460` |
-| 记忆引擎插件路由未接(`config.memory.engine` 从未被读) | Reference `bootstrap/memory.py:36` |
 | Reference 工具描述是决策树式长文,kirakira 多为单行(隐性行为差) | — |
 
 ### 1.7 换 provider 后的契约面回归

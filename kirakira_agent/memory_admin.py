@@ -141,11 +141,58 @@ def _reference_alignment(root: Path) -> dict[str, Any]:
             matched.append(local.name)
         else:
             drifted.append(local.name)
+    akasha = _akasha_alignment(root)
     return {
         "checked": len(matched) + len(drifted),
         "matched_after_namespace_adapter_normalization": matched,
         "drifted": drifted,
         "boundary_adapters": ["coremem/store.py:replace_item_content"],
+        "akasha": akasha,
+    }
+
+
+def _akasha_alignment(root: Path) -> dict[str, Any]:
+    """akasha 引擎的源码漂移审计。
+
+    与 coremem 同一条纪律:镜像文件只改 import 命名空间,框架缺口补在 `akasha/_compat.py`
+    这类边界文件里。这里把命名空间还原回 Reference 形态再逐字节比对,`_compat.py` 与
+    `__init__.py` 是 kirakira 自己的边界文件,不参与比对。
+    """
+    local_dir = root / "kirakira_agent" / "akasha"
+    reference_dir = root / "Reference" / "plugins" / "akasha"
+    if not local_dir.exists() or not reference_dir.exists():
+        return {"checked": 0, "matched": [], "drifted": [], "note": "akasha 未安装"}
+    matched: list[str] = []
+    drifted: list[str] = []
+    for local in sorted(list(local_dir.glob("*.py")) + list(local_dir.glob("fast/*.py"))):
+        relative = local.relative_to(local_dir)
+        reference = reference_dir / relative
+        if not reference.exists() or local.name == "_compat.py":
+            continue
+        text = local.read_text(encoding="utf-8")
+        text = text.replace("from kirakira_agent.akasha", "from plugins.akasha")
+        text = text.replace("from kirakira_agent.coremem.embedding_store", "from session.embedding_store")
+        text = text.replace("from kirakira_agent.coremem.embedder", "from memory2.embedder")
+        text = text.replace("from kirakira_agent.coremem", "from core.memory")
+        text = text.replace("from kirakira_agent._compat.config_models", "from agent.config_models")
+        text = text.replace("from kirakira_agent._compat.net_http", "from core.net.http")
+        text = text.replace("from kirakira_agent.lifecycle", "from bus.events_lifecycle")
+        text = text.replace("from kirakira_agent.event_bus", "from bus.event_bus")
+        # 两个框架缺口的补齐点:Reference 从 infra/agent 取,kirakira 从 akasha/_compat 取
+        text = text.replace(
+            "from plugins.akasha._compat import atomic_write_text",
+            "from infra.persistence.json_store import atomic_write_text",
+        )
+        text = text.replace("from plugins.akasha._compat import (", "from agent.plugins.manifest import (")
+        if text == reference.read_text(encoding="utf-8"):
+            matched.append(str(relative))
+        else:
+            drifted.append(str(relative))
+    return {
+        "checked": len(matched) + len(drifted),
+        "matched_after_namespace_adapter_normalization": matched,
+        "drifted": drifted,
+        "boundary_adapters": ["akasha/_compat.py", "akasha/__init__.py"],
     }
 
 

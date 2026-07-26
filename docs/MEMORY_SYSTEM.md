@@ -1,6 +1,6 @@
 # Kirakira 记忆系统(coremem)
 
-> 快照:2026-07-25。Reference 固定为 `012e37c8b51df045353972bb551d8e868ab52455`。
+> 快照:2026-07-27(akasha 引擎与引擎路由补齐之后)。Reference 固定为 `012e37c8b51df045353972bb551d8e868ab52455`。
 > 本文是记忆系统的**当前权威文档**。历史迁移细节(M0/M1 owner 切换、备份/回滚)见
 > [MEMORY2_M0_M1.md](./MEMORY2_M0_M1.md);本文覆盖当前架构、数据流、配置与对齐状态。
 
@@ -95,6 +95,27 @@ schema 与描述由 `engine.tool_profile()` 声明(对照 Reference `agent/tools
 与 Reference 的显式偏离:Reference 在引擎 Disabled 时不注册记忆工具;kirakira 保留词法
 回退注册,使未配 embedding 也能用基础记忆。
 
+### 4.4 两套引擎与路由
+
+`[memory].plugin` 决定用哪套引擎(照 Reference `bootstrap/wiring.resolve_memory_plugin`):
+
+| plugin | 引擎 | 语义 |
+| --- | --- | --- |
+| `default`(缺省) | `coremem/default_engine.py` | 抽取成条目 → 向量 lane + 关键词 lane → RRF 融合 → 注入预算 |
+| `akasha` | `akasha/engine.py` | 把**整轮对话**存成图节点,查询做涟漪扩散(RAR);真相源是 `sessions.db/messages` |
+
+两点必须知道:
+
+- **`[memory].engine` 不是这个键**。那是 M1 迁移的存储 owner 选择器(auto/legacy/coremem),
+  语义完全不同,合并会让老 workspace 的 `engine="auto"` 被当成引擎名解析失败。
+- **工具面由引擎决定**:default 声明 memorize/recall/forget;akasha 只声明 recall 与自定义
+  `reinforce_memory`(它从 turn 自动摄入,本就没有 memorize)。注册器声明什么注册什么,
+  不做回退——否则模型会看到一个必然被拒绝的工具。
+
+akasha 依赖 `sessions.db` 的 `messages` 投影表(canonical 仍是 per-session JSON,
+投影与 `messages_fts` 随 save 增量维护、启动时全量重建)。实弹记录见
+[design/live-verification.md](./design/live-verification.md) 第 12 节。
+
 ## 5. 门控与 embedding 配置(关键)
 
 `build_memory_services` 的门控(对照 Reference `bootstrap/memory.py`):
@@ -145,8 +166,8 @@ base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 | Stage 4 主动兴趣检索 | 完成 | content 判断前 `engine.query(intent="interest")` |
 | Stage 5 工具切引擎 + consolidation 移交 | 完成 | 工具走 `engine.mutate/query`;旧 consolidation 路径已删 |
 
-全部里程碑完成。后续记忆侧的未完成项(引擎插件路由、Dashboard 走 `MemoryAdminApi` 等)
-只维护在 [NOW.md](./NOW.md)。
+全部里程碑完成;引擎插件路由与 akasha 已于 2026-07-27 补齐(见 §4.4)。
+后续记忆侧的未完成项只维护在 [NOW.md](./NOW.md)。
 
 ## 8. 管理与现场检查
 
