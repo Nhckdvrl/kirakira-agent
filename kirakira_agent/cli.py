@@ -40,6 +40,8 @@ from kirakira_agent.proactive.sources import build_file_inbox_registry
 from kirakira_agent.proactive.state import ProactiveStateStore
 from kirakira_agent.drift import DriftRunner
 from kirakira_agent.control.binding import build_control_plane
+from kirakira_agent.dashboard import DashboardService
+from kirakira_agent.observe import RecallInspector
 from kirakira_agent.restart import RestartCoordinator, SupervisorCommitChannel
 from kirakira_agent.supervisor import RESTART_EXIT_CODE
 from kirakira_agent.runtime import (
@@ -121,6 +123,7 @@ def _build_channel_host(
     interrupt=None,
     memory=None,
     app_config=None,
+    dashboard=None,
 ) -> ChannelHost | None:
     from agent.looping.interrupt import InterruptController
     from agent.tools.message_push import MessagePushTool
@@ -157,6 +160,7 @@ def _build_channel_host(
                 host=os.getenv("KIRAKIRA_WEB_HOST", str(chat_config.get("host") or "127.0.0.1")),
                 port=int(os.getenv("KIRAKIRA_WEB_PORT", str(chat_config.get("port") or 6322))),
                 channel_name=os.getenv("KIRAKIRA_WEB_CHANNEL", str(chat_config.get("channel_name") or "web")),
+                dashboard=dashboard,
             )
         )
         added = True
@@ -631,6 +635,9 @@ async def build_runtime(
         bus=bus,
         tools=registry,
     )
+    # 检索回放:记录每轮召回了什么、注入了没有;引擎未承重时这条路本来就不走。
+    recall_inspector = RecallInspector(workdir)
+    reasoner.add_tool_hooks([recall_inspector.tool_hook()])
     pipeline = PassiveTurnPipeline(
         bus=bus,
         event_bus=event_bus,
@@ -643,6 +650,7 @@ async def build_runtime(
         memory_services=memory_services,
         session_services=SessionServices(session_manager=session_manager),
         context_services=ContextServices(context=context),
+        recall_inspector=recall_inspector,
     )
     loop = AgentLoop(bus=bus, pipeline=pipeline)
     plugin_manager = PluginManager(
@@ -669,6 +677,19 @@ async def build_runtime(
     pipeline.add_before_reasoning_plugin_modules(plugin_manager.before_reasoning_modules)
     pipeline.add_after_reasoning_plugin_modules(plugin_manager.after_reasoning_modules)
     pipeline.add_after_turn_plugin_modules(plugin_manager.after_turn_modules)
+    # Dashboard 数据面。主动/Drift 在下面才装配,这里先建再回填——DashboardService
+    # 是可变 dataclass,这样不必为了一个只读面板重排整条装配顺序。
+    dashboard = DashboardService(
+        workspace=workdir,
+        session_manager=session_manager,
+        memory_services=memory_services,
+        memory=memory,
+        plugin_manager=plugin_manager,
+        restart_coordinator=None,
+        recall_inspector=recall_inspector,
+        # 状态库连接归本循环所在线程独占;Web 的 HTTP handler 在别的线程,读要 marshal 回来。
+        loop=asyncio.get_running_loop(),
+    )
     channel_host = _build_channel_host(
         workdir=workdir,
         bus=bus,
@@ -681,6 +702,7 @@ async def build_runtime(
         interrupt=loop.request_interrupt,
         memory=memory,
         app_config=app_config,
+        dashboard=dashboard,
     )
     if plugin_manager.channels:
         if channel_host is None:
@@ -713,6 +735,9 @@ async def build_runtime(
         plugin_generations=plugin_manager.generations,
         snapshot_store=snapshot_store,
     )
+    # 回填晚于面板构造的两条链路,Dashboard 的主动/Drift 面板由此拿到真实数据。
+    dashboard.proactive_loop = proactive_loop
+    dashboard.drift_runner = drift_runner
     if proactive_loop is not None:
         available_channels = {
             channel.name for channel in (channel_host.channels if channel_host else [])
@@ -773,6 +798,7 @@ async def build_runtime(
             restart_coordinator=restart_coordinator,
         )
     )
+    dashboard.restart_coordinator = restart_coordinator
     if restart_coordinator is not None:
         register_agent_restart_tool(registry, restart_coordinator)
     return CoreRuntime(
@@ -1038,13 +1064,14 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "memory_action",
         nargs="?",
-        choices=["doctor", "backup", "migrate", "verify", "rollback", "clear"],
+        choices=["doctor", "backup", "migrate", "verify", "rollback", "clear", "repair-kinds"],
         help="Memory administration action.",
     )
     parser.add_argument("--backup-id", default="", help="Backup id for memory verify/rollback.")
     parser.add_argument("--confirm", default="", help="Explicit confirmation token for destructive memory actions.")
     parser.add_argument("--include-sessions", action="store_true", help="Also delete all persisted sessions during memory clear.")
     parser.add_argument("--clear-self", action="store_true", help="Also reset memory/SELF.md during memory clear.")
+    parser.add_argument("--dry-run", action="store_true", help="Report planned changes without writing (memory repair-kinds).")
     parser.add_argument("--serve", action="store_true", help="Run background agent loop and configured channels.")
     parser.add_argument("--web", action="store_true", help="Enable stdlib web channel.")
     parser.add_argument("--telegram", action="store_true", help="Enable Telegram Bot API channel.")
@@ -1105,10 +1132,12 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "memory":
         import json as _json
 
-        from kirakira_agent.memory_admin import backup, clear, doctor, migrate, rollback, verify
+        from kirakira_agent.memory_admin import (
+            backup, clear, doctor, migrate, repair_kinds, rollback, verify,
+        )
 
         if not args.memory_action:
-            parser.error("memory requires doctor/backup/migrate/verify/rollback/clear")
+            parser.error("memory requires doctor/backup/migrate/verify/rollback/clear/repair-kinds")
         try:
             if args.memory_action == "doctor":
                 result = doctor(workdir, project_root=cwd)
@@ -1118,6 +1147,8 @@ def main(argv: list[str] | None = None) -> None:
                 result = migrate(workdir)
             elif args.memory_action == "verify":
                 result = verify(workdir, backup_id=args.backup_id)
+            elif args.memory_action == "repair-kinds":
+                result = repair_kinds(workdir, dry_run=args.dry_run)
             elif args.memory_action == "rollback":
                 result = rollback(workdir, backup_id=args.backup_id)
             else:

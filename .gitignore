@@ -21,6 +21,7 @@ Reference/
 /proactive.db-shm
 /proactive.db-wal
 /drift/
+/observe/
 /PROACTIVE_CONTEXT.md
 /coremem.db
 /coremem.db-shm

@@ -12,6 +12,7 @@ import shutil
 import sqlite3
 import subprocess
 import time
+import contextlib
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -86,12 +87,25 @@ def _sqlite_report(path: Path) -> dict[str, Any]:
                 "SELECT status, COUNT(*) FROM memory_items GROUP BY status"
             )
         }
+        # 注入选择器只接受这四类,其余类型即使被检索命中也永远不会注入上下文
+        # (retriever.py 的 `else: continue`)。旧 schema 写进来的 identity/fact 等
+        # 会静默失效,所以在 doctor 里显式报出来。
+        non_injectable = {
+            str(memory_type): int(count)
+            for memory_type, count in conn.execute(
+                "SELECT memory_type, COUNT(*) FROM memory_items "
+                "WHERE status = 'active' AND memory_type NOT IN (?, ?, ?, ?) "
+                "GROUP BY memory_type",
+                tuple(sorted(CANONICAL_TYPES)),
+            )
+        }
         return {
             "exists": True,
             "integrity": conn.execute("PRAGMA integrity_check").fetchone()[0],
             "schema": "ok",
             "items": sum(counts.values()),
             "statuses": counts,
+            "non_injectable_types": non_injectable,
             "vectors": int(
                 conn.execute(
                     "SELECT COUNT(*) FROM memory_items WHERE embedding IS NOT NULL"
@@ -141,11 +155,58 @@ def _reference_alignment(root: Path) -> dict[str, Any]:
             matched.append(local.name)
         else:
             drifted.append(local.name)
+    akasha = _akasha_alignment(root)
     return {
         "checked": len(matched) + len(drifted),
         "matched_after_namespace_adapter_normalization": matched,
         "drifted": drifted,
         "boundary_adapters": ["coremem/store.py:replace_item_content"],
+        "akasha": akasha,
+    }
+
+
+def _akasha_alignment(root: Path) -> dict[str, Any]:
+    """akasha 引擎的源码漂移审计。
+
+    与 coremem 同一条纪律:镜像文件只改 import 命名空间,框架缺口补在 `akasha/_compat.py`
+    这类边界文件里。这里把命名空间还原回 Reference 形态再逐字节比对,`_compat.py` 与
+    `__init__.py` 是 kirakira 自己的边界文件,不参与比对。
+    """
+    local_dir = root / "kirakira_agent" / "akasha"
+    reference_dir = root / "Reference" / "plugins" / "akasha"
+    if not local_dir.exists() or not reference_dir.exists():
+        return {"checked": 0, "matched": [], "drifted": [], "note": "akasha 未安装"}
+    matched: list[str] = []
+    drifted: list[str] = []
+    for local in sorted(list(local_dir.glob("*.py")) + list(local_dir.glob("fast/*.py"))):
+        relative = local.relative_to(local_dir)
+        reference = reference_dir / relative
+        if not reference.exists() or local.name == "_compat.py":
+            continue
+        text = local.read_text(encoding="utf-8")
+        text = text.replace("from kirakira_agent.akasha", "from plugins.akasha")
+        text = text.replace("from kirakira_agent.coremem.embedding_store", "from session.embedding_store")
+        text = text.replace("from kirakira_agent.coremem.embedder", "from memory2.embedder")
+        text = text.replace("from kirakira_agent.coremem", "from core.memory")
+        text = text.replace("from kirakira_agent._compat.config_models", "from agent.config_models")
+        text = text.replace("from kirakira_agent._compat.net_http", "from core.net.http")
+        text = text.replace("from kirakira_agent.lifecycle", "from bus.events_lifecycle")
+        text = text.replace("from kirakira_agent.event_bus", "from bus.event_bus")
+        # 两个框架缺口的补齐点:Reference 从 infra/agent 取,kirakira 从 akasha/_compat 取
+        text = text.replace(
+            "from plugins.akasha._compat import atomic_write_text",
+            "from infra.persistence.json_store import atomic_write_text",
+        )
+        text = text.replace("from plugins.akasha._compat import (", "from agent.plugins.manifest import (")
+        if text == reference.read_text(encoding="utf-8"):
+            matched.append(str(relative))
+        else:
+            drifted.append(str(relative))
+    return {
+        "checked": len(matched) + len(drifted),
+        "matched_after_namespace_adapter_normalization": matched,
+        "drifted": drifted,
+        "boundary_adapters": ["akasha/_compat.py", "akasha/__init__.py"],
     }
 
 
@@ -527,6 +588,60 @@ def verify(workspace: Path, *, backup_id: str = "") -> dict[str, Any]:
         "database": db_report,
         "migration_snapshot_exact": db_report.get("items") == len(expected),
         "mismatches": mismatches,
+    }
+
+
+def repair_kinds(workspace: Path, *, dry_run: bool = False) -> dict[str, Any]:
+    """把非规范 memory_type 归一,让它们重新可注入。
+
+    背景:注入选择器只接受 `procedure/preference/event/profile`(retriever 的
+    `else: continue`),旧工具 schema 写入的 `identity/fact/requested_memory`
+    即使被检索命中也永远进不了上下文——**检索到了却用不上,且完全静默**。
+    写入边界已归一(见 `tools/builtins._canonical_memory_kind`),本命令修存量。
+
+    只改 `memory_type` 一列,不动 summary、向量与状态:同一条记忆换个标签,
+    语义不变。改前自动备份;`dry_run` 只报告不落库。
+    """
+    db_path = workspace / "memory" / "coremem.db"
+    if not db_path.exists():
+        return {"ok": False, "error": "coremem.db 不存在", "path": str(db_path)}
+
+    with contextlib.closing(sqlite3.connect(db_path)) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = [
+            dict(row)
+            for row in conn.execute(
+                "SELECT id, memory_type, status, substr(summary, 1, 80) AS summary "
+                "FROM memory_items WHERE memory_type NOT IN (?, ?, ?, ?)",
+                tuple(sorted(CANONICAL_TYPES)),
+            )
+        ]
+
+    planned = [
+        {
+            **row,
+            "target_type": TYPE_MAP.get(row["memory_type"], "profile"),
+        }
+        for row in rows
+    ]
+    if not planned:
+        return {"ok": True, "repaired": 0, "items": [], "note": "没有需要修复的条目"}
+    if dry_run:
+        return {"ok": True, "dry_run": True, "repaired": 0, "items": planned}
+
+    # 改数据前先备份:这条命令改的是用户长期记忆,出错要能回去
+    backup_info = backup(workspace, label="repair-kinds")
+    with contextlib.closing(sqlite3.connect(db_path)) as conn:
+        conn.executemany(
+            "UPDATE memory_items SET memory_type = ? WHERE id = ?",
+            [(item["target_type"], item["id"]) for item in planned],
+        )
+        conn.commit()
+    return {
+        "ok": True,
+        "repaired": len(planned),
+        "items": planned,
+        "backup_id": backup_info.get("backup_id"),
     }
 
 

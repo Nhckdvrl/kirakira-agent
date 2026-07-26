@@ -1,6 +1,6 @@
 # 实弹验证记录:哪些链路真的跑过
 
-- 状态:accepted;第 2–6 节为 2026-07-25 一轮,第 7 节为 2026-07-26 控制面一轮,第 9 节为 2026-07-26 换代与 tool_choice 一轮
+- 状态:accepted;第 2–6 节为 2026-07-25 一轮,第 7 节为 2026-07-26 控制面一轮,第 9–11 节为 2026-07-26 换代/tool_choice、仪表盘与检索回放三轮,第 12–13 节为 2026-07-27 akasha 引擎与设计意图逐项检验
 - 核对基线:`Reference/` @ `012e37c8b51df045353972bb551d8e868ab52455`
 - 目标读者:维护者、评审者、接手做下一轮验证的人
 - 关联:[NOW.md](../NOW.md)、[decisions/0004](../decisions/0004-delivery-dedup.md)
@@ -9,7 +9,7 @@
 
 ## 1. 为什么单独记这一份
 
-离线回归(2026-07-26 起为 477 passed)只说明**单测口径**下的行为成立。它抓不到两类问题:
+离线回归(2026-07-27 起为 518 passed)只说明**单测口径**下的行为成立。它抓不到两类问题:
 
 1. **跨组件的真实链路**——测试用 mock provider 与替身渠道,组件之间的真实交互没被走过;
 2. **真实模型的输出偏差**——mock 永远按约定返回,真实模型不会。
@@ -159,3 +159,138 @@ toolCall)。已按 Reference 补齐 `outbound_metadata`,重跑后 toolCall 正�
 
 未出现 Reference `DeepSeekStrategy` 提示的 thinking 冲突(当前配置下)。换 provider 或开
 thinking 后需重验,见 [NOW.md](../NOW.md)。
+
+## 10. Web 仪表盘(F,2026-07-26)
+
+真实 gateway(`main.py gateway`,真实 deepseek + 承重记忆引擎)+ 浏览器实访。
+
+| 面板 | 结果 |
+| --- | --- |
+| 总览 | 引擎 `default · 承重`、5 条记忆、12 个会话、主动运行中、Drift 3 轮、`未托管 → agent_restart 不可用` 均正确 |
+| 记忆 | 走引擎 admin 协议;能力集 8 项与工具面 `recall_memory/memorize/forget_memory` 由 `tool_profile()` 渲染;5 条记忆含 active/superseded 分状态 |
+| 会话 | 12 个会话列表;点开 `telegram:1862986856` 显示 58 条、已归档至第 37 条与真实历史 |
+| 插件与代际 | 空 workspace 下正确显示"暂无数据"(未装插件) |
+| 主动与 Drift | 流水线 7 个 slot、电量 0.26/base 0.95、真实决策轨迹;Drift 3 轮运行含 sent/silent 与跨轮 scratchpad/倾向 |
+| 聊天页 | 真实模型一轮问答正常渲染 |
+
+### 这一轮抓到的问题
+
+1. **状态库的线程亲和(真 bug)**:`proactive.db` / `drift.db` 的连接归事件循环线程独占,
+   而 Web 的 HTTP handler 跑在 `ThreadingHTTPServer` 自己的线程里——首次打开面板直接报
+   `SQLite objects created in a thread can only be used in that same thread`。
+   修法是把读 marshal 回属主线程(`DashboardService._read`,同 `_next_event_sync` 的既有惯例),
+   **而不是另开一条连接**——后者会破坏"状态库单一 owner"这条不变量。
+   单测抓不到:测试里 DashboardService 与 store 在同一线程。
+2. **空表头渲染成 `[object Object]`**:`esc(h.label || h)` 对空串会 falsy 回退到对象本身。
+   改成 `h.label === undefined ? h : h.label`。
+
+第 1 条与前两轮同属一类:**只有真跑才暴露的跨组件真实形状**(线程归属、上游字段、环境上限)。
+
+## 11. 检索回放与批量删除(F,2026-07-26)
+
+真实 gateway + 真实 deepseek,跑一轮"用 recall_memory 查我的身份设定"。
+
+| 项 | 结果 |
+| --- | --- |
+| 两类记录写入 | `context_prepare` 与 `recall_memory` 各一条,**归到同一个 turn_id** `dfa4187e…` |
+| 面板聚合 | 回放列表显示"自动召回 1 / 未注入 / 主动查询 1" |
+| 详情 | 命中项含类型、内容、分数 0.515、注入标记;模型主动查询的参数与结果一并展示 |
+| 消息检索 | 跨会话搜索"月火"命中真实历史,并标注只读原因 |
+| 记忆批量删除 | 勾选/全选/按钮门控正确;**缺 confirm 令牌服务端返回 400**(`hard delete requires confirm=HARD_DELETE`) |
+
+### 面板第一次使用就抓到一个检索质量问题
+
+这轮的真实数据是:**自动检索召回了正确的 identity 记忆(分数 0.515),但 `injected=False`
+——没进上下文**;模型随后主动调 `recall_memory(intent="answer")` 返回 0 条;于是模型回答
+"没有找到关于你身份设定的记录"。
+
+没有这个面板,现象只有最后那句"没找到",只能猜是哪一环出的问题。有了它可以直接读出:
+召回没问题,是**注入阈值与 answer intent 的阈值**把它挡掉了。这条留作调阈值时的依据,
+本轮不改——改检索阈值属于行为变更,应当单独评估。
+
+## 12. akasha RAR 引擎(F,2026-07-27)
+
+隔离 workspace(关渠道与主动)+ `[memory].plugin = "akasha"` + 真实 deepseek。
+
+| 项 | 结果 |
+| --- | --- |
+| 引擎路由 | 仪表盘 `engine-info` 报 `akasha`,`load_bearing=true` |
+| 工具面 | `recall_memory` + **`reinforce_memory`**(engine 自定义工具槽真的生效) |
+| 第一轮 | 告知"部署脚本在 scripts/rollout.sh",正常回复;检索回放记录召回 0(库空) |
+| **跨 session 检索** | **新 session、零历史**问"我发版要跑哪个脚本",答出 `scripts/rollout.sh` |
+| 回放证据 | 引擎=akasha,召回 1 条,注入 True,score **0.7593**,命中项类型是 `turn` |
+| 镜像保真 | `memory doctor` 报 akasha `checked=12, drifted=[]` |
+
+命中项类型是 `turn` 而不是 `item`——这正是 akasha 与默认引擎的语义差:它把**整轮对话**
+存成图节点,靠涟漪激活召回,而不是抽取成条目再做向量检索。
+
+### 这一轮抓到的四个问题
+
+1. **`timestamp` 从"不承重"变成"承重"(预测命中)**:审计里写过"Reference 传了
+   `timestamp`,但 DefaultMemoryEngine 全文不读,**只有换 engine 才会承重**"。换到 akasha
+   后第一次 query 就返回 `missing_query_timestamp`。三处 `MemoryQuery` 构造点已补。
+2. **工具面不能有回退**:此前"profile 没声明就退回旧 schema 注册",导致 akasha 下模型
+   看得到 `memorize`、调用后被引擎拒绝写入(akasha 从 turn 自动摄入,本就没有 memorize)。
+   改为**声明什么注册什么**,并支持 `profile.tools` 自定义工具槽。
+3. **真相源错配**:akasha 的 `DESCRIPTOR.notes` 写着 `truth=sessions.db/messages`,而
+   kirakira 的会话是 per-session JSON。解法是在派生索引库里加一张 Reference 同形的
+   `messages` 投影表 + 外部内容 `messages_fts`(三个触发器),并把索引库路径对齐到
+   `workspace/sessions.db`。JSON 仍是唯一 canonical。
+4. **外部内容 FTS 的 malformed 陷阱**:老库里 `messages` 先于 `messages_fts` 存在时,
+   `DELETE FROM messages` 会触发删除不存在的索引项,SQLite 直接报
+   `database disk image is malformed`(`integrity_check` 却是 ok)。派生物应当能无条件
+   重置,故改为"先拆触发器与索引、清表、再原样建回"。
+
+## 13. 设计意图逐项在线检验(F,2026-07-27)
+
+akasha 与仪表盘一轮改动之后,用真实 gateway(默认引擎 + 真实 deepseek)逐项核对
+**"实现是否满足当初的设计意图"**,而不只是"能不能跑"。
+
+| 设计项 | 检验结果 |
+| --- | --- |
+| 默认引擎在 akasha 改动后仍承重 | `engine-info` 报 `default`、`load_bearing=true`、工具面三件套齐 |
+| 引擎路由 fail loud | 配错名字 → `未知记忆引擎: 'akashaa'(可选 default / akasha)` |
+| 批量删除的 confirm 保护 | 缺令牌 → 400 `hard delete requires confirm=HARD_DELETE` |
+| 消息面板只读契约 | 命中 5 条,`deletable=false` 且带原因 |
+| `compact` 真归档 | 归档游标 0 → **2**,回执"已归档 2 条历史消息" |
+| subagent 禁用名单用真实工具名 | 14 项全部是已注册名,`mcp_apply` 在内 |
+| 检索回放记录默认引擎路径 | 记录到 `engine=default` 的 context_prepare |
+| 插件面板代际可观测 | 空 workspace 正确返回空集合 |
+
+### 抓到一个真缺陷:非规范类型的记忆永远不会被注入
+
+两次采样都是同一现象:检索**命中了正确的记忆**(score 0.515 / 0.5818,均高于
+阈值 0.45),但 `injected=False`,模型于是答出与记忆不符的内容
+(库里是"月火,傲娇",模型答"Kirakira,认真活泼")。
+
+根因不在阈值,在**类型**:`retriever._select_injection_sections` 只接受
+`procedure/preference` 与 `event/profile` 四类,其余落进 `else: continue`。
+而这两条记忆的类型是 `identity` —— kirakira **旧工具 schema** 才有的类型
+(Reference 的 enum 只有 event/profile/preference/procedure,靠 schema 就防住了)。
+引擎的 `_coerce_memory_type` 只处理 procedure,其余原样存入,所以旧数据静默失效。
+
+处置(不改镜像文件):
+
+1. **写入边界归一**:`_canonical_memory_kind` 把 `identity/fact/requested_memory`
+   映射成 `profile`(与旧 `MemoryRuntime._canonical_memory_type` 同一张表),
+   新写入不会再产生不可注入的行;
+2. **doctor 报出存量**:`coremem.non_injectable_types` 列出 active 里的非规范类型,
+   当前工作区报 `{'identity': 1}` —— 这类数据以前完全不可见。
+
+这一条是"在线检验设计意图"的直接价值:功能测试会通过(检索确实返回了记录),
+只有对着**设计意图**看才发现"召回了但没用上"。
+
+### 13.1 存量修复的闭环验证(F,2026-07-27)
+
+`memory repair-kinds` 把两条 `identity` 归一成 `profile`(自动备份
+`20260727-071229-repair-kinds-…`),随后同一个问题重跑:
+
+| | 修复前 | 修复后 |
+| --- | --- | --- |
+| 召回 | 1 条,score 0.5818 | 2 条,同一条仍是 score **0.5817** |
+| 注入 | **False** | **True,363 字符** |
+| 模型回答 | "我是 Kirakira,认真又带点活泼" | "哼,既然你诚心诚意地问了…我是**月火**" |
+| doctor | `{'identity': 1}` | `non_injectable_types: {}` |
+
+分数没变、召回没变,**只有注入变了**——证明问题确实在类型而不是相关性,
+修复也确实落在那一环上。

@@ -499,6 +499,8 @@ class ProactiveLoop:
                     effect="read_only",
                     filters=MemoryQueryFilters(relevance_floor="strong"),
                     limit=limit,
+                    # 同上:akasha 承重,默认引擎忽略。
+                    timestamp=datetime.now(timezone.utc),
                 )
             )
         except Exception as exc:  # noqa: BLE001 - 兴趣检索失败不阻断主动判断

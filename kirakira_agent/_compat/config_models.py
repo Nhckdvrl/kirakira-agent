@@ -19,6 +19,11 @@ class MemoryEmbeddingConfig:
 @dataclass
 class MemoryConfig:
     enabled: bool = True
+    # 注意与 kirakira 自己的 `[memory].engine` 区分:那个是 M1 迁移的**存储 owner**
+    # 选择器(auto/legacy/coremem,由旧 MemoryRuntime 消费);这里的 plugin 才是
+    # Reference 语义上的**引擎插件名**(default/akasha)。两者语义不同,不能合并——
+    # 合并会让老 workspace 的 `engine="auto"` 被当成引擎名解析失败。
+    plugin: str = "default"
     engine: str = "default"
     embedding: MemoryEmbeddingConfig = field(default_factory=MemoryEmbeddingConfig)
 
@@ -73,6 +78,9 @@ def build_config(app_config: dict[str, Any]) -> Config:
     )
     memory = MemoryConfig(
         enabled=bool(config_value(app_config, "memory", "enabled", default=True)),
+        plugin=str(
+            config_value(app_config, "memory", "plugin", default="") or "default"
+        ),
         engine=str(config_value(app_config, "memory", "engine", default="default")),
         embedding=embedding,
     )

@@ -20,7 +20,7 @@ HELP = """\
   init                          非交互初始化配置和工作区
   gateway                       启动未托管 Agent 服务（调试）
   supervise                     显式进入 supervisor（兼容别名）
-  memory doctor|backup|migrate|verify|rollback|clear
+  memory doctor|backup|migrate|verify|rollback|clear|repair-kinds
                                 Memory2 M0/M1 管理与恢复
   control <子命令>              连接已在跑的 Agent:看状态、跑一轮、中断、排空插件
                                 (control -h 看完整子命令)
@@ -106,8 +106,8 @@ def main(argv: list[str] | None = None) -> None:
         _print_summary(initialize_workspace(config_path, workspace, force="--force" in args))
         return
     if command == "memory":
-        if len(args) < 2 or args[1] not in {"doctor", "backup", "migrate", "verify", "rollback", "clear"}:
-            raise SystemExit("memory 需要 doctor/backup/migrate/verify/rollback/clear")
+        if len(args) < 2 or args[1] not in {"doctor", "backup", "migrate", "verify", "rollback", "clear", "repair-kinds"}:
+            raise SystemExit("memory 需要 doctor/backup/migrate/verify/rollback/clear/repair-kinds")
         from kirakira_agent.cli import main as runtime_main
 
         forwarded = ["memory", args[1], "--config", str(config_path), "--workspace", str(workspace)]
@@ -121,6 +121,8 @@ def main(argv: list[str] | None = None) -> None:
             forwarded.append("--include-sessions")
         if "--clear-self" in args:
             forwarded.append("--clear-self")
+        if "--dry-run" in args:
+            forwarded.append("--dry-run")
         runtime_main(forwarded)
         return
     if command == "control":

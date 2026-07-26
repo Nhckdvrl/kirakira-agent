@@ -5,6 +5,9 @@
 
 > 2026-07-26 起的取向(用户指示):**功能真实还原优先,结构工程后补**。
 > 因此本文件分两节:第 1 节是功能/可靠性缺口,第 2 节是明确推迟的结构工程。
+>
+> 本文只收录**有接手点与验收边界**的事项。与 Reference 的完整覆盖面对照
+> (含整块未实现的子系统)见 [DIFFERENCE_AUDIT.md](./DIFFERENCE_AUDIT.md) 附录 A.5。
 
 ## 1. 功能与可靠性缺口
 
@@ -65,7 +68,6 @@ tick 现在把租到的 snapshot 钉在共享 gateway 上,源在本轮用同一�
 | spawn 回传缺 exit_reason 六态与重试协议 | Reference `agent/subagent.py:114` |
 | SkillRecord 缺 root_dir(带附属资源的 skill 无法自定位);`create-drift-skill` 未移植 | Reference `agent/skills.py` |
 | EventBus 事件路径不持 snapshot 租约,observer 异常静默 | Reference `bus/event_bus.py:190,460` |
-| 记忆引擎插件路由未接(`config.memory.engine` 从未被读);Dashboard 绕过 `MemoryAdminApi` | Reference `bootstrap/memory.py:36` |
 | Reference 工具描述是决策树式长文,kirakira 多为单行(隐性行为差) | — |
 
 ### 1.6 换 provider 后的契约面回归
@@ -87,4 +89,6 @@ required/具名强制已在 deepseek-v4-flash 下实弹通过(见
 | proactive 模块 factory / start-stop | Reference 有 module factory 链;但 `start()` 生产代码零实现(只有测试),`stop()` 只有一个实现 | 插件真要贡献主动模块时再做;`add_modules` 目前无生产调用点 |
 | QQ 两渠道逐字节对齐(Telegram 已对齐) | — | — |
 | 插件包元数据 manifest、非 git 源、版本缓存回滚、MCP venv 准备 | Reference `plugins/install.py:238-551` | — |
-| 前端 Dashboard、peer-agent、eval、主动多目标调度 | 多目标调度 Reference 也没有(presence 多 session API 仅测试引用) | — |
+| peer-agent、eval、主动多目标调度 | 多目标调度 Reference 也没有(presence 多 session API 仅测试引用) | — |
+| **消息的稳定 id(删除的前置迁移)** | kirakira 消息是位置寻址(`source_ref = "session_key:index"`),删一条会让后续索引整体前移,打断记忆条目里指向 `key:index` 的 evidence 与 `last_consolidated` 游标。因此消息面板**有意只读**,Reference 的 messages 批量删除未移植 | 先给消息加稳定 id 并迁移既有 `source_ref`,才谈得上删除;这是数据模型迁移,不是面板功能 |
+| memory optimizer | Reference `/api/dashboard/memory/optimize` 有一套记忆整理流程 | 记忆整理当前由 consolidation + Drift 的 `review-memory` 承担,重复度高,真需要再评估 |

@@ -76,6 +76,27 @@ def memory_engine_enabled(config: Config) -> bool:
     return bool(config.memory.enabled and config.memory.embedding.base_url)
 
 
+def resolve_memory_plugin(name: str) -> Any:
+    """按名字解析记忆引擎插件(照 Reference `bootstrap/wiring.resolve_memory_plugin`)。
+
+    这条路由此前是断的——插件名从未被读,等于 `MemoryPlugin` 协议
+    是个没人走的缝。补上之后 akasha 才谈得上"可选中"。未知名字 fail loud:
+    配错引擎名应当立刻可见,而不是静默回落到 default 让人以为在用另一套。
+    """
+    key = (name or "").strip() or "default"
+    if key == "default":
+        from kirakira_agent.coremem.default_plugin import MemoryPlugin as DefaultPlugin
+
+        return DefaultPlugin()
+    if key == "akasha":
+        from kirakira_agent.akasha import MemoryPlugin as AkashaPlugin
+
+        return AkashaPlugin()
+    raise ValueError(
+        "未知记忆引擎: %r(可选 default / akasha)" % name
+    )
+
+
 def build_memory_engine(
     *,
     app_config: dict[str, Any],
@@ -84,19 +105,54 @@ def build_memory_engine(
     light_provider: LLMProvider | None = None,
     http_resources: SharedHttpResources | None = None,
     event_publisher: Any = None,
+    markdown: Any = None,
 ) -> MemoryEngine:
-    """构造记忆引擎:配了 embedding → DefaultMemoryEngine,否则 DisabledMemoryEngine。"""
+    """构造记忆引擎。
+
+    门控与路由是两件事:先看**是否承重**(memory.enabled + 配了 embedding),
+    再看**用哪套引擎**(`[memory].plugin`)。前者不成立时一律 DisabledMemoryEngine,
+    因为两套引擎读写都要向量。
+    """
     config = build_config(app_config)
     if not memory_engine_enabled(config):
         return DisabledMemoryEngine()
-    return DefaultMemoryEngine(
-        config=config,
-        default_config=DefaultMemoryConfig(),
+    runtime = build_memory_plugin_runtime(
+        app_config=app_config,
         workspace=workspace,
         provider=provider,
         light_provider=light_provider,
-        http_resources=http_resources or SharedHttpResources(),
+        http_resources=http_resources,
         event_publisher=event_publisher,
+        markdown=markdown,
+    )
+    return runtime.engine
+
+
+def build_memory_plugin_runtime(
+    *,
+    app_config: dict[str, Any],
+    workspace: Path,
+    provider: LLMProvider,
+    light_provider: LLMProvider | None = None,
+    http_resources: SharedHttpResources | None = None,
+    event_publisher: Any = None,
+    markdown: Any = None,
+) -> Any:
+    """统一插件构造入口(照 Reference `bootstrap/memory.py:_build_memory_plugin_runtime`)。"""
+    from kirakira_agent.coremem.plugin import MemoryPluginBuildDeps
+
+    config = build_config(app_config)
+    plugin = resolve_memory_plugin(config.memory.plugin)
+    return plugin.build(
+        MemoryPluginBuildDeps(
+            config=config,
+            workspace=workspace,
+            provider=provider,
+            light_provider=light_provider,
+            http_resources=http_resources or SharedHttpResources(),
+            event_publisher=event_publisher,
+            markdown=markdown,
+        )
     )
 
 
@@ -116,17 +172,10 @@ def build_memory_services(
     session_manager: Any = None,
     memory_window: int = 40,
 ) -> MemoryServices:
-    engine = build_memory_engine(
-        app_config=app_config,
-        workspace=workspace,
-        provider=provider,
-        light_provider=light_provider,
-        http_resources=http_resources,
-        event_publisher=event_publisher,
-    )
     config = build_config(app_config)
-    # Markdown 四文件与 engine 并列:它订阅 TurnCommitted 做 consolidation,
-    # 提交后发 ConsolidationCommitted —— 引擎正是靠这个事件做长期事实提取。
+    # 顺序刻意:markdown 先建。它与 engine 并列(订阅 TurnCommitted 做 consolidation,
+    # 提交后发 ConsolidationCommitted,引擎靠这个事件做长期事实提取),而
+    # `MemoryPluginBuildDeps` 要求把它传给插件——所以不能等 engine 建完再建。
     markdown = build_markdown_memory_runtime(
         workspace=workspace,
         provider=provider,
@@ -146,7 +195,18 @@ def build_memory_services(
                 save_session=session_manager.save_async,
             )
         )
-    # 引擎是 coremem.db 的唯一 owner;把它的 store 一并暴露,过渡期消费者共享同一连接。
+    engine = build_memory_engine(
+        app_config=app_config,
+        workspace=workspace,
+        provider=provider,
+        light_provider=light_provider,
+        http_resources=http_resources,
+        event_publisher=event_publisher,
+        markdown=markdown,
+    )
+    # 引擎是记忆库的唯一 owner;把它的 store 一并暴露,过渡期消费者共享同一连接。
+    # akasha 没有 `_v2_store`(它有自己的 AkashaStore),此时 store 为 None——
+    # Dashboard 会因此走 engine 的 admin 协议,正是我们想要的。
     return MemoryServices(
         engine=engine,
         store=getattr(engine, "_v2_store", None),

@@ -13,6 +13,7 @@ dependencies = [
     "textual>=6.12,<9",
     "httpx[socks]>=0.28.0",
     "html2text>=2025.4.0",
+    "jieba>=0.42",  # akasha RAR 引擎的中文分词
     "json-repair>=0.44.1",
     "lxml>=6.0.0",
     "Pillow>=11.0.0",

@@ -367,7 +367,9 @@ class ChannelTests(unittest.TestCase):
                             ).read().decode("utf-8")
                         )
                     )
-                    self.assertIn("Kirakira Memory2 Dashboard", dashboard)
+                    # /memory 现在是仪表盘的旧地址别名(老书签不至于 404)
+                    self.assertIn("Kirakira 仪表盘", dashboard)
+                    self.assertIn('data-tab="memory"', dashboard)
                     listed = json.loads(
                         await asyncio.to_thread(
                             lambda: urllib.request.urlopen(
