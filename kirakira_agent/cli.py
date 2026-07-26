@@ -1064,13 +1064,14 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "memory_action",
         nargs="?",
-        choices=["doctor", "backup", "migrate", "verify", "rollback", "clear"],
+        choices=["doctor", "backup", "migrate", "verify", "rollback", "clear", "repair-kinds"],
         help="Memory administration action.",
     )
     parser.add_argument("--backup-id", default="", help="Backup id for memory verify/rollback.")
     parser.add_argument("--confirm", default="", help="Explicit confirmation token for destructive memory actions.")
     parser.add_argument("--include-sessions", action="store_true", help="Also delete all persisted sessions during memory clear.")
     parser.add_argument("--clear-self", action="store_true", help="Also reset memory/SELF.md during memory clear.")
+    parser.add_argument("--dry-run", action="store_true", help="Report planned changes without writing (memory repair-kinds).")
     parser.add_argument("--serve", action="store_true", help="Run background agent loop and configured channels.")
     parser.add_argument("--web", action="store_true", help="Enable stdlib web channel.")
     parser.add_argument("--telegram", action="store_true", help="Enable Telegram Bot API channel.")
@@ -1131,10 +1132,12 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "memory":
         import json as _json
 
-        from kirakira_agent.memory_admin import backup, clear, doctor, migrate, rollback, verify
+        from kirakira_agent.memory_admin import (
+            backup, clear, doctor, migrate, repair_kinds, rollback, verify,
+        )
 
         if not args.memory_action:
-            parser.error("memory requires doctor/backup/migrate/verify/rollback/clear")
+            parser.error("memory requires doctor/backup/migrate/verify/rollback/clear/repair-kinds")
         try:
             if args.memory_action == "doctor":
                 result = doctor(workdir, project_root=cwd)
@@ -1144,6 +1147,8 @@ def main(argv: list[str] | None = None) -> None:
                 result = migrate(workdir)
             elif args.memory_action == "verify":
                 result = verify(workdir, backup_id=args.backup_id)
+            elif args.memory_action == "repair-kinds":
+                result = repair_kinds(workdir, dry_run=args.dry_run)
             elif args.memory_action == "rollback":
                 result = rollback(workdir, backup_id=args.backup_id)
             else:

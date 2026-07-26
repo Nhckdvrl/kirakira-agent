@@ -249,3 +249,83 @@ class MemoryM1Tests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RepairKindsTests(unittest.TestCase):
+    """把非规范 memory_type 归一,让旧数据重新可注入。
+
+    背景:注入选择器只接受 event/profile/preference/procedure,其余类型即使被检索
+    命中也永远进不了上下文——实弹里表现为"召回 score 0.58 但 injected=False,
+    模型答出与记忆不符的内容"。
+    """
+
+    def _db(self, tmp: Path, rows: list[tuple[str, str, str]]) -> None:
+        (tmp / "memory").mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(tmp / "memory" / "coremem.db")
+        conn.execute(
+            "CREATE TABLE memory_items (id TEXT PRIMARY KEY, memory_type TEXT, "
+            "status TEXT, summary TEXT, embedding BLOB, source_ref TEXT)"
+        )
+        conn.executemany(
+            "INSERT INTO memory_items(id, memory_type, status, summary) VALUES (?,?,?,?)",
+            [(i, t, s, "内容 %s" % i) for i, t, s in rows],
+        )
+        conn.commit()
+        conn.close()
+
+    def test_dry_run_reports_without_writing(self) -> None:
+        from kirakira_agent.memory_admin import repair_kinds
+
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            self._db(tmp, [("a", "identity", "active")])
+            report = repair_kinds(tmp, dry_run=True)
+            self.assertTrue(report["dry_run"])
+            self.assertEqual(report["repaired"], 0)
+            self.assertEqual(report["items"][0]["target_type"], "profile")
+            conn = sqlite3.connect(tmp / "memory" / "coremem.db")
+            self.assertEqual(
+                conn.execute("SELECT memory_type FROM memory_items").fetchone()[0],
+                "identity",  # dry-run 不落库
+            )
+            conn.close()
+
+    def test_repair_maps_legacy_types_and_backs_up(self) -> None:
+        from kirakira_agent.memory_admin import repair_kinds
+
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            self._db(
+                tmp,
+                [
+                    ("a", "identity", "active"),
+                    ("b", "fact", "superseded"),
+                    ("c", "preference", "active"),  # 规范类型不该被动
+                ],
+            )
+            report = repair_kinds(tmp)
+            self.assertEqual(report["repaired"], 2)
+            self.assertTrue(report["backup_id"])  # 改数据前必须留备份
+            conn = sqlite3.connect(tmp / "memory" / "coremem.db")
+            types = dict(conn.execute("SELECT id, memory_type FROM memory_items"))
+            conn.close()
+            self.assertEqual(types, {"a": "profile", "b": "profile", "c": "preference"})
+
+    def test_repair_is_idempotent(self) -> None:
+        from kirakira_agent.memory_admin import repair_kinds
+
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            self._db(tmp, [("a", "identity", "active")])
+            repair_kinds(tmp)
+            again = repair_kinds(tmp)
+            self.assertEqual(again["repaired"], 0)
+            self.assertIn("没有需要修复", again["note"])
+
+    def test_missing_db_is_reported_not_raised(self) -> None:
+        from kirakira_agent.memory_admin import repair_kinds
+
+        with tempfile.TemporaryDirectory() as raw:
+            report = repair_kinds(Path(raw))
+            self.assertFalse(report["ok"])
+            self.assertIn("不存在", report["error"])

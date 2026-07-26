@@ -177,7 +177,14 @@ uv run python main.py memory backup     # 备份
 uv run python main.py memory migrate    # 迁移(需 Supervisor 停止,离线独占锁)
 uv run python main.py memory verify      # 校验
 uv run python main.py memory rollback --backup-id <id>
+uv run python main.py memory repair-kinds [--dry-run]   # 归一非规范 memory_type
 ```
+
+**`repair-kinds` 解决什么**:注入选择器只接受 `event/profile/preference/procedure`
+(`retriever._select_injection_sections` 的 `else: continue`);旧工具 schema 写入的
+`identity/fact/requested_memory` 即使被检索命中也**永远进不了上下文,且完全静默**。
+写入边界已归一,本命令修存量:只改 `memory_type` 一列,改前自动备份,`--dry-run` 只报告。
+`doctor` 的 `coremem.non_injectable_types` 用来发现这类数据。
 
 `doctor` 的 Reference 漂移审计比对 `coremem/*.py` 与 `Reference/memory2/*.py`(normalizer 先把 coremem 的
 `events/utils` 还原成 `core.memory.*`,其余还原成 `memory2.*` 再逐字节比对),因此保留了 Reference 保真。

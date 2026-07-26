@@ -41,20 +41,7 @@ tick 现在把租到的 snapshot 钉在共享 gateway 上,源在本轮用同一�
 
 **验收**:真实源产出的事件进入三通道去重、被判断链路消费,ACK 回到源端。
 
-### 1.4 存量非规范类型记忆的修复
-
-**现状**:注入选择器只接受 `procedure/preference/event/profile`;旧工具 schema 写入的
-`identity` 等类型即使被检索命中也永远不会注入(见
-[design/live-verification.md](./design/live-verification.md) 第 13 节)。
-写入边界已归一,`memory doctor` 的 `coremem.non_injectable_types` 会报出存量;
-**但已有的行仍是坏的**——当前工作区有 1 条 active `identity`。
-
-**接手点**:把存量行的 `memory_type` 改成 `profile`(与写入边界同一张映射),
-或由用户重新说一遍让 agent 重写。前者需要一条一次性修复命令。
-
-**验收**:doctor 报 `non_injectable_types: {}`;问"你是谁"能召回并注入到上下文。
-
-### 1.5 主动链路的限流与审计厚度(Reference 有、kirakira 无)
+### 1.4 主动链路的限流与审计厚度(Reference 有、kirakira 无)
 
 按对 Reference 的代码核实(2026-07-26),以下机制在 Reference 有真实调用点:
 
@@ -69,7 +56,7 @@ tick 现在把租到的 snapshot 钉在共享 gateway 上,源在本轮用同一�
 | 调度权反转(`run:next_wakeup` terminal slot) | `proactive_v2/loop.py:428` | 模块无法影响下次唤醒间隔 |
 | 累计 hazard / embedding 兴趣 / turn 原型 | `wake_proactive/hazard.py` + `runtime.py:567-654` | 主动侧排序仍是 severity/newness |
 
-### 1.6 其余已核实的行为差(2026-07-26 扫盘)
+### 1.5 其余已核实的行为差(2026-07-26 扫盘)
 
 | 项 | 说明 |
 | --- | --- |
@@ -83,7 +70,7 @@ tick 现在把租到的 snapshot 钉在共享 gateway 上,源在本轮用同一�
 | EventBus 事件路径不持 snapshot 租约,observer 异常静默 | Reference `bus/event_bus.py:190,460` |
 | Reference 工具描述是决策树式长文,kirakira 多为单行(隐性行为差) | — |
 
-### 1.7 换 provider 后的契约面回归
+### 1.6 换 provider 后的契约面回归
 
 `post_response_worker` 两处裸 JSON 数组解析已由 `coremem/compat_worker.py` 容错;
 `ProactiveJudge` 严格 JSON 与 `finish_drift` 解析在真实模型下跑过;tool_choice 的

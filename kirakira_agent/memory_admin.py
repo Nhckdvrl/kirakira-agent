@@ -12,6 +12,7 @@ import shutil
 import sqlite3
 import subprocess
 import time
+import contextlib
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -89,14 +90,13 @@ def _sqlite_report(path: Path) -> dict[str, Any]:
         # 注入选择器只接受这四类,其余类型即使被检索命中也永远不会注入上下文
         # (retriever.py 的 `else: continue`)。旧 schema 写进来的 identity/fact 等
         # 会静默失效,所以在 doctor 里显式报出来。
-        canonical = ("event", "profile", "preference", "procedure")
         non_injectable = {
             str(memory_type): int(count)
             for memory_type, count in conn.execute(
                 "SELECT memory_type, COUNT(*) FROM memory_items "
                 "WHERE status = 'active' AND memory_type NOT IN (?, ?, ?, ?) "
                 "GROUP BY memory_type",
-                canonical,
+                tuple(sorted(CANONICAL_TYPES)),
             )
         }
         return {
@@ -588,6 +588,60 @@ def verify(workspace: Path, *, backup_id: str = "") -> dict[str, Any]:
         "database": db_report,
         "migration_snapshot_exact": db_report.get("items") == len(expected),
         "mismatches": mismatches,
+    }
+
+
+def repair_kinds(workspace: Path, *, dry_run: bool = False) -> dict[str, Any]:
+    """把非规范 memory_type 归一,让它们重新可注入。
+
+    背景:注入选择器只接受 `procedure/preference/event/profile`(retriever 的
+    `else: continue`),旧工具 schema 写入的 `identity/fact/requested_memory`
+    即使被检索命中也永远进不了上下文——**检索到了却用不上,且完全静默**。
+    写入边界已归一(见 `tools/builtins._canonical_memory_kind`),本命令修存量。
+
+    只改 `memory_type` 一列,不动 summary、向量与状态:同一条记忆换个标签,
+    语义不变。改前自动备份;`dry_run` 只报告不落库。
+    """
+    db_path = workspace / "memory" / "coremem.db"
+    if not db_path.exists():
+        return {"ok": False, "error": "coremem.db 不存在", "path": str(db_path)}
+
+    with contextlib.closing(sqlite3.connect(db_path)) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = [
+            dict(row)
+            for row in conn.execute(
+                "SELECT id, memory_type, status, substr(summary, 1, 80) AS summary "
+                "FROM memory_items WHERE memory_type NOT IN (?, ?, ?, ?)",
+                tuple(sorted(CANONICAL_TYPES)),
+            )
+        ]
+
+    planned = [
+        {
+            **row,
+            "target_type": TYPE_MAP.get(row["memory_type"], "profile"),
+        }
+        for row in rows
+    ]
+    if not planned:
+        return {"ok": True, "repaired": 0, "items": [], "note": "没有需要修复的条目"}
+    if dry_run:
+        return {"ok": True, "dry_run": True, "repaired": 0, "items": planned}
+
+    # 改数据前先备份:这条命令改的是用户长期记忆,出错要能回去
+    backup_info = backup(workspace, label="repair-kinds")
+    with contextlib.closing(sqlite3.connect(db_path)) as conn:
+        conn.executemany(
+            "UPDATE memory_items SET memory_type = ? WHERE id = ?",
+            [(item["target_type"], item["id"]) for item in planned],
+        )
+        conn.commit()
+    return {
+        "ok": True,
+        "repaired": len(planned),
+        "items": planned,
+        "backup_id": backup_info.get("backup_id"),
     }
 
 
