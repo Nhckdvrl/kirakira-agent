@@ -205,7 +205,9 @@ def doctor(workspace: Path, *, project_root: Path | None = None) -> dict[str, An
 
         config = tomllib.loads(config_path.read_text(encoding="utf-8"))
         embedding = ((config.get("memory") or {}).get("embedding") or {})
-        embedding_configured = bool(embedding.get("model") and embedding.get("base_url"))
+        # 与 build_memory_services 的门控同口径:base_url 决定是否承重,
+        # model 未配时 build_config 会落到 Reference 同款默认 text-embedding-v3。
+        embedding_configured = bool(embedding.get("base_url"))
     legacy_items = _read_items(items_path) if items_path.exists() else []
     report = {
         "ok": False,

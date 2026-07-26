@@ -8,7 +8,9 @@ from typing import Any
 
 @dataclass
 class MemoryEmbeddingConfig:
-    model: str = ""
+    # 默认值照 Reference agent/config_models.py:85——只配 base_url 不配 model 时,
+    # Embedder 不应带着空 model 发请求(doctor 的 embedding_configured 判据同此口径)。
+    model: str = "text-embedding-v3"
     api_key: str = ""
     base_url: str = ""
     output_dimensionality: int | None = None
@@ -59,7 +61,10 @@ def build_config(app_config: dict[str, Any]) -> Config:
         app_config, "memory", "embedding", "output_dimensionality", default=None
     )
     embedding = MemoryEmbeddingConfig(
-        model=str(config_value(app_config, "memory", "embedding", "model", default="")),
+        model=str(
+            config_value(app_config, "memory", "embedding", "model", default="")
+            or "text-embedding-v3"
+        ),
         api_key=str(config_value(app_config, "memory", "embedding", "api_key", default="")),
         base_url=str(config_value(app_config, "memory", "embedding", "base_url", default="")),
         output_dimensionality=int(embed_dim_raw)
