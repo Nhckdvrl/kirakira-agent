@@ -1574,6 +1574,8 @@ class CoreRuntime:
     control_runtime: Any | None = None
     control_service: Any | None = None
     control_server: Any | None = None
+    # supervisor 托管时非空;runtime_serve 等待它的 committed 事件并以 75 退出换代。
+    restart_coordinator: Any | None = None
 
     def add_tool_hooks(self, hooks: List[ToolHook]) -> None:
         self.reasoner.add_tool_hooks(hooks)

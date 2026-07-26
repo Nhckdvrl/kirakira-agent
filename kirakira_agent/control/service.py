@@ -36,6 +36,7 @@ class ControlService:
         workspace_token: str | None = None,
         boot_id: str | None = None,
         ready: Callable[[], bool] | None = None,
+        restart_coordinator: Any = None,
     ) -> None:
         self.runtime = runtime
         self.sessions = sessions
@@ -46,6 +47,7 @@ class ControlService:
         self._workspace_token = workspace_token
         self._boot_id = boot_id
         self._ready = ready
+        self._restart_coordinator = restart_coordinator
         self._operation_tasks: set[asyncio.Task[dict[str, object]]] = set()
 
     def initialize(self, params: InitializeParams) -> dict[str, object]:
@@ -74,12 +76,15 @@ class ControlService:
         }
 
     def notify_turn_delivered(self, turn_id: str) -> None:
-        """terminal 事件已送达客户端。Reference 在这里通知 RestartCoordinator;
-        我们未移植 agent_restart,保留钩子形状便于后续接线。"""
+        """terminal 事件已送达客户端 → 重启提交的第二个条件成立。"""
+        if self._restart_coordinator is not None:
+            self._restart_coordinator.mark_delivered(turn_id)
 
     def notify_turn_delivery_failed(self, turn_id: str, reason: str) -> None:
-        """terminal 事件未能送达。理由同上。"""
+        """terminal 事件未能送达 → 取消待提交的重启并恢复准入。"""
         logger.warning("control turn 终态未送达 turn=%s reason=%s", turn_id, reason)
+        if self._restart_coordinator is not None:
+            self._restart_coordinator.mark_delivery_failed(turn_id, reason)
 
     def start_thread(self, metadata: dict[str, Any]) -> dict[str, object]:
         thread_id = new_thread_id()

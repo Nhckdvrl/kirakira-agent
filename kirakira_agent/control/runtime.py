@@ -5,8 +5,12 @@ import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
+if TYPE_CHECKING:
+    from kirakira_agent.restart import RestartCoordinator
+
+from kirakira_agent.control.context import current_turn_id
 from kirakira_agent.control.errors import (
     ControlExecutionError,
     RuntimeClosedError,
@@ -72,6 +76,7 @@ class ConversationRuntime:
         executor: TurnExecutor,
         *,
         subscriber_queue_size: int = 256,
+        restart_coordinator: "RestartCoordinator | None" = None,
     ) -> None:
         if subscriber_queue_size < 2:
             raise ValueError("subscriber_queue_size 必须至少为 2")
@@ -87,12 +92,17 @@ class ConversationRuntime:
         self._interrupt_requested: set[str] = set()
         self._thread_idle: dict[str, asyncio.Event] = {}
         self._closed = False
+        # restart 准入(照 Reference control/runtime.py:83-85):arm 之后不接受新 turn,
+        # caller 自己的 turn 跑完并送达才提交换代;取消则恢复。
+        self._accepting_turns = True
+        self._restart_owner_turn_id: str | None = None
+        self._restart_coordinator = restart_coordinator
 
     async def start_turn(self, request: TurnRequest) -> TurnHandle:
         """持久化 queued turn 并立即返回可操作句柄。"""
 
-        # 1. 在唯一 owner 处拒绝同 thread 并发。
-        if self._closed:
+        # 1. 在唯一 owner 处拒绝同 thread 并发;restart 排空期间拒绝一切新 turn。
+        if self._closed or not self._accepting_turns:
             raise RuntimeClosedError("conversation runtime is shutting down")
         if request.thread_id in self._active_by_thread:
             raise ThreadBusyError(f"thread 已有 active turn: {request.thread_id}")
@@ -217,7 +227,13 @@ class ConversationRuntime:
                     )
 
                 execution_request.metadata["_controlItemEvent"] = publish_item
-                execution = await self._executor(execution_request)
+                # 执行期间把 turn id 绑到 ContextVar:agent_restart 工具靠它自证
+                # "我就是当前这个 turn"(照 Reference looping/core.py:675)。
+                turn_token = current_turn_id.set(turn_id)
+                try:
+                    execution = await self._executor(execution_request)
+                finally:
+                    current_turn_id.reset(turn_token)
                 if open_item_ids:
                     raise RuntimeError(
                         f"executor 返回时仍有未闭合 item: {sorted(open_item_ids)}"
@@ -335,6 +351,11 @@ class ConversationRuntime:
             # 3. terminal 是唯一结束通知；结果 future 与 active owner 一起收束。
             future = self._results[turn_id]
             if terminal is not None:
+                if self._restart_coordinator is not None:
+                    self._restart_coordinator.mark_turn_terminal(
+                        turn_id,
+                        terminal.status.value,
+                    )
                 event = TurnEvent.create("turn/completed", request.thread_id, turn_id, turn=terminal.to_dict())
                 self._publish(event)
                 if not future.done():
@@ -411,6 +432,38 @@ class ConversationRuntime:
 
     def is_thread_active(self, thread_id: str) -> bool:
         return thread_id in self._active_by_thread
+
+    def quiesce_for_restart(self, caller_turn_id: str) -> None:
+        """仅在 caller 是唯一 turn 时冻结新的 turn 准入。"""
+
+        # 1. caller 必须是当前 runtime 唯一已经持久化的 turn。
+        active_turns = set(self._tasks)
+        if caller_turn_id not in active_turns:
+            raise RuntimeClosedError(f"restart caller turn 不在当前 runtime: {caller_turn_id}")
+        others = active_turns - {caller_turn_id}
+        if others:
+            raise RuntimeClosedError(
+                f"仍有其他 turn 等待或执行，拒绝重启: {sorted(others)}"
+            )
+        if not self._accepting_turns:
+            if self._restart_owner_turn_id == caller_turn_id:
+                return
+            raise RuntimeClosedError("conversation runtime 已在排空")
+
+        # 2. 不获取全局 admission，避免 caller 在工具执行中自锁。
+        self._accepting_turns = False
+        self._restart_owner_turn_id = caller_turn_id
+
+    def resume_after_restart_cancel(self, caller_turn_id: str) -> None:
+        """只允许原 restart owner 在提交前恢复准入。"""
+
+        if self._restart_owner_turn_id != caller_turn_id:
+            raise RuntimeError(
+                f"restart admission owner 不匹配: {caller_turn_id}"
+            )
+        self._restart_owner_turn_id = None
+        if not self._closed:
+            self._accepting_turns = True
 
     async def wait_thread_available(self, thread_id: str) -> None:
         """等待当前 thread owner 释放，不获取新的 owner。"""

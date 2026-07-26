@@ -120,10 +120,22 @@ def build_control_plane(
     boot_id: str | None = None,
     plugin_drain: Callable[[str], Any] | None = None,
     consolidate: Callable[[str], Any] | None = None,
+    restart_coordinator: Any = None,
 ) -> tuple[ControlStore, ConversationRuntime, ControlService, SocketAppServer]:
     """装配 store → runtime → service → socket 四层并返回,调用方负责 start/stop。"""
     store = ControlStore(Path(workspace) / ".kirakira" / "control.db")
-    runtime = ConversationRuntime(store, build_turn_executor(pipeline))
+    runtime = ConversationRuntime(
+        store,
+        build_turn_executor(pipeline),
+        restart_coordinator=restart_coordinator,
+    )
+    if restart_coordinator is not None:
+        # 照 Reference bootstrap/app.py:runtime 一建好就绑准入,coordinator 冻结/恢复
+        # 的对象就是这个唯一 ConversationRuntime。
+        restart_coordinator.bind_admission(
+            quiesce=runtime.quiesce_for_restart,
+            resume=runtime.resume_after_restart_cancel,
+        )
     service = ControlService(
         runtime,
         sessions,
@@ -134,6 +146,7 @@ def build_control_plane(
         workspace_token=workspace_token,
         boot_id=boot_id,
         ready=lambda: True,
+        restart_coordinator=restart_coordinator,
     )
     resolved = endpoint or (Path(workspace) / ".kirakira" / "control.sock")
     server = SocketAppServer(resolved, service)
