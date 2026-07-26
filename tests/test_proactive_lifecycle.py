@@ -155,5 +155,111 @@ class DriftModuleTests(unittest.TestCase):
         self.assertIn(SLOT_PROPOSAL_DRIFT, DriftModule.produces)
 
 
+class TickGenerationLeaseTests(unittest.TestCase):
+    """tick 期间持有 per-plugin 代际租约:中途换代不抽走本轮能力(NOW 条目 2 验收)。"""
+
+    def _minimal_loop(self, *, generations=None, snapshot_store=None, gateway=None):
+        from kirakira_agent.proactive.loop import ProactiveLoop
+
+        loop = ProactiveLoop.__new__(ProactiveLoop)
+        loop._plugin_generations = generations
+        loop._snapshot_store = snapshot_store
+        loop._mcp_gateway = gateway
+        loop._cfg = type("Cfg", (), {"session_key": "web:u1"})()
+        return loop
+
+    def test_tick_holds_generation_lease_while_modules_run(self) -> None:
+        from kirakira_agent.plugin_generation import (
+            GateResult,
+            PluginContributions,
+            PluginGeneration,
+            PluginGenerationRegistry,
+        )
+
+        async def scenario() -> None:
+            registry = PluginGenerationRegistry()
+            gen = PluginGeneration(
+                plugin_id="p1",
+                generation_id="g1",
+                module_path="x",
+                source_revision="s",
+                config_revision="c",
+                instance=object(),
+                contributions=PluginContributions(),
+                gate_result=GateResult(
+                    plugin_id="p1", candidate_revision="r", status="passed"
+                ),
+            )
+            registry.publish(gen)
+            observed: dict = {}
+
+            class _Probe:
+                slot = "probe.only"
+
+                async def run(self, frame):
+                    # 模块执行期间,当前代际必须持有租约
+                    observed["lease_count"] = gen.lease_count
+                    # 模拟 tick 中途换代:旧代际转 retired,但不能被销毁
+                    registry.retire("p1")
+                    observed["can_quiesce_mid_tick"] = gen.can_quiesce
+                    return frame
+
+            loop = self._minimal_loop(generations=registry)
+            loop._modules = [_Probe()]
+            await loop._tick()
+
+            self.assertEqual(observed["lease_count"], 1)
+            self.assertFalse(observed["can_quiesce_mid_tick"])
+            # tick 结束租约释放,退休代际此时才可 quiesce
+            self.assertTrue(gen.can_quiesce)
+
+        asyncio.run(scenario())
+
+    def test_tick_pins_snapshot_on_gateway_and_unpins_after(self) -> None:
+        from kirakira_agent.snapshot import RuntimeSnapshot, RuntimeSnapshotStore
+
+        async def scenario() -> None:
+            store = RuntimeSnapshotStore()
+            snapshot = RuntimeSnapshot(snapshot_id="snap1")
+            transaction = store.publish(snapshot)
+            await store.commit(transaction)
+
+            pins: list = []
+
+            class _Gateway:
+                def pin_snapshot(self, value):
+                    pins.append(value)
+
+            class _Probe:
+                slot = "probe.only"
+
+                async def run(self, frame):
+                    return frame
+
+            loop = self._minimal_loop(snapshot_store=store, gateway=_Gateway())
+            loop._modules = [_Probe()]
+            await loop._tick()
+
+            # tick 开始钉住租到的快照,结束清除;租约已释放(lease_count 归零)
+            self.assertEqual(pins, [snapshot, None])
+            self.assertEqual(snapshot.lease_count, 0)
+
+        asyncio.run(scenario())
+
+    def test_assembly_error_fails_loud_at_add_time_not_in_tick(self) -> None:
+        loop = self._minimal_loop()
+        loop._modules = topo_sort_modules(build_default_proactive_modules(loop))
+
+        class _Duplicate(_LoopModule):
+            slot = "proactive.gate"  # 与内置 gate 撞 slot
+
+        with self.assertRaises(RuntimeError):
+            from kirakira_agent.proactive.loop import ProactiveLoop
+
+            ProactiveLoop.add_modules(loop, [_Duplicate(None)])
+        # 坏声明只影响它自己的注册操作,已编译流水线保持原样
+        self.assertEqual(len(loop._modules), 7)
+
+
 if __name__ == "__main__":
     unittest.main()

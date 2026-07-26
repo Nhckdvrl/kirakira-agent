@@ -11,6 +11,7 @@ import asyncio
 import hashlib
 import logging
 import random
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional
@@ -77,6 +78,9 @@ class ProactiveLoop:
         passive_busy_fn: Callable[[str], bool] | None = None,
         rng: random.Random | None = None,
         memory_services: Any = None,
+        plugin_generations: Any = None,
+        snapshot_store: Any = None,
+        mcp_gateway: Any = None,
     ) -> None:
         self._cfg = config
         self._bus = bus
@@ -97,8 +101,16 @@ class ProactiveLoop:
         self._running = False
         self._wake = asyncio.Event()
         self._workspace = Path(session_manager.workspace)
+        # tick 的两份代际租约(与被动 turn 同一对保证,见 runtime.AgentLoop.run):
+        # per-plugin 代际防模块/源在 tick 中途被 quiesce,snapshot 租约固定本轮 MCP 工具代际。
+        self._plugin_generations = plugin_generations
+        self._snapshot_store = snapshot_store
+        self._mcp_gateway = mcp_gateway
         # 主动链路是模块流水线;默认模块覆盖原有 tick 的每一步。
-        self._modules: List[object] = build_default_proactive_modules(self)
+        # 照 Reference ProactiveKernel:装配期编译一次(排序失败 fail loud),不在每 tick 重排。
+        self._modules: List[object] = topo_sort_modules(
+            build_default_proactive_modules(self)
+        )
 
     # ── 生命周期 ──────────────────────────────────────────────────
 
@@ -190,27 +202,55 @@ class ProactiveLoop:
 
     # ── tick 主链路 ──────────────────────────────────────────────
 
+    @contextmanager
+    def _plugin_generation_lease(self):
+        """未接插件代际注册表时是空操作,便于测试与最小构造(同被动侧)。"""
+        registry = self._plugin_generations
+        if registry is None:
+            yield ()
+            return
+        with registry.lease_active() as leased:
+            yield leased
+
     async def _tick(self) -> None:
         """跑一遍模块流水线。
 
-        顺序由各模块的 `requires` 依赖图决定(`phase.topo_sort_modules`),不是这里的行序;
-        提前结束由 `frame.terminal` 表达,而不是 return——因此插件可以声明依赖后插进中间,
+        模块顺序在装配期已按 `requires` 依赖图编译好(不是注册行序);提前结束由
+        `frame.terminal` 表达,而不是 return——因此插件可以声明依赖后插进中间,
         不必改这个函数。
+
+        整个 tick 持有 per-plugin 代际租约与 runtime snapshot 租约:tick 进行中发生
+        插件换代/热重载,本轮仍用开始时的模块集合与工具代际跑完,新代际下一轮生效。
         """
+        modules = list(self._modules)
+        with self._plugin_generation_lease():
+            store = self._snapshot_store
+            if store is None or store.current is None:
+                await self._run_modules(modules)
+                return
+            lease = store.lease()
+            if self._mcp_gateway is not None:
+                self._mcp_gateway.pin_snapshot(lease.snapshot)
+            try:
+                await self._run_modules(modules)
+            finally:
+                if self._mcp_gateway is not None:
+                    self._mcp_gateway.pin_snapshot(None)
+                await lease.release()
+
+    async def _run_modules(self, modules: List[object]) -> None:
         frame = new_proactive_frame(self._cfg.session_key)
-        try:
-            modules = topo_sort_modules(self._modules)
-        except RuntimeError as error:
-            # 模块声明成环/重复是装配错误,大声报出来但保持注册顺序,不把主动链路打挂。
-            logger.error("[proactive] 模块依赖排序失败: %s", error)
-            modules = list(self._modules)
         for module in modules:
             frame = await module.run(frame)
-        return None
 
     def add_modules(self, modules: List[object]) -> None:
-        """插件把自己的模块插进主动链路;顺序仍由 requires 决定。"""
-        self._modules.extend(modules)
+        """插件把自己的模块插进主动链路;顺序仍由 requires 决定。
+
+        装配错误(slot 重复/成环)在这里 fail loud——坏声明只影响它自己的注册操作,
+        已编译的流水线保持原样继续服务。
+        """
+        candidate = list(self._modules) + list(modules)
+        self._modules = topo_sort_modules(candidate)
 
     async def _push_alert(
         self,
