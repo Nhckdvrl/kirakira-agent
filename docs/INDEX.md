@@ -10,6 +10,7 @@
 | **现状** | 现在是什么形态、还差什么 | `MVP_TO_CURRENT.md`、`NOW.md`、各子系统专题 |
 | **历程** | 为什么长成这样、每一步解决了什么问题 | `VERSION_EVOLUTION.md` |
 | **方法** | 这些经历提炼出的可迁移判断 | `ENGINEERING_METHOD.md` |
+| **覆盖面** | Reference 有什么、我们有没有、差多少 | `ALIGNMENT.md` |
 | **判断** | 与 Reference 差在哪、哪些是有意取舍 | `DIFFERENCE_AUDIT.md` |
 | **依据** | 某个选择的理由、某次重构的调用链与验收 | `decisions/`、`design/` |
 
@@ -24,7 +25,8 @@
 | 了解被动链路每一轮工程化解决了什么问题 | [VERSION_EVOLUTION.md](./VERSION_EVOLUTION.md) |
 | **学怎么判断"该重构还是该加功能"** | [ENGINEERING_METHOD.md](./ENGINEERING_METHOD.md) |
 | 想知道复杂系统会怎么腐坏、怎么更早发现 | [ENGINEERING_METHOD.md §4](./ENGINEERING_METHOD.md) |
-| 查与 Reference(Akashic)的差距与定位 | [DIFFERENCE_AUDIT.md](./DIFFERENCE_AUDIT.md) |
+| **逐模块核对覆盖面、找完整缺口清单** | [ALIGNMENT.md](./ALIGNMENT.md) |
+| 查与 Reference(Akashic)的差距与取舍理由 | [DIFFERENCE_AUDIT.md](./DIFFERENCE_AUDIT.md) |
 | **确认某条链路是"测过"还是"真跑过"** | [design/live-verification.md](./design/live-verification.md) |
 | 改记忆:引擎、检索、摄入、embedding | [MEMORY_SYSTEM.md](./MEMORY_SYSTEM.md) |
 | 改插件:声明、代际、热重载、安装 | [PLUGIN_SYSTEM.md](./PLUGIN_SYSTEM.md) |
@@ -41,9 +43,10 @@
 
 1. [MVP_TO_CURRENT.md](./MVP_TO_CURRENT.md) —— 当前整体形态(第 3 节有一张全景图)与四个地基的状态。
 2. [design/live-verification.md](./design/live-verification.md) —— 哪些是真跑过的,哪些只是测过。
-3. [NOW.md](./NOW.md) —— 还没做完的是什么、接手点与验收边界在哪。
-4. 按你要动的子系统读对应专题文档。
-5. 动手前查 [decisions/](./decisions/) 与 [design/](./design/) 有没有相关约束。
+3. [ALIGNMENT.md](./ALIGNMENT.md) —— 逐模块覆盖面与完整缺口清单(按影响分 P0–P3)。
+4. [NOW.md](./NOW.md) —— 还没做完的是什么、接手点与验收边界在哪。
+5. 按你要动的子系统读对应专题文档。
+6. 动手前查 [decisions/](./decisions/) 与 [design/](./design/) 有没有相关约束。
 
 ### 如果你是来学"怎么构建复杂系统"的
 

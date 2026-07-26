@@ -5,6 +5,9 @@
 > 其中哪些另有真实模型与真实渠道的证据,见 [design/live-verification.md](./design/live-verification.md)。被动链路的工程演进见
 > [VERSION_EVOLUTION.md](./VERSION_EVOLUTION.md)，主动链路自身的结构见
 > [PROACTIVE_ARCHITECTURE.md](./PROACTIVE_ARCHITECTURE.md)。
+>
+> **分工**:逐模块的覆盖面与完整缺口清单在 [ALIGNMENT.md](./ALIGNMENT.md);本文只写
+> **为什么这样取舍**与对外表述边界,不重复维护清单。
 
 ## 1. 结论先行
 
