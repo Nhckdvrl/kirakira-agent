@@ -217,13 +217,54 @@ class SchedulerService:
             return
         try:
             payload = json.loads(self.path.read_text(encoding="utf-8"))
-            jobs = payload.get("jobs", []) if isinstance(payload, dict) else []
-            for item in jobs:
-                if isinstance(item, dict) and item.get("id"):
-                    job = ScheduledMessage(**item)
-                    self._jobs[job.id] = job
-        except (OSError, ValueError, TypeError):
-            self._jobs = {}
+        except (OSError, ValueError):
+            return
+        jobs = payload.get("jobs", []) if isinstance(payload, dict) else []
+        changed = False
+        for item in jobs:
+            # 单行损坏只跳过该行;整份文件丢弃会把所有用户任务清零。
+            if not isinstance(item, dict) or not item.get("id"):
+                continue
+            try:
+                job = ScheduledMessage(**item)
+            except TypeError:
+                continue
+            if self._recover_job(job):
+                changed = True
+            self._jobs[job.id] = job
+        if changed:
+            self._save()
+
+    _MISFIRE_GRACE_SECONDS = 300
+
+    def _recover_job(self, job: ScheduledMessage) -> bool:
+        """启动时的 misfire 恢复(照 Reference scheduler.load_and_recover)。
+
+        重复任务把 run_at 推进到未来(保持相位);一次性任务过期超过宽限期则标记
+        missed 而不补发——离线一天后重启,不能把积压的定时消息一次性轰给用户。
+        """
+        if job.status != "pending":
+            return False
+        try:
+            run_at = datetime.fromisoformat(job.run_at)
+        except ValueError:
+            job.status = "failed"
+            job.last_error = "invalid run_at"
+            return True
+        now = datetime.now().astimezone()
+        if run_at > now:
+            return False
+        if job.interval_seconds > 0 and job.remaining_runs > 0:
+            next_time = run_at
+            while next_time <= now:
+                next_time += timedelta(seconds=job.interval_seconds)
+            job.run_at = next_time.isoformat()
+            return True
+        if (now - run_at).total_seconds() > self._MISFIRE_GRACE_SECONDS:
+            job.status = "missed"
+            job.last_error = "missed while runtime was offline"
+            return True
+        return False
 
     def _save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)

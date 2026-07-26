@@ -155,7 +155,11 @@ async def commit_turn_result(
     outcome = TurnCommitOutcome(dispatched=False)
     await _run_side_effects(result.side_effects, outcome)
 
-    if result.decision == "skip" or result.outbound is None:
+    if result.decision == "skip":
+        # skip 不是失败:没有尝试投递,不跑 failure 回滚(照 Reference turns/orchestrator.py)。
+        return outcome
+    if result.outbound is None:
+        # decision=reply 却没有产物,是调用方缺陷;按投递失败处理,让回滚副作用清理预置状态。
         await _run_side_effects(result.failure_side_effects, outcome)
         return outcome
 

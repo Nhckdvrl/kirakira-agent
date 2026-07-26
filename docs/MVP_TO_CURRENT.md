@@ -21,8 +21,12 @@
 完整离线回归:
 
 ```text
-454 passed, 4 subtests passed
+477 passed, 4 subtests passed
 ```
+
+2026-07-26 新增:agent_restart 换代链路、主动 tick 双代际租约、`tool_choice`
+(Drift 强制收尾)、scheduler misfire 恢复、记忆工具面对齐(tool_profile 驱动 +
+`§cited:` 引用协议)、MCP 工具结果 100k 钳制。
 
 离线回归之外的**真实模型/真实渠道**验证结果单独记在
 [design/live-verification.md](./design/live-verification.md):哪些链路真跑过、哪些只是测过。
@@ -152,9 +156,11 @@ Kirakira ≈3.4 万行,Reference ≈10.5 万行(产品代码)。差距的核心�
 | 加法(依赖地基,可增量) | 状态 |
 | --- | --- |
 | control plane | **已完成**(JSON-RPC over NDJSON,见 [design/control-plane.md](./design/control-plane.md));app server / 前端未做 |
+| **agent_restart 换代** | **已完成**(准入冻结 + 双条件提交 + supervisor 握手,见 [design/agent-restart.md](./design/agent-restart.md));真实换代待实弹 |
+| **主动 tick 代际租约** | **已完成**(plugin generation + snapshot 双租约,gateway 快照钉定) |
 | 前端 Dashboard | 无(仅 Memory 管理 API) |
 | peer-agent 进程管理 | 无 |
-| 插件/MCP 主动源 | **已接线**(插件声明→编译→SourceRegistry);真实 MCP 端到端验证见 NOW.md 第 4 项 |
+| 插件/MCP 主动源 | **已接线**(插件声明→编译→SourceRegistry);真实 MCP 端到端验证见 NOW.md 1.4 |
 | 跨崩溃投递去重 | **已完成**(deliveries 表,见 [decisions/0004](./decisions/0004-delivery-dedup.md));多目标调度未做 |
 | 插件安装/升级/卸载免重启 | **已完成**;包元数据与非 git 源未做 |
 
@@ -182,9 +188,9 @@ Drift:现在是流水线上的 `proactive.drift` 模块。触发由 **hazard 采
 
 未完成事项、接手点与验收边界统一维护在 [NOW.md](./NOW.md),本文不重复列举。
 
-摘要:主动链路模块的服务化、主动 tick 的代际租约、Phase 模块 frame 签名、
-插件源真实端到端验证;以及未排期的 QQ 逐字节对齐、插件包元数据、
-control plane / 前端 / peer-agent / eval、主动多目标调度。
+摘要(2026-07-26):功能侧——agent_restart 真实换代实弹、渠道 turn 发起重启、
+tool_choice 真实模型顺从度、插件源端到端、主动限流/审计厚度;结构侧(按用户指示推迟)——
+主动服务化、PhaseFrame 迁移、QQ 逐字节对齐、前端 / peer-agent / eval。
 
 ## 8. 文档导航
 

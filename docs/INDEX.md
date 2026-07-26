@@ -69,8 +69,9 @@
 
 | 文档 | 主题 |
 | --- | --- |
-| [proactive-lifecycle.md](./design/proactive-lifecycle.md) | 主动链路从扁平 tick 重构成模块流水线 |
+| [proactive-lifecycle.md](./design/proactive-lifecycle.md) | 主动链路从扁平 tick 重构成模块流水线(含 tick 双租约) |
 | [control-plane.md](./design/control-plane.md) | 控制面分层、turn 状态机、事件流与认证 |
+| [agent-restart.md](./design/agent-restart.md) | Agent 自请求换代:准入冻结、双条件提交、supervisor 握手 |
 | [live-verification.md](./design/live-verification.md) | 实弹验证记录与仍未验证的边界 |
 
 ## 历史记录

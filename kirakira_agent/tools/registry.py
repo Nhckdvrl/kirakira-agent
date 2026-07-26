@@ -11,6 +11,21 @@ from kirakira_agent.schema import JsonDict, ToolCall, ToolResult, ToolSpec
 
 ToolHandler = Callable[..., Any]
 
+# 单条工具结果进上下文前的硬上限(照 Reference agent/looping/constants.py)。
+# 各 handler 自己的 truncate 只覆盖内置工具;MCP 远端与插件工具的返回值走不到那里,
+# 必须在唯一出口(执行器)钳制,否则一个大响应就能撑爆当轮上下文。
+_MAX_TOOL_RESULT_CHARS = 100_000
+
+
+def _clamp_result_text(text: str) -> str:
+    if len(text) <= _MAX_TOOL_RESULT_CHARS:
+        return text
+    original_len = len(text)
+    return text[:_MAX_TOOL_RESULT_CHARS] + (
+        "\n...[结果已截断，原始长度 %d 字符，超出上限 %d]"
+        % (original_len, _MAX_TOOL_RESULT_CHARS)
+    )
+
 
 @dataclass
 class Tool:
@@ -105,11 +120,11 @@ class ToolRegistry:
             if isinstance(output, ToolResult):
                 return ToolResult(
                     call.id,
-                    output.content,
+                    _clamp_result_text(output.content),
                     output.is_error,
                     mobile_attention=output.mobile_attention,
                 )
-            text = str(output)
+            text = _clamp_result_text(str(output))
             return ToolResult(call.id, text, is_error=_looks_like_error(text))
         except Exception as exc:
             return ToolResult(call.id, "Error: %s" % exc, is_error=True)
@@ -131,11 +146,11 @@ class ToolRegistry:
             if isinstance(output, ToolResult):
                 return ToolResult(
                     call.id,
-                    output.content,
+                    _clamp_result_text(output.content),
                     output.is_error,
                     mobile_attention=output.mobile_attention,
                 )
-            text = str(output)
+            text = _clamp_result_text(str(output))
             return ToolResult(call.id, text, is_error=_looks_like_error(text))
         except Exception as exc:
             return ToolResult(call.id, "Error: %s" % exc, is_error=True)

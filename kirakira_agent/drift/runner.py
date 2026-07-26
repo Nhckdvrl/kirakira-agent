@@ -248,9 +248,18 @@ class DriftRunner:
                 system=skill.body,
                 max_tokens=self._max_tokens,
             )
+            # 照 Reference drift 主循环(plugins/drift_flow/runtime.py):每步必须调工具,
+            # 预算最后一步具名强制 finish_drift,finish 执行后立即收束——收尾由服务端
+            # tool_choice 保证,不再只靠 briefing 里的一句提示。
             agent.run(
                 [{"role": "user", "content": briefing}],
                 max_rounds=self._cfg.max_steps,
+                tool_choice="required",
+                final_tool_choice={
+                    "type": "function",
+                    "function": {"name": "finish_drift"},
+                },
+                stop_tools={"finish_drift"},
             )
         finally:
             registry.reset_context(token)

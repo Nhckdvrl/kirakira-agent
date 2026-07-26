@@ -32,11 +32,16 @@ from kirakira_agent.plugins import PluginManager
 from kirakira_agent.plugin_watcher import PluginWatcher
 from kirakira_agent.proactive import ProactiveLoop
 from kirakira_agent.proactive.config import ProactiveConfig
-from kirakira_agent.proactive.mcp_sources import compile_proactive_sources
+from kirakira_agent.proactive.mcp_sources import (
+    ToolRegistryMcpGateway,
+    compile_proactive_sources,
+)
 from kirakira_agent.proactive.sources import build_file_inbox_registry
 from kirakira_agent.proactive.state import ProactiveStateStore
 from kirakira_agent.drift import DriftRunner
 from kirakira_agent.control.binding import build_control_plane
+from kirakira_agent.restart import RestartCoordinator, SupervisorCommitChannel
+from kirakira_agent.supervisor import RESTART_EXIT_CODE
 from kirakira_agent.runtime import (
     AgentLoop,
     CoreRuntime,
@@ -262,10 +267,64 @@ def _build_channel_host(
     return host if added else None
 
 
+def register_agent_restart_tool(registry: Any, coordinator: Any) -> None:
+    """注册 agent_restart(照 Reference agent/tools/agent_restart.py)。
+
+    只在 supervisor 托管时注册;deferred 对应 Reference 的 requires_turn_search 边界
+    (模型必须先 tool_search 发现它,不进默认工具面)。turn 上下文取自 ContextVar 与
+    registry context;非控制面 turn 没有 current_turn_id,arm 会明确拒绝而不是挂起。
+    """
+    import json as _json
+
+    from kirakira_agent.control.context import current_turn_id
+    from kirakira_agent.schema import ToolSpec
+    from kirakira_agent.tools.registry import object_schema
+
+    async def agent_restart(reason: str) -> str:
+        ctx = registry.context
+        request = coordinator.arm(
+            turn_id=current_turn_id.get(),
+            session_key=str(ctx.get("session_key") or ""),
+            channel=str(ctx.get("channel") or ""),
+            chat_id=str(ctx.get("chat_id") or ""),
+            reason=reason,
+        )
+        return _json.dumps(
+            {
+                "status": "scheduled",
+                "requestId": request.id,
+                "message": "将在本轮回复持久化并送达后重启。",
+            },
+            ensure_ascii=False,
+        )
+
+    registry.register(
+        ToolSpec(
+            "agent_restart",
+            "安全重启当前 Kirakira Agent。仅在核心代码或主配置必须重新加载时使用；"
+            "MCP 与插件可热重载时不要调用。执行后会等待本轮回复持久化并送达。",
+            object_schema(
+                {
+                    "reason": {
+                        "type": "string",
+                        "description": "需要完整重启 Agent 的具体原因",
+                        "minLength": 1,
+                        "maxLength": 300,
+                    }
+                },
+                ["reason"],
+            ),
+        ),
+        agent_restart,
+        deferred=True,
+    )
+
+
 def _build_source_registry(
     workdir: Path,
     plugin_sources: Any = None,
     tool_registry: Any = None,
+    gateway: Any = None,
 ):
     """内置文件源 + 插件声明编译出的 MCP 源。
 
@@ -273,7 +332,9 @@ def _build_source_registry(
     这是主动链路可扩展的接线点。单个源注册失败不阻断其余源与整条链路。
     """
     registry = build_file_inbox_registry(workdir)
-    for source in compile_proactive_sources(list(plugin_sources or []), tool_registry):
+    for source in compile_proactive_sources(
+        list(plugin_sources or []), tool_registry, gateway=gateway
+    ):
         try:
             registry.add(source)
         except ValueError as error:
@@ -296,6 +357,8 @@ def _build_proactive(
     memory_services: Any = None,
     plugin_sources: Any = None,
     tool_registry: Any = None,
+    plugin_generations: Any = None,
+    snapshot_store: Any = None,
 ) -> tuple[ProactiveLoop | None, DriftRunner | None]:
     """按配置装配主动推送链路与 Drift 链路；未启用则返回 (None, None)。"""
     cfg = ProactiveConfig.from_app_config(app_config, default_model=default_model)
@@ -307,6 +370,11 @@ def _build_proactive(
         )
         return None, None
 
+    # 长期档案读取绑定 coremem 的 markdown store。Reference 里 Drift/主动读的
+    # 就是 MEMORY.md(MemoryProfileApi),不是引擎;这里同口径,不再经过旧 MemoryRuntime。
+    markdown_runtime = getattr(memory_services, "markdown", None)
+    long_term_source = getattr(markdown_runtime, "store", None) or memory
+
     drift_runner: DriftRunner | None = None
     drift_hook = None
     if cfg.drift.enabled:
@@ -317,23 +385,31 @@ def _build_proactive(
             session_manager=session_manager,
             model_client=client,
             model=cfg.model,
-            memory=memory,
+            memory=long_term_source,
             target_channel=cfg.channel,
             target_chat_id=cfg.chat_id,
         )
         drift_hook = drift_runner.maybe_run
 
+    # 所有插件源共用一个 gateway;tick 开始时 loop 把租到的快照钉在上面,
+    # 本轮 fetch/ack 用同一代 MCP 工具视图。
+    mcp_gateway = ToolRegistryMcpGateway(tool_registry)
     loop = ProactiveLoop(
         config=cfg,
         bus=bus,
         session_manager=session_manager,
         model_client=client,
-        sources=_build_source_registry(workdir, plugin_sources, tool_registry),
+        sources=_build_source_registry(
+            workdir, plugin_sources, tool_registry, gateway=mcp_gateway
+        ),
         state=ProactiveStateStore(workdir / "proactive.db"),
-        memory=memory,
+        memory=long_term_source,
         drift_hook=drift_hook,
         passive_busy_fn=passive_busy_fn,
         memory_services=memory_services,
+        plugin_generations=plugin_generations,
+        snapshot_store=snapshot_store,
+        mcp_gateway=mcp_gateway,
     )
     return loop, drift_runner
 
@@ -633,6 +709,9 @@ async def build_runtime(
         memory_services=memory_services,
         plugin_sources=plugin_manager.proactive_sources,
         tool_registry=registry,
+        # tick 与被动 turn 同一对租约保证:换代不抽走在途能力。
+        plugin_generations=plugin_manager.generations,
+        snapshot_store=snapshot_store,
     )
     if proactive_loop is not None:
         available_channels = {
@@ -667,6 +746,19 @@ async def build_runtime(
             await session_manager.save_async(session)
         return changed
 
+    # supervisor 托管时装配重启协调器:supervisor(Reference 原文)早已在等私有管道上
+    # 唯一一帧 restart_commit + 退出码 75,这里补进程内的另一半。非托管运行为 None,
+    # agent_restart 不注册,准入永远开放。声明 supervised 却缺 fd 是环境契约被破坏,
+    # from_environment 直接抛错(fail loud),不静默降级。
+    restart_coordinator = None
+    commit_channel = SupervisorCommitChannel.from_environment()
+    if commit_channel is not None:
+        restart_coordinator = RestartCoordinator(
+            commit_channel.boot_id,
+            supervised=True,
+            commit=commit_channel.commit,
+        )
+
     # 控制面:workspace 私有 Unix socket 上的 JSON-RPC,让外部程序观测/驱动 agent。
     control_store, control_runtime, control_service, control_server = (
         build_control_plane(
@@ -675,10 +767,14 @@ async def build_runtime(
             sessions=session_manager,
             endpoint=os.getenv("KIRAKIRA_CONTROL_ENDPOINT", "").strip() or None,
             workspace_token=os.getenv("KIRAKIRA_CONTROL_TOKEN", "").strip() or None,
+            boot_id=commit_channel.boot_id if commit_channel is not None else None,
             plugin_drain=plugin_manager.reconcile_disabled_and_drain,
             consolidate=_control_consolidate,
+            restart_coordinator=restart_coordinator,
         )
     )
+    if restart_coordinator is not None:
+        register_agent_restart_tool(registry, restart_coordinator)
     return CoreRuntime(
         bus=bus,
         event_bus=event_bus,
@@ -702,6 +798,7 @@ async def build_runtime(
         control_runtime=control_runtime,
         control_service=control_service,
         control_server=control_server,
+        restart_coordinator=restart_coordinator,
     )
 
 
@@ -758,7 +855,12 @@ async def runtime_repl(
     await runtime_plain_repl(runtime, workdir, session_id=session_id)
 
 
-async def runtime_serve(runtime: CoreRuntime) -> None:
+async def runtime_serve(runtime: CoreRuntime) -> int:
+    """跑后台服务直到停止信号或 agent 自请求重启。
+
+    返回进程退出码:重启提交成立时返回 RESTART_EXIT_CODE(75),supervisor 收到
+    75 + 私有管道上的有效 commit 帧才会拉起下一代(照 Reference main.py:serve)。
+    """
     tasks = await runtime.start_background()
     readiness = None
     boot_id = (
@@ -783,17 +885,39 @@ async def runtime_serve(runtime: CoreRuntime) -> None:
             registered_signals.append(watched)
         except (NotImplementedError, RuntimeError):
             pass
+    restart_requested = False
+    stop_task = asyncio.create_task(stop_event.wait(), name="shutdown_signal")
+    restart_task = (
+        asyncio.create_task(
+            runtime.restart_coordinator.wait_committed(),
+            name="restart_committed",
+        )
+        if runtime.restart_coordinator is not None
+        else None
+    )
     try:
         print("kirakira-agent server running. Ctrl+C to stop.")
-        await stop_event.wait()
+        watched_tasks = {stop_task}
+        if restart_task is not None:
+            watched_tasks.add(restart_task)
+        done, _ = await asyncio.wait(
+            watched_tasks, return_when=asyncio.FIRST_COMPLETED
+        )
+        if restart_task is not None and restart_task in done:
+            await restart_task
+            restart_requested = True
     except (KeyboardInterrupt, asyncio.CancelledError):
         pass
     finally:
+        for pending_task in (stop_task, restart_task):
+            if pending_task is not None and not pending_task.done():
+                pending_task.cancel()
         for watched in registered_signals:
             loop.remove_signal_handler(watched)
         if readiness is not None:
             readiness.clear()
         await runtime.stop_background(tasks)
+    return RESTART_EXIT_CODE if restart_requested else 0
 
 
 def resolve_workspace(
@@ -820,7 +944,7 @@ def resolve_workspace(
     return default
 
 
-async def _main_async(args: argparse.Namespace, workdir: Path) -> None:
+async def _main_async(args: argparse.Namespace, workdir: Path) -> int:
     runtime = await build_runtime(
         workdir,
         enable_web=args.web,
@@ -832,7 +956,7 @@ async def _main_async(args: argparse.Namespace, workdir: Path) -> None:
     if getattr(args, "proactive", False):
         await _run_proactive_once(runtime)
     elif args.serve or args.web or args.telegram or args.qq or args.qqbot:
-        await runtime_serve(runtime)
+        return await runtime_serve(runtime)
     else:
         mode = choose_cli_mode(force_tui=args.tui, force_plain=args.plain)
         if mode == "tui":
@@ -851,6 +975,7 @@ async def _main_async(args: argparse.Namespace, workdir: Path) -> None:
                 await runtime_tui(runtime, workdir, session_id=args.session)
         else:
             await runtime_repl(runtime, workdir, session_id=args.session)
+    return 0
 
 
 async def _run_proactive_once(runtime: CoreRuntime) -> None:
@@ -1006,4 +1131,7 @@ def main(argv: list[str] | None = None) -> None:
             parser.exit(2, "memory %s failed: %s\n" % (args.memory_action, exc))
         print(_json.dumps(result, ensure_ascii=False, indent=2))
         return
-    asyncio.run(_main_async(args, workdir))
+    exit_code = asyncio.run(_main_async(args, workdir))
+    if exit_code:
+        # 重启换代(75)必须作为进程退出码传给 supervisor;正常退出保持 return 语义。
+        sys.exit(exit_code)

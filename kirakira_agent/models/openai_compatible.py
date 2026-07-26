@@ -48,8 +48,11 @@ class OpenAICompatibleClient:
         system: str,
         model: str,
         max_tokens: int,
+        tool_choice: Any = "auto",
     ) -> ModelResponse:
-        payload = self._build_payload(messages, tools, system, model, max_tokens)
+        payload = self._build_payload(
+            messages, tools, system, model, max_tokens, tool_choice=tool_choice
+        )
         with self._open(payload) as resp:
             body = resp.read().decode("utf-8")
 
@@ -63,8 +66,11 @@ class OpenAICompatibleClient:
         model: str,
         max_tokens: int,
         on_delta: Optional[Callable[[str, str], None]] = None,
+        tool_choice: Any = "auto",
     ) -> ModelResponse:
-        payload = self._build_payload(messages, tools, system, model, max_tokens)
+        payload = self._build_payload(
+            messages, tools, system, model, max_tokens, tool_choice=tool_choice
+        )
         payload["stream"] = True
         state = self._new_stream_state()
         with self._open(payload) as response:
@@ -167,10 +173,13 @@ class OpenAICompatibleClient:
         model: str,
         max_tokens: int,
         on_delta: Optional[Callable[[str, str], None]] = None,
+        tool_choice: Any = "auto",
     ) -> ModelResponse:
         import httpx
 
-        payload = self._build_payload(messages, tools, system, model, max_tokens)
+        payload = self._build_payload(
+            messages, tools, system, model, max_tokens, tool_choice=tool_choice
+        )
         payload["stream"] = True
         url = self._chat_completions_url()
         headers = self._headers()
@@ -202,8 +211,11 @@ class OpenAICompatibleClient:
         system: str,
         model: str,
         max_tokens: int,
+        tool_choice: Any = "auto",
     ) -> ModelResponse:
-        payload = self._build_payload(messages, tools, system, model, max_tokens)
+        payload = self._build_payload(
+            messages, tools, system, model, max_tokens, tool_choice=tool_choice
+        )
         body = await self._arequest(payload)
         return self.parse_response(json.loads(body))
 
@@ -325,6 +337,7 @@ class OpenAICompatibleClient:
         system: str,
         model: str,
         max_tokens: int,
+        tool_choice: Any = "auto",
     ) -> Dict[str, Any]:
         self._enforce_context_budget(messages, tools, system, max_tokens)
         payload: Dict[str, Any] = {
@@ -337,7 +350,10 @@ class OpenAICompatibleClient:
             payload["thinking"] = thinking
         if tools:
             payload["tools"] = [self._to_openai_tool(tool) for tool in tools]
-            payload["tool_choice"] = "auto"
+            # 照 Reference provider.chat:调用方可要求 "required" 或具名强制
+            # {"type":"function","function":{"name":...}} —— Drift 收尾与主动判定
+            # 靠它拿到服务端保证的工具调用,而不是靠 prompt 约束。
+            payload["tool_choice"] = tool_choice if tool_choice is not None else "auto"
         return payload
 
     def _enforce_context_budget(

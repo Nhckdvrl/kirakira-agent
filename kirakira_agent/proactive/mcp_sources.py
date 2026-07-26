@@ -36,10 +36,28 @@ class McpGateway(Protocol):
 
 
 class ToolRegistryMcpGateway:
-    """通过 ToolRegistry 调用 MCP 工具。工具不在当前代际时直接失败,不静默降级。"""
+    """通过 ToolRegistry 调用 MCP 工具。工具不在当前代际时直接失败,不静默降级。
+
+    MCP 工具只挂在 runtime snapshot 上,不进基础注册表。tick 开始时 loop 把租到的
+    快照钉在这里(`pin_snapshot`),本轮所有 source 的 fetch/ack 都用这一代工具视图——
+    这是"tick 期间工具代际固定"的另一半;只拿租约但仍读基础注册表,主动源永远看不到
+    快照工具,也谈不上代际一致。
+    """
 
     def __init__(self, tools: Any) -> None:
         self._tools = tools
+        self._pinned_snapshot: Any = None
+
+    def pin_snapshot(self, snapshot: Any) -> None:
+        """由 ProactiveLoop 在 tick 开始/结束时设置与清除。单事件循环内 tick 串行,无并发。"""
+        self._pinned_snapshot = snapshot
+
+    def _view(self) -> Any:
+        if self._pinned_snapshot is not None:
+            from kirakira_agent.snapshot import SnapshotToolView
+
+            return SnapshotToolView(self._tools, self._pinned_snapshot)
+        return self._tools
 
     async def call(
         self,
@@ -49,11 +67,12 @@ class ToolRegistryMcpGateway:
     ) -> Any:
         if self._tools is None:
             raise RuntimeError("共享 ToolRegistry 不可用")
-        available = set(self._tools.names())
+        tools = self._view()
+        available = set(tools.names())
         registered = tool_name if tool_name in available else "mcp_%s__%s" % (server, tool_name)
         if registered not in available:
             raise RuntimeError("MCP tool 不可用: %s.%s" % (server, tool_name))
-        result = await self._tools.execute_async(
+        result = await tools.execute_async(
             ToolCall(id="proactive-%s" % uuid4().hex[:8], name=registered, arguments=dict(args))
         )
         text = getattr(result, "content", None)
@@ -153,7 +172,12 @@ class McpProactiveSource:
 def compile_proactive_sources(
     registered: Sequence[RegisteredProactiveSource],
     tools: Any,
+    *,
+    gateway: ToolRegistryMcpGateway | None = None,
 ) -> List[McpProactiveSource]:
-    """把插件声明编译成真实 source 列表。"""
-    gateway = ToolRegistryMcpGateway(tools)
-    return [McpProactiveSource(item, gateway) for item in registered]
+    """把插件声明编译成真实 source 列表。
+
+    传入共享 gateway 时全部源复用它——ProactiveLoop 靠这个共享实例做 tick 级快照钉定。
+    """
+    shared = gateway or ToolRegistryMcpGateway(tools)
+    return [McpProactiveSource(item, shared) for item in registered]

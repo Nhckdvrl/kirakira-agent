@@ -3,6 +3,7 @@
 import asyncio
 import base64
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 import gzip
 import ipaddress
 import json
@@ -20,6 +21,7 @@ import zlib
 from pathlib import Path
 from typing import Any, Optional
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from kirakira_agent.bus import MessageBus
 from kirakira_agent.events import OutboundMessage
@@ -224,6 +226,129 @@ def _toolsearch_score(name: str, description: str, keywords: set[str]) -> int:
         if kw in desc_lower:
             score += 2
     return score
+
+
+# ── 记忆工具的渲染与过滤(照 Reference agent/tools/recall_memory.py / forget_memory.py) ──
+
+_MEMORY_LOCAL_TZ = ZoneInfo("Asia/Shanghai")
+_MEMORY_RECENT_PRESETS = {
+    "recent_3d": 3,
+    "recent_7d": 7,
+    "recent_30d": 30,
+}
+
+
+def _normalize_recall_intent(value: str) -> str:
+    intents = {"context", "answer", "timeline", "interest", "procedure"}
+    return value if value in intents else "answer"
+
+
+def _parse_memory_day(value: str) -> datetime | None:
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=_MEMORY_LOCAL_TZ)
+    except ValueError:
+        return None
+
+
+def _parse_time_filter(value: str) -> tuple[datetime, datetime] | None:
+    text = (value or "").strip()
+    if not text:
+        return None
+    now = datetime.now(_MEMORY_LOCAL_TZ)
+    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    if text == "today":
+        return today, today + timedelta(days=1)
+    if text == "yesterday":
+        start = today - timedelta(days=1)
+        return start, today
+    if text in _MEMORY_RECENT_PRESETS:
+        return now - timedelta(days=_MEMORY_RECENT_PRESETS[text]), now
+    if "~" in text:
+        left, right = [part.strip() for part in text.split("~", 1)]
+        start = _parse_memory_day(left)
+        end_day = _parse_memory_day(right)
+        if start is None or end_day is None:
+            return None
+        return start, end_day + timedelta(days=1)
+    day = _parse_memory_day(text)
+    if day is None:
+        return None
+    return day, day + timedelta(days=1)
+
+
+def _render_recall_records(records: list, *, trace: dict) -> str:
+    """带 `§cited:` 引用协议的结构化返回;记忆问责依赖它,不是可选的花样。"""
+    items: list[dict[str, object]] = []
+    for record in records:
+        evidence = [
+            {
+                "kind": ref.kind,
+                "refs": ref.refs,
+                "resolver": ref.resolver,
+                "source_ref": ref.source_ref,
+                "metadata": ref.metadata,
+            }
+            for ref in (record.evidence or [])
+        ]
+        source_ref = ""
+        for entry in evidence:
+            candidate = str(entry.get("source_ref") or "").strip()
+            if candidate:
+                source_ref = candidate
+                break
+            refs = entry.get("refs")
+            if isinstance(refs, list):
+                for ref in refs:
+                    if isinstance(ref, str) and ref.strip():
+                        source_ref = ref.strip()
+                        break
+            if source_ref:
+                break
+        item: dict[str, object] = {
+            "id": record.id,
+            "memory_type": record.kind,
+            "summary": record.summary,
+            "score": round(float(record.score), 4),
+            "evidence": evidence,
+            "signals": record.signals,
+        }
+        if source_ref:
+            item["source_ref"] = source_ref
+        items.append(item)
+    cited_item_ids = [str(item["id"]) for item in items if str(item.get("id", "")).strip()]
+    return json.dumps(
+        {
+            "count": len(items),
+            "items": items,
+            "trace": trace,
+            "citation_required": True,
+            "citation_format": "§cited:[id1,id2,...]§",
+            "cited_item_ids": cited_item_ids,
+            "citation_rule": (
+                "若最终回复使用了本工具返回的任何记忆条目，"
+                "必须在正文末尾输出 §cited:[实际使用的id列表]§"
+            ),
+        },
+        ensure_ascii=False,
+    )
+
+
+def _render_forget_result(
+    requested_ids: list[str],
+    affected_ids: list,
+    missing_ids: list,
+    items: list,
+) -> str:
+    return json.dumps(
+        {
+            "requested_ids": requested_ids,
+            "superseded_ids": list(affected_ids),
+            "missing_ids": list(missing_ids),
+            "count": len(affected_ids),
+            "items": list(items),
+        },
+        ensure_ascii=False,
+    )
 
 
 class WorkspaceTools:
@@ -501,8 +626,41 @@ class WorkspaceTools:
         )
         return response.text or "Error: Vision model returned an empty response"
 
-    def compact(self) -> str:
-        return "Compacting context."
+    async def compact(self) -> str:
+        """把当前会话的历史强制归档进长期记忆,推进 consolidation 游标。
+
+        之前这里是一个只返回固定文案的空壳——模型调用后会以为上下文已压缩。
+        现在接到真实的 MarkdownMemoryMaintenance:游标推进后,下一轮的历史窗口
+        从归档点开始(runtime 以 last_consolidated 为 start_index 切历史)。
+        """
+        maintenance = getattr(
+            getattr(self.memory_services, "markdown", None), "maintenance", None
+        )
+        if maintenance is None or self.session_manager is None or self.registry is None:
+            return "Error: 当前 runtime 未配置记忆归档能力，无法压缩上下文"
+        session_key = str(self.registry.context.get("session_key") or "")
+        if not session_key:
+            return "Error: 当前上下文没有会话，无法压缩"
+        from kirakira_agent.coremem.markdown import ConsolidateRequest
+
+        # 与 pipeline 持有的是同一个缓存实例,游标推进不会被 turn 提交覆盖。
+        session = self.session_manager.get_or_create(session_key)
+        before = int(session.last_consolidated or 0)
+        await maintenance.consolidate(
+            ConsolidateRequest(
+                session=session,
+                force=True,
+                scope_channel=str(session.metadata.get("channel") or ""),
+                scope_chat_id=str(session.metadata.get("chat_id") or ""),
+            )
+        )
+        after = int(session.last_consolidated or 0)
+        if after > before:
+            await self.session_manager.save_async(session)
+            return "已归档 %d 条历史消息到长期记忆；下一轮起上下文从归档点开始。" % (
+                after - before
+            )
+        return "没有需要归档的新历史。"
 
     async def tool_search(self, query: str = "", limit: int = 20) -> str:
         # 必须是 async：只有在 turn 自己的 task 里才能读到本轮锁定的快照，
@@ -896,68 +1054,116 @@ class WorkspaceTools:
             return ""
         return self.session_manager.peek_next_message_id(session_key)
 
-    async def memorize(self, content: str, memory_type: str = "requested_memory") -> str:
+    async def memorize(
+        self,
+        content: str = "",
+        memory_type: str = "",
+        summary: str = "",
+        memory_kind: str = "",
+        tool_requirement: str | None = None,
+        steps=None,
+    ) -> str:
+        """写入长期记忆。
+
+        引擎承重时参数面照 Reference `agent/tools/memorize.py`:`summary`/`memory_kind`,
+        `tool_requirement`/`steps` 进 mutation metadata——procedure 类记忆靠它们生成
+        rule_schema 与触发标签。旧参数名 `content`/`memory_type` 继续接受(回退路径的 schema)。
+        """
+        text = str(summary or content or "").strip()
+        if not text:
+            return "Error: summary 不能为空"
+        kind = str(memory_kind or memory_type or "").strip()
         source_ref = self._next_source_ref()
         engine = self._live_memory_engine()
         if engine is not None:
+            metadata: dict[str, object] = {}
+            if tool_requirement is not None:
+                metadata["tool_requirement"] = str(tool_requirement)
+            if steps is not None:
+                metadata["steps"] = [str(step) for step in steps]
             result = await engine.mutate(
                 MemoryMutation(
                     kind="remember",
-                    summary=content,
-                    memory_kind=memory_type,
+                    summary=text,
+                    memory_kind=kind,
                     source_ref=source_ref or "memorize_tool",
                     scope=self._memory_scope(),
+                    metadata=metadata,
                 )
             )
             if not result.accepted:
                 return "Error: 记忆写入被拒绝"
-            return "记忆已写入: %s (%s)" % (result.item_id, result.actual_kind)
+            # 返回格式照 Reference memorize.py:_format_result。
+            actual_kind = (result.actual_kind or "").strip()
+            status = (result.status or "new").strip()
+            if actual_kind:
+                return "已记住（item_id=%s；kind=%s；status=%s）：%s" % (
+                    result.item_id,
+                    actual_kind,
+                    status,
+                    text,
+                )
+            return "已记住（item_id=%s；status=%s）：%s" % (result.item_id, status, text)
         if self.memory is None:
             return "Error: Memory runtime is not enabled"
         record = self.memory.memorize(
-            content, source_ref=source_ref, memory_type=memory_type
+            text, source_ref=source_ref, memory_type=kind or "requested_memory"
         )
         return "记忆已写入: %s" % record.id
 
     async def recall_memory(
         self,
         query: str,
-        limit: int = 5,
+        limit: int = 8,
+        intent: str = "answer",
+        memory_kind: str = "",
+        time_filter: str = "",
         memory_types=None,
         since: str = "",
         until: str = "",
     ) -> str:
+        """检索长期记忆。
+
+        引擎承重时对齐 Reference `agent/tools/recall_memory.py`:
+        - `intent` answer/timeline(timeline 分支在引擎里真实存在,之前模型永远够不到);
+        - `time_filter` 预设串解析成 filters.time_start/end,非法值明确报错;
+        - limit 钳制 1..200;
+        - 返回带 evidence/source_ref/trace 与 `§cited:` 引用协议的结构。
+        旧参数 `memory_types`/`since`/`until` 只在词法回退路径继续生效。
+        """
+        text = str(query or "").strip()
         if isinstance(memory_types, str):
             memory_types = [memory_types]
-        kinds = tuple(str(item) for item in (memory_types or []))
+        legacy_kinds = tuple(str(item) for item in (memory_types or []))
+        kinds = (memory_kind.strip(),) if str(memory_kind or "").strip() else legacy_kinds
         engine = self._live_memory_engine()
         if engine is not None:
+            if not text:
+                return _render_recall_records([], trace={})
+            time_window = _parse_time_filter(time_filter)
+            if time_filter and time_window is None:
+                return json.dumps(
+                    {"count": 0, "items": [], "error": "invalid_time_filter"},
+                    ensure_ascii=False,
+                )
             result = await engine.query(
                 MemoryQuery(
-                    text=query,
-                    intent="answer",
+                    text=text,
+                    intent=_normalize_recall_intent(intent),
                     scope=self._memory_scope(),
-                    filters=MemoryQueryFilters(kinds=kinds),
-                    limit=max(1, int(limit)),
+                    filters=MemoryQueryFilters(
+                        kinds=kinds,
+                        time_start=time_window[0] if time_window else None,
+                        time_end=time_window[1] if time_window else None,
+                    ),
+                    limit=max(1, min(int(limit), 200)),
                 )
             )
-            return json.dumps(
-                [
-                    {
-                        "id": record.id,
-                        "memory_type": record.kind,
-                        "content": record.summary,
-                        "score": round(float(record.score), 4),
-                    }
-                    for record in result.records
-                ],
-                ensure_ascii=False,
-                indent=2,
-            )
+            return _render_recall_records(result.records, trace=result.trace)
         if self.memory is None:
             return "[]"
         records = self.memory.recall(
-            query,
+            text,
             limit=limit,
             memory_types=list(kinds),
             since=since,
@@ -970,18 +1176,23 @@ class WorkspaceTools:
     async def forget_memory(self, ids) -> str:
         if isinstance(ids, str):
             ids = [ids]
-        clean = [str(item) for item in ids]
+        # 去重保序,照 Reference forget_memory.py:_clean_ids。
+        clean: list[str] = []
+        seen: set[str] = set()
+        for raw in ids or []:
+            item_id = str(raw).strip()
+            if item_id and item_id not in seen:
+                seen.add(item_id)
+                clean.append(item_id)
         engine = self._live_memory_engine()
         if engine is not None:
+            if not clean:
+                return _render_forget_result([], [], [], [])
             result = await engine.mutate(
                 MemoryMutation(kind="forget", ids=tuple(clean), scope=self._memory_scope())
             )
-            return json.dumps(
-                {
-                    "superseded_ids": result.affected_ids,
-                    "missing_ids": result.missing_ids,
-                },
-                ensure_ascii=False,
+            return _render_forget_result(
+                clean, result.affected_ids, result.missing_ids, result.items
             )
         if self.memory is None:
             return "Error: Memory runtime is not enabled"
@@ -1204,6 +1415,90 @@ class WorkspaceTools:
                 pass
 
 
+def _register_memory_tools(registry: ToolRegistry, handlers: "WorkspaceTools") -> None:
+    """注册显式记忆工具。
+
+    引擎承重时,schema 与描述取自 `engine.tool_profile()`(照 Reference
+    `agent/tools/meta/register.py`:记忆工具面由 engine 声明,runtime 不写死记忆语义,
+    换 engine 即换工具面)。引擎未承重时回退 kirakira 词法路径的旧 schema——这是与
+    Reference 的显式偏离:Reference 在 Disabled 时干脆不注册记忆工具,kirakira 保留
+    词法降级,使未配 embedding 也能用基础记忆。
+    """
+    engine = handlers._live_memory_engine()
+    profile = engine.tool_profile() if engine is not None else None
+    if profile is not None and profile.memorize is not None:
+        registry.register(
+            ToolSpec("memorize", profile.memorize.description, profile.memorize.parameters),
+            handlers.memorize,
+        )
+    else:
+        registry.register(
+            ToolSpec(
+                "memorize",
+                "Write a stable user fact or preference into long-term memory.",
+                object_schema(
+                    {
+                        "content": {"type": "string"},
+                        "memory_type": {
+                            "type": "string",
+                            "enum": [
+                                "requested_memory",
+                                "identity",
+                                "preference",
+                                "procedure",
+                                "event",
+                            ],
+                        },
+                    },
+                    ["content"],
+                ),
+            ),
+            handlers.memorize,
+        )
+    if profile is not None and profile.recall is not None:
+        registry.register(
+            ToolSpec("recall_memory", profile.recall.description, profile.recall.parameters),
+            handlers.recall_memory,
+        )
+    else:
+        registry.register(
+            ToolSpec(
+                "recall_memory",
+                "Search long-term memory semantically/lexically.",
+                object_schema(
+                    {
+                        "query": {"type": "string"},
+                        "limit": {"type": "integer"},
+                        "memory_types": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                        "since": {"type": "string"},
+                        "until": {"type": "string"},
+                    },
+                    ["query"],
+                ),
+            ),
+            handlers.recall_memory,
+        )
+    if profile is not None and profile.forget is not None:
+        registry.register(
+            ToolSpec("forget_memory", profile.forget.description, profile.forget.parameters),
+            handlers.forget_memory,
+        )
+    else:
+        registry.register(
+            ToolSpec(
+                "forget_memory",
+                "Mark memory items as forgotten by id.",
+                object_schema(
+                    {"ids": {"type": "array", "items": {"type": "string"}}}, ["ids"]
+                ),
+            ),
+            handlers.forget_memory,
+        )
+
+
 def build_default_registry(
     workdir: Path,
     skills_dir: Optional[Path] = None,
@@ -1363,7 +1658,7 @@ def build_default_registry(
     registry.register(
         ToolSpec(
             "compact",
-            "Compress the current conversation context.",
+            "将当前会话的历史归档进长期记忆并推进归档游标；下一轮起上下文从归档点开始。仅在上下文确实过长时使用。",
             object_schema({}, []),
         ),
         handlers.compact,
@@ -1423,57 +1718,7 @@ def build_default_registry(
         ),
         handlers.message_push,
     )
-    registry.register(
-        ToolSpec(
-            "memorize",
-            "Write a stable user fact or preference into long-term memory.",
-            object_schema(
-                {
-                    "content": {"type": "string"},
-                    "memory_type": {
-                        "type": "string",
-                        "enum": [
-                            "requested_memory",
-                            "identity",
-                            "preference",
-                            "procedure",
-                            "event",
-                        ],
-                    },
-                },
-                ["content"],
-            ),
-        ),
-        handlers.memorize,
-    )
-    registry.register(
-        ToolSpec(
-            "recall_memory",
-            "Search long-term memory semantically/lexically.",
-            object_schema(
-                {
-                    "query": {"type": "string"},
-                    "limit": {"type": "integer"},
-                    "memory_types": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                    },
-                    "since": {"type": "string"},
-                    "until": {"type": "string"},
-                },
-                ["query"],
-            ),
-        ),
-        handlers.recall_memory,
-    )
-    registry.register(
-        ToolSpec(
-            "forget_memory",
-            "Mark memory items as forgotten by id.",
-            object_schema({"ids": {"type": "array", "items": {"type": "string"}}}, ["ids"]),
-        ),
-        handlers.forget_memory,
-    )
+    _register_memory_tools(registry, handlers)
     registry.register(
         ToolSpec(
             "search_messages",

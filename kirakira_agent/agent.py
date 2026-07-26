@@ -35,19 +35,41 @@ class Agent:
         self.token_threshold = token_threshold
         self.transcript_dir = workdir / ".transcripts"
 
-    def run(self, messages: List[JsonDict], max_rounds: int = 50) -> ModelResponse:
+    def run(
+        self,
+        messages: List[JsonDict],
+        max_rounds: int = 50,
+        tool_choice: object | None = None,
+        final_tool_choice: object | None = None,
+        stop_tools: frozenset[str] | set[str] = frozenset(),
+    ) -> ModelResponse:
+        """ReAct 循环。
+
+        `tool_choice`/`final_tool_choice`/`stop_tools` 一起复刻 Reference drift 主循环的
+        收尾语义(plugins/drift_flow/runtime.py):每步可要求 "required"(必须调工具),
+        最后一步具名强制收尾工具,收尾工具执行后立即结束(Reference 的 mandatory_exit_tools)。
+        不传时行为与旧签名完全一致——kwargs 只在启用时才传给 model_client,旧测试替身不受影响。
+        """
         last_response: Optional[ModelResponse] = None
-        for _ in range(max_rounds):
+        stop_names = frozenset(stop_tools)
+        for round_index in range(max_rounds):
             microcompact(messages)
             if estimate_tokens(messages) > self.token_threshold:
                 messages[:] = self.compact(messages)
 
+            effective_choice = tool_choice
+            if final_tool_choice is not None and round_index == max_rounds - 1:
+                effective_choice = final_tool_choice
+            kwargs: dict = {}
+            if effective_choice is not None:
+                kwargs["tool_choice"] = effective_choice
             response = self.model_client.complete(
                 messages=messages,
                 tools=self.tool_registry.specs(),
                 system=self.system,
                 model=self.model,
                 max_tokens=self.max_tokens,
+                **kwargs,
             )
             last_response = response
             messages.append(assistant_message_from_response(response))
@@ -56,15 +78,21 @@ class Agent:
                 return response
 
             requested_compact = False
+            stop_requested = False
             for call in response.tool_calls:
                 result = self.tool_registry.execute(call)
                 if call.name == "compact":
                     requested_compact = True
+                if call.name in stop_names:
+                    stop_requested = True
                 messages.append(tool_result_message(result))
 
             if requested_compact:
                 messages[:] = self.compact(messages)
                 return ModelResponse(text="Context compacted.", stop_reason="end_turn")
+            if stop_requested:
+                # 收尾工具已执行:立即结束,不再让模型多跑一轮
+                return response
 
         return last_response or ModelResponse(text="", stop_reason="max_rounds")
 

@@ -88,12 +88,63 @@ class MemoryToolsViaEngineTests(unittest.TestCase):
                 ]
             )
             out = await _tools(engine).recall_memory("语言偏好", limit=3)
+            # 返回格式照 Reference recall_memory.py:count/items/引用协议,不再是裸数组
             payload = json.loads(out)
-            self.assertEqual(payload[0]["id"], "r1")
-            self.assertEqual(payload[0]["memory_type"], "preference")
+            self.assertEqual(payload["count"], 1)
+            self.assertEqual(payload["items"][0]["id"], "r1")
+            self.assertEqual(payload["items"][0]["memory_type"], "preference")
+            self.assertTrue(payload["citation_required"])
+            self.assertEqual(payload["cited_item_ids"], ["r1"])
             request = engine.query.await_args.args[0]
             self.assertEqual(request.intent, "answer")
             self.assertEqual(request.limit, 3)
+
+        asyncio.run(scenario())
+
+    def test_recall_timeline_intent_and_time_filter_reach_engine(self) -> None:
+        async def scenario() -> None:
+            engine = _FakeEngine()
+            engine.query.return_value = MemoryQueryResult(records=[])
+            await _tools(engine).recall_memory(
+                "上周做了什么", intent="timeline", time_filter="recent_7d", limit=999
+            )
+            request = engine.query.await_args.args[0]
+            # timeline 分支之前模型永远够不到;time_filter 解析成时间窗;limit 钳制到 200
+            self.assertEqual(request.intent, "timeline")
+            self.assertIsNotNone(request.filters.time_start)
+            self.assertIsNotNone(request.filters.time_end)
+            self.assertEqual(request.limit, 200)
+
+        asyncio.run(scenario())
+
+    def test_recall_invalid_time_filter_is_explicit_error(self) -> None:
+        async def scenario() -> None:
+            engine = _FakeEngine()
+            out = await _tools(engine).recall_memory("x", time_filter="not-a-date")
+            payload = json.loads(out)
+            self.assertEqual(payload["error"], "invalid_time_filter")
+            engine.query.assert_not_awaited()
+
+        asyncio.run(scenario())
+
+    def test_memorize_reference_params_carry_procedure_metadata(self) -> None:
+        async def scenario() -> None:
+            engine = _FakeEngine()
+            engine.mutate.return_value = MemoryMutationResult(
+                accepted=True, item_id="p1", actual_kind="procedure", status="new"
+            )
+            out = await _tools(engine).memorize(
+                summary="部署前先跑测试",
+                memory_kind="procedure",
+                tool_requirement="bash",
+                steps=["跑测试", "再部署"],
+            )
+            # tool_requirement/steps 进 metadata,procedure 的 rule_schema 生成靠它们
+            request = engine.mutate.await_args.args[0]
+            self.assertEqual(request.metadata["tool_requirement"], "bash")
+            self.assertEqual(request.metadata["steps"], ["跑测试", "再部署"])
+            self.assertIn("已记住", out)
+            self.assertIn("procedure", out)
 
         asyncio.run(scenario())
 

@@ -1,6 +1,6 @@
 # 实弹验证记录:哪些链路真的跑过
 
-- 状态:accepted;第 2–6 节为 2026-07-25 一轮,第 7 节为 2026-07-26 控制面一轮
+- 状态:accepted;第 2–6 节为 2026-07-25 一轮,第 7 节为 2026-07-26 控制面一轮,第 9 节为 2026-07-26 换代与 tool_choice 一轮
 - 核对基线:`Reference/` @ `012e37c8b51df045353972bb551d8e868ab52455`
 - 目标读者:维护者、评审者、接手做下一轮验证的人
 - 关联:[NOW.md](../NOW.md)、[decisions/0004](../decisions/0004-delivery-dedup.md)
@@ -9,7 +9,7 @@
 
 ## 1. 为什么单独记这一份
 
-离线回归 454 passed 只说明**单测口径**下的行为成立。它抓不到两类问题:
+离线回归(2026-07-26 起为 477 passed)只说明**单测口径**下的行为成立。它抓不到两类问题:
 
 1. **跨组件的真实链路**——测试用 mock provider 与替身渠道,组件之间的真实交互没被走过;
 2. **真实模型的输出偏差**——mock 永远按约定返回,真实模型不会。
@@ -111,6 +111,8 @@ toolCall)。已按 Reference 补齐 `outbound_metadata`,重跑后 toolCall 正�
 
 | 项 | 缺什么 |
 | --- | --- |
+| 主动 tick 租约在真实热重载下 | 双租约有单测,tick 中途真实插件升级未观察过 |
+| scheduler 重启 misfire 恢复 | 恢复逻辑有单测,没做过"离线一天再启动"的真实验证 |
 | 插件声明的 MCP 主动源端到端 | 只用替身 gateway 验过编译与注册,没有真实 MCP server 的 fetch/ack |
 | Web / QQ / 官方 QQBot 渠道 | 只有 Telegram 做过真实投递 |
 | 热重载与在途 turn 的竞争 | 代际租约有单测,但没在真实并发下观察过 |
@@ -118,3 +120,42 @@ toolCall)。已按 Reference 补齐 `outbound_metadata`,重跑后 toolCall 正�
 | 长时间运行 | 没有连续跑数小时观察内存、连接与调度漂移 |
 | 控制面 TCP 模式与 token 认证 | 只验过 Unix socket 无 token 路径 |
 | `plugin/disable-and-drain` 真实排空 | 当前 workspace 没装插件,只验过错误路径 |
+| 换代期间另一连接的 retryable 拒绝 | 第 9 节换代成功,但没有在冻结窗口内并发第二个连接观察 `-32011` |
+
+## 9. 换代与 tool_choice(F,2026-07-26)
+
+隔离 workspace(`[proactive].enabled=false`)+ 真实 supervisor + 真实 deepseek-v4-flash。
+
+### agent_restart 真实换代
+
+| 步骤 | 观察结果 |
+| --- | --- |
+| supervisor 拉起第一代 | bootId `a686cb79…`,readiness 1s 内就绪;控制面 `server/status` 回报同一 bootId(接线正确) |
+| 控制面 turn 驱动 | 模型按指令 **自己 `tool_search` 发现并调用 `agent_restart`**(deferred 边界成立),工具返回 `{"status":"scheduled","requestId":"restart_3a8ba18…"}` |
+| 提交与换代 | 最终回复送达 CLI 后,gateway 以 75 退出;supervisor 校验通过并**拉起第二代**(bootId `64189fd0…`,新 pid),前后约 1s |
+| 第二代服务 | 控制面重新上线报新 bootId;新起一轮 turn,真实模型正常回复 |
+| 关停 | SIGTERM supervisor → 转发 → 全部退出;control.sock 与 `.runtime-ready.json` 被清理 |
+
+若提交帧无效,supervisor 会以 70(SUPERVISOR_FAILURE)退出而不是换代——它继续监管并拉起了第二代,
+证明 `_valid_commit`(nonce/boot_id/单帧)真实通过。
+
+两个顺带发现:
+
+1. **AF_UNIX 路径上限(macOS 104 字节)**:深层 workspace 下默认 `control.sock` 绑定失败,
+   控制面按设计被吸收(runtime 继续跑);`KIRAKIRA_CONTROL_ENDPOINT` 覆盖短路径后正常。
+   部署到深路径 workspace 时必须用该环境变量。
+2. **渠道随 config 启动,与 CLI 旗标无关**:`_build_channel_host` 直接读
+   `channels.*.enabled`(telegram 还默认"有 token 即启"),隔离测试只关 proactive 不够,
+   web+telegram 仍在测试进程内启动(~2 分钟窗口,无消息发出)。想完全隔离渠道,要在
+   隔离配置里把 `channels.*.enabled` 也置 false。
+
+### tool_choice 顺从度(deepseek-v4-flash,客户端直连)
+
+| case | 结果 |
+| --- | --- |
+| `auto`(对照) | 闲聊 prompt 自然返回纯文本,无工具调用 |
+| `required` | 同一 prompt 被服务端强制 → 产出 `journal_append` 调用,参数合理,`finish_reason=tool_calls` |
+| 具名强制 `finish_drift` | 恰好调用 `finish_drift`,参数完整且 enum 合法(`status="paused"` + briefing) |
+
+未出现 Reference `DeepSeekStrategy` 提示的 thinking 冲突(当前配置下)。换 provider 或开
+thinking 后需重验,见 [NOW.md](../NOW.md)。

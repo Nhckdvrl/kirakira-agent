@@ -26,6 +26,24 @@ class OpenAICompatibleTests(unittest.TestCase):
                 20,
             )
 
+    def test_tool_choice_passes_through_payload(self):
+        client = OpenAICompatibleClient(base_url="http://example.test/v1", api_key="")
+        tools = [ToolSpec("finish_drift", "finish", {"type": "object", "properties": {}})]
+        default = client._build_payload([{"role": "user", "content": "x"}], tools, "", "m", 20)
+        self.assertEqual(default["tool_choice"], "auto")
+        required = client._build_payload(
+            [{"role": "user", "content": "x"}], tools, "", "m", 20, tool_choice="required"
+        )
+        self.assertEqual(required["tool_choice"], "required")
+        named = {"type": "function", "function": {"name": "finish_drift"}}
+        forced = client._build_payload(
+            [{"role": "user", "content": "x"}], tools, "", "m", 20, tool_choice=named
+        )
+        self.assertEqual(forced["tool_choice"], named)
+        # 无工具时不携带 tool_choice(与旧行为一致)
+        bare = client._build_payload([{"role": "user", "content": "x"}], [], "", "m", 20)
+        self.assertNotIn("tool_choice", bare)
+
     def test_stream_parser_accumulates_text_reasoning_and_fragmented_tool_call(self):
         class FakeResponse:
             def __enter__(self):

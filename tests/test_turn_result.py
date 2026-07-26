@@ -92,7 +92,23 @@ class TurnCommitTests(unittest.TestCase):
             outcome = await commit_turn_result(result, port=port)
             self.assertFalse(outcome.dispatched)
             self.assertEqual(port.calls, [])
-            # skip 不算成功投递,走失败分支(未读保留等语义)
+            # skip 不是失败:没有尝试投递,不跑 failure 回滚(照 Reference turns/orchestrator.py)
+            self.assertEqual(log, ["pre"])
+
+        asyncio.run(scenario())
+
+    def test_reply_without_outbound_runs_failure_rollback(self) -> None:
+        async def scenario() -> None:
+            log: list[str] = []
+            result = TurnResult(
+                decision="reply",
+                outbound=None,
+                side_effects=[_effect("pre", log)],
+                failure_side_effects=[_effect("on_failure", log)],
+            )
+            outcome = await commit_turn_result(result, port=_Port(ok=True))
+            # decision=reply 却没有产物是调用方缺陷,按投递失败清理预置状态
+            self.assertFalse(outcome.dispatched)
             self.assertEqual(log, ["pre", "on_failure"])
 
         asyncio.run(scenario())
