@@ -66,5 +66,76 @@ class SchedulerTests(unittest.TestCase):
         asyncio.run(scenario())
 
 
+class MisfireRecoveryTests(unittest.TestCase):
+    """重启恢复(照 Reference load_and_recover):不把离线期间积压的消息一次性轰出去。"""
+
+    def _write_jobs(self, path: Path, jobs: list[dict]) -> None:
+        path.write_text(json.dumps({"jobs": jobs}), encoding="utf-8")
+
+    def _job(self, **overrides) -> dict:
+        base = {
+            "id": "job_x",
+            "channel": "web",
+            "chat_id": "u",
+            "message": "hi",
+            "run_at": datetime.now().astimezone().isoformat(),
+            "interval_seconds": 0,
+            "remaining_runs": 1,
+            "status": "pending",
+            "created_at": "",
+            "last_error": "",
+        }
+        base.update(overrides)
+        return base
+
+    def _boot(self, tmp: str, jobs: list[dict]) -> SchedulerService:
+        path = Path(tmp) / "schedules.json"
+        self._write_jobs(path, jobs)
+        return SchedulerService(path, bus=MessageBus(), tools=ToolRegistry())
+
+    def test_stale_one_shot_is_marked_missed_not_fired(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            old = (datetime.now().astimezone() - timedelta(hours=6)).isoformat()
+            scheduler = self._boot(tmp, [self._job(run_at=old)])
+            job = scheduler._jobs["job_x"]
+            self.assertEqual(job.status, "missed")
+            self.assertEqual(scheduler._due_jobs(), [])
+
+    def test_recent_one_shot_within_grace_still_fires(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            recent = (datetime.now().astimezone() - timedelta(seconds=30)).isoformat()
+            scheduler = self._boot(tmp, [self._job(run_at=recent)])
+            self.assertEqual(scheduler._jobs["job_x"].status, "pending")
+            self.assertEqual(len(scheduler._due_jobs()), 1)
+
+    def test_repeating_job_advances_to_future_without_backlog(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            old = (datetime.now().astimezone() - timedelta(hours=6)).isoformat()
+            scheduler = self._boot(
+                tmp,
+                [self._job(run_at=old, interval_seconds=3600, remaining_runs=100)],
+            )
+            job = scheduler._jobs["job_x"]
+            self.assertEqual(job.status, "pending")
+            self.assertGreater(
+                datetime.fromisoformat(job.run_at), datetime.now().astimezone()
+            )
+            # 积压的 6 次不补发
+            self.assertEqual(scheduler._due_jobs(), [])
+
+    def test_bad_row_is_skipped_without_dropping_others(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            future = (datetime.now().astimezone() + timedelta(hours=1)).isoformat()
+            scheduler = self._boot(
+                tmp,
+                [
+                    {"id": "bad", "unexpected_field": True},
+                    self._job(id="job_ok", run_at=future),
+                ],
+            )
+            self.assertNotIn("bad", scheduler._jobs)
+            self.assertIn("job_ok", scheduler._jobs)
+
+
 if __name__ == "__main__":
     unittest.main()

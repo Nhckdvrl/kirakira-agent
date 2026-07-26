@@ -386,13 +386,18 @@ class SubagentManager:
 
     @staticmethod
     def _disabled_tools(profile: str) -> set[str]:
+        # 禁用名单必须用真实注册名:曾写成不存在的 "mcp_add",导致 mcp_apply
+        # 对所有 profile 的 subagent 实际开放(禁用是空操作)。
         common = {
             "spawn",
             "spawn_manage",
             "message_push",
-            "mcp_add",
+            "mcp_apply",
             "mcp_remove",
             "plugin_install",
+            "plugin_enable",
+            "plugin_disable",
+            "plugin_uninstall",
             "schedule",
             "cancel_schedule",
         }
