@@ -31,6 +31,7 @@
 | 改主动推送或 Drift | [PROACTIVE_ARCHITECTURE.md](./PROACTIVE_ARCHITECTURE.md) + [design/proactive-lifecycle.md](./design/proactive-lifecycle.md) |
 | 改启动、Supervisor 或渠道 | [STARTUP_AND_CHANNELS.md](./STARTUP_AND_CHANNELS.md) |
 | 程序化观测/驱动运行中的 agent | [design/control-plane.md](./design/control-plane.md) |
+| 排查"记忆为什么没被用上" | 仪表盘的**检索回放**面板(`/dashboard#recall`)+ `kirakira_agent/observe.py` |
 | 查某个架构选择当初为什么这么定 | [decisions/](./decisions/) |
 | 准备面试/对外讲这个项目 | [RESUME_INTERVIEW_GUIDE.md](./RESUME_INTERVIEW_GUIDE.md) |
 

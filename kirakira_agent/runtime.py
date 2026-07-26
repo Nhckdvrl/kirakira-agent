@@ -883,9 +883,12 @@ class PassiveTurnPipeline:
         plugin_generations: Any = None,
         session_services: "SessionServices | None" = None,
         context_services: "ContextServices | None" = None,
+        recall_inspector: Any = None,
     ) -> None:
         self.bus = bus
         self.event_bus = event_bus
+        # 检索回放记录器;未注入时不记录,主链路行为不变。
+        self.recall_inspector = recall_inspector
         # 服务包优先;未注入时用具体对象兜底,便于最小构造与测试。
         # 两条路都收敛到同一个属性,pipeline 内部只认服务包。
         self.session_services = session_services or SessionServices(
@@ -1082,6 +1085,22 @@ class PassiveTurnPipeline:
                     "intent": "context",
                     "records": len(result.records),
                 }
+                # 检索回放:记下"召回了什么、注入了没有",供 Dashboard 逐轮回看。
+                # 观测失败绝不能影响回复,所以整段吞异常。
+                if self.recall_inspector is not None:
+                    try:
+                        self.recall_inspector.record_context_prepare(
+                            session_key=key,
+                            channel=msg.context_channel,
+                            chat_id=msg.context_chat_id,
+                            user_text=msg.content,
+                            timestamp=msg.timestamp.isoformat(),
+                            records=list(result.records),
+                            text_block=retrieved,
+                            trace=dict(result.trace or {}),
+                        )
+                    except Exception:  # noqa: BLE001
+                        logger.warning("[observe] 检索回放记录失败", exc_info=True)
             else:
                 retrieval_result = await asyncio.to_thread(
                     self.memory.retrieve,

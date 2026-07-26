@@ -41,6 +41,7 @@ from kirakira_agent.proactive.state import ProactiveStateStore
 from kirakira_agent.drift import DriftRunner
 from kirakira_agent.control.binding import build_control_plane
 from kirakira_agent.dashboard import DashboardService
+from kirakira_agent.observe import RecallInspector
 from kirakira_agent.restart import RestartCoordinator, SupervisorCommitChannel
 from kirakira_agent.supervisor import RESTART_EXIT_CODE
 from kirakira_agent.runtime import (
@@ -634,6 +635,9 @@ async def build_runtime(
         bus=bus,
         tools=registry,
     )
+    # 检索回放:记录每轮召回了什么、注入了没有;引擎未承重时这条路本来就不走。
+    recall_inspector = RecallInspector(workdir)
+    reasoner.add_tool_hooks([recall_inspector.tool_hook()])
     pipeline = PassiveTurnPipeline(
         bus=bus,
         event_bus=event_bus,
@@ -646,6 +650,7 @@ async def build_runtime(
         memory_services=memory_services,
         session_services=SessionServices(session_manager=session_manager),
         context_services=ContextServices(context=context),
+        recall_inspector=recall_inspector,
     )
     loop = AgentLoop(bus=bus, pipeline=pipeline)
     plugin_manager = PluginManager(
@@ -681,6 +686,7 @@ async def build_runtime(
         memory=memory,
         plugin_manager=plugin_manager,
         restart_coordinator=None,
+        recall_inspector=recall_inspector,
         # 状态库连接归本循环所在线程独占;Web 的 HTTP handler 在别的线程,读要 marshal 回来。
         loop=asyncio.get_running_loop(),
     )

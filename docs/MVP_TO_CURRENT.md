@@ -21,13 +21,13 @@
 完整离线回归:
 
 ```text
-494 passed, 4 subtests passed
+504 passed, 4 subtests passed
 ```
 
 2026-07-26 新增:agent_restart 换代链路、主动 tick 双代际租约、`tool_choice`
 (Drift 强制收尾)、scheduler misfire 恢复、记忆工具面对齐(tool_profile 驱动 +
-`§cited:` 引用协议)、MCP 工具结果 100k 钳制、**五面板 Web 仪表盘**(总览/记忆/会话/
-插件与代际/主动与 Drift)与重做的聊天页。
+`§cited:` 引用协议)、MCP 工具结果 100k 钳制、**六面板 Web 仪表盘**(总览/记忆/会话/
+检索回放/插件与代际/主动与 Drift)与重做的聊天页,以及**检索回放记录**(observe.py)。
 
 离线回归之外的**真实模型/真实渠道**验证结果单独记在
 [design/live-verification.md](./design/live-verification.md):哪些链路真跑过、哪些只是测过。
@@ -159,7 +159,7 @@ Kirakira ≈3.4 万行,Reference ≈10.5 万行(产品代码)。差距的核心�
 | control plane | **已完成**(JSON-RPC over NDJSON,见 [design/control-plane.md](./design/control-plane.md));app server / 前端未做 |
 | **agent_restart 换代** | **已完成**(准入冻结 + 双条件提交 + supervisor 握手,见 [design/agent-restart.md](./design/agent-restart.md));真实换代待实弹 |
 | **主动 tick 代际租约** | **已完成**(plugin generation + snapshot 双租约,gateway 快照钉定) |
-| **前端仪表盘** | **已完成**(五面板:总览/记忆/会话/插件与代际/主动与 Drift + 重做聊天页);零依赖 stdlib,不引构建链 |
+| **前端仪表盘** | **已完成**(六面板:总览/记忆/会话/检索回放/插件与代际/主动与 Drift + 重做聊天页);零依赖 stdlib,不引构建链 |
 | peer-agent 进程管理 | 无 |
 | 插件/MCP 主动源 | **已接线**(插件声明→编译→SourceRegistry);真实 MCP 端到端验证见 NOW.md 1.4 |
 | 跨崩溃投递去重 | **已完成**(deliveries 表,见 [decisions/0004](./decisions/0004-delivery-dedup.md));多目标调度未做 |

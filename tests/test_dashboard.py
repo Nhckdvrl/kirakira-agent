@@ -298,3 +298,167 @@ class PageTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RecallInspectorTests(unittest.TestCase):
+    """检索回放:两类记录按 turn 聚合,写入失败不影响主链路。"""
+
+    def _inspector(self, tmp: str):
+        from kirakira_agent.observe import RecallInspector
+
+        return RecallInspector(Path(tmp))
+
+    def test_context_and_recall_group_into_one_turn(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            insp = self._inspector(tmp)
+            record = SimpleNamespace(
+                id="m1", kind="identity", summary="我是月火", score=0.515, injected=False
+            )
+            turn = insp.record_context_prepare(
+                session_key="web:u1",
+                channel="web",
+                chat_id="u1",
+                user_text="我是谁",
+                timestamp="2026-07-27T06:00:00+00:00",
+                records=[record],
+                text_block="",
+            )
+            insp.record_recall_memory(
+                session_key="web:u1",
+                arguments={"query": "身份"},
+                result_text='{"items": [{"id": "m1", "memory_type": "identity", "summary": "x"}]}',
+            )
+            turns, total = insp.list_turns()
+            self.assertEqual(total, 1)  # 两条记录归到同一轮
+            item = turns[0]
+            self.assertEqual(item["turn_id"], turn)
+            self.assertEqual(item["context_prepare_count"], 1)
+            self.assertEqual(item["recall_call_count"], 1)
+            self.assertEqual(item["recall_memory_count"], 1)
+            # 召回到但未注入——这正是面板要暴露的情形
+            self.assertFalse(item["injected"])
+            self.assertEqual(insp.get_turn(turn)["user_text"], "我是谁")
+
+    def test_search_and_paging(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            insp = self._inspector(tmp)
+            for i in range(3):
+                insp.record_context_prepare(
+                    session_key="web:u%d" % i,
+                    channel="web",
+                    chat_id="u%d" % i,
+                    user_text="问题 %d 部署" % i if i else "无关",
+                    timestamp="2026-07-27T0%d:00:00+00:00" % i,
+                    records=[],
+                    text_block="block",
+                )
+            hits, total = insp.list_turns(q="部署")
+            self.assertEqual(total, 2)
+            self.assertTrue(all("部署" in h["user_text"] for h in hits))
+            scoped, _ = insp.list_turns(session_key="web:u1")
+            self.assertEqual(len(scoped), 1)
+            page2, _ = insp.list_turns(page=2, page_size=2)
+            self.assertEqual(len(page2), 1)
+
+    def test_disabled_records_nothing_but_still_tracks_turn(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            from kirakira_agent.observe import RecallInspector
+
+            insp = RecallInspector(Path(tmp), enabled=False)
+            turn = insp.record_context_prepare(
+                session_key="s", channel="c", chat_id="i", user_text="x",
+                timestamp="t", records=[], text_block="",
+            )
+            self.assertTrue(turn)
+            self.assertFalse(insp.path.exists())
+            self.assertEqual(insp.list_turns()[1], 0)
+
+    def test_corrupt_line_is_skipped_not_fatal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            insp = self._inspector(tmp)
+            insp.record_context_prepare(
+                session_key="s", channel="c", chat_id="i", user_text="ok",
+                timestamp="t", records=[], text_block="",
+            )
+            with insp.path.open("a", encoding="utf-8") as handle:
+                handle.write("{ 这行坏了\n")
+            # 一行损坏不该让整个面板打不开
+            self.assertEqual(insp.list_turns()[1], 1)
+
+    def test_tool_hook_only_matches_recall_memory(self) -> None:
+        async def scenario() -> None:
+            with tempfile.TemporaryDirectory() as tmp:
+                insp = self._inspector(tmp)
+                hook = insp.tool_hook()
+                self.assertEqual(hook.event, "post_tool_use")
+                request = SimpleNamespace(
+                    tool_name="recall_memory", session_key="web:u1", channel="web", chat_id="u1"
+                )
+                other = SimpleNamespace(tool_name="bash", session_key="web:u1")
+                self.assertTrue(hook.matches(SimpleNamespace(request=request)))
+                self.assertFalse(hook.matches(SimpleNamespace(request=other)))
+                outcome = await hook.run(
+                    SimpleNamespace(
+                        request=request,
+                        current_arguments={"query": "x"},
+                        result='{"items": []}',
+                    )
+                )
+                self.assertEqual(outcome.decision, "allow")  # 观测钩子永不改判决
+                self.assertEqual(insp.list_turns()[1], 1)
+
+        asyncio.run(scenario())
+
+    def test_hook_swallows_errors(self) -> None:
+        async def scenario() -> None:
+            with tempfile.TemporaryDirectory() as tmp:
+                insp = self._inspector(tmp)
+                hook = insp.tool_hook()
+                # 缺字段的 ctx 也不能让工具调用失败
+                outcome = await hook.run(SimpleNamespace())
+                self.assertEqual(outcome.decision, "allow")
+
+        asyncio.run(scenario())
+
+
+class DashboardRecallAndMessagesTests(unittest.TestCase):
+    def test_recall_panels_degrade_without_inspector(self) -> None:
+        board = DashboardService(workspace=Path("."))
+        self.assertFalse(board.recall_overview()["available"])
+        self.assertFalse(board.recall_turns()["available"])
+        self.assertIsNone(board.recall_turn("x"))
+
+    def test_recall_panels_read_from_inspector(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            from kirakira_agent.observe import RecallInspector
+
+            insp = RecallInspector(Path(tmp))
+            turn = insp.record_context_prepare(
+                session_key="web:u1", channel="web", chat_id="u1", user_text="hi",
+                timestamp="2026-07-27T06:00:00+00:00", records=[], text_block="b",
+            )
+            board = DashboardService(workspace=Path(tmp), recall_inspector=insp)
+            self.assertEqual(board.recall_turns()["total"], 1)
+            self.assertEqual(board.recall_turn(turn)["turn_id"], turn)
+            self.assertEqual(board.overview()["recall"]["total"], 1)
+
+    def test_messages_search_is_readonly_by_design(self) -> None:
+        board = DashboardService(
+            workspace=Path("."),
+            session_manager=SimpleNamespace(
+                search_messages=lambda q, limit=10: [
+                    {"source_ref": "web:u1:3", "session_key": "web:u1", "role": "user",
+                     "content": "部署脚本", "timestamp": "t"}
+                ],
+                list_sessions=lambda: [],
+            ),
+        )
+        result = board.messages({"q": ["部署"]})
+        self.assertEqual(result["total"], 1)
+        # 消息是位置寻址的,删除会打断记忆 evidence 与归档游标 → 面板明确标记只读
+        self.assertFalse(result["deletable"])
+        self.assertIn("位置寻址", result["deletable_reason"])
+
+    def test_blank_message_query_returns_empty(self) -> None:
+        board = DashboardService(workspace=Path("."), session_manager=SimpleNamespace())
+        self.assertEqual(board.messages({"q": ["  "]})["total"], 0)

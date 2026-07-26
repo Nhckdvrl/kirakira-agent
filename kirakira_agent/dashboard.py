@@ -53,6 +53,7 @@ class DashboardService:
     proactive_loop: Any = None
     drift_runner: Any = None
     restart_coordinator: Any = None
+    recall_inspector: Any = None
     # 运行时的事件循环。proactive.db / drift.db 的连接归它所在的线程独占,而 Web 渠道
     # 的 HTTP handler 跑在自己的线程里——直接读会撞 SQLite 的线程亲和检查。这里把读
     # marshal 回属主线程,而不是另开一条连接:后者会破坏"状态库单一 owner"这条不变量。
@@ -277,6 +278,61 @@ class DashboardService:
             return False
         return bool(self.session_manager.delete_session(key))
 
+    def messages(self, params: dict[str, list[str]] | None = None) -> dict[str, Any]:
+        """跨会话消息检索(只读)。
+
+        **有意不提供删除**:kirakira 的消息是位置寻址的(`source_ref = "session_key:index"`),
+        删一条会让后续索引整体前移,同时打断两样东西——记忆条目里指向 `key:index` 的
+        evidence,以及 `last_consolidated` 这个索引游标。Reference 的消息有稳定 id 才敢删。
+        补稳定 id 是一次数据模型迁移,记在 NOW.md,不在面板里先斩后奏。
+        """
+        params = params or {}
+        query = str((params.get("q") or [""])[0]).strip()
+        limit = max(1, min(200, int((params.get("limit") or ["50"])[0] or 50)))
+        if self.session_manager is None or not query:
+            return {"messages": [], "total": 0, "query": query, "deletable": False}
+        try:
+            rows = self.session_manager.search_messages(query, limit=limit)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[dashboard] 消息检索失败: %s", exc)
+            return {"messages": [], "total": 0, "query": query, "error": str(exc)}
+        return {
+            "messages": list(rows),
+            "total": len(rows),
+            "query": query,
+            # 前端据此不渲染删除按钮,而不是渲染了再报错
+            "deletable": False,
+            "deletable_reason": "消息为位置寻址，删除会打断记忆 evidence 与归档游标",
+        }
+
+    # ── 检索回放 ────────────────────────────────────────────────────
+
+    def recall_overview(self) -> dict[str, Any]:
+        if self.recall_inspector is None:
+            return {"available": False, "enabled": False, "total": 0}
+        return self.recall_inspector.overview()
+
+    def recall_turns(self, params: dict[str, list[str]] | None = None) -> dict[str, Any]:
+        if self.recall_inspector is None:
+            return {"turns": [], "total": 0, "available": False}
+        params = params or {}
+
+        def one(name: str, default: str = "") -> str:
+            return str((params.get(name) or [default])[0])
+
+        turns, total = self.recall_inspector.list_turns(
+            session_key=one("session_key"),
+            q=one("q"),
+            page=max(1, int(one("page", "1") or 1)),
+            page_size=max(1, min(200, int(one("page_size", "50") or 50))),
+        )
+        return {"turns": turns, "total": total, "available": True}
+
+    def recall_turn(self, turn_id: str) -> dict[str, Any] | None:
+        if self.recall_inspector is None:
+            return None
+        return self.recall_inspector.get_turn(turn_id)
+
     # ── 插件 ────────────────────────────────────────────────────────
 
     def plugins(self) -> dict[str, Any]:
@@ -447,4 +503,5 @@ class DashboardService:
                 "supervised": bool(getattr(coordinator, "supervised", False)),
                 "state": str(getattr(coordinator, "state", "") or "idle"),
             },
+            "recall": self.recall_overview(),
         }

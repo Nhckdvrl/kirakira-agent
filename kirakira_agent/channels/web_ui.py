@@ -283,6 +283,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   <button data-tab="overview" class="active">总览</button>
   <button data-tab="memory">记忆</button>
   <button data-tab="sessions">会话</button>
+  <button data-tab="recall">检索回放</button>
   <button data-tab="plugins">插件与代际</button>
   <button data-tab="proactive">主动与 Drift</button>
   <div class="foot muted">
@@ -310,8 +311,9 @@ const tile = (k, v, n) => '<div class="tile"><div class="k">' + esc(k) + '</div>
 const table = (heads, rows) => rows.length
   ? '<div class="scroll"><table><thead><tr>' + heads.map(h =>
       // 注意 h.label 可能是空串(占位列),不能用 || 回退,否则会渲染成 [object Object]
+      // h.raw=true 时按 HTML 原样放入(用于全选复选框这类表头控件)
       '<th' + (h.num ? ' class="num"' : "") + ">"
-      + esc(h.label === undefined ? h : h.label) + "</th>").join("")
+      + (h.raw ? h.label : esc(h.label === undefined ? h : h.label)) + "</th>").join("")
     + "</tr></thead><tbody>" + rows.join("") + "</tbody></table></div>"
   : '<div class="empty">暂无数据</div>';
 
@@ -356,6 +358,8 @@ tabs.memory = async () => {
   ]);
   const rows = (d.memories || []).map(it =>
     '<tr class="rowlink" onclick="showMemory(\\'' + esc(it.id) + '\\')">'
+    + '<td><input type="checkbox" class="msel" value="' + esc(it.id)
+    + '" onclick="event.stopPropagation();syncSel()" /></td>'
     + "<td>" + pill(it.memory_type || it.kind || "—", "mut") + "</td>"
     + '<td class="clip">' + esc(clip(it.summary || it.content, 110)) + "</td>"
     + "<td>" + (String(it.status) === "active" ? pill("active", "ok") : pill(it.status || "—", "mut")) + "</td>"
@@ -380,12 +384,55 @@ tabs.memory = async () => {
         '<option value="' + s + '"' + (memState.status === s ? " selected" : "") + ">" + s + "</option>").join("")
     + "</select>"
     + '<button class="primary" onclick="applyMem()">筛选</button>'
-    + '<span class="spacer"></span></div>'
-    + table([{label: "类型"}, {label: "内容"}, {label: "状态"}, {label: "来源"}, {label: "创建"}], rows)
+    + '<span class="spacer"></span>'
+    + '<span class="muted num" id="selinfo">未选中</span>'
+    + '<button class="danger" id="delbtn" disabled onclick="batchDelete()">物理删除选中</button>'
+    + "</div>"
+    + table([{label: '<input type="checkbox" onclick="selAll(this)" />', raw: true},
+             {label: "类型"}, {label: "内容"}, {label: "状态"}, {label: "来源"}, {label: "创建"}], rows)
     + '<div class="bar" style="margin-top:12px"><span class="muted num">共 ' + (d.total || 0)
     + " 条 · 第 " + (d.page || 1) + " / " + pages + " 页</span><span class=\\"spacer\\"></span>"
     + '<button onclick="memPage(-1)">上一页</button><button onclick="memPage(1)">下一页</button></div>'
     + "</div>";
+};
+
+tabs.recall = async () => {
+  const q = new URLSearchParams({q: recallState.q, page: recallState.page}).toString();
+  const [d, info] = await Promise.all([
+    get("/api/dashboard/recall?" + q), get("/api/dashboard/overview")
+  ]);
+  const ov = (info || {}).recall || {};
+  if (!d.available) {
+    return "<h2>检索回放</h2>" + '<div class="panel"><div class="empty">'
+      + "检索回放未启用（需要承重的记忆引擎）。</div></div>";
+  }
+  const rows = (d.turns || []).map(t =>
+    '<tr class="rowlink" onclick="showRecall(\\'' + esc(t.turn_id) + '\\')">'
+    + '<td class="clip">' + esc(clip(t.user_text, 70)) + "</td>"
+    + '<td class="num">' + (t.context_prepare_count ?? 0) + "</td>"
+    + "<td>" + (t.injected ? pill("已注入", "ok") : pill("未注入", "warn")) + "</td>"
+    + '<td class="num">' + (t.recall_call_count ?? 0) + "</td>"
+    + '<td class="mono muted">' + esc(clip(t.session_key, 22)) + "</td>"
+    + '<td class="muted">' + esc(when(t.timestamp)) + "</td></tr>");
+  return "<h2>检索回放</h2><p class=\\"sub\\">每一轮召回了什么、有没有注入、模型又主动查了什么"
+    + "——检索质量出问题时不必靠猜。</p>"
+    + '<div class="tiles">'
+    + tile("已记录轮次", ov.total ?? 0, "")
+    + tile("最近一轮", ov.latest_at ? when(ov.latest_at) : "—", "")
+    + "</div>"
+    + '<div class="panel"><div class="filters">'
+    + '<input id="rq" placeholder="按用户提问搜索" value="' + esc(recallState.q || "") + '" />'
+    + '<button class="primary" onclick="applyRecall()">筛选</button></div>'
+    + table([{label: "用户提问"}, {label: "自动召回", num: true}, {label: "注入"},
+             {label: "主动查询", num: true}, {label: "会话"}, {label: "时间"}], rows)
+    + '<div class="bar" style="margin-top:12px"><span class="muted num">共 ' + (d.total || 0)
+    + ' 轮</span><span class="spacer"></span>'
+    + '<button onclick="recallPage(-1)">上一页</button><button onclick="recallPage(1)">下一页</button>'
+    + "</div></div>"
+    + '<div class="panel"><h3>消息检索</h3>'
+    + '<div class="filters"><input id="mq2" placeholder="跨会话搜索历史消息" />'
+    + '<button class="primary" onclick="searchMessages()">搜索</button></div>'
+    + '<div id="msgres" class="empty">输入关键词开始搜索</div></div>';
 };
 
 tabs.sessions = async () => {
@@ -491,6 +538,91 @@ function applyMem() {
   render("memory");
 }
 function memPage(delta) { memState.page = Math.max(1, memState.page + delta); render("memory"); }
+
+function selectedIds() {
+  return [...document.querySelectorAll(".msel")].filter(c => c.checked).map(c => c.value);
+}
+function syncSel() {
+  const n = selectedIds().length;
+  const info = document.querySelector("#selinfo");
+  const btn = document.querySelector("#delbtn");
+  if (info) info.textContent = n ? ("已选中 " + n + " 条") : "未选中";
+  if (btn) btn.disabled = n === 0;
+}
+function selAll(box) {
+  document.querySelectorAll(".msel").forEach(c => { c.checked = box.checked; });
+  syncSel();
+}
+async function batchDelete() {
+  const ids = selectedIds();
+  if (!ids.length) return;
+  // 物理删除绕过了记忆系统"逻辑退休"的默认保护,所以要二次确认 + 服务端 confirm 令牌
+  if (!confirm("物理删除 " + ids.length + " 条记忆？\\n这会连同向量一起移除，不可恢复。\\n"
+      + "（只想标记失效请用详情里的「标记失效」）")) return;
+  const resp = await fetch("/api/dashboard/memories/batch-delete", {
+    method: "POST", headers: {"content-type": "application/json"},
+    body: JSON.stringify({ids: ids, confirm: "HARD_DELETE"})
+  });
+  const data = await resp.json();
+  if (data.error) alert("删除失败: " + data.error);
+  render("memory");
+}
+
+let recallState = {page: 1, q: ""};
+function applyRecall() {
+  recallState.q = document.querySelector("#rq").value.trim();
+  recallState.page = 1;
+  render("recall");
+}
+function recallPage(delta) { recallState.page = Math.max(1, recallState.page + delta); render("recall"); }
+
+async function showRecall(turnId) {
+  const d = await get("/api/dashboard/recall/turn?id=" + encodeURIComponent(turnId));
+  const t = d.turn || {};
+  const prep = t.context_prepare || {};
+  const hits = (prep.items || []).map(it =>
+    "<tr><td>" + pill(it.memory_type || "—", "mut") + "</td>"
+    + '<td class="clip">' + esc(clip(it.summary, 110)) + "</td>"
+    + '<td class="num">' + (typeof it.score === "number" ? it.score.toFixed(3) : "—") + "</td>"
+    + "<td>" + (it.injected ? pill("注入", "ok") : pill("未注入", "mut")) + "</td></tr>");
+  const calls = (t.recall_memory_calls || []).map(c =>
+    '<div style="margin-top:10px"><div class="muted mono">'
+    + esc(JSON.stringify(c.arguments || {})) + "</div>"
+    + table([{label: "类型"}, {label: "内容"}, {label: "分数", num: true}],
+        (c.items || []).map(it =>
+          "<tr><td>" + pill(it.memory_type || "—", "mut") + "</td>"
+          + '<td class="clip">' + esc(clip(it.summary, 110)) + "</td>"
+          + '<td class="num">'
+          + (typeof it.score === "number" ? it.score.toFixed(3) : "—") + "</td></tr>"))
+    + "</div>").join("");
+  openModal('<h3 style="margin-top:0">检索回放</h3>'
+    + '<div class="muted mono">' + esc(t.session_key || "") + " · " + esc(when(t.timestamp)) + "</div>"
+    + '<pre style="margin:10px 0">' + esc(t.user_text || "") + "</pre>"
+    + "<h3>自动召回（context）</h3>"
+    + '<div class="muted" style="margin-bottom:6px">'
+    + (prep.injected ? pill("已注入 " + (prep.injected_chars ?? 0) + " 字符", "ok")
+        : pill("未注入上下文", "warn"))
+    + " " + pill("引擎 " + esc((prep.trace || {}).engine || "—"), "mut") + "</div>"
+    + table([{label: "类型"}, {label: "内容"}, {label: "分数", num: true}, {label: "注入"}], hits)
+    + (calls ? "<h3>模型主动查询</h3>" + calls : ""));
+}
+
+async function searchMessages() {
+  const box = document.querySelector("#msgres");
+  const q = document.querySelector("#mq2").value.trim();
+  if (!q) { box.className = "empty"; box.textContent = "输入关键词开始搜索"; return; }
+  const d = await get("/api/dashboard/messages?q=" + encodeURIComponent(q) + "&limit=50");
+  const rows = (d.messages || []).map(m =>
+    "<tr><td>" + pill(m.role || "—", m.role === "user" ? "mut" : "ok") + "</td>"
+    + '<td class="clip">' + esc(clip(m.content, 140)) + "</td>"
+    + '<td class="mono muted">' + esc(clip(m.session_key || m.source_ref, 24)) + "</td>"
+    + '<td class="muted">' + esc(when(m.timestamp)) + "</td></tr>");
+  box.className = "";
+  box.innerHTML = table([{label: "角色"}, {label: "内容"}, {label: "会话"}, {label: "时间"}], rows)
+    + (d.deletable === false
+        ? '<div class="muted" style="margin-top:8px">只读：' + esc(d.deletable_reason || "") + "</div>"
+        : "");
+}
 
 async function showMemory(id) {
   const [d, sim] = await Promise.all([

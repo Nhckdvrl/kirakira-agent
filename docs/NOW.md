@@ -38,7 +38,19 @@ tick 现在把租到的 snapshot 钉在共享 gateway 上,源在本轮用同一�
 
 **验收**:真实源产出的事件进入三通道去重、被判断链路消费,ACK 回到源端。
 
-### 1.4 主动链路的限流与审计厚度(Reference 有、kirakira 无)
+### 1.4 检索注入阈值待评估(检索回放实测发现)
+
+**现状**:检索回放面板第一次使用就记录到一例——自动检索召回了正确的 identity 记忆
+(分数 0.515)但 `injected=False` 未进上下文;模型随后主动 `recall_memory(intent="answer")`
+返回 0 条,于是回答"没找到"。证据见
+[design/live-verification.md](./design/live-verification.md) 第 11 节。
+
+**接手点**:用回放面板收集若干轮样本,再决定调 `DefaultMemoryConfig` 的注入预算与
+`answer` intent 的 score_threshold。改阈值是行为变更,要有样本再动。
+
+**验收**:同类提问能稳定召回并注入;不因放宽阈值而引入无关记忆。
+
+### 1.5 主动链路的限流与审计厚度(Reference 有、kirakira 无)
 
 按对 Reference 的代码核实(2026-07-26),以下机制在 Reference 有真实调用点:
 
@@ -53,7 +65,7 @@ tick 现在把租到的 snapshot 钉在共享 gateway 上,源在本轮用同一�
 | 调度权反转(`run:next_wakeup` terminal slot) | `proactive_v2/loop.py:428` | 模块无法影响下次唤醒间隔 |
 | 累计 hazard / embedding 兴趣 / turn 原型 | `wake_proactive/hazard.py` + `runtime.py:567-654` | 主动侧排序仍是 severity/newness |
 
-### 1.5 其余已核实的行为差(2026-07-26 扫盘)
+### 1.6 其余已核实的行为差(2026-07-26 扫盘)
 
 | 项 | 说明 |
 | --- | --- |
@@ -68,7 +80,7 @@ tick 现在把租到的 snapshot 钉在共享 gateway 上,源在本轮用同一�
 | 记忆引擎插件路由未接(`config.memory.engine` 从未被读) | Reference `bootstrap/memory.py:36` |
 | Reference 工具描述是决策树式长文,kirakira 多为单行(隐性行为差) | — |
 
-### 1.6 换 provider 后的契约面回归
+### 1.7 换 provider 后的契约面回归
 
 `post_response_worker` 两处裸 JSON 数组解析已由 `coremem/compat_worker.py` 容错;
 `ProactiveJudge` 严格 JSON 与 `finish_drift` 解析在真实模型下跑过;tool_choice 的
@@ -88,5 +100,5 @@ required/具名强制已在 deepseek-v4-flash 下实弹通过(见
 | QQ 两渠道逐字节对齐(Telegram 已对齐) | — | — |
 | 插件包元数据 manifest、非 git 源、版本缓存回滚、MCP venv 准备 | Reference `plugins/install.py:238-551` | — |
 | peer-agent、eval、主动多目标调度 | 多目标调度 Reference 也没有(presence 多 session API 仅测试引用) | — |
-| Dashboard 的写操作面(记忆批量删除 UI、消息级管理) | 当前仪表盘是只读投影 + 记忆单条失效/会话删除;Reference 有 messages 批量删除与 memory optimizer | 真有运维需要时再加,避免仪表盘变成第二个控制面 |
-| RecallInspector 检索回放面板 | Reference `plugins/default_memory/dashboard.py` 读 `observe/recall_inspector.jsonl` 逐轮回放检索命中;kirakira 只在 turn metadata 里留了三字段 trace | 先补检索 trace 落盘,再做面板 |
+| **消息的稳定 id(删除的前置迁移)** | kirakira 消息是位置寻址(`source_ref = "session_key:index"`),删一条会让后续索引整体前移,打断记忆条目里指向 `key:index` 的 evidence 与 `last_consolidated` 游标。因此消息面板**有意只读**,Reference 的 messages 批量删除未移植 | 先给消息加稳定 id 并迁移既有 `source_ref`,才谈得上删除;这是数据模型迁移,不是面板功能 |
+| memory optimizer | Reference `/api/dashboard/memory/optimize` 有一套记忆整理流程 | 记忆整理当前由 consolidation + Drift 的 `review-memory` 承担,重复度高,真需要再评估 |

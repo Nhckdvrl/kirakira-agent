@@ -283,6 +283,16 @@ class WebChannel:
                             {"session": item},
                             status=HTTPStatus.OK if item is not None else HTTPStatus.NOT_FOUND,
                         )
+                    elif suffix == "/messages":
+                        self._send_json(board.messages(query))
+                    elif suffix == "/recall":
+                        self._send_json(board.recall_turns(query))
+                    elif suffix == "/recall/turn":
+                        item = board.recall_turn(str((query.get("id") or [""])[0]))
+                        self._send_json(
+                            {"turn": item},
+                            status=HTTPStatus.OK if item is not None else HTTPStatus.NOT_FOUND,
+                        )
                     elif suffix == "/plugins":
                         self._send_json(board.plugins())
                     elif suffix == "/proactive":
