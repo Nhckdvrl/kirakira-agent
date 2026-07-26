@@ -1,6 +1,6 @@
 # 实弹验证记录:哪些链路真的跑过
 
-- 状态:accepted;第 2–6 节为 2026-07-25 一轮,第 7 节为 2026-07-26 控制面一轮,第 9 节为 2026-07-26 换代与 tool_choice 一轮
+- 状态:accepted;第 2–6 节为 2026-07-25 一轮,第 7 节为 2026-07-26 控制面一轮,第 9–10 节为 2026-07-26 换代/tool_choice 与仪表盘两轮
 - 核对基线:`Reference/` @ `012e37c8b51df045353972bb551d8e868ab52455`
 - 目标读者:维护者、评审者、接手做下一轮验证的人
 - 关联:[NOW.md](../NOW.md)、[decisions/0004](../decisions/0004-delivery-dedup.md)
@@ -9,7 +9,7 @@
 
 ## 1. 为什么单独记这一份
 
-离线回归(2026-07-26 起为 477 passed)只说明**单测口径**下的行为成立。它抓不到两类问题:
+离线回归(2026-07-26 起为 494 passed)只说明**单测口径**下的行为成立。它抓不到两类问题:
 
 1. **跨组件的真实链路**——测试用 mock provider 与替身渠道,组件之间的真实交互没被走过;
 2. **真实模型的输出偏差**——mock 永远按约定返回,真实模型不会。
@@ -159,3 +159,29 @@ toolCall)。已按 Reference 补齐 `outbound_metadata`,重跑后 toolCall 正�
 
 未出现 Reference `DeepSeekStrategy` 提示的 thinking 冲突(当前配置下)。换 provider 或开
 thinking 后需重验,见 [NOW.md](../NOW.md)。
+
+## 10. Web 仪表盘(F,2026-07-26)
+
+真实 gateway(`main.py gateway`,真实 deepseek + 承重记忆引擎)+ 浏览器实访。
+
+| 面板 | 结果 |
+| --- | --- |
+| 总览 | 引擎 `default · 承重`、5 条记忆、12 个会话、主动运行中、Drift 3 轮、`未托管 → agent_restart 不可用` 均正确 |
+| 记忆 | 走引擎 admin 协议;能力集 8 项与工具面 `recall_memory/memorize/forget_memory` 由 `tool_profile()` 渲染;5 条记忆含 active/superseded 分状态 |
+| 会话 | 12 个会话列表;点开 `telegram:1862986856` 显示 58 条、已归档至第 37 条与真实历史 |
+| 插件与代际 | 空 workspace 下正确显示"暂无数据"(未装插件) |
+| 主动与 Drift | 流水线 7 个 slot、电量 0.26/base 0.95、真实决策轨迹;Drift 3 轮运行含 sent/silent 与跨轮 scratchpad/倾向 |
+| 聊天页 | 真实模型一轮问答正常渲染 |
+
+### 这一轮抓到的问题
+
+1. **状态库的线程亲和(真 bug)**:`proactive.db` / `drift.db` 的连接归事件循环线程独占,
+   而 Web 的 HTTP handler 跑在 `ThreadingHTTPServer` 自己的线程里——首次打开面板直接报
+   `SQLite objects created in a thread can only be used in that same thread`。
+   修法是把读 marshal 回属主线程(`DashboardService._read`,同 `_next_event_sync` 的既有惯例),
+   **而不是另开一条连接**——后者会破坏"状态库单一 owner"这条不变量。
+   单测抓不到:测试里 DashboardService 与 store 在同一线程。
+2. **空表头渲染成 `[object Object]`**:`esc(h.label || h)` 对空串会 falsy 回退到对象本身。
+   改成 `h.label === undefined ? h : h.label`。
+
+第 1 条与前两轮同属一类:**只有真跑才暴露的跨组件真实形状**(线程归属、上游字段、环境上限)。

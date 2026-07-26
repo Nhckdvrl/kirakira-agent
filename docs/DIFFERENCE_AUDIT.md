@@ -62,7 +62,7 @@ namespace、MessageBus、SessionManager、message-push 和 interrupt binding。�
 | Provider | 多后端抽象与更完整控制能力 | OpenAI-compatible 一类接口 | 范围收窄；forced tool choice 等能力缺失 |
 | 状态与持久化 | 统一 persistence 语义、更多 SQLite/恢复合同 | JSON/SQLite 分散在各模块 | 能运行，但一致性与恢复边界较弱 |
 | 扩展生态 | 插件市场、plugin job、proactive source、lifecycle factory | 声明式规格 + 作业/服务 host + 插件主动源编译 + 安装免重启 | 骨架对齐；缺包元数据与非 git 源 |
-| 控制面 | app server、control protocol、Dashboard、peer agent | **control protocol 已对齐**(JSON-RPC/NDJSON/Unix socket)+ Memory 管理 API | 协议与 turn 编排对齐;app server、Dashboard、peer agent 未实现 |
+| 控制面与观测 | app server、control protocol、Dashboard、peer agent | **control protocol 已对齐**(JSON-RPC/NDJSON/Unix socket)+ **五面板 Web 仪表盘** | 协议与 turn 编排对齐;仪表盘为零依赖替代实现;app server、peer agent 未实现 |
 
 Kirakira 的“轻”有真实收益：主链路可在较少文件内追踪，开发和演示成本低，也避免过早复制未被
 使用的抽象。但当需求进入热插拔、跨进程、可靠投递和故障恢复时，这些差异会从“简化”变成必须补的能力。
@@ -102,7 +102,8 @@ markdown store——Reference 里它读的就是 `MEMORY.md`(`MemoryProfileApi`)
 Reference 则完全不注册;门控在 kirakira 是 `embedding.base_url`,不沿用 Reference 的
 light/main 端点回退链(聊天端点通常没有 /embeddings,静默回退只会制造失败请求)。
 
-记忆侧仍未对齐的项(引擎插件路由 `config.memory.engine`、Dashboard 改走 `MemoryAdminApi`、
+Dashboard 此前直接调 `memory.store2.*` 绕过 admin 协议,已改为统一走 `engine.*_for_dashboard`
+(见 `dashboard.py`)。记忆侧仍未对齐的项(引擎插件路由 `config.memory.engine`、
 RecallInspector 观测面板)记录在 [NOW.md](./NOW.md)。
 
 ### 4.3 已确认不是差距的两项
@@ -187,7 +188,7 @@ lease 与提交语义。
 
 | 能力 | 当前处置 | 原因 |
 | --- | --- | --- |
-| 完整 Dashboard / frontend | 轻实现 | Memory2 已有分页、过滤、详情、编辑、相似项、删除和健康 API；尚无 Reference 完整前端 |
+| 完整 Dashboard / frontend | 替代实现 | 五面板仪表盘(总览/记忆/会话/插件与代际/主动与 Drift)+ 重做的聊天页，零依赖 stdlib 实现；**有意不引 React+Vite+Tailwind 构建链**——本项目的部署形态是"一个 Python 进程 + 一份 config"，加 node 构建会让 `uv run python main.py` 不再是完整启动方式。代价是没有组件复用，故页面保持在"操作台"复杂度 |
 | app server / control protocol | **已对齐**(JSON-RPC/NDJSON/Unix socket) | stdio 版 app_server 与 Dashboard HTTP API 未做 |
 | Agent 发起的 restart | **已实现并实弹换代成功**(2026-07-26) | RestartCoordinator + 准入冻结 + supervisor 私有管道提交,见 [design/agent-restart.md](./design/agent-restart.md);rolling backup 未做 |
 | peer-agent 进程管理 | 未实现 | 当前 subagent 已满足本地委派范围 |
@@ -234,8 +235,8 @@ per-plugin generation、proactive phase DAG、多目标调度、app server、Das
 - Telegram/启动：固定 Reference 源码字节一致性测试、原始 Telegram utils 契约测试和真实
   Supervisor → gateway readiness 启动。
 
-当前完整离线回归为 `477 passed, 4 subtests passed`(2026-07-26,含 agent_restart、
-tick 双租约、tool_choice、scheduler misfire 恢复与记忆工具对齐的新增用例)。
+当前完整离线回归为 `494 passed, 4 subtests passed`(2026-07-26,含 agent_restart、
+tick 双租约、tool_choice、scheduler misfire 恢复、记忆工具对齐与 Dashboard 的新增用例)。
 
 现有测试证明“进程内闭环贯通到 Channel callback”，尚未证明：真实外部平台最终展示、渠道成功与
 consume/ACK 的跨崩溃原子性、进程恢复、多目标公平调度、插件热换代中的主动 tick 一致性，以及

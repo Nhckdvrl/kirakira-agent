@@ -40,6 +40,7 @@ from kirakira_agent.proactive.sources import build_file_inbox_registry
 from kirakira_agent.proactive.state import ProactiveStateStore
 from kirakira_agent.drift import DriftRunner
 from kirakira_agent.control.binding import build_control_plane
+from kirakira_agent.dashboard import DashboardService
 from kirakira_agent.restart import RestartCoordinator, SupervisorCommitChannel
 from kirakira_agent.supervisor import RESTART_EXIT_CODE
 from kirakira_agent.runtime import (
@@ -121,6 +122,7 @@ def _build_channel_host(
     interrupt=None,
     memory=None,
     app_config=None,
+    dashboard=None,
 ) -> ChannelHost | None:
     from agent.looping.interrupt import InterruptController
     from agent.tools.message_push import MessagePushTool
@@ -157,6 +159,7 @@ def _build_channel_host(
                 host=os.getenv("KIRAKIRA_WEB_HOST", str(chat_config.get("host") or "127.0.0.1")),
                 port=int(os.getenv("KIRAKIRA_WEB_PORT", str(chat_config.get("port") or 6322))),
                 channel_name=os.getenv("KIRAKIRA_WEB_CHANNEL", str(chat_config.get("channel_name") or "web")),
+                dashboard=dashboard,
             )
         )
         added = True
@@ -669,6 +672,18 @@ async def build_runtime(
     pipeline.add_before_reasoning_plugin_modules(plugin_manager.before_reasoning_modules)
     pipeline.add_after_reasoning_plugin_modules(plugin_manager.after_reasoning_modules)
     pipeline.add_after_turn_plugin_modules(plugin_manager.after_turn_modules)
+    # Dashboard 数据面。主动/Drift 在下面才装配,这里先建再回填——DashboardService
+    # 是可变 dataclass,这样不必为了一个只读面板重排整条装配顺序。
+    dashboard = DashboardService(
+        workspace=workdir,
+        session_manager=session_manager,
+        memory_services=memory_services,
+        memory=memory,
+        plugin_manager=plugin_manager,
+        restart_coordinator=None,
+        # 状态库连接归本循环所在线程独占;Web 的 HTTP handler 在别的线程,读要 marshal 回来。
+        loop=asyncio.get_running_loop(),
+    )
     channel_host = _build_channel_host(
         workdir=workdir,
         bus=bus,
@@ -681,6 +696,7 @@ async def build_runtime(
         interrupt=loop.request_interrupt,
         memory=memory,
         app_config=app_config,
+        dashboard=dashboard,
     )
     if plugin_manager.channels:
         if channel_host is None:
@@ -713,6 +729,9 @@ async def build_runtime(
         plugin_generations=plugin_manager.generations,
         snapshot_store=snapshot_store,
     )
+    # 回填晚于面板构造的两条链路,Dashboard 的主动/Drift 面板由此拿到真实数据。
+    dashboard.proactive_loop = proactive_loop
+    dashboard.drift_runner = drift_runner
     if proactive_loop is not None:
         available_channels = {
             channel.name for channel in (channel_host.channels if channel_host else [])
@@ -773,6 +792,7 @@ async def build_runtime(
             restart_coordinator=restart_coordinator,
         )
     )
+    dashboard.restart_coordinator = restart_coordinator
     if restart_coordinator is not None:
         register_agent_restart_tool(registry, restart_coordinator)
     return CoreRuntime(

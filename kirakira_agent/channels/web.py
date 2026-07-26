@@ -19,6 +19,7 @@ import urllib.parse
 from uuid import uuid4
 
 from kirakira_agent.channels.contract import ChannelContext
+from kirakira_agent.channels.web_ui import CHAT_HTML, DASHBOARD_HTML
 from kirakira_agent.events import InboundMessage, OutboundMessage
 
 logger = logging.getLogger(__name__)
@@ -26,173 +27,6 @@ logger = logging.getLogger(__name__)
 
 class _DaemonThreadingHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
-
-
-_INDEX_HTML = """<!doctype html>
-<html lang="zh-CN">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Kirakira Agent</title>
-  <style>
-    body { margin: 0; font: 15px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f7f7f8; color: #202124; }
-    main { max-width: 860px; margin: 0 auto; min-height: 100vh; display: grid; grid-template-rows: auto 1fr auto; }
-    header { padding: 18px 16px; border-bottom: 1px solid #ddd; font-weight: 650; }
-    #log { padding: 16px; overflow-y: auto; }
-    .msg { margin: 0 0 12px; padding: 10px 12px; border: 1px solid #ddd; background: #fff; border-radius: 6px; white-space: pre-wrap; }
-    .user { background: #eef5ff; }
-    form { display: flex; gap: 8px; padding: 14px 16px; border-top: 1px solid #ddd; background: #fff; }
-    textarea { flex: 1; min-height: 44px; max-height: 160px; resize: vertical; font: inherit; padding: 10px; border: 1px solid #bbb; border-radius: 6px; }
-    button { min-width: 72px; border: 1px solid #111; background: #111; color: white; border-radius: 6px; font: inherit; cursor: pointer; }
-  </style>
-</head>
-<body>
-<main>
-  <header>Kirakira Agent Web Channel</header>
-  <section id="log"></section>
-  <form id="form">
-    <textarea id="text" placeholder="输入消息..."></textarea>
-    <button>发送</button>
-  </form>
-</main>
-<script>
-const log = document.querySelector("#log");
-const text = document.querySelector("#text");
-const sessionId = localStorage.kirakiraSessionId || crypto.randomUUID();
-localStorage.kirakiraSessionId = sessionId;
-function add(cls, value) {
-  const div = document.createElement("div");
-  div.className = "msg " + cls;
-  div.textContent = value;
-  log.appendChild(div);
-  div.scrollIntoView({block: "end"});
-}
-document.querySelector("#form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const value = text.value.trim();
-  if (!value) return;
-  text.value = "";
-  add("user", value);
-  const resp = await fetch("/message", {
-    method: "POST",
-    headers: {"content-type": "application/json"},
-    body: JSON.stringify({session_id: sessionId, text: value})
-  });
-  const data = await resp.json();
-  add("assistant", data.content || data.error || "(empty)");
-});
-async function pollEvents() {
-  while (true) {
-    try {
-      const response = await fetch("/events?session_id=" + encodeURIComponent(sessionId));
-      if (response.ok) {
-        const data = await response.json();
-        if (data.content) add("agent", data.content);
-      }
-    } catch (_) {}
-    await new Promise(resolve => setTimeout(resolve, 500));
-  }
-}
-pollEvents();
-</script>
-</body>
-</html>
-"""
-
-
-_MEMORY_HTML = """<!doctype html>
-<html lang="zh-CN">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Kirakira Memory2</title>
-  <style>
-    body { margin: 0; font: 14px/1.5 system-ui, sans-serif; color: #202124; background: #f6f7f9; }
-    main { max-width: 1180px; margin: 0 auto; padding: 24px; }
-    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
-    h1 { margin: 0; font-size: 22px; }
-    a { color: #275efe; }
-    .panel { background: white; border: 1px solid #ddd; border-radius: 8px; padding: 14px; margin-bottom: 14px; }
-    .filters { display: grid; grid-template-columns: 2fr repeat(3, 1fr) auto; gap: 8px; }
-    input, select, textarea, button { font: inherit; padding: 8px; border: 1px solid #bbb; border-radius: 5px; }
-    button { cursor: pointer; background: #fff; }
-    button.primary { background: #111; color: #fff; border-color: #111; }
-    button.danger { color: #a00; border-color: #c88; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { border-bottom: 1px solid #e4e4e4; padding: 8px; text-align: left; vertical-align: top; }
-    th { white-space: nowrap; }
-    td.summary { max-width: 560px; }
-    .muted { color: #777; }
-    .toolbar { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
-    #detail[hidden] { display: none; }
-    #detail textarea { width: 100%; min-height: 100px; box-sizing: border-box; }
-    pre { white-space: pre-wrap; word-break: break-word; max-height: 240px; overflow: auto; }
-  </style>
-</head>
-<body><main>
-  <header><h1>Kirakira Memory2 Dashboard</h1><a href="/">返回聊天</a></header>
-  <section class="panel filters">
-    <input id="q" placeholder="搜索 ID、正文、source_ref" />
-    <select id="type"><option value="">全部类型</option><option>procedure</option><option>preference</option><option>event</option><option>profile</option></select>
-    <select id="status"><option value="">全部状态</option><option>active</option><option>superseded</option></select>
-    <select id="embedding"><option value="">全部向量状态</option><option value="true">有 embedding</option><option value="false">无 embedding</option></select>
-    <button class="primary" onclick="page=1;load()">查询</button>
-  </section>
-  <section class="panel">
-    <table><thead><tr><th></th><th>ID</th><th>类型/状态</th><th>摘要</th><th>来源</th><th>强化</th><th></th></tr></thead><tbody id="rows"></tbody></table>
-    <div class="toolbar">
-      <button onclick="page=Math.max(1,page-1);load()">上一页</button>
-      <span id="pageInfo"></span>
-      <button onclick="page++;load()">下一页</button>
-      <button class="danger" onclick="batchHardDelete()">确认硬删除选中项</button>
-    </div>
-  </section>
-  <section id="detail" class="panel" hidden>
-    <h2 id="detailTitle"></h2>
-    <label>正文</label><textarea id="summary"></textarea>
-    <div class="toolbar">
-      <select id="editType"><option>procedure</option><option>preference</option><option>event</option><option>profile</option></select>
-      <button class="primary" onclick="saveEdit()">保存编辑</button>
-      <button onclick="logicalDelete()">逻辑删除</button>
-      <button onclick="loadSimilar()">相似记忆</button>
-      <button class="danger" onclick="hardDelete()">确认硬删除</button>
-    </div>
-    <pre id="detailJson"></pre><pre id="similar"></pre>
-  </section>
-  <section class="panel"><button onclick="health()">刷新健康信息</button><pre id="health"></pre></section>
-</main>
-<script>
-let page=1, pageSize=50, selected=null;
-const qEl=document.getElementById('q'), typeEl=document.getElementById('type'), statusEl=document.getElementById('status'), embeddingEl=document.getElementById('embedding');
-const rowsEl=document.getElementById('rows'), pageInfoEl=document.getElementById('pageInfo'), detailEl=document.getElementById('detail');
-const detailTitleEl=document.getElementById('detailTitle'), summaryEl=document.getElementById('summary'), editTypeEl=document.getElementById('editType');
-const detailJsonEl=document.getElementById('detailJson'), similarEl=document.getElementById('similar'), healthEl=document.getElementById('health');
-const esc = value => String(value ?? "").replace(/[&<>\"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-async function load(){
-  const p=new URLSearchParams({page,page_size:pageSize,q:qEl.value,memory_type:typeEl.value,status:statusEl.value,has_embedding:embeddingEl.value});
-  const data=await (await fetch('/api/memories?'+p)).json();
-  rowsEl.innerHTML=data.memories.map(item=>`<tr><td><input type="checkbox" value="${esc(item.id)}"></td><td><a href="#" onclick="showDetail('${esc(item.id)}');return false">${esc(item.id)}</a></td><td>${esc(item.memory_type)}<br><span class="muted">${esc(item.status)} / ${item.has_embedding?'vector':'no vector'}</span></td><td class="summary">${esc(item.summary)}</td><td>${esc(item.source_ref||'')}</td><td>${esc(item.reinforcement)}</td><td><button onclick="showDetail('${esc(item.id)}')">详情</button></td></tr>`).join('');
-  const pages=Math.max(1,Math.ceil(data.total/data.page_size)); if(page>pages){page=pages;return load();}
-  pageInfoEl.textContent=`第 ${page}/${pages} 页，共 ${data.total} 条`;
-}
-async function showDetail(id){
-  const response=await fetch('/api/memory?id='+encodeURIComponent(id)); const data=await response.json();
-  if(!response.ok){alert(data.error||'not found');return;} selected=data.memory; detailEl.hidden=false;
-  detailTitleEl.textContent=`记忆 ${selected.id}`; summaryEl.value=selected.summary; editTypeEl.value=selected.memory_type;
-  detailJsonEl.textContent=JSON.stringify(selected,null,2); similarEl.textContent=''; detailEl.scrollIntoView({behavior:'smooth'});
-}
-async function saveEdit(){
-  const response=await fetch('/api/memory',{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({id:selected.id,content:summaryEl.value,memory_type:editTypeEl.value})});
-  const data=await response.json(); if(!response.ok){alert(data.error);return;} await load(); await showDetail(selected.id);
-}
-async function logicalDelete(){if(!selected||!confirm('将该记忆标记为 superseded？'))return;await fetch('/api/memory?id='+encodeURIComponent(selected.id),{method:'DELETE'});detailEl.hidden=true;load();}
-async function hardDelete(){if(!selected||!confirm('物理删除不可由普通 recall 恢复，确定？'))return;await fetch('/api/memory?id='+encodeURIComponent(selected.id)+'&hard=true&confirm=HARD_DELETE',{method:'DELETE'});detailEl.hidden=true;load();}
-async function batchHardDelete(){const ids=[...document.querySelectorAll('tbody input:checked')].map(x=>x.value);if(!ids.length||!confirm(`物理删除 ${ids.length} 条记忆？`))return;const r=await fetch('/api/memories/delete',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({ids,confirm:'HARD_DELETE'})});const d=await r.json();if(!r.ok)alert(d.error);load();}
-async function loadSimilar(){const r=await fetch('/api/memory/similar?id='+encodeURIComponent(selected.id));const d=await r.json();similarEl.textContent=JSON.stringify(d,null,2);}
-async function health(){healthEl.textContent=JSON.stringify(await (await fetch('/api/memory/health')).json(),null,2);}
-load();health();
-</script></body></html>
-"""
 
 
 class WebChannel:
@@ -203,11 +37,14 @@ class WebChannel:
         port: int = 6322,
         channel_name: str = "web",
         response_timeout: float = 180.0,
+        dashboard: Any = None,
     ) -> None:
         self.name = channel_name
         self.host = host
         self.port = int(port)
         self.response_timeout = float(response_timeout)
+        # 装配期注入的 DashboardService;未注入时 _dashboard() 按 ctx 临时组一个。
+        self._dashboard_service = dashboard
         self._ctx: ChannelContext | None = None
         self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
@@ -268,10 +105,11 @@ class WebChannel:
             def do_GET(self) -> None:
                 parsed = urllib.parse.urlparse(self.path)
                 if parsed.path == "/":
-                    self._send_bytes(_INDEX_HTML.encode("utf-8"), "text/html; charset=utf-8")
+                    self._send_bytes(CHAT_HTML.encode("utf-8"), "text/html; charset=utf-8")
                     return
-                if parsed.path == "/memory":
-                    self._send_bytes(_MEMORY_HTML.encode("utf-8"), "text/html; charset=utf-8")
+                if parsed.path in ("/dashboard", "/memory"):
+                    # /memory 是旧地址,保留为仪表盘的别名,老书签不至于 404。
+                    self._send_bytes(DASHBOARD_HTML.encode("utf-8"), "text/html; charset=utf-8")
                     return
                 if parsed.path == "/favicon.ico":
                     self._send_bytes(b"", "image/x-icon")
@@ -279,20 +117,19 @@ class WebChannel:
                 if parsed.path == "/health":
                     self._send_json({"ok": True, "channel": channel.name})
                     return
+                if parsed.path.startswith("/api/dashboard"):
+                    self._dashboard_get(parsed)
+                    return
                 if parsed.path == "/api/sessions":
-                    self._send_json(
-                        {"sessions": channel._ctx.session_manager.list_sessions()}
-                        if channel._ctx
-                        else {"sessions": []}
-                    )
+                    self._send_json({"sessions": channel._dashboard().sessions()})
                     return
                 if parsed.path == "/api/memories":
                     query = urllib.parse.parse_qs(parsed.query)
-                    self._send_json(channel._memory_records(query))
+                    self._send_json(channel._dashboard().memories(query))
                     return
                 if parsed.path == "/api/memory":
                     query = urllib.parse.parse_qs(parsed.query)
-                    item = channel._memory_detail(str((query.get("id") or [""])[0]))
+                    item = channel._dashboard().memory_item(str((query.get("id") or [""])[0]))
                     self._send_json(
                         {"memory": item},
                         status=HTTPStatus.OK if item is not None else HTTPStatus.NOT_FOUND,
@@ -301,7 +138,7 @@ class WebChannel:
                 if parsed.path == "/api/memory/similar":
                     query = urllib.parse.parse_qs(parsed.query)
                     try:
-                        items = channel._memory_similar(
+                        items = channel._dashboard().memory_similar(
                             str((query.get("id") or [""])[0]),
                             int((query.get("limit") or ["8"])[0]),
                         )
@@ -310,7 +147,7 @@ class WebChannel:
                         self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
                     return
                 if parsed.path == "/api/memory/health":
-                    self._send_json(channel._memory_health())
+                    self._send_json(channel._dashboard().memory_health())
                     return
                 if parsed.path == "/events":
                     try:
@@ -334,10 +171,10 @@ class WebChannel:
                 self._send_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
 
             def do_POST(self) -> None:
-                if self.path == "/api/memories/delete":
+                if self.path in ("/api/memories/delete", "/api/dashboard/memories/batch-delete"):
                     try:
                         payload = self._read_json()
-                        deleted = channel._hard_delete_memories(
+                        deleted = channel._dashboard().delete_memories(
                             [str(item) for item in payload.get("ids", [])],
                             confirm=str(payload.get("confirm") or ""),
                         )
@@ -370,12 +207,12 @@ class WebChannel:
                     self._send_json({"error": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
 
             def do_PATCH(self) -> None:
-                if self.path != "/api/memory":
+                if self.path not in ("/api/memory", "/api/dashboard/memory"):
                     self._send_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
                     return
                 try:
                     payload = self._read_json()
-                    updated = channel._update_memory(payload)
+                    updated = channel._dashboard().update_memory(payload)
                     self._send_json({"ok": updated}, status=HTTPStatus.OK if updated else HTTPStatus.NOT_FOUND)
                 except Exception as exc:
                     self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
@@ -383,18 +220,19 @@ class WebChannel:
             def do_DELETE(self) -> None:
                 parsed = urllib.parse.urlparse(self.path)
                 query = urllib.parse.parse_qs(parsed.query)
-                if parsed.path == "/api/session":
+                board = channel._dashboard()
+                if parsed.path in ("/api/session", "/api/dashboard/session"):
                     key = str((query.get("key") or [""])[0])
-                    deleted = bool(channel._ctx and channel._ctx.session_manager.delete_session(key))
+                    deleted = board.delete_session(key)
                     self._send_json({"ok": deleted}, status=HTTPStatus.OK if deleted else HTTPStatus.NOT_FOUND)
                     return
-                if parsed.path == "/api/memory":
+                if parsed.path in ("/api/memory", "/api/dashboard/memory"):
                     memory_id = str((query.get("id") or [""])[0])
                     hard = str((query.get("hard") or [""])[0]).lower() in {"1", "true"}
                     if hard:
                         try:
                             deleted = bool(
-                                channel._hard_delete_memories(
+                                board.delete_memories(
                                     [memory_id],
                                     confirm=str((query.get("confirm") or [""])[0]),
                                 )
@@ -403,10 +241,59 @@ class WebChannel:
                             self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
                             return
                     else:
-                        deleted = channel._forget_memory(memory_id)
+                        deleted = board.forget_memory(memory_id)
                     self._send_json({"ok": deleted}, status=HTTPStatus.OK if deleted else HTTPStatus.NOT_FOUND)
                     return
                 self._send_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
+
+            def _dashboard_get(self, parsed) -> None:
+                """`/api/dashboard/*` 的只读投影。单个面板失败不让整页 500。"""
+                query = urllib.parse.parse_qs(parsed.query)
+                board = channel._dashboard()
+                suffix = parsed.path[len("/api/dashboard") :]
+                try:
+                    if suffix == "/overview":
+                        self._send_json(board.overview())
+                    elif suffix == "/memories":
+                        self._send_json(board.memories(query))
+                    elif suffix == "/memory":
+                        item = board.memory_item(str((query.get("id") or [""])[0]))
+                        self._send_json(
+                            {"memory": item},
+                            status=HTTPStatus.OK if item is not None else HTTPStatus.NOT_FOUND,
+                        )
+                    elif suffix == "/memory/similar":
+                        self._send_json(
+                            {
+                                "items": board.memory_similar(
+                                    str((query.get("id") or [""])[0]),
+                                    int((query.get("limit") or ["8"])[0]),
+                                )
+                            }
+                        )
+                    elif suffix == "/memory/engine-info":
+                        self._send_json(board.engine_info())
+                    elif suffix == "/memory/health":
+                        self._send_json(board.memory_health())
+                    elif suffix == "/sessions":
+                        self._send_json({"sessions": board.sessions()})
+                    elif suffix == "/session":
+                        item = board.session(str((query.get("key") or [""])[0]))
+                        self._send_json(
+                            {"session": item},
+                            status=HTTPStatus.OK if item is not None else HTTPStatus.NOT_FOUND,
+                        )
+                    elif suffix == "/plugins":
+                        self._send_json(board.plugins())
+                    elif suffix == "/proactive":
+                        self._send_json(board.proactive())
+                    elif suffix == "/drift":
+                        self._send_json(board.drift())
+                    else:
+                        self._send_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
+                except Exception as exc:  # noqa: BLE001 - 面板错误回给前端展示,不 500
+                    logger.exception("[web] dashboard %s failed", suffix)
+                    self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
 
             def _read_json(self) -> dict[str, Any]:
                 length = int(self.headers.get("content-length") or "0")
@@ -544,100 +431,21 @@ class WebChannel:
             result.append(str(path))
         return result
 
-    def _memory_records(self, query: dict[str, list[str]] | None = None) -> dict[str, object]:
-        if self._ctx is None:
-            return {"memories": [], "total": 0, "page": 1, "page_size": 50}
-        memory = getattr(self._ctx, "memory", None)
-        if memory is None:
-            return {"memories": [], "total": 0, "page": 1, "page_size": 50}
-        params = query or {}
-        page = max(1, int((params.get("page") or ["1"])[0]))
-        page_size = max(1, min(200, int((params.get("page_size") or ["50"])[0])))
-        if memory.engine == "coremem" and memory.store2 is not None:
-            embedding_raw = str((params.get("has_embedding") or [""])[0]).lower()
-            has_embedding = None
-            if embedding_raw in {"1", "true"}:
-                has_embedding = True
-            elif embedding_raw in {"0", "false"}:
-                has_embedding = False
-            items, total = memory.store2.list_items_for_dashboard(
-                q=str((params.get("q") or [""])[0]),
-                memory_type=str((params.get("memory_type") or [""])[0]),
-                status=str((params.get("status") or [""])[0]),
-                source_ref=str((params.get("source_ref") or [""])[0]),
-                scope_channel=str((params.get("scope_channel") or [""])[0]),
-                scope_chat_id=str((params.get("scope_chat_id") or [""])[0]),
-                has_embedding=has_embedding,
-                page=page,
-                page_size=page_size,
-                sort_by=str((params.get("sort_by") or ["created_at"])[0]),
-                sort_order=str((params.get("sort_order") or ["desc"])[0]),
-            )
-            return {"memories": items, "total": total, "page": page, "page_size": page_size}
-        items = memory.list_records(include_forgotten=True)
-        return {
-            "memories": items[(page - 1) * page_size : page * page_size],
-            "total": len(items),
-            "page": page,
-            "page_size": page_size,
-        }
+    def _dashboard(self):
+        """Dashboard 数据面。
 
-    def _memory_detail(self, memory_id: str) -> dict[str, object] | None:
-        if self._ctx is None:
-            return None
-        memory = getattr(self._ctx, "memory", None)
-        if memory is None:
-            return None
-        if memory.engine == "coremem" and memory.store2 is not None:
-            return memory.store2.get_item_for_dashboard(memory_id)
-        return next(
-            (item for item in memory.list_records(include_forgotten=True) if item["id"] == memory_id),
-            None,
+        优先用装配期注入的 DashboardService(它能看到 proactive/drift/plugins);
+        没注入时(最小构造、旧测试)按 ctx 现有依赖临时组一个,页面仍可打开,
+        只是主动/插件面板为空。
+        """
+        if self._dashboard_service is not None:
+            return self._dashboard_service
+        from kirakira_agent.dashboard import DashboardService
+
+        ctx = self._ctx
+        return DashboardService(
+            workspace=ctx.workspace if ctx else Path("."),
+            session_manager=ctx.session_manager if ctx else None,
+            memory=getattr(ctx, "memory", None) if ctx else None,
+            memory_services=getattr(ctx, "memory_services", None) if ctx else None,
         )
-
-    def _memory_similar(self, memory_id: str, limit: int) -> list[dict[str, object]]:
-        if self._ctx is None:
-            return []
-        memory = getattr(self._ctx, "memory", None)
-        if memory is None or memory.engine != "coremem" or memory.store2 is None:
-            return []
-        return memory.store2.find_similar_items_for_dashboard(
-            memory_id, top_k=max(1, min(50, limit))
-        )
-
-    def _memory_health(self) -> dict[str, object]:
-        if self._ctx is None:
-            return {"ok": False, "error": "channel not started"}
-        from kirakira_agent.memory_admin import doctor
-
-        return doctor(self._ctx.workspace)
-
-    def _update_memory(self, payload: dict[str, Any]) -> bool:
-        if self._ctx is None:
-            return False
-        memory = getattr(self._ctx, "memory", None)
-        if memory is None:
-            return False
-        return memory.update_record(
-            str(payload.get("id") or ""),
-            content=payload.get("content"),
-            memory_type=payload.get("memory_type"),
-        )
-
-    def _forget_memory(self, memory_id: str) -> bool:
-        if self._ctx is None:
-            return False
-        memory = getattr(self._ctx, "memory", None)
-        return bool(memory and memory.forget([memory_id]))
-
-    def _hard_delete_memories(self, ids: list[str], *, confirm: str) -> int:
-        if confirm != "HARD_DELETE":
-            raise ValueError("hard delete requires confirm=HARD_DELETE")
-        if self._ctx is None:
-            return 0
-        memory = getattr(self._ctx, "memory", None)
-        if memory is None or memory.engine != "coremem" or memory.store2 is None:
-            raise RuntimeError("hard delete 只允许在 Memory2 Dashboard 执行")
-        deleted = memory.store2.delete_items_batch([item for item in ids if item])
-        memory._load()
-        return deleted
