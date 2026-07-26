@@ -21,7 +21,7 @@
 完整离线回归:
 
 ```text
-504 passed, 4 subtests passed
+518 passed, 4 subtests passed
 ```
 
 2026-07-26 新增:agent_restart 换代链路、主动 tick 双代际租约、`tool_choice`
@@ -157,7 +157,7 @@ Kirakira ≈3.4 万行,Reference ≈10.5 万行(产品代码)。差距的核心�
 | 加法(依赖地基,可增量) | 状态 |
 | --- | --- |
 | control plane | **已完成**(JSON-RPC over NDJSON,见 [design/control-plane.md](./design/control-plane.md));app server / 前端未做 |
-| **agent_restart 换代** | **已完成**(准入冻结 + 双条件提交 + supervisor 握手,见 [design/agent-restart.md](./design/agent-restart.md));真实换代待实弹 |
+| **agent_restart 换代** | **已完成**(准入冻结 + 双条件提交 + supervisor 握手,见 [design/control-plane.md](./design/control-plane.md#agent_restartagent-自请求换代重启));已实弹换代成功 |
 | **主动 tick 代际租约** | **已完成**(plugin generation + snapshot 双租约,gateway 快照钉定) |
 | **前端仪表盘** | **已完成**(六面板:总览/记忆/会话/检索回放/插件与代际/主动与 Drift + 重做聊天页);零依赖 stdlib,不引构建链 |
 | peer-agent 进程管理 | 无 |

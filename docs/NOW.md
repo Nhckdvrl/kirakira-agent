@@ -7,7 +7,7 @@
 > 因此本文件分两节:第 1 节是功能/可靠性缺口,第 2 节是明确推迟的结构工程。
 >
 > 本文只收录**有接手点与验收边界**的事项。与 Reference 的完整覆盖面对照
-> (含整块未实现的子系统)见 [ALIGNMENT.md](./ALIGNMENT.md) 第 5 节。
+> (含整块未实现的子系统)见 [DIFFERENCE_AUDIT.md](./DIFFERENCE_AUDIT.md) 附录 A.5。
 
 ## 1. 功能与可靠性缺口
 
@@ -41,17 +41,18 @@ tick 现在把租到的 snapshot 钉在共享 gateway 上,源在本轮用同一�
 
 **验收**:真实源产出的事件进入三通道去重、被判断链路消费,ACK 回到源端。
 
-### 1.4 检索注入阈值待评估(检索回放实测发现)
+### 1.4 存量非规范类型记忆的修复
 
-**现状**:检索回放面板第一次使用就记录到一例——自动检索召回了正确的 identity 记忆
-(分数 0.515)但 `injected=False` 未进上下文;模型随后主动 `recall_memory(intent="answer")`
-返回 0 条,于是回答"没找到"。证据见
-[design/live-verification.md](./design/live-verification.md) 第 11 节。
+**现状**:注入选择器只接受 `procedure/preference/event/profile`;旧工具 schema 写入的
+`identity` 等类型即使被检索命中也永远不会注入(见
+[design/live-verification.md](./design/live-verification.md) 第 13 节)。
+写入边界已归一,`memory doctor` 的 `coremem.non_injectable_types` 会报出存量;
+**但已有的行仍是坏的**——当前工作区有 1 条 active `identity`。
 
-**接手点**:用回放面板收集若干轮样本,再决定调 `DefaultMemoryConfig` 的注入预算与
-`answer` intent 的 score_threshold。改阈值是行为变更,要有样本再动。
+**接手点**:把存量行的 `memory_type` 改成 `profile`(与写入边界同一张映射),
+或由用户重新说一遍让 agent 重写。前者需要一条一次性修复命令。
 
-**验收**:同类提问能稳定召回并注入;不因放宽阈值而引入无关记忆。
+**验收**:doctor 报 `non_injectable_types: {}`;问"你是谁"能召回并注入到上下文。
 
 ### 1.5 主动链路的限流与审计厚度(Reference 有、kirakira 无)
 

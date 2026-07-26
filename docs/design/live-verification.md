@@ -1,6 +1,6 @@
 # 实弹验证记录:哪些链路真的跑过
 
-- 状态:accepted;第 2–6 节为 2026-07-25 一轮,第 7 节为 2026-07-26 控制面一轮,第 9–11 节为 2026-07-26 换代/tool_choice、仪表盘与检索回放三轮,第 12 节为 2026-07-27 akasha 引擎
+- 状态:accepted;第 2–6 节为 2026-07-25 一轮,第 7 节为 2026-07-26 控制面一轮,第 9–11 节为 2026-07-26 换代/tool_choice、仪表盘与检索回放三轮,第 12–13 节为 2026-07-27 akasha 引擎与设计意图逐项检验
 - 核对基线:`Reference/` @ `012e37c8b51df045353972bb551d8e868ab52455`
 - 目标读者:维护者、评审者、接手做下一轮验证的人
 - 关联:[NOW.md](../NOW.md)、[decisions/0004](../decisions/0004-delivery-dedup.md)
@@ -9,7 +9,7 @@
 
 ## 1. 为什么单独记这一份
 
-离线回归(2026-07-27 起为 515 passed)只说明**单测口径**下的行为成立。它抓不到两类问题:
+离线回归(2026-07-27 起为 518 passed)只说明**单测口径**下的行为成立。它抓不到两类问题:
 
 1. **跨组件的真实链路**——测试用 mock provider 与替身渠道,组件之间的真实交互没被走过;
 2. **真实模型的输出偏差**——mock 永远按约定返回,真实模型不会。
@@ -240,3 +240,42 @@ thinking 后需重验,见 [NOW.md](../NOW.md)。
    `DELETE FROM messages` 会触发删除不存在的索引项,SQLite 直接报
    `database disk image is malformed`(`integrity_check` 却是 ok)。派生物应当能无条件
    重置,故改为"先拆触发器与索引、清表、再原样建回"。
+
+## 13. 设计意图逐项在线检验(F,2026-07-27)
+
+akasha 与仪表盘一轮改动之后,用真实 gateway(默认引擎 + 真实 deepseek)逐项核对
+**"实现是否满足当初的设计意图"**,而不只是"能不能跑"。
+
+| 设计项 | 检验结果 |
+| --- | --- |
+| 默认引擎在 akasha 改动后仍承重 | `engine-info` 报 `default`、`load_bearing=true`、工具面三件套齐 |
+| 引擎路由 fail loud | 配错名字 → `未知记忆引擎: 'akashaa'(可选 default / akasha)` |
+| 批量删除的 confirm 保护 | 缺令牌 → 400 `hard delete requires confirm=HARD_DELETE` |
+| 消息面板只读契约 | 命中 5 条,`deletable=false` 且带原因 |
+| `compact` 真归档 | 归档游标 0 → **2**,回执"已归档 2 条历史消息" |
+| subagent 禁用名单用真实工具名 | 14 项全部是已注册名,`mcp_apply` 在内 |
+| 检索回放记录默认引擎路径 | 记录到 `engine=default` 的 context_prepare |
+| 插件面板代际可观测 | 空 workspace 正确返回空集合 |
+
+### 抓到一个真缺陷:非规范类型的记忆永远不会被注入
+
+两次采样都是同一现象:检索**命中了正确的记忆**(score 0.515 / 0.5818,均高于
+阈值 0.45),但 `injected=False`,模型于是答出与记忆不符的内容
+(库里是"月火,傲娇",模型答"Kirakira,认真活泼")。
+
+根因不在阈值,在**类型**:`retriever._select_injection_sections` 只接受
+`procedure/preference` 与 `event/profile` 四类,其余落进 `else: continue`。
+而这两条记忆的类型是 `identity` —— kirakira **旧工具 schema** 才有的类型
+(Reference 的 enum 只有 event/profile/preference/procedure,靠 schema 就防住了)。
+引擎的 `_coerce_memory_type` 只处理 procedure,其余原样存入,所以旧数据静默失效。
+
+处置(不改镜像文件):
+
+1. **写入边界归一**:`_canonical_memory_kind` 把 `identity/fact/requested_memory`
+   映射成 `profile`(与旧 `MemoryRuntime._canonical_memory_type` 同一张表),
+   新写入不会再产生不可注入的行;
+2. **doctor 报出存量**:`coremem.non_injectable_types` 列出 active 里的非规范类型,
+   当前工作区报 `{'identity': 1}` —— 这类数据以前完全不可见。
+
+这一条是"在线检验设计意图"的直接价值:功能测试会通过(检索确实返回了记录),
+只有对着**设计意图**看才发现"召回了但没用上"。

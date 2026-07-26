@@ -242,3 +242,37 @@ class ProactiveInterestTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LegacyMemoryKindCanonicalizationTests(unittest.TestCase):
+    """写入边界把旧类型归一。
+
+    引擎的注入选择器只接受 event/profile/preference/procedure(retriever.py 的
+    `else: continue`),其余类型即使被检索命中也**永远不会注入上下文**。
+    Reference 靠工具 schema 的 enum 防住;kirakira 旧 schema 曾提供 identity,
+    写进去的行会静默失效——实弹里就撞上了(召回 score 0.58 但 injected=False)。
+    """
+
+    def test_legacy_kinds_map_to_canonical(self) -> None:
+        from kirakira_agent.tools.builtins import _canonical_memory_kind
+
+        for legacy in ("identity", "fact", "requested_memory"):
+            self.assertEqual(_canonical_memory_kind(legacy), "profile")
+
+    def test_canonical_and_blank_pass_through(self) -> None:
+        from kirakira_agent.tools.builtins import _canonical_memory_kind
+
+        for kind in ("event", "profile", "preference", "procedure", ""):
+            self.assertEqual(_canonical_memory_kind(kind), kind)
+
+    def test_memorize_writes_canonical_kind(self) -> None:
+        async def scenario() -> None:
+            engine = _FakeEngine()
+            engine.mutate.return_value = MemoryMutationResult(
+                accepted=True, item_id="m1", actual_kind="profile", status="new"
+            )
+            await _tools(engine).memorize("我是月火", memory_kind="identity")
+            # identity 会被注入选择器丢弃,所以在写入边界就归一成 profile
+            self.assertEqual(engine.mutate.await_args.args[0].memory_kind, "profile")
+
+        asyncio.run(scenario())

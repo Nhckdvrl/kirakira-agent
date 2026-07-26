@@ -86,12 +86,26 @@ def _sqlite_report(path: Path) -> dict[str, Any]:
                 "SELECT status, COUNT(*) FROM memory_items GROUP BY status"
             )
         }
+        # 注入选择器只接受这四类,其余类型即使被检索命中也永远不会注入上下文
+        # (retriever.py 的 `else: continue`)。旧 schema 写进来的 identity/fact 等
+        # 会静默失效,所以在 doctor 里显式报出来。
+        canonical = ("event", "profile", "preference", "procedure")
+        non_injectable = {
+            str(memory_type): int(count)
+            for memory_type, count in conn.execute(
+                "SELECT memory_type, COUNT(*) FROM memory_items "
+                "WHERE status = 'active' AND memory_type NOT IN (?, ?, ?, ?) "
+                "GROUP BY memory_type",
+                canonical,
+            )
+        }
         return {
             "exists": True,
             "integrity": conn.execute("PRAGMA integrity_check").fetchone()[0],
             "schema": "ok",
             "items": sum(counts.values()),
             "statuses": counts,
+            "non_injectable_types": non_injectable,
             "vectors": int(
                 conn.execute(
                     "SELECT COUNT(*) FROM memory_items WHERE embedding IS NOT NULL"

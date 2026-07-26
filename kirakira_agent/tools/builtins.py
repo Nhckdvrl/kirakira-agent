@@ -228,6 +228,26 @@ def _toolsearch_score(name: str, description: str, keywords: set[str]) -> int:
     return score
 
 
+# 引擎的注入选择器只接受这四类(retriever.py 的 `else: continue`),其余类型即使被
+# 检索命中也**永远不会注入上下文**。Reference 靠工具 schema 的 enum 防住;kirakira 的
+# 旧 schema 曾提供 identity/fact/requested_memory,写进去的行会静默失效。
+# 这里在写入边界归一(与旧 MemoryRuntime._canonical_memory_type 同一张映射),
+# 不改镜像的 default_engine.py。
+_CANONICAL_MEMORY_KINDS = frozenset({"event", "profile", "preference", "procedure"})
+_LEGACY_MEMORY_KIND_MAP = {
+    "identity": "profile",
+    "fact": "profile",
+    "requested_memory": "profile",
+}
+
+
+def _canonical_memory_kind(kind: str) -> str:
+    value = (kind or "").strip()
+    if not value or value in _CANONICAL_MEMORY_KINDS:
+        return value
+    return _LEGACY_MEMORY_KIND_MAP.get(value, value)
+
+
 # ── 记忆工具的渲染与过滤(照 Reference agent/tools/recall_memory.py / forget_memory.py) ──
 
 _MEMORY_LOCAL_TZ = ZoneInfo("Asia/Shanghai")
@@ -1072,7 +1092,7 @@ class WorkspaceTools:
         text = str(summary or content or "").strip()
         if not text:
             return "Error: summary 不能为空"
-        kind = str(memory_kind or memory_type or "").strip()
+        kind = _canonical_memory_kind(str(memory_kind or memory_type or "").strip())
         source_ref = self._next_source_ref()
         engine = self._live_memory_engine()
         if engine is not None:
