@@ -60,8 +60,10 @@ class _ScriptedClient:
 
     def __init__(self):
         self._step = 0
+        self.tool_choices: list = []
 
-    def complete(self, messages, tools, system, model, max_tokens):
+    def complete(self, messages, tools, system, model, max_tokens, tool_choice=None):
+        self.tool_choices.append(tool_choice)
         self._step += 1
         if self._step == 1:
             return ModelResponse(
@@ -90,13 +92,14 @@ class DriftRunnerTests(unittest.TestCase):
             sessions = SessionManager(workdir)
             bus = MessageBus()
             sent = []
+            client = _ScriptedClient()
             bus.subscribe_outbound("web", lambda m: sent.append(m) or asyncio.sleep(0))
             runner = DriftRunner(
                 config=DriftConfig(enabled=True, min_interval_hours=0, max_steps=6),
                 workspace=workdir,
                 bus=bus,
                 session_manager=sessions,
-                model_client=_ScriptedClient(),
+                model_client=client,
                 model="fake",
                 memory=None,
                 target_channel="web",
@@ -111,9 +114,9 @@ class DriftRunnerTests(unittest.TestCase):
             runner.close()
             sessions.close()
             tmp.cleanup()
-            return ran, sent, recent
+            return ran, sent, recent, client.tool_choices
 
-        ran, sent, recent = asyncio.run(scenario())
+        ran, sent, recent, tool_choices = asyncio.run(scenario())
         self.assertTrue(ran)
         self.assertEqual(len(sent), 1)
         self.assertEqual(sent[0].content, "最近在听什么歌？")
@@ -122,6 +125,9 @@ class DriftRunnerTests(unittest.TestCase):
         self.assertEqual(len(recent), 1)
         self.assertEqual(recent[0]["status"], "completed")
         self.assertEqual(recent[0]["message_result"], "sent")
+        # 照 Reference drift 主循环:每步 tool_choice="required";
+        # finish_drift 是收尾工具,执行后立即结束——不再有第三次模型调用。
+        self.assertEqual(tool_choices, ["required", "required"])
 
     def test_disabled_does_not_run(self):
         async def scenario():
