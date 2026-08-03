@@ -9,8 +9,8 @@ from __future__ import annotations
 import unittest
 from types import SimpleNamespace
 
-from kirakira_agent.coremem.services import memory_keep_count
-from kirakira_agent.ports import (
+from core.memory.services import memory_keep_count
+from agent.looping.ports import (
     ContextServices,
     LLMConfig,
     LLMServices,
@@ -18,7 +18,7 @@ from kirakira_agent.ports import (
     MemoryServices,
     SessionServices,
 )
-from kirakira_agent.runtime import PassiveTurnPipeline, RuntimeConfig
+from agent.core.runtime import PassiveTurnPipeline, RuntimeConfig
 
 
 class ConfigTests(unittest.TestCase):

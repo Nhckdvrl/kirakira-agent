@@ -1,4 +1,4 @@
-"""Reference-compatible Kirakira launcher.
+"""Kirakira service launcher.
 
 Recommended usage::
 
@@ -8,7 +8,7 @@ Recommended usage::
     uv run python main.py gateway
 """
 
-from kirakira_agent.entry import main
+from bootstrap.main import main
 
 
 if __name__ == "__main__":

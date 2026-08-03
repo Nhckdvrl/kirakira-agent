@@ -15,7 +15,7 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock
 
-from kirakira_agent.coremem.engine import (
+from core.memory.engine import (
     EngineProfile,
     MemoryCapability,
     MemoryEngineDescriptor,
@@ -23,9 +23,9 @@ from kirakira_agent.coremem.engine import (
     MemoryQueryResult,
     MemoryRecord,
 )
-from kirakira_agent.coremem.plugin import DisabledMemoryEngine
-from kirakira_agent.coremem.services import MemoryServices
-from kirakira_agent.tools.builtins import WorkspaceTools
+from core.memory.plugin import DisabledMemoryEngine
+from core.memory.services import MemoryServices
+from agent.tools.builtins import WorkspaceTools
 
 
 _LIVE_DESCRIPTOR = MemoryEngineDescriptor(
@@ -185,7 +185,7 @@ class MemoryToolsViaEngineTests(unittest.TestCase):
 
 class ProactiveInterestTests(unittest.TestCase):
     def _loop(self, engine: Any):
-        from kirakira_agent.proactive.loop import ProactiveLoop
+        from proactive_v2.loop import ProactiveLoop
 
         loop = ProactiveLoop.__new__(ProactiveLoop)
         loop._memory_services = MemoryServices(engine=engine) if engine else None
@@ -254,13 +254,13 @@ class LegacyMemoryKindCanonicalizationTests(unittest.TestCase):
     """
 
     def test_legacy_kinds_map_to_canonical(self) -> None:
-        from kirakira_agent.tools.builtins import _canonical_memory_kind
+        from agent.tools.builtins import _canonical_memory_kind
 
         for legacy in ("identity", "fact", "requested_memory"):
             self.assertEqual(_canonical_memory_kind(legacy), "profile")
 
     def test_canonical_and_blank_pass_through(self) -> None:
-        from kirakira_agent.tools.builtins import _canonical_memory_kind
+        from agent.tools.builtins import _canonical_memory_kind
 
         for kind in ("event", "profile", "preference", "procedure", ""):
             self.assertEqual(_canonical_memory_kind(kind), kind)

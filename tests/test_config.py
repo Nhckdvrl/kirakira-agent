@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from kirakira_agent.config import config_value, load_toml_config
+from agent.config import config_value, load_toml_config
 
 
 class ConfigTests(unittest.TestCase):

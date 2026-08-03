@@ -2,8 +2,8 @@
 
 - 状态:accepted
 - supersedes:[0002](./0002-consolidation-driver.md)
-- 关联:`kirakira_agent/coremem/markdown.py`、`PassiveTurnPipeline._guard_memory_context`、
-  `kirakira_agent/coremem/services.py`
+- 关联:`core/memory/markdown.py`、`PassiveTurnPipeline._guard_memory_context`、
+  `core/memory/services.py`
 
 ## 背景
 

@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from kirakira_agent.cli import resolve_workspace
+from bootstrap.app import resolve_workspace
 
 
 class ResolveWorkspaceTests(unittest.TestCase):

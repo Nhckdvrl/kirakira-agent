@@ -2,6 +2,7 @@
 # The *.before-setup.bak backups the setup wizard writes hold the same secrets.
 .env
 config.toml
+!plugins/**/config.toml
 .env.*.bak
 config.toml.*.bak
 
@@ -31,6 +32,10 @@ Reference/
 /.runtime-ready.json
 /.supervisor.lock
 /.supervisor.pid
+/.instance.lock
+/migrations.sqlite3
+/migrations.sqlite3-shm
+/migrations.sqlite3-wal
 
 # Python
 __pycache__/

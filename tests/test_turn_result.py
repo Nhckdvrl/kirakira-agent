@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import unittest
 
-from kirakira_agent.turns import (
+from agent.turns.result import (
     CallableSideEffect,
     OutboundDispatch,
     TurnOutbound,

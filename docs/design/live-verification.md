@@ -1,7 +1,7 @@
 # 实弹验证记录:哪些链路真的跑过
 
-- 状态:accepted;第 2–6 节为 2026-07-25 一轮,第 7 节为 2026-07-26 控制面一轮,第 9–11 节为 2026-07-26 换代/tool_choice、仪表盘与检索回放三轮,第 12–13 节为 2026-07-27 akasha 引擎与设计意图逐项检验
-- 核对基线:`Reference/` @ `012e37c8b51df045353972bb551d8e868ab52455`
+- 状态:accepted;第 2–13 节是历史实弹记录，第 14 节是 2026-08-04 架构迁移后的 DeepSeek/embedding 重验
+- 当时核对的上游基线:`012e37c8b51df045353972bb551d8e868ab52455`（历史证据，不是运行时依赖）
 - 目标读者:维护者、评审者、接手做下一轮验证的人
 - 关联:[NOW.md](../NOW.md)、[decisions/0004](../decisions/0004-delivery-dedup.md)
 
@@ -9,7 +9,7 @@
 
 ## 1. 为什么单独记这一份
 
-离线回归(2026-07-27 起为 518 passed)只说明**单测口径**下的行为成立。它抓不到两类问题:
+离线回归（2026-08-04 为 584 passed + 4 subtests）只说明**单测口径**下的行为成立。它抓不到两类问题:
 
 1. **跨组件的真实链路**——测试用 mock provider 与替身渠道,组件之间的真实交互没被走过;
 2. **真实模型的输出偏差**——mock 永远按约定返回,真实模型不会。
@@ -70,8 +70,7 @@
 - 原因:Reference 的 `_parse_json_string_array` 要求裸 JSON 数组,deepseek 在同一段 prompt 下
   会返回 `{"intent": []}`——单键对象包着数组;
 - 为什么单测没抓到:mock provider 不会这样返回,且这条路依赖引擎承重(配好 embedding)才会走到;
-- 修法:`coremem/compat_worker.py` 在 kirakira 边界容错,镜像文件保持与 Reference 逐字节一致
-  (doctor 漂移审计 16 个文件 `drifted=[]`);
+- 修法:`plugins/default_memory/compat_worker.py` 在 Kirakira 边界容错；当时的开发审计确认算法移植未漂移；
 - 容错只放宽"单键对象且值是数组"一种,其余坏响应仍报错。
 
 ## 7. 控制面与确认工具(F,2026-07-26)
@@ -235,7 +234,7 @@ thinking 后需重验,见 [NOW.md](../NOW.md)。
 3. **真相源错配**:akasha 的 `DESCRIPTOR.notes` 写着 `truth=sessions.db/messages`,而
    kirakira 的会话是 per-session JSON。解法是在派生索引库里加一张 Reference 同形的
    `messages` 投影表 + 外部内容 `messages_fts`(三个触发器),并把索引库路径对齐到
-   `workspace/sessions.db`。JSON 仍是唯一 canonical。
+   `workspace/sessions.db`。当时 JSON 仍被视为 canonical；当前状态已改为 SQLite 权威，见第 14 节勘误。
 4. **外部内容 FTS 的 malformed 陷阱**:老库里 `messages` 先于 `messages_fts` 存在时,
    `DELETE FROM messages` 会触发删除不存在的索引项,SQLite 直接报
    `database disk image is malformed`(`integrity_check` 却是 ok)。派生物应当能无条件
@@ -294,3 +293,24 @@ akasha 与仪表盘一轮改动之后,用真实 gateway(默认引擎 + 真实 de
 
 分数没变、召回没变,**只有注入变了**——证明问题确实在类型而不是相关性,
 修复也确实落在那一环上。
+
+## 14. 架构迁移后的隔离在线验证（F，2026-08-04）
+
+命令：`uv run kirakira-verify-online`。它读取已保存配置但不打印密钥，所有运行态写入临时
+workspace，结束后删除。
+
+| 能力 | 实际结果 |
+| --- | --- |
+| DeepSeek 文本 | `deepseek-v4-flash` 按要求返回探针文本 |
+| 具名强制工具 | 返回 1 个 `online_probe`，JSON 参数为 `value=probe-ok` |
+| 用量 | input/output 均返回，coverage=`exact`；本次文本探针 17 input / 7 output |
+| Embedding | 真实 OpenAI-compatible endpoint 返回 1024 维向量 |
+| Runtime 工具闭环 | 模型选择 `read_file`，Runtime 执行，最终回复消费文件 sentinel |
+| 上下文治理 | 预置 60 条持久消息；请求降级到 0 条历史投影后成功；原 60 个消息 ID 顺序与内容未变 |
+| Akasha v1 | engine 路由为 `akasha`；真实 turn 摄入后召回 3 条；最终模型正确消费召回代号 |
+
+这轮同时固化了可重复脚本 `scripts/verify_online.py`。它验证的是 provider/runtime/记忆链路 smoke，
+不替代 LongMemEval/PersonaMem 的质量评分。
+
+补充勘误：第 12 节记录了当时“JSON 是 canonical”的中间状态；当前 `sessions.db/messages` 已是唯一
+权威，JSON 只作为旧导入源/非权威镜像。

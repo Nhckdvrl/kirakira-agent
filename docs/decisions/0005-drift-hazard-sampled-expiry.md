@@ -1,7 +1,7 @@
 # 0005 Drift 用采样到期驱动,不用轮询判阈
 
 - 状态:accepted
-- 关联:`kirakira_agent/drift/drive.py`、`DriftRunner._hazard_due`、`drift.db:drift_schedule`
+- 关联:`plugins/drift_flow/drive.py`、`DriftRunner._hazard_due`、`drift.db:drift_schedule`
 
 ## 背景
 

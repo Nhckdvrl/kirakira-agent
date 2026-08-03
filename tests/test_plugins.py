@@ -6,11 +6,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from kirakira_agent.event_bus import EventBus
-from kirakira_agent.plugins import PluginManager
-from kirakira_agent.schema import ToolCall
-from kirakira_agent.tool_hooks import HookContext, ToolExecutionRequest
-from kirakira_agent.tools.registry import ToolRegistry
+from bus.event_bus import EventBus
+from agent.plugins import PluginManager
+from core.schema import ToolCall
+from agent.tool_hooks import HookContext, ToolExecutionRequest
+from agent.tools.registry import ToolRegistry
 
 
 def write_enablement(workspace, body):
@@ -41,6 +41,94 @@ class FakeSkillLoader:
 
 
 class PluginTests(unittest.TestCase):
+    def test_plugin_data_config_overrides_packaged_defaults(self):
+        class Config:
+            def __init__(self, value="default"):
+                self.value = value
+
+        class Demo:
+            ConfigModel = Config
+
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            root = workspace / "plugins" / "demo"
+            data_dir = workspace / ".kirakira" / "plugin-data" / "demo"
+            root.mkdir(parents=True)
+            data_dir.mkdir(parents=True)
+            root.joinpath("config.toml").write_text('value = "packaged"\n', encoding="utf-8")
+            data_dir.joinpath("config.local.toml").write_text(
+                'value = "private"\n', encoding="utf-8"
+            )
+
+            loaded = PluginManager._load_plugin_config(root, data_dir, Demo())
+            self.assertEqual(loaded.value, "private")
+
+    def test_disable_and_drain_reconciles_before_returning(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                workspace = Path(tmp)
+                root = workspace / "plugins" / "demo"
+                root.mkdir(parents=True)
+                root.joinpath("plugin.py").write_text(
+                    "from agent.plugins import Plugin\n"
+                    "class Demo(Plugin):\n"
+                    "    name = 'demo'\n",
+                    encoding="utf-8",
+                )
+                manager = PluginManager(
+                    [workspace / "plugins"],
+                    event_bus=EventBus(),
+                    tool_registry=ToolRegistry(),
+                    workspace=workspace,
+                    session_manager=None,
+                    memory=None,
+                )
+                await manager.load_all()
+                self.assertEqual([record.plugin_id for record in manager.active], ["demo"])
+
+                result = await manager.reconcile_disabled_and_drain("demo", timeout=1)
+
+                self.assertEqual(result, "插件已停用并排空: demo")
+                self.assertEqual(manager.active, [])
+                self.assertIsNone(manager.generations.current("demo"))
+                self.assertEqual(manager.generations.retired, ())
+                manifest = (workspace / ".kirakira" / "manifest.toml").read_text()
+                self.assertIn("enabled = false", manifest)
+
+        asyncio.run(scenario())
+
+    def test_watch_revision_covers_mcp_skills_and_plugin_data_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            root = workspace / "plugins" / "demo"
+            skill = root / "drift-skills" / "watch"
+            skill.mkdir(parents=True)
+            root.joinpath("plugin.py").write_text(
+                "from agent.plugins import Plugin\nclass Demo(Plugin):\n    pass\n",
+                encoding="utf-8",
+            )
+            root.joinpath("mcp_server.py").write_text("VERSION = 1\n", encoding="utf-8")
+            skill.joinpath("SKILL.md").write_text("first\n", encoding="utf-8")
+            manager = PluginManager(
+                [workspace / "plugins"],
+                event_bus=EventBus(),
+                tool_registry=ToolRegistry(),
+                workspace=workspace,
+                session_manager=None,
+                memory=None,
+            )
+            original = manager.watch_revision()
+            root.joinpath("mcp_server.py").write_text("VERSION = 2\n", encoding="utf-8")
+            after_mcp = manager.watch_revision()
+            self.assertNotEqual(original, after_mcp)
+            skill.joinpath("SKILL.md").write_text("second\n", encoding="utf-8")
+            after_skill = manager.watch_revision()
+            self.assertNotEqual(after_mcp, after_skill)
+            data_dir = manager.plugin_data_dir("demo")
+            data_dir.mkdir(parents=True)
+            data_dir.joinpath("config.local.toml").write_text("enabled = true\n")
+            self.assertNotEqual(after_skill, manager.watch_revision())
+
     def test_decorated_phase_tool_and_pre_hook_are_discovered(self):
         async def scenario():
             with tempfile.TemporaryDirectory() as tmp:
@@ -48,7 +136,7 @@ class PluginTests(unittest.TestCase):
                 root = workspace / "plugins" / "decorated"
                 root.mkdir(parents=True)
                 root.joinpath("plugin.py").write_text(
-                    "from kirakira_agent.plugins import Plugin, on_before_turn, on_tool_pre, tool\n"
+                    "from agent.plugins import Plugin, on_before_turn, on_tool_pre, tool\n"
                     "class Decorated(Plugin):\n"
                     "    @on_before_turn(priority=10)\n"
                     "    def touch(self, ctx):\n"
@@ -101,7 +189,7 @@ class PluginTests(unittest.TestCase):
                 )
                 # 能力全部由 plugin.py 用代码声明，没有任何描述符文件。
                 (root / "plugin.py").write_text(
-                    "from kirakira_agent.plugins import McpServerSpec, Plugin\n"
+                    "from agent.plugins import McpServerSpec, Plugin\n"
                     "class FullPlugin(Plugin):\n"
                     "    name = 'full'\n"
                     "    version = '1.0.0'\n"
@@ -153,7 +241,7 @@ class PluginTests(unittest.TestCase):
                 root = workspace / "plugins" / "off"
                 root.mkdir(parents=True)
                 root.joinpath("plugin.py").write_text(
-                    "from kirakira_agent.plugins import Plugin\n"
+                    "from agent.plugins import Plugin\n"
                     "class Off(Plugin):\n"
                     "    name = 'off'\n",
                     encoding="utf-8",
@@ -203,7 +291,7 @@ class PluginTests(unittest.TestCase):
                 (source / "skills" / "demo").mkdir(parents=True)
                 (source / "skills" / "demo" / "SKILL.md").write_text("demo")
                 (source / "plugin.py").write_text(
-                    "from kirakira_agent.plugins import Plugin\n"
+                    "from agent.plugins import Plugin\n"
                     "class Demo(Plugin):\n"
                     "    name = 'installed-demo'\n",
                     encoding="utf-8",
@@ -259,8 +347,8 @@ class PluginTests(unittest.TestCase):
                 bad.mkdir(parents=True)
                 good.mkdir(parents=True)
                 bad.joinpath("plugin.py").write_text(
-                    "from kirakira_agent.plugins import Plugin\n"
-                    "from kirakira_agent.schema import ToolSpec\n"
+                    "from agent.plugins import Plugin\n"
+                    "from core.schema import ToolSpec\n"
                     "class Bad(Plugin):\n"
                     "    def register_tools(self, registry):\n"
                     "        registry.register(ToolSpec('leaked', 'x', {'type': 'object'}), lambda: 'x')\n"
@@ -269,7 +357,7 @@ class PluginTests(unittest.TestCase):
                     encoding="utf-8",
                 )
                 good.joinpath("plugin.py").write_text(
-                    "from kirakira_agent.plugins import Plugin\n"
+                    "from agent.plugins import Plugin\n"
                     "class Good(Plugin):\n"
                     "    name = 'good'\n",
                     encoding="utf-8",
@@ -284,7 +372,7 @@ class PluginTests(unittest.TestCase):
                     memory=None,
                 )
 
-                with self.assertLogs("kirakira_agent.plugins", level="ERROR"):
+                with self.assertLogs("agent.plugins", level="ERROR"):
                     await manager.load_all()
 
                 self.assertFalse(tools.has("leaked"))
@@ -302,7 +390,7 @@ class PluginTests(unittest.TestCase):
                 bad.mkdir(parents=True)
                 good.mkdir(parents=True)
                 bad.joinpath("plugin.py").write_text(
-                    "from kirakira_agent.plugins import Plugin\n"
+                    "from agent.plugins import Plugin\n"
                     "class Bad(Plugin):\n"
                     "    name = 'bad'\n"
                     "    @classmethod\n"
@@ -311,7 +399,7 @@ class PluginTests(unittest.TestCase):
                     encoding="utf-8",
                 )
                 good.joinpath("plugin.py").write_text(
-                    "from kirakira_agent.plugins import Plugin\nclass Good(Plugin):\n    pass\n",
+                    "from agent.plugins import Plugin\nclass Good(Plugin):\n    pass\n",
                     encoding="utf-8",
                 )
                 manager = PluginManager(
@@ -323,7 +411,7 @@ class PluginTests(unittest.TestCase):
                     memory=None,
                 )
 
-                with self.assertLogs("kirakira_agent.plugins", level="ERROR"):
+                with self.assertLogs("agent.plugins", level="ERROR"):
                     await manager.load_all()
 
                 self.assertIn("bad", manager.errors)

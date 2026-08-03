@@ -11,16 +11,16 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from kirakira_agent._compat.provider import ModelClientProvider
-from kirakira_agent.coremem.default_engine import DefaultMemoryEngine
-from kirakira_agent.coremem.plugin import DisabledMemoryEngine
-from kirakira_agent.coremem.services import (
+from infra.providers.model_client_adapter import ModelClientProvider
+from plugins.default_memory.engine import DefaultMemoryEngine
+from core.memory.plugin import DisabledMemoryEngine
+from core.memory.services import (
     MemoryServices,
     build_memory_engine,
     memory_engine_enabled,
 )
-from kirakira_agent._compat.config_models import build_config
-from kirakira_agent.runtime import _engine_can_retrieve
+from agent.config_models import build_config
+from agent.core.runtime import _engine_can_retrieve
 
 
 class _StubClient:

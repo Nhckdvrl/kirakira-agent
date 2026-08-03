@@ -10,8 +10,8 @@ import time
 import unittest
 from pathlib import Path
 
-from kirakira_agent.readiness import RuntimeReadiness
-from kirakira_agent.supervisor import _SupervisorLock, _valid_commit
+from bootstrap.runtime_readiness import RuntimeReadiness
+from agent.supervisor import _SupervisorLock, _valid_commit
 
 
 class SupervisorTests(unittest.TestCase):

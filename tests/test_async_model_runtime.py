@@ -10,10 +10,10 @@ from __future__ import annotations
 import asyncio
 import unittest
 
-from kirakira_agent._compat.provider import ModelClientProvider
-from kirakira_agent.models.openai_compatible import OpenAICompatibleClient
-from kirakira_agent.models.base import ContentSafetyError, ContextLengthError
-from kirakira_agent.schema import ModelResponse
+from infra.providers.model_client_adapter import ModelClientProvider
+from infra.providers.llm_provider import OpenAICompatibleClient
+from agent.model_runtime.types import ContentSafetyError, ContextLengthError
+from core.schema import ModelResponse
 
 
 class _AsyncClient:

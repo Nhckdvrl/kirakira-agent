@@ -1,161 +1,118 @@
 # Kirakira Agent
 
-Reference-aligned first run and service entry:
+Kirakira is a local, multi-channel AI-agent runtime. Its package boundaries follow
+the current Akashic reference architecture while keeping Kirakira's own
+implementations and product choices. The optional `Reference/` checkout is audit
+input only: production imports, startup, migrations, builds and tests do not read it.
+
+The runtime has three connected execution paths:
+
+- Passive turns: session-aware ReAct loops, tools, MCP, plugins, memory and channels.
+- Proactive turns: scheduled alert/content/context collection, decisions, delivery,
+  source feedback and durable tick/step traces.
+- Drift: user-authored `SKILL.md` background work when a proactive tick has nothing
+  to send.
+
+## Start
+
+Python 3.11+ and [uv](https://docs.astral.sh/uv/) are required.
 
 ```bash
 uv run python main.py setup    # interactive setup
 uv run python main.py init     # non-interactive workspace initialization
-uv run python main.py          # full long-running service
-uv run python main.py gateway  # explicit unmanaged debug entry
+uv run python main.py          # supervisor -> gateway
+uv run python main.py gateway  # unmanaged debug gateway
 ```
 
-Running `uv run python main.py` without a `config.toml` automatically opens the setup wizard. The legacy `python -m kirakira_agent` TUI/plain entry remains available.
-
-Kirakira Agent is a multi-channel AI agent runtime built after
-[`akashic-agent`](https://github.com/kachofugetsu09/akashic-agent) from a minimal
-function-calling MVP upward. It is not just a "you ask, it answers" bot — it has
-**three parallel chains**, and the latter two are what set it apart from an ordinary
-chatbot:
-
-- **Passive reply** — Web, Telegram, QQ/OneBot and CLI channels; an ordered message
-  bus; session-aware concurrent turns; streaming OpenAI-compatible tool loops;
-  persistent sessions and long-term memory; plugins, MCP, skills, scheduling and
-  isolated subagents.
-- **Proactive push** — a background loop that adaptively paces its polling with an
-  energy model, pulls three channels of data (`alert`/`content`/`context`) and lets
-  the LLM decide whether to reach out. See [_handbook/proactive.md](_handbook/proactive.md).
-- **Drift** — when the proactive chain has nothing to push, it reuses the same agent
-  loop to run a background task defined by a user-authored `SKILL.md`, with
-  cross-run continuity. See [_handbook/drift.md](_handbook/drift.md).
-
-Proactive/Drift are MVP-level: the differentiating essence is implemented and wired
-in; the reference's heavier machinery (phase-graph kernel, snapshot hot reload,
-semantic-interest vectors) is deliberately deferred. Both are off by default and
-enabled under `[proactive]` in `config.toml`.
-
-Current milestone: the memory subsystem runs on a ported `DefaultMemoryEngine`
-behind a `MemoryServices` seam (retrieval, explicit tools and proactive interest
-queries all go through it, with embeddings configured), the model runtime is
-async-native, and the plugin system has declarative specs, per-plugin generations
-with in-flight leases, hot reload, restart-free install and slot-ordered phases.
-Telegram's five channel source files and the fixed supervisor are byte-identical to
-the pinned Reference checkout. Start at docs/INDEX.md; open work is in docs/NOW.md.
-
-For the unified MVP-to-current roadmap and three-chain verification guide, see
-[docs/MVP_TO_CURRENT.md](docs/MVP_TO_CURRENT.md).
-For the supervisor and Web/Telegram/QQ/official-QQBot contracts, see
-[docs/STARTUP_AND_CHANNELS.md](docs/STARTUP_AND_CHANNELS.md).
-
-> This is a learning project. The documentation is a first-class part of it: it
-> traces how each layer was driven into existence by a concrete problem, which is
-> the point of the exercise. Start with
-> [docs/VERSION_EVOLUTION.md](docs/VERSION_EVOLUTION.md).
-
-## Quick start
-
-Python 3.11+. Dependencies are locked by `uv.lock`; Telegram uses the same
-`python-telegram-bot` and `telegramify-markdown` stack as Reference.
+Without `config.toml`, the default command opens setup. The public compatibility
+entry remains available:
 
 ```bash
-uv run python main.py setup    # configure Web/Telegram/QQ/official QQBot
-uv run python main.py          # supervisor -> full gateway service
-uv run python main.py gateway  # unmanaged gateway for debugging
+python -m kirakira_agent --tui
+python -m kirakira_agent --plain
+python -m kirakira_agent --session research
 ```
 
-With no `config.toml`, the default command opens the setup wizard automatically.
-The wizard validates channel credentials, discovers Telegram `chat_id` and official
-QQBot `user_openid`, and wires the selected channel as the proactive target.
-
-```bash
-python -m kirakira_agent --tui               # force the full-screen client
-python -m kirakira_agent --plain             # streaming line-oriented fallback
-python -m kirakira_agent --session research  # create or resume a named local chat
-python -m kirakira_agent --serve             # run configured channels
-python -m kirakira_agent --proactive         # run one proactive tick now, print status, exit
-python -m kirakira_agent --workspace /tmp/ws # isolated runtime state
-python -m unittest discover -s tests
-```
-
-## Layout
-
-```text
-kirakira_agent/          the runtime
-├── runtime.py           AgentLoop, PassiveTurnPipeline, DefaultReasoner
-├── snapshot.py          capability generations + per-turn leases
-├── session.py           JSON sessions + SQLite FTS index
-├── memory.py            markdown/typed memory + background consolidation
-├── retrieval.py         multi-lane recall, RRF fusion, hotness, inject budget
-├── context_policy.py    derives context window settings from the model
-├── prompting/           named prompt blocks, context frames, trim plans
-├── tools/               registry, executor, built-in tools
-├── mcp/                 declarative workspace MCP (declarations/host/publisher/watcher)
-├── channels/            web, telegram, qq/OneBot, official qqbot, host
-├── proactive/           energy model, three channels, pluggable sources, judge, tick loop
-├── drift/               idle-task chain: skill discovery, run state, runner (reuses agent loop)
-├── plugins.py           plugin loading and programmatic capability declaration
-└── ...
-
-_handbook/               contracts: what each subsystem is, its rules, how it fails
-docs/                    history and method: why it looks the way it does
-skills/                  built-in skills
-tests/                   offline regression suite
-```
-
-Runtime state (`sessions/`, `memory/`, `uploads/`, `mcp/`, `.kirakira/`) lives
-under the workspace root and is gitignored. The workspace resolves as
-`--workspace` > `KIRAKIRA_WORKSPACE` > `config.toml [runtime].workspace` > cwd.
-Each launch starts a fresh empty local chat unless `--session <name>` is given.
-Inside the TUI, `/sessions` opens a keyboard picker for saved chats and
-`/session <name>` switches or creates one; `/clear` only clears the view.
-During a turn the clients show the selected context plan, estimated/input-budget
-tokens and history size. Named prompt sections are re-rendered under pressure;
-the complete retry/section/cache/model-usage trace is stored with the assistant
-session message, while `metadata.context_budget` stores the next-turn baseline.
-
-For DeepSeek, set its advertised capacity explicitly so the runtime and provider
-share one budget:
+Minimal model configuration:
 
 ```toml
 [llm.main]
 model = "deepseek-v4-flash"
 base_url = "https://api.deepseek.com/v1"
 api_key = "${DEEPSEEK_API_KEY}"
-context_window = 128000  # set this to the capacity documented by your provider
+context_window = 128000 # use the capacity advertised by your provider
 
 [agent.context]
 effective_context_percent = 0.9
 ```
 
+Embeddings are configured separately under `[memory.embedding]`; a chat-completion
+endpoint is not assumed to provide embeddings.
+
+## Current runtime contracts
+
+- SQLite is the authoritative session/message store. Normal saves are append-only;
+  prompt pressure never deletes or rewrites durable history.
+- Every model attempt renders a bounded projection. It can drop optional prompt
+  sections and progressively reduce projected history, while storing the selected
+  plan, approximate input estimate and exact/partial/unavailable provider usage.
+- Shell execution uses one lifecycle for foreground/background processes, PTY input,
+  output polling, cancellation and process-group cleanup. Child agents have isolated
+  execution ownership and bounded admission.
+- Schedules support one-shot, duration, interval and 5/6-field cron triggers with
+  IANA time zones, instant/soft tiers and isolated soft-turn sessions.
+- Tools carry risk, discovery and source metadata. MCP/plugin tools can remain
+  deferred until `tool_search` unlocks them.
+- Workspace schema changes run through a locked Yoyo migration ledger. Migration
+  files are append-only.
+- Akasha v1 is a supported selectable memory engine. Akasha v2 is intentionally not
+  required for the current milestone.
+
+The repository includes a minimal semantic change-impact gate and a secret-safe
+online verifier:
+
+```bash
+uv run pytest -q
+uv run kirakira-impact --base HEAD --run
+uv run kirakira-verify-online
+```
+
+The online verifier uses an isolated temporary workspace and checks configured model
+text, forced tool calls, token usage, embeddings, runtime tool execution, context
+governance and Akasha v1 ingest/retrieval. It never prints credentials.
+
+## Layout
+
+```text
+agent/            reasoning, lifecycle, tools, MCP, plugins, scheduling, subagents
+bootstrap/        composition root, setup, supervisor, control and dashboard wiring
+bus/              message queue and logical event contracts
+core/             shared schema, network and memory contracts/runtime
+infra/            provider, channel, control and persistence adapters
+session/          authoritative session and message-embedding stores
+memory2/          default structured-memory algorithms and storage
+plugins/          first-party memory, proactive and Drift implementations
+plugin_packages/  distributable plugins
+proactive_v2/     proactive kernel, frame and tick orchestration
+frontend/         terminal and local Web presentation surfaces
+eval/             memory evaluation harnesses
+migrations/       append-only workspace migrations
+scripts/          migration, change-impact and online verification tools
+kirakira_agent/   public `python -m kirakira_agent` entry shell only
+```
+
+Runtime state lives under the selected workspace. Resolution order is
+`--workspace` → `KIRAKIRA_WORKSPACE` → `[runtime].workspace` → current directory.
+
 ## Documentation
 
-`_handbook/` describes **what is true now** — the contract for each subsystem.
-It changes in the same commit as the code it documents.
+Start with [docs/INDEX.md](docs/INDEX.md). Current gaps and deliberate deferrals are
+in [docs/NOW.md](docs/NOW.md) and the complete capability audit is in
+[docs/DIFFERENCE_AUDIT.md](docs/DIFFERENCE_AUDIT.md). Operational contracts live in
+[_handbook/](_handbook/); verified real-provider evidence lives in
+[docs/design/live-verification.md](docs/design/live-verification.md).
 
-| | |
-| --- | --- |
-| [workspace-mcp.md](_handbook/workspace-mcp.md) | declaring MCP servers; what happens when a declaration is wrong |
-| [snapshot-and-lease.md](_handbook/snapshot-and-lease.md) | why hot reload cannot break an in-flight turn |
-| [plugins.md](_handbook/plugins.md) | writing a plugin; declaring capabilities in code |
-| [memory.md](_handbook/memory.md) | session vs memory; why recall fuses by rank, not score |
-| [context-management.md](_handbook/context-management.md) | prompt blocks, token budget, semantic retries and traces |
-| [cli-and-sessions.md](_handbook/cli-and-sessions.md) | TUI ownership, streaming finality and saved-session behavior |
-| [proactive.md](_handbook/proactive.md) | operating contract: energy, three channels, sources and push decisions |
-| [drift.md](_handbook/drift.md) | idle-task skills, one drift run = one agent run, cross-run continuity |
-
-`docs/` describes **how it got here** — history, and the reasoning worth reusing.
-
-| | |
-| --- | --- |
-| [ENGINEERING_METHOD.md](docs/ENGINEERING_METHOD.md) | **how to grow an MVP into a system that doesn't collapse** — refactor-vs-add signals, five decay modes, "green tests ≠ it runs" |
-| [MVP_TO_CURRENT.md](docs/MVP_TO_CURRENT.md) | unified MVP-to-current progress and verification guide for all three chains |
-| [VERSION_EVOLUTION.md](docs/VERSION_EVOLUTION.md) | Function Calling MVP → passive runtime → four foundation refactors → control plane, one problem at a time |
-| [PROACTIVE_ARCHITECTURE.md](docs/PROACTIVE_ARCHITECTURE.md) | the proactive runtime architecture, state machine, commit boundary and roadmap |
-| [DIFFERENCE_AUDIT.md](docs/DIFFERENCE_AUDIT.md) | capability-level comparison with Akashic, deliberate choices, and prioritized gaps |
-| [design/control-plane.md](docs/design/control-plane.md) | JSON-RPC control plane: layering, turn state machine, auth |
-| [design/live-verification.md](docs/design/live-verification.md) | what was actually run against real models/channels, and what wasn't |
-| [RESUME_INTERVIEW_GUIDE.md](docs/RESUME_INTERVIEW_GUIDE.md) | résumé wording and interview Q&A, incl. the three-chain differentiator |
-
-[中文 README](README-cn.md) has the detailed configuration and channel setup.
+[中文说明](README-cn.md)
 
 ## License
 

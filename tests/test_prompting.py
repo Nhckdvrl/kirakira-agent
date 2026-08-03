@@ -5,11 +5,11 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from kirakira_agent.context_builder import ContextBuilder
-from kirakira_agent.memory import MemoryRuntime
-from kirakira_agent.prompting import SYSTEM_CONTEXT_FRAME_MARKER
-from kirakira_agent.session import SessionManager
-from kirakira_agent.skills import SkillLoader
+from agent.prompting.context_builder import ContextBuilder
+from core.memory.legacy import MemoryRuntime
+from agent.prompting import SYSTEM_CONTEXT_FRAME_MARKER
+from session.manager import SessionManager
+from agent.skills import SkillLoader
 
 
 class PromptingTests(unittest.TestCase):

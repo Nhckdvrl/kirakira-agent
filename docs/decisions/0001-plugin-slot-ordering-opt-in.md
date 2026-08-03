@@ -1,7 +1,7 @@
 # 0001 Phase slot 排序在全员声明后才启用
 
 - 状态:accepted
-- 关联:`kirakira_agent/phase.py`、`PluginManager._order_phase_modules`
+- 关联:`agent/lifecycle/phase.py`、`PluginManager._order_phase_modules`
 
 ## 背景
 

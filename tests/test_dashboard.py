@@ -16,7 +16,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from kirakira_agent.dashboard import DashboardService
+from bootstrap.dashboard_api import DashboardService
 
 
 class _FakeAdminEngine:
@@ -262,7 +262,7 @@ class WebRoutingTests(unittest.TestCase):
     """Web 渠道未注入 dashboard 时也要能自建一个,页面不至于打不开。"""
 
     def test_channel_builds_fallback_dashboard(self) -> None:
-        from kirakira_agent.channels.web import WebChannel
+        from infra.channels.web_chat_channel import WebChannel
 
         channel = WebChannel()
         board = channel._dashboard()
@@ -270,7 +270,7 @@ class WebRoutingTests(unittest.TestCase):
         self.assertEqual(board.memories({})["total"], 0)
 
     def test_injected_dashboard_is_used(self) -> None:
-        from kirakira_agent.channels.web import WebChannel
+        from infra.channels.web_chat_channel import WebChannel
 
         with tempfile.TemporaryDirectory() as tmp:
             injected = DashboardService(workspace=Path(tmp))
@@ -280,7 +280,7 @@ class WebRoutingTests(unittest.TestCase):
 
 class PageTests(unittest.TestCase):
     def test_pages_are_self_contained(self) -> None:
-        from kirakira_agent.channels.web_ui import CHAT_HTML, DASHBOARD_HTML
+        from frontend.web_ui import CHAT_HTML, DASHBOARD_HTML
 
         for page in (CHAT_HTML, DASHBOARD_HTML):
             self.assertTrue(page.startswith("<!doctype html>"))
@@ -290,7 +290,7 @@ class PageTests(unittest.TestCase):
             self.assertIn("prefers-color-scheme", page)  # 深浅色都要有
 
     def test_dashboard_declares_all_panels(self) -> None:
-        from kirakira_agent.channels.web_ui import DASHBOARD_HTML
+        from frontend.web_ui import DASHBOARD_HTML
 
         for tab in ("overview", "memory", "sessions", "plugins", "proactive"):
             self.assertIn('data-tab="%s"' % tab, DASHBOARD_HTML)
@@ -304,7 +304,7 @@ class RecallInspectorTests(unittest.TestCase):
     """检索回放:两类记录按 turn 聚合,写入失败不影响主链路。"""
 
     def _inspector(self, tmp: str):
-        from kirakira_agent.observe import RecallInspector
+        from plugins.default_memory.inspector import RecallInspector
 
         return RecallInspector(Path(tmp))
 
@@ -362,7 +362,7 @@ class RecallInspectorTests(unittest.TestCase):
 
     def test_disabled_records_nothing_but_still_tracks_turn(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            from kirakira_agent.observe import RecallInspector
+            from plugins.default_memory.inspector import RecallInspector
 
             insp = RecallInspector(Path(tmp), enabled=False)
             turn = insp.record_context_prepare(
@@ -430,7 +430,7 @@ class DashboardRecallAndMessagesTests(unittest.TestCase):
 
     def test_recall_panels_read_from_inspector(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            from kirakira_agent.observe import RecallInspector
+            from plugins.default_memory.inspector import RecallInspector
 
             insp = RecallInspector(Path(tmp))
             turn = insp.record_context_prepare(
@@ -455,9 +455,9 @@ class DashboardRecallAndMessagesTests(unittest.TestCase):
         )
         result = board.messages({"q": ["部署"]})
         self.assertEqual(result["total"], 1)
-        # 消息是位置寻址的,删除会打断记忆 evidence 与归档游标 → 面板明确标记只读
+        # 底层已支持稳定 ID 删除，但面板没有 destructive confirm/sidecar 编排，仍明确只读。
         self.assertFalse(result["deletable"])
-        self.assertIn("位置寻址", result["deletable_reason"])
+        self.assertIn("稳定 ID", result["deletable_reason"])
 
     def test_blank_message_query_returns_empty(self) -> None:
         board = DashboardService(workspace=Path("."), session_manager=SimpleNamespace())

@@ -13,7 +13,7 @@ from unittest import mock
 class CliTests(unittest.TestCase):
     def test_setup_rejects_telegram_display_name(self):
         import click
-        from kirakira_agent.bootstrap import _normalize_telegram_identity
+        from bootstrap.setup_wizard import _normalize_telegram_identity
 
         self.assertEqual(_normalize_telegram_identity("@jackdjjiwo"), "jackdjjiwo")
         self.assertEqual(_normalize_telegram_identity("1862986856"), "1862986856")
@@ -21,7 +21,7 @@ class CliTests(unittest.TestCase):
             _normalize_telegram_identity("Xin-Yi Mae")
 
     def test_setup_rejects_bot_group_and_mismatched_telegram_targets(self):
-        from kirakira_agent.bootstrap import _validate_telegram_chat_target
+        from bootstrap.setup_wizard import _validate_telegram_chat_target
 
         class Response:
             def __init__(self, payload):
@@ -90,7 +90,7 @@ class CliTests(unittest.TestCase):
             )
 
     def test_reference_style_gateway_maps_to_full_service(self):
-        from kirakira_agent.entry import main
+        from bootstrap.main import main
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -98,7 +98,7 @@ class CliTests(unittest.TestCase):
             config.write_text(
                 '[runtime]\nworkspace = "workspace"\n', encoding="utf-8"
             )
-            with mock.patch("kirakira_agent.cli.main") as runtime_main:
+            with mock.patch("bootstrap.app.main") as runtime_main:
                 main(["gateway", "--config", str(config)])
 
             runtime_main.assert_called_once()
@@ -107,7 +107,7 @@ class CliTests(unittest.TestCase):
             self.assertIn(str(config.resolve()), runtime_args)
 
     def test_reference_style_default_entry_uses_supervisor(self):
-        from kirakira_agent.entry import main
+        from bootstrap.main import main
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -118,7 +118,7 @@ class CliTests(unittest.TestCase):
                 encoding="utf-8",
             )
             with mock.patch(
-                "kirakira_agent.supervisor.run_supervisor", return_value=0
+                "agent.supervisor.run_supervisor", return_value=0
             ) as run_supervisor:
                 with self.assertRaises(SystemExit) as exited:
                     main(["--config", str(config)])
@@ -129,7 +129,7 @@ class CliTests(unittest.TestCase):
             )
 
     def test_reference_style_supervise_rejects_unowned_flags(self):
-        from kirakira_agent.entry import main
+        from bootstrap.main import main
 
         with self.assertRaises(SystemExit) as exited:
             main(["supervise", "--unknown", "value"])
@@ -137,7 +137,7 @@ class CliTests(unittest.TestCase):
         self.assertIn("supervise 不支持参数", str(exited.exception))
 
     def test_reference_style_init_creates_config_and_workspace(self):
-        from kirakira_agent.entry import main
+        from bootstrap.main import main
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -160,7 +160,7 @@ class CliTests(unittest.TestCase):
 
     def test_reference_style_setup_renders_supported_chains(self):
         from click.testing import CliRunner
-        from kirakira_agent.bootstrap import run_setup_wizard
+        from bootstrap.setup_wizard import run_setup_wizard
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -191,7 +191,7 @@ class CliTests(unittest.TestCase):
             self.assertIn("KIRAKIRA_MAIN_API_KEY=secret-key", (root / ".env").read_text())
 
     def test_setup_renderer_wires_all_reference_channels(self):
-        from kirakira_agent.bootstrap import WizardAnswers, _render_config, _render_env
+        from bootstrap.setup_wizard import WizardAnswers, _render_config, _render_env
 
         answers = WizardAnswers(
             workspace=Path("/tmp/kirakira-test"),
@@ -225,7 +225,7 @@ class CliTests(unittest.TestCase):
         self.assertIn("ONEBOT_ACCESS_TOKEN=onebot-secret", secrets)
 
     def test_proactive_target_auto_enables_builtin_channel(self):
-        from kirakira_agent.cli import build_runtime
+        from bootstrap.app import build_runtime
 
         async def scenario():
             with tempfile.TemporaryDirectory() as tmp:
@@ -262,7 +262,7 @@ chat_id = "u1"
         asyncio.run(scenario())
 
     def test_cli_mode_selection(self):
-        from kirakira_agent.cli import choose_cli_mode
+        from bootstrap.app import choose_cli_mode
 
         self.assertEqual(
             choose_cli_mode(

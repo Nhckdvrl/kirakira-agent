@@ -4,12 +4,41 @@ import json
 import os
 import unittest
 
-from kirakira_agent.models.openai_compatible import OpenAICompatibleClient
-from kirakira_agent.models.base import ContextLengthError
-from kirakira_agent.schema import ModelResponse, ToolCall, ToolResult, ToolSpec, assistant_message_from_response, tool_result_message
+from infra.providers.llm_provider import (
+    OpenAICompatibleClient,
+    _parse_tool_arguments,
+)
+from agent.model_runtime.types import ContextLengthError
+from core.schema import ModelResponse, ToolCall, ToolResult, ToolSpec, assistant_message_from_response, tool_result_message
 
 
 class OpenAICompatibleTests(unittest.TestCase):
+    def test_tool_arguments_repair_matches_current_reference(self):
+        self.assertEqual(
+            _parse_tool_arguments('{"command":"echo ok'),
+            {"command": "echo ok"},
+        )
+        with self.assertRaises(TypeError):
+            _parse_tool_arguments('["not", "an", "object"]')
+        with self.assertRaises(json.JSONDecodeError):
+            _parse_tool_arguments("not json")
+
+    def test_stream_parser_repairs_incomplete_tool_arguments(self):
+        state = {
+            "chunks": [],
+            "text_parts": [],
+            "reasoning_parts": [],
+            "raw_calls": {
+                0: {"id": "call_1", "name": "bash", "arguments": '{"command":"pwd'}
+            },
+            "finish_reason": "tool_calls",
+        }
+        client = OpenAICompatibleClient(base_url="http://example.test/v1", api_key="")
+
+        response = client._finalize_stream(state)
+
+        self.assertEqual(response.tool_calls[0].arguments, {"command": "pwd"})
+
     def test_preflight_rejects_oversized_context_before_network(self):
         client = OpenAICompatibleClient(
             base_url="http://example.test/v1",

@@ -4,7 +4,7 @@ import asyncio
 from dataclasses import dataclass
 import unittest
 
-from kirakira_agent.event_bus import EventBus
+from bus.event_bus import EventBus
 
 
 @dataclass

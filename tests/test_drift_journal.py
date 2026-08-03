@@ -12,10 +12,10 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from kirakira_agent.drift.state import DriftStateStore
-from kirakira_agent.drift.tools import DriftRunContext, register_drift_tools
-from kirakira_agent.schema import ToolCall
-from kirakira_agent.tools.registry import ToolRegistry
+from plugins.drift_flow.state import DriftStateStore
+from plugins.drift_flow.tools import DriftRunContext, register_drift_tools
+from core.schema import ToolCall
+from agent.tools.registry import ToolRegistry
 
 NOW = datetime(2026, 7, 25, 12, 0, tzinfo=timezone.utc)
 

@@ -15,13 +15,13 @@ import random
 import unittest
 from datetime import datetime, timezone
 
-from kirakira_agent.phase import topo_sort_modules
-from kirakira_agent.proactive.frame import (
+from agent.lifecycle.phase import topo_sort_modules
+from proactive_v2.frame import (
     SLOT_PROPOSAL_DRIFT,
     ProactiveFrame,
     new_proactive_frame,
 )
-from kirakira_agent.proactive.modules import (
+from plugins.proactive_flow.modules import (
     DriftModule,
     _LoopModule,
     build_default_proactive_modules,
@@ -159,7 +159,7 @@ class TickGenerationLeaseTests(unittest.TestCase):
     """tick 期间持有 per-plugin 代际租约:中途换代不抽走本轮能力(NOW 条目 2 验收)。"""
 
     def _minimal_loop(self, *, generations=None, snapshot_store=None, gateway=None):
-        from kirakira_agent.proactive.loop import ProactiveLoop
+        from proactive_v2.loop import ProactiveLoop
 
         loop = ProactiveLoop.__new__(ProactiveLoop)
         loop._plugin_generations = generations
@@ -169,7 +169,7 @@ class TickGenerationLeaseTests(unittest.TestCase):
         return loop
 
     def test_tick_holds_generation_lease_while_modules_run(self) -> None:
-        from kirakira_agent.plugin_generation import (
+        from agent.plugins.generation import (
             GateResult,
             PluginContributions,
             PluginGeneration,
@@ -216,7 +216,7 @@ class TickGenerationLeaseTests(unittest.TestCase):
         asyncio.run(scenario())
 
     def test_tick_pins_snapshot_on_gateway_and_unpins_after(self) -> None:
-        from kirakira_agent.snapshot import RuntimeSnapshot, RuntimeSnapshotStore
+        from agent.plugins.snapshot import RuntimeSnapshot, RuntimeSnapshotStore
 
         async def scenario() -> None:
             store = RuntimeSnapshotStore()
@@ -254,7 +254,7 @@ class TickGenerationLeaseTests(unittest.TestCase):
             slot = "proactive.gate"  # 与内置 gate 撞 slot
 
         with self.assertRaises(RuntimeError):
-            from kirakira_agent.proactive.loop import ProactiveLoop
+            from proactive_v2.loop import ProactiveLoop
 
             ProactiveLoop.add_modules(loop, [_Duplicate(None)])
         # 坏声明只影响它自己的注册操作,已编译流水线保持原样

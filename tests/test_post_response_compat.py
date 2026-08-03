@@ -14,11 +14,11 @@ from __future__ import annotations
 
 import unittest
 
-from kirakira_agent.coremem.compat_worker import (
+from plugins.default_memory.compat_worker import (
     CompatPostResponseMemoryWorker,
     _unwrap_single_key_array,
 )
-from kirakira_agent.coremem.post_response_worker import PostResponseMemoryWorker
+from memory2.post_response_worker import PostResponseMemoryWorker
 
 
 def _parse(text: str):
@@ -76,7 +76,7 @@ class CompatParserTests(unittest.TestCase):
 
     def test_engine_wires_the_compat_worker(self) -> None:
         # 引擎必须用容错版,否则修复等于没接上
-        import kirakira_agent.coremem.default_engine as engine
+        import plugins.default_memory.engine as engine
 
         self.assertIs(engine.PostResponseMemoryWorker, CompatPostResponseMemoryWorker)
 

@@ -17,19 +17,19 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from kirakira_agent.control.context import current_turn_id
-from kirakira_agent.control.errors import RuntimeClosedError
-from kirakira_agent.control.models import TurnRequest
-from kirakira_agent.control.ports import ControlExecutionResult
-from kirakira_agent.control.runtime import ConversationRuntime
-from kirakira_agent.control.store import ControlStore
-from kirakira_agent.restart import (
+from agent.control.context import current_turn_id
+from agent.control.errors import RuntimeClosedError
+from agent.control.models import TurnRequest
+from agent.control.ports import ControlExecutionResult
+from agent.control.runtime import ConversationRuntime
+from agent.control.store import ControlStore
+from agent.restart import (
     RestartCoordinator,
     RestartRejectedError,
     RestartState,
     SupervisorCommitChannel,
 )
-from kirakira_agent.supervisor import _valid_commit
+from agent.supervisor import _valid_commit
 
 NONCE = "n" * 64
 

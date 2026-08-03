@@ -1,8 +1,8 @@
 # 0002 consolidation 暂由 MemoryRuntime 驱动,不交给 MarkdownMemoryMaintenance
 
 - 状态:superseded by [0003](./0003-consolidation-handover.md)
-- 关联:`kirakira_agent/memory.py`、`kirakira_agent/coremem/markdown.py`、
-  `kirakira_agent/coremem/services.py`
+- 关联:`core/memory/legacy.py`、`core/memory/markdown.py`、
+  `core/memory/services.py`
 
 ## 背景
 

@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from kirakira_agent.context import compact_messages, estimate_tokens, microcompact
+from agent.model_runtime.context import compact_messages, estimate_tokens, microcompact
 
 
 class ContextTests(unittest.TestCase):

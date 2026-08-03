@@ -1,1 +1,1 @@
-"""Network compatibility namespace."""
+"""Shared network contracts and resource owners."""

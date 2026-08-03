@@ -3,15 +3,15 @@
 from datetime import datetime
 import unittest
 
-from kirakira_agent.events import OutboundMessage
-from kirakira_agent.lifecycle import (
+from bus.events import OutboundMessage
+from bus.events_lifecycle import (
     StreamDeltaReady,
     ToolCallCompleted,
     ToolCallStarted,
     TurnFinished,
     TurnStarted,
 )
-from kirakira_agent.tui.state import TurnViewState
+from frontend.tui.state import TurnViewState
 
 
 class TurnViewStateTests(unittest.TestCase):

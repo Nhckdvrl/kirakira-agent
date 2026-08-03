@@ -16,7 +16,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from kirakira_agent.proactive.state import ProactiveStateStore
+from plugins.wake_proactive.state import ProactiveStateStore
 
 
 def _store(tmp: str) -> ProactiveStateStore:

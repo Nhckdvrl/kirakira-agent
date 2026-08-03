@@ -4,8 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from kirakira_agent.memory import MemoryRuntime
-from kirakira_agent.session import SessionManager
+from core.memory.legacy import MemoryRuntime
+from session.manager import SessionManager
 
 
 class MemoryTests(unittest.TestCase):
