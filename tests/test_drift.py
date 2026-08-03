@@ -6,13 +6,13 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from kirakira_agent.bus import MessageBus
-from kirakira_agent.drift.runner import DriftRunner
-from kirakira_agent.drift.skills import discover_skills, ensure_example_skill
-from kirakira_agent.drift.state import DriftStateStore
-from kirakira_agent.proactive.config import DriftConfig
-from kirakira_agent.schema import ModelResponse, ToolCall
-from kirakira_agent.session import SessionManager
+from bus.queue import MessageBus
+from plugins.drift_flow.runner import DriftRunner
+from plugins.drift_flow.skills import discover_skills, ensure_example_skill
+from plugins.drift_flow.state import DriftStateStore
+from proactive_v2.config import DriftConfig
+from core.schema import ModelResponse, ToolCall
+from session.manager import SessionManager
 
 NOW = datetime(2026, 7, 22, 12, 0, 0, tzinfo=timezone.utc)
 
@@ -27,6 +27,28 @@ class SkillDiscoveryTests(unittest.TestCase):
         self.assertEqual(names, {"explore-curiosity", "review-memory"})
         self.assertTrue(all("finish_drift" in s.body for s in skills))
         tmp.cleanup()
+
+    def test_plugin_skill_roots_are_discovered_and_duplicates_fail_loud(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workdir = Path(tmp)
+            plugin_root = workdir / "plugins" / "feeds" / "drift-skills"
+            skill_dir = plugin_root / "follow-feed"
+            skill_dir.mkdir(parents=True)
+            skill_dir.joinpath("SKILL.md").write_text(
+                "---\nname: follow-feed\ndescription: test\n---\nCall finish_drift.",
+                encoding="utf-8",
+            )
+            skills = discover_skills(workdir, extra_roots=[plugin_root])
+            self.assertEqual([skill.name for skill in skills], ["follow-feed"])
+
+            duplicate = workdir / "drift" / "skills" / "follow-feed"
+            duplicate.mkdir(parents=True)
+            duplicate.joinpath("SKILL.md").write_text(
+                "---\nname: follow-feed\ndescription: duplicate\n---\nbody",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "duplicate Drift skill"):
+                discover_skills(workdir, extra_roots=[plugin_root])
 
 
 class DriftStateTests(unittest.TestCase):

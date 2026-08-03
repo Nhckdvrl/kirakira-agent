@@ -12,15 +12,15 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from kirakira_agent.bus import MessageBus
-from kirakira_agent.channels.contract import ChannelContext
-from kirakira_agent.channels.web import WebChannel
-from kirakira_agent.event_bus import EventBus
-from kirakira_agent.memory import MemoryRuntime
-from kirakira_agent.memory_admin import clear, doctor, migrate, rollback, verify
-from kirakira_agent.schema import ToolCall
-from kirakira_agent.session import SessionManager
-from kirakira_agent.tools import build_default_registry
+from bus.queue import MessageBus
+from infra.channels.contract import ChannelContext
+from infra.channels.web_chat_channel import WebChannel
+from bus.event_bus import EventBus
+from core.memory.legacy import MemoryRuntime
+from bootstrap.memory_admin import clear, doctor, migrate, rollback, verify
+from core.schema import ToolCall
+from session.manager import SessionManager
+from agent.tools import build_default_registry
 
 
 class MemoryM1Tests(unittest.TestCase):
@@ -274,7 +274,7 @@ class RepairKindsTests(unittest.TestCase):
         conn.close()
 
     def test_dry_run_reports_without_writing(self) -> None:
-        from kirakira_agent.memory_admin import repair_kinds
+        from bootstrap.memory_admin import repair_kinds
 
         with tempfile.TemporaryDirectory() as raw:
             tmp = Path(raw)
@@ -291,7 +291,7 @@ class RepairKindsTests(unittest.TestCase):
             conn.close()
 
     def test_repair_maps_legacy_types_and_backs_up(self) -> None:
-        from kirakira_agent.memory_admin import repair_kinds
+        from bootstrap.memory_admin import repair_kinds
 
         with tempfile.TemporaryDirectory() as raw:
             tmp = Path(raw)
@@ -312,7 +312,7 @@ class RepairKindsTests(unittest.TestCase):
             self.assertEqual(types, {"a": "profile", "b": "profile", "c": "preference"})
 
     def test_repair_is_idempotent(self) -> None:
-        from kirakira_agent.memory_admin import repair_kinds
+        from bootstrap.memory_admin import repair_kinds
 
         with tempfile.TemporaryDirectory() as raw:
             tmp = Path(raw)
@@ -323,7 +323,7 @@ class RepairKindsTests(unittest.TestCase):
             self.assertIn("没有需要修复", again["note"])
 
     def test_missing_db_is_reported_not_raised(self) -> None:
-        from kirakira_agent.memory_admin import repair_kinds
+        from bootstrap.memory_admin import repair_kinds
 
         with tempfile.TemporaryDirectory() as raw:
             report = repair_kinds(Path(raw))

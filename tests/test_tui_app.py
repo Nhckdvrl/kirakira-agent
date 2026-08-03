@@ -85,7 +85,7 @@ class TuiAppTests(unittest.IsolatedAsyncioTestCase):
     async def test_headless_app_mounts_and_accepts_input(self):
         from pathlib import Path
 
-        from kirakira_agent.tui.app import KirakiraTui
+        from frontend.tui.app import KirakiraTui
 
         runtime = _FakeRuntime()
         app = KirakiraTui(runtime, Path.cwd(), session_id="local")
@@ -103,7 +103,7 @@ class TuiAppTests(unittest.IsolatedAsyncioTestCase):
     async def test_switches_named_session_without_sending_a_model_turn(self):
         from pathlib import Path
 
-        from kirakira_agent.tui.app import KirakiraTui
+        from frontend.tui.app import KirakiraTui
         from textual.widgets import Input
 
         runtime = _FakeRuntime()
@@ -120,7 +120,7 @@ class TuiAppTests(unittest.IsolatedAsyncioTestCase):
     async def test_default_is_fresh_and_sessions_picker_restores_history(self):
         from pathlib import Path
 
-        from kirakira_agent.tui.app import KirakiraTui, SessionPicker
+        from frontend.tui.app import KirakiraTui, SessionPicker
         from textual.widgets import Input
 
         runtime = _FakeRuntime()

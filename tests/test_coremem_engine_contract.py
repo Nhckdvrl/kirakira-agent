@@ -14,9 +14,9 @@ from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock
 
-from kirakira_agent.coremem.default_engine import DefaultMemoryEngine
-from kirakira_agent.coremem.default_memory_config import DefaultMemoryConfig
-from kirakira_agent.coremem.engine import (
+from plugins.default_memory.engine import DefaultMemoryEngine
+from plugins.default_memory.config import DefaultMemoryConfig
+from core.memory.engine import (
     EngineProfile,
     MemoryCapability,
     MemoryIngestRequest,

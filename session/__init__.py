@@ -1,1 +1,1 @@
-"""Reference namespace compatibility for Kirakira sessions."""
+"""Canonical persistent-session package."""

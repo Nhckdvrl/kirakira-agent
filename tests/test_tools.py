@@ -18,13 +18,13 @@ import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from kirakira_agent.bus import MessageBus
-from kirakira_agent.events import OutboundMessage
-from kirakira_agent.schema import ToolCall, ToolSpec
-from kirakira_agent.skills import SkillLoader
-from kirakira_agent.tools.builtins import WorkspaceTools, build_default_registry, safe_path
-from kirakira_agent.tools.registry import ToolRegistry
-from kirakira_agent.tool_hooks import ToolExecutionRequest, ToolExecutor
+from bus.queue import MessageBus
+from bus.events import OutboundMessage
+from core.schema import ToolCall, ToolSpec
+from agent.skills import SkillLoader
+from agent.tools.builtins import WorkspaceTools, build_default_registry, safe_path
+from agent.tools.registry import ToolRegistry
+from agent.tool_hooks import ToolExecutionRequest, ToolExecutor
 
 
 def _exa_sse(payload: dict) -> str:
@@ -185,7 +185,7 @@ class ToolTests(unittest.TestCase):
                 invoked.append(True)
                 return "done"
 
-            with self.assertLogs("kirakira_agent.tool_hooks", level="ERROR"):
+            with self.assertLogs("agent.tool_hooks", level="ERROR"):
                 result = await executor.execute(request, invoke)
             self.assertEqual(result.status, "error")
             self.assertEqual(invoked, [])
@@ -542,6 +542,86 @@ class ToolTests(unittest.TestCase):
 
         asyncio.run(scenario())
 
+    def test_shell_execution_is_isolated_by_session_owner(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                registry = build_default_registry(Path(tmp))
+                owner_a = registry.set_context(session_key="web:a")
+                try:
+                    started = await registry.execute_async(
+                        ToolCall(
+                            "1",
+                            "bash",
+                            {
+                                "command": "python -c \"import time; time.sleep(30)\"",
+                                "run_in_background": True,
+                            },
+                        )
+                    )
+                    execution_id = json.loads(started.content)["execution_id"]
+                finally:
+                    registry.reset_context(owner_a)
+
+                owner_b = registry.set_context(session_key="web:b")
+                try:
+                    denied = await registry.execute_async(
+                        ToolCall(
+                            "2",
+                            "task_output",
+                            {"task_id": execution_id},
+                        )
+                    )
+                    self.assertTrue(denied.is_error)
+                finally:
+                    registry.reset_context(owner_b)
+
+                await registry.cleanup_owner("web:a")
+                self.assertFalse(
+                    registry._tools["bash"].handler.__self__._shell_processes._executions
+                )
+                await registry.shutdown()
+
+        asyncio.run(scenario())
+
+    @unittest.skipIf(os.name == "nt", "PTY test requires POSIX")
+    def test_tty_shell_accepts_write_stdin(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                registry = build_default_registry(Path(tmp))
+                token = registry.set_context(session_key="web:tty")
+                try:
+                    started = await registry.execute_async(
+                        ToolCall(
+                            "1",
+                            "bash",
+                            {
+                                "command": "read value; echo got:$value",
+                                "tty": True,
+                                "run_in_background": True,
+                            },
+                        )
+                    )
+                    execution_id = json.loads(started.content)["execution_id"]
+                    resumed = await registry.execute_async(
+                        ToolCall(
+                            "2",
+                            "write_stdin",
+                            {
+                                "execution_id": execution_id,
+                                "chars": "hello\n",
+                                "yield_time_ms": 2000,
+                            },
+                        )
+                    )
+                    payload = json.loads(resumed.content)
+                    self.assertEqual(payload["process_status"], "succeeded")
+                    self.assertIn("got:hello", payload["output"])
+                finally:
+                    registry.reset_context(token)
+                    await registry.shutdown()
+
+        asyncio.run(scenario())
+
     def test_tool_search_returns_matching_tool(self):
         with tempfile.TemporaryDirectory() as tmp:
             registry = build_default_registry(Path(tmp))
@@ -549,6 +629,25 @@ class ToolTests(unittest.TestCase):
             payload = json.loads(result.content)
 
         self.assertTrue(any(item["name"] == "web_fetch" for item in payload["matched"]))
+        self.assertTrue(all("risk" in item for item in payload["matched"]))
+
+    def test_tool_meta_tracks_risk_source_and_deferred_catalog(self):
+        registry = ToolRegistry()
+        registry.register(
+            ToolSpec("remote_write", "write remotely", {"type": "object"}),
+            lambda: "ok",
+            deferred=True,
+            risk="external-side-effect",
+            search_hint="remote mutation",
+            source_type="plugin",
+            source_name="demo",
+        )
+
+        meta = registry.get_meta("remote_write")
+        self.assertEqual(meta.risk, "external-side-effect")
+        self.assertEqual(meta.source_type, "plugin")
+        self.assertEqual(meta.source_name, "demo")
+        self.assertEqual(registry.get_deferred_names()["plugin"], ["remote_write"])
 
 
 if __name__ == "__main__":

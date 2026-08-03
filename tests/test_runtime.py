@@ -8,21 +8,21 @@ import time
 import unittest
 from pathlib import Path
 
-from kirakira_agent.bus import MessageBus
-from kirakira_agent.context_builder import ContextBuilder
-from kirakira_agent.event_bus import EventBus
-from kirakira_agent.events import InboundMessage, OutboundMessage
-from kirakira_agent.memory import MemoryRuntime
-from kirakira_agent.models.base import ContextLengthError
-from kirakira_agent.runtime import AgentLoop, DefaultReasoner, PassiveTurnPipeline, RuntimeConfig
-from kirakira_agent.schema import ModelResponse, ToolCall, ToolSpec
-from kirakira_agent.session import SessionManager
-from kirakira_agent.snapshot import RuntimeSnapshotStore, compile_snapshot
-from kirakira_agent.subagent import SubagentManager
-from kirakira_agent.tool_hooks import HookOutcome
-from kirakira_agent.tools import build_default_registry
-from kirakira_agent.tools.registry import Tool
-from kirakira_agent.lifecycle import (
+from bus.queue import MessageBus
+from agent.prompting.context_builder import ContextBuilder
+from bus.event_bus import EventBus
+from bus.events import InboundMessage, OutboundMessage
+from core.memory.legacy import MemoryRuntime
+from agent.model_runtime.types import ContextLengthError
+from agent.core.runtime import AgentLoop, DefaultReasoner, PassiveTurnPipeline, RuntimeConfig
+from core.schema import ModelResponse, ToolCall, ToolSpec
+from session.manager import SessionManager
+from agent.plugins.snapshot import RuntimeSnapshotStore, compile_snapshot
+from agent.subagent import SubagentManager
+from agent.tool_hooks import HookOutcome
+from agent.tools import build_default_registry
+from agent.tools.registry import Tool
+from bus.events_lifecycle import (
     ContextBudgetUpdated,
     ContextPrepared,
     StreamDeltaReady,
@@ -494,6 +494,7 @@ class RuntimeTests(unittest.TestCase):
                 for index in range(8):
                     session.add_message("user", "u%d %s" % (index, "x" * 200))
                     session.add_message("assistant", "a%d %s" % (index, "y" * 200))
+                original_history = [dict(message) for message in session.messages]
 
                 outbound = await loop.pipeline.run(
                     InboundMessage("cli", "tester", "chat", "current"),
@@ -514,9 +515,25 @@ class RuntimeTests(unittest.TestCase):
                     saved.metadata["context_budget"]["selected_plan"],
                     "trim_skills_catalog",
                 )
+                # Prompt degradation is a per-attempt runtime view. It must never
+                # rewrite or delete the durable conversation history.
+                self.assertEqual(saved.messages[: len(original_history)], original_history)
 
         asyncio.run(scenario())
 
+    def test_react_usage_counts_requests_without_provider_telemetry(self):
+        stats = DefaultReasoner._react_stats(
+            [120, 150],
+            [
+                {"prompt_tokens": 100, "completion_tokens": 20},
+                {},
+            ],
+        )
+
+        self.assertEqual(stats["iteration_count"], 2)
+        self.assertEqual(stats["request_count"], 2)
+        self.assertEqual(stats["model_usage"]["covered_request_count"], 1)
+        self.assertEqual(stats["model_usage"]["coverage"], "partial")
 
     def test_before_turn_history_rewrite_reaches_model(self):
         class RewriteHistory:

@@ -7,12 +7,92 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from kirakira_agent.bus import MessageBus
-from kirakira_agent.scheduler import SchedulerService
-from kirakira_agent.tools.registry import ToolRegistry
+from bus.queue import MessageBus
+from agent.scheduler import SchedulerService
+from agent.tools.registry import ToolRegistry
 
 
 class SchedulerTests(unittest.TestCase):
+    def test_cron_timezone_schedule_is_persistent_and_repeating(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                tools = ToolRegistry()
+                tools.set_context(channel="telegram", chat_id="42")
+                scheduler = SchedulerService(
+                    Path(tmp) / "schedules.json", bus=MessageBus(), tools=tools
+                )
+
+                created = json.loads(
+                    await scheduler.schedule(
+                        message="daily",
+                        tier="instant",
+                        trigger="every",
+                        when="0 9 * * *",
+                        timezone="Asia/Tokyo",
+                        name="morning",
+                    )
+                )
+
+                self.assertEqual(created["cron_expr"], "0 9 * * *")
+                self.assertEqual(created["timezone"], "Asia/Tokyo")
+                self.assertEqual(created["remaining_runs"], -1)
+                self.assertEqual(created["status"], "pending")
+
+        asyncio.run(scenario())
+
+    def test_soft_schedule_uses_isolated_session_and_disables_memory(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                bus = MessageBus()
+                tools = ToolRegistry()
+                tools.set_context(channel="web", chat_id="u1")
+                scheduler = SchedulerService(
+                    Path(tmp) / "schedules.json", bus=bus, tools=tools
+                )
+                created = json.loads(
+                    await scheduler.schedule(
+                        tier="soft",
+                        prompt="summarize the latest status",
+                        delay_seconds=60,
+                    )
+                )
+
+                await scheduler._fire(scheduler._jobs[created["id"]])
+                inbound = await asyncio.wait_for(bus.consume_inbound(), timeout=1)
+
+                self.assertEqual(inbound.content, "summarize the latest status")
+                self.assertEqual(
+                    inbound.metadata["session_key_override"],
+                    "scheduler:%s" % created["id"],
+                )
+                self.assertTrue(inbound.metadata["skip_post_memory"])
+                self.assertTrue(inbound.metadata["skip_memory_retrieval"])
+                self.assertIn("recall_memory", inbound.metadata["disabled_tools"])
+                await bus.complete_inbound(inbound)
+
+        asyncio.run(scenario())
+
+    def test_workspace_schedule_capacity_is_enforced(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                tools = ToolRegistry()
+                tools.set_context(channel="web", chat_id="u1")
+                scheduler = SchedulerService(
+                    Path(tmp) / "schedules.json", bus=MessageBus(), tools=tools
+                )
+                for index in range(scheduler.MAX_ACTIVE_JOBS):
+                    result = await scheduler.schedule(
+                        message="job %d" % index, delay_seconds=3600 + index
+                    )
+                    self.assertFalse(result.startswith("Error:"))
+
+                rejected = await scheduler.schedule(
+                    message="one too many", delay_seconds=7200
+                )
+                self.assertIn("schedule_capacity_reached", rejected)
+
+        asyncio.run(scenario())
+
     def test_schedule_fires_to_bound_channel_and_persists_completion(self):
         async def scenario():
             with tempfile.TemporaryDirectory() as tmp:

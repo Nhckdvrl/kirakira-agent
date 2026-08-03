@@ -38,8 +38,39 @@ class AttachmentStore:
         return root / f"{prefix}{uuid4().hex}{suffix}"
 
     def write_bytes(self, data: bytes, *, prefix: str, suffix: str) -> Path:
-        path = self.create_path(prefix, suffix)
-        path.write_bytes(data)
+        staging = self.create_staging_path(prefix=f".{prefix}", suffix=".part")
+        try:
+            fd = os.open(staging, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(data)
+                handle.flush()
+                os.fsync(handle.fileno())
+            return self.publish_staging(staging, prefix=prefix, suffix=suffix)
+        except BaseException as exc:
+            try:
+                staging.unlink(missing_ok=True)
+            except OSError as cleanup_error:
+                raise BaseExceptionGroup(
+                    "附件 staging 清理失败",
+                    [exc, cleanup_error],
+                ) from exc
+            raise
+
+    def create_staging_path(self, *, prefix: str = ".upload-", suffix: str = ".part") -> Path:
+        """在附件目录创建一个仅供当前写入的 staging 路径。"""
+
+        root = self._resolve_root()
+        return root / f"{prefix}{uuid4().hex}{suffix}"
+
+    def publish_staging(self, staging: Path, *, prefix: str, suffix: str) -> Path:
+        """fsync 后原子发布 staging 文件，目录不一致时直接失败。"""
+
+        root = self._resolve_root().resolve()
+        staging_path = staging.resolve()
+        if staging_path.parent != root:
+            raise ValueError(f"staging 文件不在附件目录: {staging}")
+        path = root / f"{prefix}{uuid4().hex}{suffix}"
+        os.replace(staging_path, path)
         return path
 
 
@@ -104,7 +135,7 @@ class SessionIdentityIndex:
 class MessageDeduper:
     """滑动窗口去重，避免 channel 重投或重复事件被处理多次。"""
 
-    def __init__(self, max_size: int) -> None:
+    def __init__(self, max_size: int = 500) -> None:
         self._max_size = max(1, max_size)
         self._seen: set[str] = set()
         self._order: deque[str] = deque()

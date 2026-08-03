@@ -10,7 +10,7 @@ import asyncio
 import sys
 import unittest
 
-from kirakira_agent.plugin_services import PluginServiceHost
+from agent.plugins.service_host import PluginServiceHost
 
 
 def _sleep_spec(seconds: float = 30) -> dict:

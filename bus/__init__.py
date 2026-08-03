@@ -1,1 +1,1 @@
-"""Reference namespace compatibility for Kirakira's bus implementation."""
+"""Canonical message and event bus package."""

@@ -1,1 +1,1 @@
-"""Reference infrastructure compatibility namespace."""
+"""Shared core contracts and utilities."""

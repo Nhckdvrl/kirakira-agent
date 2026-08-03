@@ -14,10 +14,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from kirakira_agent.coremem.events import ConsolidationCommitted
-from kirakira_agent.event_bus import EventBus
-from kirakira_agent.memory import MemoryRuntime
-from kirakira_agent.session import Session
+from core.memory.events import ConsolidationCommitted
+from bus.event_bus import EventBus
+from core.memory.legacy import MemoryRuntime
+from session.manager import Session
 
 
 def _runtime(workspace: Path, bus: EventBus | None) -> MemoryRuntime:

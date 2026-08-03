@@ -7,10 +7,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from kirakira_agent.mcp import McpCatalogPublisher, WorkspaceMcpAdmin, WorkspaceMcpWatcher
-from kirakira_agent.schema import ToolCall
-from kirakira_agent.snapshot import RuntimeSnapshotStore, SnapshotToolView
-from kirakira_agent.tools.registry import ToolRegistry
+from agent.mcp import McpCatalogPublisher, WorkspaceMcpAdmin, WorkspaceMcpWatcher
+from core.schema import ToolCall
+from agent.plugins.snapshot import RuntimeSnapshotStore, SnapshotToolView
+from agent.tools.registry import ToolRegistry
 
 SERVER = Path(__file__).parent / "fixtures" / "fake_mcp_server.py"
 

@@ -13,8 +13,8 @@ import unittest
 from types import SimpleNamespace
 from typing import Any
 
-from kirakira_agent.coremem.services import MemoryServices
-from kirakira_agent.runtime import PassiveTurnPipeline, RuntimeConfig
+from core.memory.services import MemoryServices
+from agent.core.runtime import PassiveTurnPipeline, RuntimeConfig
 
 
 class _Session:
@@ -53,7 +53,7 @@ def _pipeline(maintenance: Any) -> PassiveTurnPipeline:
     async def save_async(session):
         saved.append(session)
 
-    from kirakira_agent.ports import SessionServices
+    from agent.looping.ports import SessionServices
 
     pipeline.session_services = SessionServices(
         session_manager=SimpleNamespace(save_async=save_async)
@@ -134,7 +134,7 @@ class MaintenanceWaitTests(unittest.TestCase):
     """下一轮读历史前必须等上一轮归档收口,否则会读到错位的历史窗口。"""
 
     def _maintenance(self):
-        from kirakira_agent.coremem.markdown import MarkdownMemoryMaintenance
+        from core.memory.markdown import MarkdownMemoryMaintenance
 
         m = MarkdownMemoryMaintenance.__new__(MarkdownMemoryMaintenance)
         m._maintenance_tasks = {}

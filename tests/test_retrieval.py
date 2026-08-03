@@ -5,15 +5,15 @@ import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from kirakira_agent.memory import MemoryRuntime
-from kirakira_agent.retrieval import (
+from core.memory.legacy import MemoryRuntime
+from agent.retrieval.default_pipeline import (
     RRF_K,
     RetrievalRequest,
     hotness_boost,
     plan_injection,
     rrf_fuse,
 )
-from kirakira_agent.session import SessionManager
+from session.manager import SessionManager
 
 
 class _Rec:
@@ -234,7 +234,7 @@ class RecallIntegrationTests(unittest.TestCase):
         任何抓得住真重复的阈值都会把否定句合并掉，让 agent 说反话。
         """
 
-        from kirakira_agent.memory import _tokenize
+        from core.memory.legacy import _tokenize
 
         def jaccard(a, b):
             ta, tb = _tokenize(a), _tokenize(b)

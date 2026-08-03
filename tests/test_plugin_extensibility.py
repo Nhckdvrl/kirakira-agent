@@ -12,26 +12,26 @@ import asyncio
 import json
 import unittest
 
-from kirakira_agent.event_bus import EventBus
-from kirakira_agent.plugin_jobs import (
+from bus.event_bus import EventBus
+from agent.plugins.jobs import (
     EventTrigger,
     IntervalTrigger,
     PluginJobHost,
     PluginJobSpec,
 )
-from kirakira_agent.plugin_registry import plugin_registry
-from kirakira_agent.plugin_specs import (
+from agent.plugins.registry import plugin_registry
+from agent.plugins.specs import (
     PluginSemanticCheck,
     ProactiveSourceSpec,
     RegisteredProactiveSource,
     proactive_source_key,
 )
-from kirakira_agent.proactive.mcp_sources import (
+from plugins.wake_proactive.mcp_sources import (
     McpProactiveSource,
     compile_proactive_sources,
 )
-from kirakira_agent.proactive.sources import SourceRegistry
-from kirakira_agent.schema import ToolResult
+from plugins.wake_proactive.sources import SourceRegistry
+from core.schema import ToolResult
 
 
 class _FakeToolRegistry:
@@ -259,7 +259,7 @@ class PluginSpecTests(unittest.TestCase):
         self.assertFalse(PluginSemanticCheck.fail("c", "why").passed)
 
     def test_plugin_subclass_auto_registers(self) -> None:
-        from kirakira_agent.plugins import Plugin
+        from agent.plugins import Plugin
 
         class _Demo(Plugin):
             name = "demo-autoreg"
@@ -281,7 +281,7 @@ class PluginSourceRuntimeWiringTests(unittest.TestCase):
         import tempfile
         from pathlib import Path
 
-        from kirakira_agent.cli import _build_source_registry
+        from bootstrap.app import _build_source_registry
 
         tools = _FakeToolRegistry({"mcp_feed__pull": []})
         registered = [
@@ -298,7 +298,7 @@ class PluginSourceRuntimeWiringTests(unittest.TestCase):
         import tempfile
         from pathlib import Path
 
-        from kirakira_agent.cli import _build_source_registry
+        from bootstrap.app import _build_source_registry
 
         tools = _FakeToolRegistry({"mcp_feed__pull": []})
         dup = _registered(
@@ -315,7 +315,7 @@ class PluginSourceRuntimeWiringTests(unittest.TestCase):
         import tempfile
         from pathlib import Path
 
-        from kirakira_agent.cli import _build_source_registry
+        from bootstrap.app import _build_source_registry
 
         with tempfile.TemporaryDirectory() as tmp:
             registry = _build_source_registry(Path(tmp), None, None)
@@ -327,7 +327,7 @@ class PluginSourceRuntimeWiringTests(unittest.TestCase):
         import tempfile
         from pathlib import Path
 
-        from kirakira_agent.cli import _build_source_registry
+        from bootstrap.app import _build_source_registry
 
         tools = _FakeToolRegistry({"mcp_feed__pull": []})
         with tempfile.TemporaryDirectory() as tmp:

@@ -123,7 +123,7 @@ thread busy、协议严格性、socket 权限与 owner 冲突。
 
 ### 1. 问题
 
-kirakira 的 `agent/supervisor.py` 与 Reference 逐字节一致,它自始至终在等一个握手:
+Kirakira 的 canonical supervisor 位于 `agent/supervisor.py`，它自始至终在等一个握手:
 子进程向继承的私有管道写**恰好一帧**带本 boot nonce 的 `restart_commit`,然后以退出码
 75 退出——supervisor 校验通过才拉起下一代。**F**
 

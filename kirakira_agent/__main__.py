@@ -1,6 +1,6 @@
-"""Kirakira Agent learning harness module."""
+"""Compatibility shell for ``python -m kirakira_agent``."""
 
-from .cli import main
+from bootstrap.app import main
 
 
 if __name__ == "__main__":

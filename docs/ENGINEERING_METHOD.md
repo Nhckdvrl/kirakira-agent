@@ -3,9 +3,8 @@
 > 这份文档不讲这个项目**有什么**,讲的是把它从 200 行养到 3.4 万行的过程中,
 > 哪些判断是对的、哪些是错的、以及**下次遇到同类问题该怎么判断**。
 >
-> 分工:[VERSION_EVOLUTION.md](./VERSION_EVOLUTION.md) 是编年史(先后发生了什么),
-> 本文是方法论(为什么那样做)。两者的实例互相引用,不重复叙述。
-> 每一条方法后面都挂着本项目的真实 commit,可以 `git show` 去看当时的代码。
+> 本文只保留可复用的方法论。过期的阶段编年史已删除；真实选择由 `decisions/`、`design/`
+> 与 Git 历史保存。每一条方法后的 commit 可以用 `git show` 检查当时代码。
 
 ---
 
@@ -204,10 +203,9 @@ LLMServices / SessionServices  # 对象:有生命周期,要关闭,不可序列�
 | 自查 | `compile_proactive_sources` 零调用点 | 它自己的测试是绿的 |
 | 控制面实弹 | toolCall 投影拿不到数据 | 测试里的上游数据是我自己造的 |
 
-修第一个时有一条**边界纪律**值得记:容错写在 kirakira 自己的
-`coremem/compat_worker.py`,**镜像 Reference 的文件保持逐字节一致**,
-这样 doctor 的漂移审计仍然能报 `drifted=[]`。
-**在别人的代码里打补丁,会让你永远无法判断自己漂了多远。**
+修第一个时有一条**边界纪律**值得记:容错写在 Kirakira 自己的
+`plugins/default_memory/compat_worker.py`，上游只提供设计依据。运行时和 doctor 不读取上游 checkout；
+差异由开发期审计和本地合同测试记录。
 
 ### 落到制度上
 
@@ -225,10 +223,11 @@ LLMServices / SessionServices  # 对象:有生命周期,要关闭,不可序列�
 
 本项目是照着 `akashic-agent` 重建的。这里面有一个反复出现的判断:
 
-**照抄**(逐字节移植)适用于:纯算法、纯协议、纯数据结构——它们不依赖你的环境。
+**直接复用**适用于:纯算法、纯协议、纯数据结构——复用后也必须成为 Kirakira 仓库内的本地源码，
+不能在运行时 import 或读取外部 checkout。
 
-- 实例:`coremem/*.py` 的 16 个算法文件、控制面的 `errors/ids/events/models/ports`。
-  这些只改 import 命名空间,doctor 逐字节比对,`drifted=[]`。
+- 实例:`coremem/*.py` 的算法文件、控制面的 `errors/ids/events/models/ports`。
+  本地合同测试验证行为；上游差异只在开发审计中核对。
 
 **照着做**(理解语义后重写)适用于:与本项目结构耦合的部分。
 
@@ -259,8 +258,8 @@ LLMServices / SessionServices  # 对象:有生命周期,要关闭,不可序列�
 
 | 类别 | 回答什么 | 位置 |
 | --- | --- | --- |
-| 现状 | 现在是什么形态、还差什么 | `MVP_TO_CURRENT.md`、`NOW.md`、子系统专题 |
-| 历程 | 为什么长成这样 | `VERSION_EVOLUTION.md`、本文 |
+| 现状 | 现在是什么形态、还差什么 | README、`NOW.md`、子系统专题 |
+| 方法 | 哪些判断可以复用 | 本文 |
 | 判断 | 与参考实现差在哪、哪些是有意取舍 | `DIFFERENCE_AUDIT.md` |
 | 依据 | 某个选择的理由、某次重构的验收 | `decisions/`、`design/` |
 
@@ -318,8 +317,8 @@ LLMServices / SessionServices  # 对象:有生命周期,要关闭,不可序列�
 
 | 主题 | commit | 文档 |
 | --- | --- | --- |
-| 四个地基:异步 runtime + 记忆 seam | `0f448f1` | [VERSION_EVOLUTION §11.5–11.6](./VERSION_EVOLUTION.md) |
-| 地基②:DI 推广到 context/session | `0f77550` | [VERSION_EVOLUTION §11.7](./VERSION_EVOLUTION.md) |
+| 四个地基:异步 runtime + 记忆 seam | `0f448f1` | `git show 0f448f1` |
+| 地基②:DI 推广到 context/session | `0f77550` | `git show 0f77550` |
 | 地基③:Turn 抽象 / slot 依赖图 | `2f4fd5f` `bdd39b6` | — |
 | 副作用三处收敛成一处 | `f29fd52` | — |
 | 主动链路 lifecycle 化 | `179ab28` | [design/proactive-lifecycle.md](./design/proactive-lifecycle.md) |

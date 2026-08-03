@@ -1,88 +1,87 @@
-# 上下文管理
+# 上下文治理合同
 
-## 一轮消息怎样进入模型
+## 真相与投影分离
 
-上下文不是一段不断增长的字符串，而是有名字、有优先级、可观测的 block：
+`sessions.db/messages` 是完整历史的唯一权威。正常 `SessionManager.save()` 只能追加；删除、覆盖或
+缩短历史会直接失败，数据库保持原样。JSON 文件只可能作为旧数据导入源或可读镜像，不参与恢复
+当前运行态。
+
+模型看到的是**当前请求投影**，不是数据库本体：
 
 ```text
-稳定 system
-  identity → behavior_rules → skills_catalog → self_model
-  → long_term_memory → session_context
-
-逐轮 Context Frame（role=user，但带系统标记）
-  recent_context → active_skills → retrieved_memory
-  → turn_injection → plugin_hints
-
-历史消息 → Context Frame → 当前用户原文
+持久 Session（完整、append-only）
+  → 读取当前未归档历史
+  → render 具名 PromptBlock
+  → 叠加 Context Frame、当前消息、工具 schema、图片预算
+  → 本次模型请求
 ```
 
-动态内容放在带 `data-system-context-frame="true"` 标记的 reminder 里，位置固定在历史之后、
-当前消息之前。它明确声明这些内容不是用户陈述，避免模型把检索记忆或插件提示当成用户原话。
-`identity`、`behavior_rules`、`skills_catalog` 等稳定 block 按 workspace + 内容签名缓存。
+因此“为了过 context limit 缩小历史”和“删除旧会话”是两件完全不同的事。前者可重算、只活在
+当前 attempt；后者只有显式 destructive 管理操作才允许。
 
-Skill 默认只把目录放进 `skills_catalog`；用户用 `$skill-name` 点名后，正文进入
-`active_skills`。需要每轮加载的 skill 可在 `SKILL.md` frontmatter 写 `always: true`。
+## Prompt 结构
+
+稳定 section 包括 identity、behavior rules、skills catalog、self model、长期记忆与 session context；
+动态 Context Frame 包括 recent context、active skills、retrieved memory、turn injection 与 plugin
+hints。动态块带系统标记并位于历史之后、当前用户原文之前，明确声明它不是用户陈述。
+
+稳定 section 按 workspace 与内容签名缓存。Skill 默认只暴露目录；用户点名 `$skill-name` 或声明
+`always: true` 时才加载正文。
 
 ## 预算与降级
 
-输入预算为：
-
 ```text
-floor(context_window × effective_context_percent) - max_tokens
+input_budget = floor(context_window × effective_context_percent) - max_tokens
 ```
 
-估算覆盖 system、所有消息字段、工具 schema 和图片块。Runtime 在每个 ReAct step 记录估算，
-OpenAI-compatible Provider 在发网络请求之前再做一次最终预检，防止漏算工具解锁后的 schema。
-当前估算器有意采用保守的 `text chars / 3 + image allowance`，不是模型 tokenizer；真正计费值以
-Provider 返回的 `usage` 为准。估算用于提前拒绝明显超限和比较 retry plan，不应被当作账单数字。
+估算覆盖 system、所有消息字段、工具 schema、图片和输出预留。估算器是保守近似值，trace 标记
+`estimate_quality=approximate`；真实计费以 provider usage 为准。
 
-超限不是直接截字符串，而是重新 render：
+外层 attempt 每次都重新经过 prompt hooks：
 
-1. `full`
-2. `trim_skills_catalog`
-3. `trim_recent_context`
-4. `trim_long_term_memory`
-5. `trim_retrieved_memory`
-6. 保留上述裁剪并把历史缩到 50%
-7. 保留上述裁剪并移除历史
+1. full；
+2. 去 skills catalog；
+3. 去 recent context；
+4. 去 long-term memory；
+5. 去 retrieved memory；
+6. 历史投影缩到 50%；
+7. 历史投影缩到 0。
 
-每次历史切片都会回退到 user 边界，绝不从半组 tool call 开始。工具结果超过上限时保留头尾，
-并写明总行数与省略字符数，避免只保留开头而丢掉末尾错误。
+切片回退到 user 边界，不从半组 tool call 开始。2026-08-04 的 DeepSeek 在线验证实际在 60 条
+持久历史上降到 0 条投影后完成请求，同时 60 条旧消息 ID 全部保持不变。
+
+## 同一 ReAct 内的工具批次压缩
+
+长任务在当前请求内累积多个完整工具批次时，`QueryCompactor` 可以让模型总结已闭合的旧前缀，
+保留至少最新批次，再用 `context_compact` 协议消息继续。压缩摘要本身也计入模型请求与 usage。
+
+只压缩完整 assistant tool-call + tool-result 批次；仍在运行的 Shell 起始批次会被 pin，直到
+`write_stdin/task_output/task_stop` 表明执行已结束。提交时只把压缩元数据随新的 assistant 消息
+追加；不会回写旧消息。下轮 replay 根据 `react_compaction` 重建模型历史。
+
+## 用量与可观测性
+
+每个模型请求都计数，包括 provider 没返回 usage 的请求。聚合字段：
+
+- input/output tokens；
+- cached input tokens（含 DeepSeek prompt cache hit）；
+- reasoning output tokens（provider 提供时）；
+- request count、covered request count；
+- coverage：`exact` / `partial` / `unavailable`。
+
+缺少遥测是 `unavailable`，不是 0。每条 assistant 消息保存 `context_trace`：所有 attempt、section
+大小、预算、所选计划、ReAct 估算、模型 usage 与请求数。控制面事件同时发布准备和预算信息。
 
 ## Consolidation 边界
 
-Session JSON 保存完整对话；送入模型的历史从 `last_consolidated` 开始。未归档区达到
-`history_window + max(5, history_window / 2)` 时，本轮开始前必须先推进 consolidation。
-如果归档游标没有前进，本轮会明确失败，而不是悄悄丢掉旧消息。
-
-## 怎么检查一轮上下文
-
-每条 assistant session message 的 `context_trace` 包含：
-
-- 所有 attempt 的计划名、history window、disabled sections；
-- 每个 block 的 chars、估算 tokens、static/cache hit；
-- Provider 返回的 prompt/completion/total token usage；
-- 最终选中的计划与 ReAct request 数。
-
-Session 顶层 metadata 的 `context_budget` 保存回复提交后的 history token baseline，供下一轮
-和诊断工具读取。TUI/Plain CLI 会显示当前计划、估算/预算与历史规模。
-
-直接检查持久化数据时，找到 `<workspace>/sessions/*.json` 中对应 session：assistant message 上的
-`context_trace` 是本轮明细，根级 `metadata.context_budget` 是下一轮基线。Session 文件名带 key hash，
-不要根据文件名猜；TUI 的 `/sessions` 或 SessionManager 索引才是正式查找入口。
-
-## 当前重试边界
-
-语义裁剪发生在 `run_turn()` 外层，因此 ContextLengthError 发生在工具循环中途时，会用下一计划
-重新执行整轮 Reasoner。这样能保证 prompt hooks、工具可见性和消息协议重新一致，但已经成功执行的
-外部副作用工具理论上可能再次被模型选择。文件原子写、调度幂等和重复调用 guard 能降低部分风险，
-但通用外部工具仍应自行使用幂等 key。未来如果加入跨 attempt 的 tool-result replay，必须同时证明
-不会把旧计划下的无效上下文当成新计划证据。
+Markdown maintenance 使用 `last_consolidated` 推进归档游标。下一轮读取前会等待同 session 上一次
+归档收口；无法推进时明确失败，不能通过删历史掩盖。结构化长期记忆与 Session 历史是不同 owner。
 
 ## 不变量
 
-- 不把检索记忆伪装成用户原文。
-- 不在超限后静默丢历史。
-- 不只计算文本而漏掉工具 schema 或图片。
-- 不复用上一轮渲染结果做重试；每个计划都重新经过 plugin prompt hooks。
-- Context Frame 只能提供候选上下文，工具结果仍是外部事实的证据边界。
+- Reference checkout 不参与上下文生成。
+- 持久历史不可因 prompt 压力被删除。
+- 检索记忆不可伪装成用户原文。
+- 重试必须重新渲染，不复用旧计划的 prompt hooks 产物。
+- 工具 schema、图片、摘要请求与输出预留都必须计入预算/请求统计。
+- provider 已产生可见 streaming delta 后不得切换备用模型。

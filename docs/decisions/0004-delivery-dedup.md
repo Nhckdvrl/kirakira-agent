@@ -1,8 +1,8 @@
 # 0004 用内容指纹 + 时间窗做跨崩溃投递去重,不做两阶段 outbox
 
 - 状态:accepted
-- 关联:`kirakira_agent/proactive/state.py`(deliveries 表)、`ProactiveLoop._deliver`、
-  `kirakira_agent/turns.py`
+- 关联:`proactive_v2/state.py`(deliveries 表)、`ProactiveLoop._deliver`、
+  `agent/turns/result.py`
 
 ## 背景
 

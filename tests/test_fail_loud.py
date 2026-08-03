@@ -9,8 +9,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from kirakira_agent.memory import MemoryRuntime
-from kirakira_agent.session import SessionManager
+from core.memory.legacy import MemoryRuntime
+from session.manager import SessionManager
 
 
 class BoomEmbeddings:
@@ -30,7 +30,7 @@ class MemoryEmbeddingBoundaryTests(unittest.TestCase):
             memory.embedding_client = BoomEmbeddings()
 
             # 检索侧允许降级：向量服务挂了仍然要能用词法召回。
-            with self.assertLogs("kirakira_agent.memory", level="ERROR"):
+            with self.assertLogs("core.memory.legacy", level="ERROR"):
                 hits = memory.recall("declarative mcp")
 
             self.assertTrue(any("declarative mcp" in hit.content for hit in hits))
@@ -54,30 +54,26 @@ class MemoryEmbeddingBoundaryTests(unittest.TestCase):
 
 
 class SessionCorruptionBoundaryTests(unittest.TestCase):
-    def test_corrupt_session_file_is_exposed_not_skipped(self):
+    def test_corrupt_legacy_session_file_blocks_first_migration(self):
         with tempfile.TemporaryDirectory() as tmp:
-            manager = SessionManager(Path(tmp))
-            session = manager.get_or_create("cli:chat")
-            session.add_message("user", "hello")
-            manager.save(session)
-
-            corrupt = manager.session_dir / "corrupt.json"
+            session_dir = Path(tmp) / "sessions"
+            session_dir.mkdir()
+            corrupt = session_dir / "corrupt.json"
             corrupt.write_text("{not json", encoding="utf-8")
 
-            # 列会话时遇到坏文件必须报错，而不是让它从列表里悄悄消失。
+            # 一次性迁移不能静默漏掉损坏的 legacy source。
             with self.assertRaises(RuntimeError) as ctx:
-                manager._all_sessions()
+                SessionManager(Path(tmp))
             self.assertIn("corrupt.json", str(ctx.exception))
 
-    def test_session_file_without_key_is_exposed(self):
+    def test_keyless_legacy_file_does_not_create_phantom_session(self):
         with tempfile.TemporaryDirectory() as tmp:
-            manager = SessionManager(Path(tmp))
-            keyless = manager.session_dir / "keyless.json"
+            keyless = Path(tmp) / "sessions" / "keyless.json"
             keyless.parent.mkdir(parents=True, exist_ok=True)
             keyless.write_text(json.dumps({"messages": []}), encoding="utf-8")
 
-            with self.assertRaises(RuntimeError):
-                manager._all_sessions()
+            manager = SessionManager(Path(tmp))
+            self.assertEqual(manager.list_sessions(), [])
 
 
 if __name__ == "__main__":

@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import unittest
 
-from kirakira_agent.coremem.services import MemoryServices
+from core.memory.services import MemoryServices
 
 
 class _Closeable:

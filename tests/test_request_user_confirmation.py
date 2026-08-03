@@ -7,12 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from kirakira_agent.control.binding import build_turn_executor
-from kirakira_agent.control.models import TurnItemKind, TurnRequest
-from kirakira_agent.events import OutboundMessage
-from kirakira_agent.schema import ToolCall, ToolResult
-from kirakira_agent.tool_hooks import ToolExecutionRequest, ToolExecutor
-from kirakira_agent.tools.builtins import build_default_registry
+from bootstrap.control import build_turn_executor
+from agent.control.models import TurnItemKind, TurnRequest
+from bus.events import OutboundMessage
+from core.schema import ToolCall, ToolResult
+from agent.tool_hooks import ToolExecutionRequest, ToolExecutor
+from agent.tools.builtins import build_default_registry
 
 
 @pytest.fixture
@@ -155,8 +155,8 @@ async def test_attention_reaches_outbound_metadata_through_pipeline():
     """模型调用确认工具后,outbound.metadata 必须带上 mobile_attention。"""
     import tempfile as _tempfile
 
-    from kirakira_agent.events import InboundMessage
-    from kirakira_agent.schema import ModelResponse, ToolCall as _ToolCall
+    from bus.events import InboundMessage
+    from core.schema import ModelResponse, ToolCall as _ToolCall
     from tests.test_runtime import build_test_runtime
 
     class _Model:
@@ -193,8 +193,8 @@ async def test_inbound_cannot_forge_attention():
     """入站 metadata 里伪造的标记必须被丢弃,只认本轮工具声明的。"""
     import tempfile as _tempfile
 
-    from kirakira_agent.events import InboundMessage
-    from kirakira_agent.schema import ModelResponse
+    from bus.events import InboundMessage
+    from core.schema import ModelResponse
     from tests.test_runtime import build_test_runtime
 
     class _Model:

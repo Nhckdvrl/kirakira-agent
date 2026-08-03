@@ -1,8 +1,7 @@
 # 启动层与多渠道合同
 
-本文只描述已经接入运行时且可以验收的启动与 Channel 行为。实现顺序与边界优先参考本地
-`Reference/`：`main.py`、`agent/supervisor.py`、`bootstrap/setup_wizard.py`、
-`infra/channels/telegram_channel.py`、`infra/channels/qq_channel.py`。
+本文只描述已经接入运行时且可以验收的启动与 Channel 行为。上游代码仅作为开发时的对照输入；
+Kirakira 的启动、构建、测试和渠道运行不读取本地 `Reference/` checkout。
 
 ## 1. 入口
 
@@ -35,8 +34,8 @@ main.py
 ```
 
 任何已启用 Channel 的凭据校验或连接失败都会让 gateway 启动失败，不会发布 readiness。当前已经有
-supervisor 的安全接收端，但还没有 Reference 的 `agent_restart` 工具准入协调器，因此 Agent 本身不会
-主动请求换代。
+supervisor 的安全接收端和 `agent_restart` 准入协调器均已接入；尚未完成的是渠道 turn 发起重启的
+完整投递观察链，见 [NOW.md](./NOW.md)。
 
 ## 3. Setup 的渠道流程
 
@@ -64,12 +63,10 @@ channel_name = "web"
 4. 向导调用 `getUpdates` 匹配 id/username，取得 `chat_id` 并确认消费该 update。
 5. 写入 Telegram Channel 与 `proactive.target=telegram/chat_id`。
 
-运行时直接移植 Reference 的 `python-telegram-bot` Channel 和 `telegram_utils`：覆盖文本、图片、文档、
+运行时的 canonical source 位于 `infra/channels/`：覆盖文本、图片、文档、
 被回复文本/附件、白名单、消息去重、`/stop`、typing、工具/思考/回复实时预览、429 `retry_after`、
-Conflict 停收、UTF-16 长消息切分、Markdown entities 和图片/文档出站。`infra/channels/` 下的
-`base.py`、`contract.py`、`reply_context.py`、`telegram_channel.py`、`telegram_utils.py` 与固定 Reference
-源码逐字节一致；namespace、MessageBus、SessionManager、message-push 和 interrupt 差异全部位于文件外
-的 compatibility/binding 层。
+Conflict 停收、UTF-16 长消息切分、Markdown entities 和图片/文档出站。上游 pin 只保留为来源元数据；
+本地实现可以承载 Kirakira 的统一附件提交和多渠道扩展，不做运行时逐文件比对。
 启动时注册 bot commands；注册或轮询失败会阻止服务被标记为 ready。
 
 ### 3.3 QQ / NapCat / OneBot
@@ -106,8 +103,9 @@ Web / Telegram / QQ / QQBot
   → Channel 校验身份、去重、下载附件
   → InboundMessage(channel, chat_id, sender, media, metadata)
   → MessageBus → AgentLoop → PassiveTurnPipeline
-  → OutboundMessage(channel, chat_id, content, media)
-  → MessageBus 根据 channel 回到原 Channel
+  → OutboundMessage → ChannelMessage(content + typed attachments)
+  → MessagePushTool 根据 channel 交给唯一 adapter
+  → DeliveryReceipt(success / partial / failed)
 
 Proactive / Drift
   → OutboundMessage(target.channel, target.chat_id, proactive=true)
@@ -117,6 +115,10 @@ Proactive / Drift
 
 因此“配置成功”的验收标准不是 TOML 能解析，而是：Channel 能在 gateway 启动阶段真实就绪、被动消息
 可往返、主动消息完成 sender callback，失败时不提交主动状态。
+
+正文和附件是一个完整逻辑消息。前序 part 已被平台接受、后续 part 失败时必须返回 `partial`，不能伪装
+成全成功；只有 `success` 才允许上层提交主动历史。入站附件先写 0600 staging 文件，`fsync` 后用
+`os.replace` 原子发布，崩溃不会留下可见的半写最终文件。
 
 ## 5. 控制面入口
 

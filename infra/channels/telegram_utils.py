@@ -13,7 +13,7 @@ import logging
 import re
 import weakref
 from collections.abc import Awaitable, Callable
-from typing import Any, cast
+from typing import Any, Literal, cast
 from typing import TypeVar
 
 from telegram import Bot, MessageEntity as TgEntity
@@ -91,7 +91,10 @@ class TelegramOutboundLimiter:
         if kind == "typing":
             return await self._run_typing(cid, label=label, action=action)
         attempts = max_attempts or self._max_attempts
-        lock = self._chat_locks.setdefault(cid, asyncio.Lock())
+        lock = self._chat_locks.get(cid)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._chat_locks[cid] = lock
         async with lock:
             last_err: Exception | None = None
             for attempt in range(1, attempts + 1):
@@ -130,7 +133,7 @@ class TelegramOutboundLimiter:
                     )
                 if attempt >= attempts:
                     break
-                await self._sleep_until_ready(cid)
+                await self._wait_for_chat_slot(cid)
             if last_err is not None:
                 raise last_err
             raise RuntimeError(f"{label} failed without exception")
@@ -142,7 +145,10 @@ class TelegramOutboundLimiter:
         label: str,
         action: Callable[[], Awaitable[_T]],
     ) -> _T:
-        lock = self._typing_locks.setdefault(chat_id, asyncio.Lock())
+        lock = self._typing_locks.get(chat_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._typing_locks[chat_id] = lock
         async with lock:
             now = asyncio.get_running_loop().time()
             wait_s = self._next_typing_at.get(chat_id, 0.0) - now
@@ -183,12 +189,6 @@ class TelegramOutboundLimiter:
                 self._next_global_at = (
                     asyncio.get_running_loop().time() + self._global_interval_s
                 )
-
-    async def _sleep_until_ready(self, chat_id: int) -> None:
-        now = asyncio.get_running_loop().time()
-        wait_s = self._next_chat_at.get(chat_id, 0.0) - now
-        if wait_s > 0:
-            await asyncio.sleep(wait_s)
 
     def _mark_used(self, chat_id: int, kind: str) -> None:
         now = asyncio.get_running_loop().time()
@@ -232,50 +232,6 @@ async def _run_outbound(
     if limiter is not None:
         return await limiter.run(chat_id, kind=kind, label=label, action=action)
     return await _send_with_retry_result(action, label=label)
-
-
-async def _send_with_retry(
-    send_coro_factory,
-    *,
-    label: str,
-    max_attempts: int = 3,
-    base_delay: float = 0.8,
-) -> None:
-    last_err: Exception | None = None
-    for attempt in range(1, max_attempts + 1):
-        try:
-            await send_coro_factory()
-            return
-        except RetryAfter as e:
-            last_err = e
-            if attempt >= max_attempts:
-                break
-            delay = max(float(getattr(e, "retry_after", 1.0) or 1.0), base_delay)
-            logger.warning(
-                "[telegram] %s 命中限流，准备重试 attempt=%d/%d delay=%.1fs err=%s",
-                label,
-                attempt,
-                max_attempts,
-                delay,
-                e,
-            )
-            await asyncio.sleep(delay)
-        except (TimedOut, NetworkError) as e:
-            last_err = e
-            if attempt >= max_attempts:
-                break
-            delay = base_delay * (2 ** (attempt - 1))
-            logger.warning(
-                "[telegram] %s 发送失败，准备重试 attempt=%d/%d delay=%.1fs err=%s",
-                label,
-                attempt,
-                max_attempts,
-                delay,
-                e,
-            )
-            await asyncio.sleep(delay)
-    if last_err is not None:
-        raise last_err
 
 
 def _serialize_entities(entities: list[MessageEntity]) -> list[dict] | None:
@@ -532,7 +488,10 @@ class TelegramLiveEditQueue:
         self._current_interval_s: dict[int, float] = {}
 
     async def reserve(self, chat_id: int, *, label: str) -> None:
-        lock = self._locks.setdefault(chat_id, asyncio.Lock())
+        lock = self._locks.get(chat_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._locks[chat_id] = lock
         async with lock:
             await self._wait_for_slot(chat_id)
             self._mark_used(chat_id)
@@ -579,7 +538,10 @@ class TelegramLiveEditQueue:
             except (TimedOut, NetworkError) as e:
                 logger.warning("[telegram] %s live 更新失败，已跳过: %s", label, e)
                 return None
-        lock = self._locks.setdefault(chat_id, asyncio.Lock())
+        lock = self._locks.get(chat_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._locks[chat_id] = lock
         async with lock:
             strikes = self._flood_strikes.get(chat_id, 0)
             if strikes >= _LIVE_MAX_FLOOD_STRIKES and not force:
@@ -683,11 +645,12 @@ class TelegramLiveTextMessage:
             sent = await self._queue.run(
                 self._chat_id,
                 label="send_message(live)",
-                action=lambda: _send_live_message(
+                action=lambda: _send_html_message(
                     self._bot,
                     self._chat_id,
                     html_body,
                     plain,
+                    channel="live",
                 ),
             )
             if sent is None:
@@ -699,12 +662,13 @@ class TelegramLiveTextMessage:
             self._chat_id,
             label="edit_message(live)",
             force=force,
-            action=lambda: _edit_live_message(
+            action=lambda: _edit_html_message(
                 self._bot,
                 self._chat_id,
                 self._message_id,
                 html_body,
                 plain,
+                channel="live",
             ),
         )
         if ok:
@@ -742,12 +706,17 @@ def _clip_live_text(text: str) -> str:
     cut = _utf16_cut(text, _LIVE_MESSAGE_LIMIT - len(suffix))
     return text[:cut] + suffix
 
-async def _send_live_message(
+async def _send_html_message(
     bot: Bot,
     chat_id: int,
     html_text: str,
     plain_text: str,
+    *,
+    channel: Literal["live", "preview"],
 ) -> object:
+    """发送 HTML 文本，仅在解析失败时降级为纯文本。"""
+
+    # 1. 先发送 Telegram HTML 消息。
     try:
         return await bot.send_message(
             chat_id=chat_id,
@@ -755,19 +724,26 @@ async def _send_live_message(
             parse_mode="HTML",
         )
     except Exception as e:
+        # 2. 解析失败才按原顺序降级为纯文本，其他异常继续暴露。
         if not _is_telegram_html_parse_error(e):
             raise
-        logger.warning("[telegram] live HTML 解析失败，降级纯文本: %s", e)
+        logger.warning("[telegram] %s HTML 解析失败，降级纯文本: %s", channel, e)
         return await bot.send_message(chat_id=chat_id, text=plain_text)
 
 
-async def _edit_live_message(
+async def _edit_html_message(
     bot: Bot,
     chat_id: int,
     message_id: int | None,
     html_text: str,
     plain_text: str,
-) -> bool:
+    *,
+    channel: Literal["live", "preview"],
+) -> bool | None:
+    """编辑 HTML 文本，并保留渠道特定的无操作返回值。"""
+
+    # 1. 先发送 Telegram HTML 编辑请求。
+    result = True if channel == "live" else None
     try:
         await bot.edit_message_text(
             chat_id=chat_id,
@@ -775,29 +751,23 @@ async def _edit_live_message(
             text=html_text,
             parse_mode="HTML",
         )
-        return True
-    except BadRequest as e:
-        if _is_telegram_message_not_modified_error(e):
-            return True
-        if not _is_telegram_html_parse_error(e):
-            raise
-        logger.warning("[telegram] live edit HTML 解析失败，降级纯文本: %s", e)
-        await bot.edit_message_text(
-            chat_id=chat_id,
-            message_id=message_id,
-            text=plain_text,
-        )
-        return True
+        return result
     except Exception as e:
+        # 2. 只吞掉已知的 not-modified 或解析错误路径。
+        if isinstance(e, BadRequest) and _is_telegram_message_not_modified_error(e):
+            if channel == "preview":
+                logger.debug("[telegram] preview edit skipped: %s", e)
+            return result
         if not _is_telegram_html_parse_error(e):
             raise
-        logger.warning("[telegram] live edit HTML 解析失败，降级纯文本: %s", e)
+        # 3. 解析失败才执行一次纯文本编辑。
+        logger.warning("[telegram] %s edit HTML 解析失败，降级纯文本: %s", channel, e)
         await bot.edit_message_text(
             chat_id=chat_id,
             message_id=message_id,
             text=plain_text,
         )
-        return True
+        return result
 
 
 class TelegramStreamMessage:
@@ -927,8 +897,12 @@ class TelegramStreamMessage:
                 self._chat_id,
                 kind="send",
                 label="send_message(stream_start)",
-                action=lambda: _send_preview_message(
-                    self._bot, self._chat_id, html_text, plain_text
+                action=lambda: _send_html_message(
+                    self._bot,
+                    self._chat_id,
+                    html_text,
+                    plain_text,
+                    channel="preview",
                 ),
             )
             self._message_id = int(getattr(sent, "message_id", 0) or 0) or None
@@ -944,12 +918,13 @@ class TelegramStreamMessage:
     ) -> bool:
         try:
             if self._limiter is None:
-                await _edit_preview_message(
+                await _edit_html_message(
                     self._bot,
                     self._chat_id,
                     self._message_id,
                     html_text,
                     plain_text,
+                    channel="preview",
                 )
             else:
                 await _run_outbound(
@@ -957,12 +932,13 @@ class TelegramStreamMessage:
                     self._chat_id,
                     kind="edit",
                     label="edit_message_text(stream)",
-                    action=lambda: _edit_preview_message(
+                    action=lambda: _edit_html_message(
                         self._bot,
                         self._chat_id,
                         self._message_id,
                         html_text,
                         plain_text,
+                        channel="preview",
                     ),
                 )
             return True
@@ -1039,57 +1015,6 @@ def _iter_stream_chunks(text: str) -> list[str]:
         chunks.append(text[start:end])
         start = end
     return chunks
-
-
-async def _send_preview_message(bot: Bot, chat_id: int, html_text: str, plain_text: str):
-    try:
-        return await bot.send_message(
-            chat_id=chat_id,
-            text=html_text,
-            parse_mode="HTML",
-        )
-    except Exception as e:
-        if not _is_telegram_html_parse_error(e):
-            raise
-        logger.warning("[telegram] preview HTML 解析失败，降级纯文本: %s", e)
-        return await bot.send_message(chat_id=chat_id, text=plain_text)
-
-
-async def _edit_preview_message(
-    bot: Bot,
-    chat_id: int,
-    message_id: int | None,
-    html_text: str,
-    plain_text: str,
-) -> None:
-    try:
-        await bot.edit_message_text(
-            chat_id=chat_id,
-            message_id=message_id,
-            text=html_text,
-            parse_mode="HTML",
-        )
-    except BadRequest as e:
-        if _is_telegram_message_not_modified_error(e):
-            logger.debug("[telegram] preview edit skipped: %s", e)
-            return
-        if not _is_telegram_html_parse_error(e):
-            raise
-        logger.warning("[telegram] preview edit HTML 解析失败，降级纯文本: %s", e)
-        await bot.edit_message_text(
-            chat_id=chat_id,
-            message_id=message_id,
-            text=plain_text,
-        )
-    except Exception as e:
-        if not _is_telegram_html_parse_error(e):
-            raise
-        logger.warning("[telegram] preview edit HTML 解析失败，降级纯文本: %s", e)
-        await bot.edit_message_text(
-            chat_id=chat_id,
-            message_id=message_id,
-            text=plain_text,
-        )
 
 
 def _is_telegram_html_parse_error(err: Exception) -> bool:

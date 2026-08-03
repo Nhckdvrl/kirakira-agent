@@ -6,20 +6,20 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from kirakira_agent.mcp import (
+from agent.mcp import (
     McpCatalogPublisher,
     McpClient,
     WorkspaceMcpWatcher,
     load_workspace_mcp_declarations,
 )
-from kirakira_agent.schema import ToolCall
-from kirakira_agent.snapshot import (
+from core.schema import ToolCall
+from agent.plugins.snapshot import (
     RuntimeSnapshotStore,
     SnapshotToolView,
     bind_runtime_snapshot,
     reset_runtime_snapshot,
 )
-from kirakira_agent.tools.registry import ToolRegistry
+from agent.tools.registry import ToolRegistry
 
 
 def _build_watcher(servers):

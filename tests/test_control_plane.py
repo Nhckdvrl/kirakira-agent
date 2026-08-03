@@ -10,26 +10,26 @@ from pathlib import Path
 
 import pytest
 
-from kirakira_agent.control.errors import (
+from agent.control.errors import (
     ThreadBusyError,
     TurnNotFoundError,
     TurnStateTransitionError,
 )
-from kirakira_agent.control.ids import new_item_id, new_turn_id
-from kirakira_agent.control.models import (
+from agent.control.ids import new_item_id, new_turn_id
+from agent.control.models import (
     TurnItem,
     TurnItemKind,
     TurnRecord,
     TurnRequest,
     TurnStatus,
 )
-from kirakira_agent.control.ports import ControlExecutionResult
-from kirakira_agent.control.protocol.models import METHOD_PARAMS, ParamValidationError
-from kirakira_agent.control.runtime import ConversationRuntime
-from kirakira_agent.control.service import ControlService
-from kirakira_agent.control.socket import SocketAppServer
-from kirakira_agent.control.store import ControlStore
-from kirakira_agent.session import SessionManager
+from agent.control.ports import ControlExecutionResult
+from agent.control.protocol.models import METHOD_PARAMS, ParamValidationError
+from agent.control.runtime import ConversationRuntime
+from agent.control.service import ControlService
+from infra.control.socket import SocketAppServer
+from agent.control.store import ControlStore
+from session.manager import SessionManager
 
 
 @pytest.fixture

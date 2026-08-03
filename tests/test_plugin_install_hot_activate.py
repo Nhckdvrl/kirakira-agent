@@ -11,12 +11,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from kirakira_agent.event_bus import EventBus
-from kirakira_agent.plugins import PluginManager
-from kirakira_agent.tools.registry import ToolRegistry
+from bus.event_bus import EventBus
+from agent.plugins import PluginManager
+from agent.tools.registry import ToolRegistry
 
 _PLUGIN_SRC = (
-    "from kirakira_agent.plugins import Plugin\n"
+    "from agent.plugins import Plugin\n"
     "class Demo(Plugin):\n"
     "    name = '{name}'\n"
     "    version = '{version}'\n"
@@ -43,6 +43,51 @@ def _write_source(root: Path, name: str, version: str = "1.0") -> Path:
 
 
 class InstallHotActivateTests(unittest.TestCase):
+    def test_cross_surface_failure_stays_gated_and_retries_same_revision(self) -> None:
+        class FailOncePublisher:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            async def publish(self, _configs, *, source="workspace"):
+                self.calls += 1
+                if self.calls == 1:
+                    raise RuntimeError("temporary MCP failure")
+                return "published"
+
+        async def scenario() -> None:
+            with tempfile.TemporaryDirectory() as tmp:
+                workspace = Path(tmp) / "workspace"
+                workspace.mkdir()
+                source = _write_source(Path(tmp) / "atomicdemo", "atomicdemo")
+                manager = _make_manager(workspace)
+                await manager.load_all()
+                await manager.install(str(source))
+                publisher = FailOncePublisher()
+                manager.mcp_publisher = publisher
+
+                with self.assertRaisesRegex(RuntimeError, "temporary MCP"):
+                    await manager.reconcile_changed()
+                self.assertTrue(manager.generations.publication_in_progress)
+
+                entered = asyncio.Event()
+
+                async def new_turn() -> None:
+                    async with manager.generations.lease_committed():
+                        entered.set()
+
+                turn = asyncio.create_task(new_turn())
+                await asyncio.sleep(0)
+                self.assertFalse(entered.is_set())
+
+                # No file change: the dirty committed revision is republished.
+                await manager.reconcile_changed()
+                self.assertEqual(publisher.calls, 2)
+                self.assertFalse(manager.generations.publication_in_progress)
+                await asyncio.wait_for(entered.wait(), timeout=1)
+                await turn
+
+        asyncio.run(scenario())
+
     def test_install_then_reconcile_activates_without_restart(self) -> None:
         async def scenario() -> None:
             with tempfile.TemporaryDirectory() as tmp:

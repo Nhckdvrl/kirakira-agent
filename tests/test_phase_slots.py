@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import unittest
 
-from kirakira_agent.phase import (
+from agent.lifecycle.phase import (
     inspect_phase,
     is_builtin_slot,
     topo_sort_modules,
@@ -116,7 +116,7 @@ class ManagerIntegrationTests(unittest.TestCase):
     """PluginManager._collect 的 slot 排序:全员声明才启用,否则保持原顺序。"""
 
     def _order(self, modules):
-        from kirakira_agent.plugins import PluginManager
+        from agent.plugins import PluginManager
 
         return _slots(PluginManager._order_phase_modules("before_turn", modules))
 

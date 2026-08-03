@@ -4,9 +4,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from kirakira_agent.agent import Agent
-from kirakira_agent.schema import ModelResponse, ToolCall
-from kirakira_agent.tools import build_default_registry
+from agent.core.runner import Agent
+from core.schema import ModelResponse, ToolCall
+from agent.tools import build_default_registry
 
 
 class FakeModel:

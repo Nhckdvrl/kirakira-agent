@@ -10,9 +10,9 @@ Drift 是**你写模型可以做什么、模型照着执行**的后台任务系�
 - **怎么做**：SKILL.md 是一份分步操作指南，作为 system prompt，模型一步步按着走，最后调 `finish_drift` 收尾。
 - **跟主动推送的本质区别**：主动推送的行为是**代码里写死的 system prompt**；Drift 的行为是**你写的 SKILL.md**——可编辑、可增删，不改代码。
 
-这是 Kirakira 的第二条差异化链路。参考 akashic 的 `plugins/drift_flow`；本项目 MVP
-**复用同步 Agent 与默认工具集**把"一轮 Drift"跑成一次 agent run，刻意不搬 hazard 穿线 /
-self_observation journal 等 Tier-3 细节。代码在 `kirakira_agent/drift/`。
+这是 Kirakira 的第二条差异化链路。实现位于 `plugins/drift_flow/`，**复用同步 Agent 与默认
+工具集**把“一轮 Drift”跑成一次 agent run，并保存 hazard 到期、skill journal、
+self-observation 与跨轮连续性。
 
 ```text
 主动链路本轮没有产生推送
@@ -39,7 +39,7 @@ self_observation journal 等 Tier-3 细节。代码在 `kirakira_agent/drift/`�
 > **注意**：内置 `message_push` 是 async 且直连 bus。Drift run 跑在工作线程里
 > （`asyncio.to_thread`），在里面跨事件循环访问 bus 不安全。所以 `register_drift_tools`
 > 先 `unregister` 内置版，再注册一个**同步**版：只把消息记成草稿，真正投递由 runner 在
-> run 结束后回到主事件循环上完成。这是 MVP 的一处关键实现取舍。
+> run 结束后回到主事件循环上完成。这是同步 Agent 与异步消息总线之间的明确边界。
 
 ## SKILL.md 格式
 
@@ -92,16 +92,15 @@ description: <一句话描述>
 
 ## 跨轮连续性
 
-Drift 会被反复触发，既要保留当前意图，也要能从多轮里形成暂定认识。MVP 保存在
-`drift.db` 的 `continuum` 表（每个 skill 一行）：
+Drift 会被反复触发，既要保留当前意图，也要能从多轮里形成暂定认识。`drift.db` 的
+`continuum` 表为每个 skill 保存：
 
 - `scratchpad` — `paused` 时写的续跑断点，下轮通过 Briefing 注入。
 - `next_tendency` — 下次可能想做什么的宽松倾向（不是硬指令）。
 
-Briefing 还会带最近 5 条 run 记录，让 skill 避免短期重复。
-
-> 参考 akashic 还有 self_observation journal（question/reinforce/revise 三态观察）和 hazard
-> 到期采样，属于 Tier-3，MVP 暂未搬，接口留在 `state.py` 的连续性表上，日后可扩。
+Briefing 还会带最近 run、skill journal 与跨 skill self-observation，让 skill 避免短期重复。
+`DriftStateStore` 另存每个 session 的 hazard schedule；用户再次发言或上一轮 Drift 完成会改变
+timer anchor 并重新采样，避免“轮询越勤越容易触发”的伪影。
 
 ## 配置与开关
 

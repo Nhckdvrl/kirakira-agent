@@ -1,1 +1,1 @@
-"""Narrow Reference ports used by copied infrastructure modules."""
+"""Canonical agent runtime package."""

@@ -7,25 +7,25 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from kirakira_agent.bus import MessageBus
-from kirakira_agent.events import OutboundMessage
-from kirakira_agent.proactive import energy
-from kirakira_agent.proactive.config import ProactiveConfig
-from kirakira_agent.proactive.contracts import (
+from bus.queue import MessageBus
+from bus.events import OutboundMessage
+from plugins.wake_proactive import energy
+from proactive_v2.config import ProactiveConfig
+from proactive_v2.contracts import (
     normalize_alert,
     normalize_content,
     rank_alerts,
     rank_content,
 )
-from kirakira_agent.proactive.loop import ProactiveLoop
-from kirakira_agent.proactive.sources import (
+from proactive_v2.loop import ProactiveLoop
+from plugins.wake_proactive.sources import (
     FileInboxSource,
     SourceRegistry,
     build_file_inbox_registry,
 )
-from kirakira_agent.proactive.state import ProactiveStateStore
-from kirakira_agent.schema import ModelResponse
-from kirakira_agent.session import SessionManager
+from plugins.wake_proactive.state import ProactiveStateStore
+from core.schema import ModelResponse
+from session.manager import SessionManager
 
 NOW = datetime(2026, 7, 22, 12, 0, 0, tzinfo=timezone.utc)
 
@@ -285,6 +285,60 @@ class LoopTickTests(unittest.TestCase):
         self.assertTrue(sent[0].metadata.get("delivery_id"))
         self.assertEqual(drift_calls, [])
 
+    def test_selected_content_feedback_is_persisted_and_sent_to_source(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                workdir = Path(tmp)
+                sessions = SessionManager(workdir)
+                inbox = workdir / "proactive" / "inbox"
+                inbox.mkdir(parents=True)
+                (inbox / "demo.jsonl").write_text(
+                    json.dumps(
+                        {"kind": "content", "event_id": "c1", "title": "news"}
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                state = ProactiveStateStore(workdir / "proactive.db")
+                bus = MessageBus()
+                bus.subscribe_outbound("web", lambda _m: asyncio.sleep(0))
+                loop = ProactiveLoop(
+                    config=_cfg(),
+                    bus=bus,
+                    session_manager=sessions,
+                    model_client=_FakeClient(
+                        content_decision={
+                            "decision": "send",
+                            "message": "useful",
+                            "cited_ids": ["demo:c1"],
+                        }
+                    ),
+                    sources=build_file_inbox_registry(workdir),
+                    state=state,
+                )
+                dispatcher = asyncio.create_task(bus.dispatch_outbound())
+
+                await loop._tick()
+                await bus.drain(timeout=2)
+
+                feedback_rows = [
+                    json.loads(line)
+                    for line in (inbox / "demo.feedback.jsonl")
+                    .read_text(encoding="utf-8")
+                    .splitlines()
+                ]
+                self.assertEqual(
+                    feedback_rows,
+                    [{"event_id": "c1", "feedback": "interesting"}],
+                )
+                self.assertEqual(state.pending_feedback(), [])
+                bus.stop()
+                await dispatcher
+                loop.close()
+                sessions.close()
+
+        asyncio.run(scenario())
+
     def test_content_is_acked_on_ingest_but_kept_locally_when_skipped(self):
         async def scenario():
             tmp = tempfile.TemporaryDirectory()
@@ -476,6 +530,25 @@ class StatusAndGateTests(unittest.TestCase):
         drift_calls, decisions = asyncio.run(scenario())
         self.assertEqual(drift_calls, [])  # 忙时不进 drift
         self.assertTrue(any(d["action"] == "gated" for d in decisions))
+
+    def test_tick_step_trajectory_records_gate_and_skipped_modules(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                loop, sessions = self._loop(Path(tmp), busy=True)
+                await loop.tick_once()
+                trajectory = loop.status()["recent_ticks"][0]
+                loop.close()
+                sessions.close()
+                return trajectory
+
+        trajectory = asyncio.run(scenario())
+        self.assertEqual(trajectory["status"], "completed")
+        self.assertEqual(trajectory["terminal"], "passive_busy")
+        self.assertEqual(trajectory["steps"][0]["slot"], "proactive.gate")
+        self.assertEqual(trajectory["steps"][0]["status"], "completed")
+        self.assertTrue(
+            all(step["status"] == "skipped" for step in trajectory["steps"][1:])
+        )
 
 
 if __name__ == "__main__":

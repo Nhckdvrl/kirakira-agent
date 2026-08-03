@@ -18,7 +18,7 @@ skills 路径和 MCP 配置路径；现在这些全部由 `plugin.py` 用代码�
 ## 最小插件
 
 ```python
-from kirakira_agent.plugins import Plugin
+from agent.plugins import Plugin
 
 
 class DemoPlugin(Plugin):
@@ -44,7 +44,7 @@ class DemoPlugin(Plugin):
 ## 声明 MCP server
 
 ```python
-from kirakira_agent.plugins import McpServerSpec, Plugin
+from agent.plugins import McpServerSpec, Plugin
 
 
 class DemoPlugin(Plugin):

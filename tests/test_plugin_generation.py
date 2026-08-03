@@ -12,7 +12,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from kirakira_agent.plugin_generation import (
+from agent.plugins.generation import (
     GateResult,
     PluginContributions,
     PluginGeneration,
@@ -20,7 +20,7 @@ from kirakira_agent.plugin_generation import (
     compute_generation_id,
     file_revision,
 )
-from kirakira_agent.plugin_specs import PluginSemanticCheck
+from agent.plugins.specs import PluginSemanticCheck
 
 
 def _generation(

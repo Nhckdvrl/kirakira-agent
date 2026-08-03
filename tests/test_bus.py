@@ -3,8 +3,8 @@
 import asyncio
 import unittest
 
-from kirakira_agent.bus import MessageBus, OutboundDeliveryError
-from kirakira_agent.events import OutboundMessage
+from bus.queue import MessageBus, OutboundDeliveryError
+from bus.events import OutboundMessage
 
 
 class BusTests(unittest.TestCase):

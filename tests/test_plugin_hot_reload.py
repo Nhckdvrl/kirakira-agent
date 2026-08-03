@@ -10,15 +10,15 @@ import asyncio
 import unittest
 from typing import Any, Dict, List
 
-from kirakira_agent.plugin_generation import (
+from agent.plugins.generation import (
     GateResult,
     PluginContributions,
     PluginGeneration,
     PluginGenerationRegistry,
     compute_generation_id,
 )
-from kirakira_agent.plugin_specs import PluginSemanticCheck
-from kirakira_agent.plugin_watcher import PluginWatcher
+from agent.plugins.specs import PluginSemanticCheck
+from agent.plugins.watcher import PluginWatcher
 
 
 def _generation(plugin_id: str, revision: str, *, failing: bool = False) -> PluginGeneration:
@@ -47,6 +47,7 @@ class _FakeManager:
         self.reconcile_calls = 0
         self.generations = PluginGenerationRegistry()
         self.raise_on_scan: Exception | None = None
+        self.reconcile_failures = 0
 
     def watch_revision(self) -> str:
         if self.raise_on_scan is not None:
@@ -55,6 +56,9 @@ class _FakeManager:
 
     async def reconcile_changed(self) -> List[Dict[str, Any]]:
         self.reconcile_calls += 1
+        if self.reconcile_failures:
+            self.reconcile_failures -= 1
+            raise RuntimeError("temporary publish failure")
         return [{"plugin_id": "demo", "state": "swapped"}]
 
 
@@ -95,6 +99,27 @@ class LeaseProtectsInFlightTurnTests(unittest.TestCase):
         registry = PluginGenerationRegistry()
         with registry.lease_active() as leased:
             self.assertEqual(leased, ())
+
+    def test_committed_lease_waits_for_publication_gate(self) -> None:
+        async def scenario() -> None:
+            registry = PluginGenerationRegistry()
+            registry.publish(_generation("demo", "v1"))
+            await registry.begin_publication()
+            entered = asyncio.Event()
+
+            async def acquire() -> None:
+                async with registry.lease_committed() as leased:
+                    self.assertEqual(len(leased), 1)
+                    entered.set()
+
+            task = asyncio.create_task(acquire())
+            await asyncio.sleep(0)
+            self.assertFalse(entered.is_set())
+            await registry.finish_publication()
+            await asyncio.wait_for(entered.wait(), timeout=1)
+            await task
+
+        asyncio.run(scenario())
 
 
 class WatcherTests(unittest.TestCase):
@@ -154,6 +179,24 @@ class WatcherTests(unittest.TestCase):
             watcher.wake()
             await asyncio.sleep(0.05)
             self.assertGreaterEqual(manager.reconcile_calls, 1)
+            watcher.stop()
+            await watcher.wait_stopped()
+            task.cancel()
+
+        asyncio.run(scenario())
+
+    def test_failed_revision_is_retried_without_another_file_change(self) -> None:
+        async def scenario() -> None:
+            manager = _FakeManager()
+            manager.reconcile_failures = 1
+            watcher = PluginWatcher(manager, interval_seconds=0.01)
+            task = asyncio.create_task(watcher.run())
+
+            await asyncio.sleep(0.08)
+
+            self.assertGreaterEqual(manager.reconcile_calls, 2)
+            self.assertIsNone(watcher.last_error)
+            self.assertEqual(watcher.status()["revision"], "r1")
             watcher.stop()
             await watcher.wait_stopped()
             task.cancel()

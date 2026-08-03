@@ -12,20 +12,20 @@ from unittest import mock
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from kirakira_agent.bus import MessageBus
-from kirakira_agent.channels.contract import ChannelContext
-from kirakira_agent.channels.qq import QQChannel
-from kirakira_agent.channels.qqbot import QQBotChannel
-from kirakira_agent.channels.telegram import TelegramChannel
-from kirakira_agent.channels.web import WebChannel
-from kirakira_agent.context_builder import ContextBuilder
-from kirakira_agent.event_bus import EventBus
-from kirakira_agent.memory import MemoryRuntime
-from kirakira_agent.runtime import AgentLoop, DefaultReasoner, PassiveTurnPipeline, RuntimeConfig
-from kirakira_agent.schema import ModelResponse
-from kirakira_agent.events import OutboundMessage
-from kirakira_agent.session import SessionManager
-from kirakira_agent.tools import build_default_registry
+from bus.queue import MessageBus
+from infra.channels.contract import ChannelContext
+from infra.channels.qq_channel import QQChannel
+from infra.channels.qqbot_channel import QQBotChannel
+from infra.channels.telegram_channel import TelegramChannel
+from infra.channels.web_chat_channel import WebChannel
+from agent.prompting.context_builder import ContextBuilder
+from bus.event_bus import EventBus
+from core.memory.legacy import MemoryRuntime
+from agent.core.runtime import AgentLoop, DefaultReasoner, PassiveTurnPipeline, RuntimeConfig
+from core.schema import ModelResponse
+from bus.events import OutboundMessage
+from session.manager import SessionManager
+from agent.tools import build_default_registry
 
 
 class FakeModel:
@@ -176,7 +176,7 @@ class ChannelTests(unittest.TestCase):
 
                 client = FakeClient()
                 with mock.patch(
-                    "kirakira_agent.channels.qqbot.httpx.AsyncClient",
+                    "infra.channels.qqbot_channel.httpx.AsyncClient",
                     return_value=client,
                 ):
                     await channel._on_response(

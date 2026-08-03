@@ -5,7 +5,7 @@
 - **工具面完全由 engine 决定**:akasha 只声明 recall + 自定义 reinforce_memory,
   **没有 memorize/forget**(它从 turn 自动摄入)——不能再退回旧 schema 注册,
   否则模型看得到 memorize、调用后被引擎拒绝(实弹踩过);
-- **镜像保真**:12 个 akasha 文件归一化命名空间后与 Reference 逐字节一致。
+- **本地完整性**:Akasha 运行时可在没有外部源码 checkout 时独立导入。
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from kirakira_agent.coremem.services import resolve_memory_plugin
+from core.memory.services import resolve_memory_plugin
 
 
 class EngineRoutingTests(unittest.TestCase):
@@ -38,7 +38,7 @@ class EngineRoutingTests(unittest.TestCase):
 
 class AkashaEngineShapeTests(unittest.TestCase):
     def test_descriptor_and_tool_profile(self) -> None:
-        from kirakira_agent.akasha.engine import AkashaMemoryEngine
+        from plugins.akasha.engine import AkashaMemoryEngine
 
         descriptor = AkashaMemoryEngine.DESCRIPTOR
         self.assertEqual(descriptor.name, "akasha")
@@ -52,9 +52,9 @@ class ToolProfileDrivesRegistrationTests(unittest.TestCase):
     """工具面由 engine 声明;声明什么注册什么,没声明的不注册。"""
 
     def _registry_for(self, profile) -> set[str]:
-        from kirakira_agent.coremem.engine import MemoryCapability
-        from kirakira_agent.tools.builtins import _register_memory_tools
-        from kirakira_agent.tools.registry import ToolRegistry
+        from core.memory.engine import MemoryCapability
+        from agent.tools.builtins import _register_memory_tools
+        from agent.tools.registry import ToolRegistry
 
         engine = SimpleNamespace(
             DESCRIPTOR=SimpleNamespace(
@@ -107,8 +107,8 @@ class ToolProfileDrivesRegistrationTests(unittest.TestCase):
 
     def test_disabled_engine_keeps_legacy_trio(self) -> None:
         """kirakira 的显式偏离:引擎未承重时仍注册词法版三件套。"""
-        from kirakira_agent.tools.builtins import _register_memory_tools
-        from kirakira_agent.tools.registry import ToolRegistry
+        from agent.tools.builtins import _register_memory_tools
+        from agent.tools.registry import ToolRegistry
 
         handlers = SimpleNamespace(
             _live_memory_engine=lambda: None,
@@ -125,7 +125,7 @@ class SessionMessagesProjectionTests(unittest.TestCase):
     def test_projection_tracks_sessions(self) -> None:
         import tempfile
 
-        from kirakira_agent.session import SessionManager
+        from session.manager import SessionManager
 
         with tempfile.TemporaryDirectory() as tmp:
             manager = SessionManager(Path(tmp))
@@ -138,7 +138,7 @@ class SessionMessagesProjectionTests(unittest.TestCase):
                 "SELECT id, session_key, seq, role, content FROM messages ORDER BY seq"
             ).fetchall()
             self.assertEqual(len(rows), 2)
-            self.assertEqual(rows[0][0], "web:u1:0")
+            self.assertEqual(rows[0][0], session.messages[0]["id"])
             self.assertEqual(rows[0][2], 0)
             self.assertEqual(rows[1][3], "assistant")
             # 外部内容 FTS 随触发器增量维护
@@ -155,7 +155,7 @@ class SessionMessagesProjectionTests(unittest.TestCase):
     def test_index_lives_at_reference_path(self) -> None:
         import tempfile
 
-        from kirakira_agent.session import SessionManager
+        from session.manager import SessionManager
 
         with tempfile.TemporaryDirectory() as tmp:
             manager = SessionManager(Path(tmp))
@@ -164,16 +164,13 @@ class SessionMessagesProjectionTests(unittest.TestCase):
             self.assertTrue((Path(tmp) / "sessions.db").exists())
 
 
-class MirrorFidelityTests(unittest.TestCase):
-    def test_akasha_files_match_reference_after_normalization(self) -> None:
-        from kirakira_agent.memory_admin import _akasha_alignment
+class LocalIntegrityTests(unittest.TestCase):
+    def test_akasha_runtime_has_no_external_checkout_dependency(self) -> None:
+        from plugins.akasha.engine import AkashaMemoryEngine
+        from plugins.akasha.memory_plugin import MemoryPlugin
 
-        root = Path(__file__).resolve().parents[1]
-        if not (root / "Reference" / "plugins" / "akasha").exists():
-            self.skipTest("Reference 不在工作树中")
-        report = _akasha_alignment(root)
-        self.assertGreaterEqual(report["checked"], 12)
-        self.assertEqual(report["drifted"], [])
+        self.assertEqual(AkashaMemoryEngine.__name__, "AkashaMemoryEngine")
+        self.assertEqual(MemoryPlugin.__name__, "MemoryPlugin")
 
 
 if __name__ == "__main__":

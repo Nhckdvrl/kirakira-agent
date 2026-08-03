@@ -3,7 +3,7 @@
 import asyncio
 import unittest
 
-from kirakira_agent.snapshot import (
+from agent.plugins.snapshot import (
     RuntimeSnapshotStore,
     SnapshotToolView,
     bind_runtime_snapshot,
@@ -12,8 +12,8 @@ from kirakira_agent.snapshot import (
     get_current_runtime_snapshot,
     reset_runtime_snapshot,
 )
-from kirakira_agent.schema import ToolCall, ToolSpec
-from kirakira_agent.tools.registry import Tool, ToolRegistry
+from core.schema import ToolCall, ToolSpec
+from agent.tools.registry import Tool, ToolRegistry
 
 
 def _echo_tool(name: str, reply: str) -> Tool:

@@ -1,11 +1,16 @@
 import unittest
 
-from kirakira_agent.context_policy import (
+from agent.model_runtime.context_policy import (
     build_runtime_context_budget,
     estimate_context_tokens,
     recommended_context_settings,
 )
-from kirakira_agent.schema import ToolSpec
+from agent.model_runtime.usage import (
+    UsageCoverage,
+    aggregate_usage,
+    usage_from_mapping,
+)
+from core.schema import ToolSpec
 
 
 class RecommendedContextSettingsTest(unittest.TestCase):
@@ -72,6 +77,38 @@ class RuntimeContextBudgetTest(unittest.TestCase):
         )
         self.assertGreater(with_tool, base)
         self.assertGreaterEqual(with_image, 1024)
+
+
+class ModelUsageGovernanceTest(unittest.TestCase):
+    def test_deepseek_cache_usage_is_normalized(self) -> None:
+        usage = usage_from_mapping(
+            {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "prompt_cache_hit_tokens": 70,
+            }
+        )
+
+        self.assertEqual(usage.input_tokens, 100)
+        self.assertEqual(usage.cached_input_tokens, 70)
+        self.assertEqual(usage.output_tokens, 20)
+        self.assertEqual(usage.coverage, UsageCoverage.EXACT)
+
+    def test_missing_request_usage_keeps_aggregate_partial(self) -> None:
+        usage = aggregate_usage(
+            [
+                usage_from_mapping(
+                    {"prompt_tokens": 100, "completion_tokens": 20}
+                ),
+                usage_from_mapping({}),
+            ]
+        )
+
+        self.assertEqual(usage.request_count, 2)
+        self.assertEqual(usage.covered_request_count, 1)
+        self.assertEqual(usage.input_tokens, 100)
+        self.assertEqual(usage.output_tokens, 20)
+        self.assertEqual(usage.coverage, UsageCoverage.PARTIAL)
 
 
 if __name__ == "__main__":
