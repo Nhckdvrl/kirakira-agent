@@ -2,7 +2,7 @@
 name: manage-workspace-mcp
 description: 安装、注册、更新、移除和诊断 kirakira 的独立 workspace MCP server。用户要求把 binary、CLI、脚本或本地项目做成常驻 MCP，询问 MCP 热重载、MCP 工具为何没出现，或需要查看非插件 MCP 状态时使用。插件自带 MCP 改用 plugin-system。
 when_to_use: 需要把独立 binary/CLI/脚本注册为常驻 workspace MCP、排查 MCP 热重载或工具未出现的问题时。
-metadata: {"akashic": {"always": false}}
+metadata: {"skill": {"always": false}}
 ---
 
 # 管理 Workspace MCP

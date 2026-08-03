@@ -1,7 +1,7 @@
 ---
 name: skill-creater
 description: 创建或改写 kirakira-agent 技能（SKILL.md）。当用户要求新建技能、适配现有技能到当前格式、或修改技能内容时使用。触发词：新建技能, 写 skill, create skill, 改写技能, 适配 skill
-metadata: {"akashic": {"always": false}}
+metadata: {"skill": {"always": false}}
 ---
 
 # Skill 创建指南
@@ -26,7 +26,7 @@ metadata: {"akashic": {"always": false}}
 ---
 name: skill-name
 description: 一句话说明技能功能 + 触发场景。触发词：词1, 词2, 词3
-metadata: {"akashic": {"always": false, "requires": {"bins": ["curl"], "env": ["API_KEY"]}}}
+metadata: {"skill": {"always": false, "requires": {"bins": ["curl"], "env": ["API_KEY"]}}}
 ---
 
 # 技能标题
@@ -39,7 +39,7 @@ metadata: {"akashic": {"always": false, "requires": {"bins": ["curl"], "env": ["
 - `name`：技能目录名（小写，连字符）
 - `description`：**最重要的字段**。agent 靠它判断何时触发此技能，务必包含功能描述和触发词
 - `when_to_use`：可选，一句话补充“什么情境下加载它”，会显示在技能清单里
-- `metadata`：运行配置（JSON），加载器读取其中的 `akashic` 或 `skill` 对象
+- `metadata`：运行配置（JSON），统一使用 `skill` 对象
   - `always`：`true` = 每轮对话都注入完整正文；`false` = 按需加载（默认）
   - `requires.bins`：所需 CLI 工具，缺失时技能标记为不可用（不会进候选清单）
   - `requires.env`：所需环境变量，缺失时技能标记为不可用

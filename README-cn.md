@@ -1,8 +1,42 @@
-# Kirakira Agent
+<h1 align="center">Kirakira Agent</h1>
 
-Kirakira 是一个本地优先、多渠道的 AI Agent Runtime。当前源码的组织边界已经按最新版
-Akashic Reference 收敛，但实现仍由 Kirakira 自己持有：`Reference/` 只用于开发审计，生产
-import、启动、迁移、构建与测试都不读取它。把整个 `Reference/` 文件夹移走，项目仍应完整工作。
+<p align="center">
+  <strong>本地优先、可持续运行的多渠道 AI Agent Runtime</strong><br>
+  <sub>被动对话 · 主动执行 · Drift · 记忆 · 插件 · MCP</sub>
+</p>
+
+<p align="center">
+  <a href="./README-cn.md"><b>简体中文</b></a> ·
+  <a href="./README.md">English</a> ·
+  <a href="./docs/INDEX.md">文档</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Nhckdvrl/kirakira-agent/stargazers"><img src="https://img.shields.io/github/stars/Nhckdvrl/kirakira-agent?style=flat&color=f29ab2" alt="GitHub Stars"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/Nhckdvrl/kirakira-agent?color=738bd7" alt="MIT License"></a>
+  <img src="https://img.shields.io/badge/Python-3.11%2B-64a8df" alt="Python 3.11+">
+  <img src="https://img.shields.io/badge/runtime-local--first-f2b84b" alt="Local-first runtime">
+</p>
+
+<p align="center">
+  <img src="./docs/assets/readme/kirakira-agent-hero.png" alt="Kirakira Agent：空舞台、乐器、星光与三条运行链" width="100%">
+</p>
+
+## Kirakira 是什么
+
+Kirakira 是一个本地优先、多渠道的 AI Agent Runtime。它把被动对话、主动执行、长期记忆和空闲任务
+放在同一个可观测、可扩展的运行时中；会话和运行状态默认保存在本地 workspace。
+
+## 一分钟了解
+
+| 你关心的问题 | Kirakira 的做法 |
+| --- | --- |
+| Agent 如何工作 | 被动 Turn、Proactive 和 Drift 三条链共用模型、工具、记忆与 Channel |
+| 数据放在哪里 | Session、Memory、任务和运行轨迹默认保存在本地 workspace |
+| 如何扩展 | 用 Plugin、MCP、Skill、Tool 和 Proactive Source 增加能力 |
+| 如何控制上下文 | 完整历史持久化，本轮只生成受预算约束的 Context Frame 投影 |
+| 如何排查运行过程 | 保存 tool chain、context trace、token usage、tick 和 module step |
+| 模型是否绑定 | 通过 OpenAI-compatible 接口接入主模型、轻模型和独立 embedding 服务 |
 
 ## 三条运行链
 
@@ -77,7 +111,7 @@ api_key = "${EMBEDDING_API_KEY}"
 - 每轮保存所选计划、各 section 大小、近似 token 估算和模型实际 usage。
 - usage 覆盖状态明确区分 `exact`、`partial`、`unavailable`，缺遥测不能伪装成 0。
 
-详见 [_handbook/context-management.md](./_handbook/context-management.md)。
+详见[上下文治理手册](./docs/handbook/context.md)。
 
 ### 工具、Shell 与子 Agent
 
@@ -102,7 +136,7 @@ api_key = "${EMBEDDING_API_KEY}"
 - Akasha v1 仍是正式可选引擎：以完整 turn 为真相，支持图扩散/RAR、持久化、证据、召回与强化。
 - 本阶段不强制升级 Akasha v2；其恢复/重建等更厚合同保留为后续扩展空间。
 
-详见 [docs/MEMORY_SYSTEM.md](./docs/MEMORY_SYSTEM.md)。
+详见[记忆架构](./docs/architecture/memory.md)和[记忆使用手册](./docs/handbook/memory.md)。
 
 ### Proactive / Drift 与运行轨迹
 
@@ -116,7 +150,7 @@ api_key = "${EMBEDDING_API_KEY}"
 
 - 启动时用 workspace 单实例锁保护迁移与运行；Yoyo 是统一迁移账本，migration 只允许追加。
 - `scripts/check_change_impact.py` 按高风险 owner 选择语义合同测试。
-- `tests/semantic/` 固化“历史不可破坏”和“Reference 可删除”两条底线。
+- `tests/semantic/` 固化“历史不可破坏”和“仓库可独立运行”两条底线。
 - 主模型与轻模型可以分开配置；轻模型只在可重试传输/限流/服务端错误且尚未产生可见流时回退主模型。
 
 ## 验证
@@ -161,12 +195,11 @@ workspace 解析顺序为：`--workspace` → `KIRAKIRA_WORKSPACE` →
 
 ## 文档
 
-从 [docs/INDEX.md](./docs/INDEX.md) 开始。当前仍保留的差异与明确延期项见
-[docs/NOW.md](./docs/NOW.md)；完整能力审计见
-[docs/DIFFERENCE_AUDIT.md](./docs/DIFFERENCE_AUDIT.md)；实际在线证据见
-[docs/design/live-verification.md](./docs/design/live-verification.md)。
+从[文档索引](./docs/INDEX.md)开始。当前完成情况和延期项见
+[当前状态](./docs/status/current.md)，整体设计见[架构总览](./docs/architecture/overview.md)，实际执行证据见
+[验证记录](./docs/operations/verification.md)。使用说明统一放在 `docs/handbook/`。
 
-前端与移动后端暂不作为本轮 Reference 对齐目标；现有前端功能保持可用，但不据此宣称产品面完全复刻。
+前端与移动端不在当前后端整理范围内；现有前端功能继续保持可用。
 
 ## License
 

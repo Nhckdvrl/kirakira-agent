@@ -1,7 +1,7 @@
 ---
 name: codex-delegate
 description: 把长代码库任务委托给本机 Codex CLI 后台执行。当用户说用 codex skill、codexskill、codex delegate、委托 codex、后台 codex、阻塞 codex exec、subagent 跑 codex 时使用。
-metadata: {"akashic": {"always": false, "requires": {"bins": ["codex"]}}}
+metadata: {"skill": {"always": false, "requires": {"bins": ["codex"]}}}
 ---
 
 # Codex Delegate
