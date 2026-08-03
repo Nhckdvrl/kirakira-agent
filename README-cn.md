@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./docs/assets/readme/kirakira-agent-icon.png" alt="Kirakira Agent 图标" width="96">
+</p>
+
 <h1 align="center">Kirakira Agent</h1>
 
 <p align="center">
