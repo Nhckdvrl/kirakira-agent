@@ -187,9 +187,14 @@ async def _runtime_checks(values: dict[str, str]) -> dict[str, Any]:
                 raise AssertionError("runtime did not execute and consume read_file")
 
             context_session = runtime.session_manager.get_or_create("online:context")
-            for index in range(30):
-                context_session.add_message("user", "历史问题 %02d" % index)
-                context_session.add_message("assistant", "历史回答 %02d" % index)
+            padding = "星光舞台上下文验证" * 24
+            for index in range(150):
+                context_session.add_message(
+                    "user", "历史问题 %03d %s" % (index, padding)
+                )
+                context_session.add_message(
+                    "assistant", "历史回答 %03d %s" % (index, padding)
+                )
             runtime.session_manager.save(context_session)
             old_ids = [str(item["id"]) for item in context_session.messages]
             context_out = await runtime.process_direct(
@@ -206,8 +211,30 @@ async def _runtime_checks(values: dict[str, str]) -> dict[str, Any]:
                 raise AssertionError("context projection mutated durable history")
             context_trace = dict(context_session.messages[-1].get("context_trace") or {})
             attempts = list(context_trace.get("attempts") or [])
-            if not attempts or int(attempts[0].get("history_messages") or 0) > 20:
-                raise AssertionError("history projection did not honor memory_window")
+            if not attempts:
+                raise AssertionError("context trace is missing")
+            checkpoint = runtime.session_manager.get_active_compaction(
+                "online:context"
+            )
+            if checkpoint is None or checkpoint.generation < 1:
+                raise AssertionError("session context compaction ledger did not advance")
+            required_headings = (
+                "## Goal",
+                "## Constraints & Preferences",
+                "## Progress",
+                "### Done",
+                "### In Progress",
+                "### Blocked",
+                "## Key Decisions",
+                "## Next Steps",
+                "## Critical Context",
+            )
+            if tuple(
+                line.strip()
+                for line in checkpoint.summary.splitlines()
+                if line.lstrip().startswith("#")
+            ) != required_headings:
+                raise AssertionError("online compaction summary headings are invalid")
             coverage = str(
                 ((context_trace.get("react_stats") or {}).get("model_usage") or {}).get(
                     "coverage"
@@ -254,9 +281,9 @@ async def _runtime_checks(values: dict[str, str]) -> dict[str, Any]:
                 "context_governance": {
                     "status": "pass",
                     "durable_history_preserved": True,
-                    "projected_history_messages": int(
-                        attempts[0].get("history_messages") or 0
-                    ),
+                    "generation": checkpoint.generation,
+                    "source_messages": len(checkpoint.source_message_ids),
+                    "retained_projection_messages": len(checkpoint.retained_tail),
                     "usage_coverage": coverage,
                 },
                 "akasha_v1": {

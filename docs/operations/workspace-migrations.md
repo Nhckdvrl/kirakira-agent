@@ -14,6 +14,8 @@
 origin migration 只记录 Kirakira 当前 workspace schema，不会改写 `sessions.db`、`memory/coremem.db`、
 `memory/akasha.db` 或 Markdown memory 内容。这些数据层有各自的 owner 和兼容策略。
 
+`20260815_01_session_context_compaction` 会先在 `.kirakira/backups/` 生成 SQLite 备份，再为 SessionDB 添加独立 compaction cursor 和只追加 ledger。它不修改 `messages` 正文。
+
 ## 验证
 
 ```bash

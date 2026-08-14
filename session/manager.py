@@ -22,9 +22,45 @@ from agent.model_runtime.query_compaction import (
     build_replay_compaction_messages,
     parse_react_compaction,
 )
+from agent.model_runtime.context_compaction import (
+    CommittedContextUnit,
+    ContextCompaction,
+    source_plan_digest,
+)
 
 JsonDict = Dict[str, Any]
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class CompactionHead:
+    session_key: str
+    parent_generation: int
+    next_generation: int
+
+
+@dataclass(frozen=True)
+class PersistedSessionCompaction:
+    session_key: str
+    generation: int
+    parent_generation: int
+    summary: str
+    source_ref: str
+    source_from_seq: int
+    consolidated_through_seq: int
+    source_message_ids: tuple[str, ...]
+    retained_tail: tuple[JsonDict, ...]
+    trigger: str
+    context_window: int
+    threshold_tokens: int
+    hard_input_tokens: int
+    keep_recent_tokens: int
+    tokens_before: int
+    tokens_after: int
+    summary_usage: JsonDict
+    model_runtime_id: str
+    model: str
+    created_at: str
 
 
 def _safe_key(key: str) -> str:
@@ -55,6 +91,41 @@ def _truncate_tool_result(value: object, limit: int = 10000) -> str:
     return "Total output lines: %d\n\n%s" % (len(text.splitlines()), clipped)
 
 
+def _logical_history_unit_ranges(messages: List[JsonDict]) -> list[tuple[int, int]]:
+    """Port Reference logical turn boundaries without splitting a tool batch."""
+
+    ranges: list[tuple[int, int]] = []
+    index = 0
+    while index < len(messages):
+        start = index
+        message = messages[index]
+        raw_turn_id = message.get("control_turn_id")
+        if raw_turn_id is not None:
+            if not isinstance(raw_turn_id, str) or not raw_turn_id:
+                raise ValueError("session message control_turn_id 必须是非空字符串")
+            index += 1
+            while index < len(messages) and messages[index].get("control_turn_id") == raw_turn_id:
+                index += 1
+            ranges.append((start, index))
+            continue
+        if message.get("role") == "assistant" and message.get("proactive"):
+            ranges.append((start, start + 1))
+            index += 1
+            continue
+        index += 1
+        while index < len(messages):
+            candidate = messages[index]
+            if candidate.get("control_turn_id") is not None:
+                break
+            if candidate.get("role") == "user" or (
+                candidate.get("role") == "assistant" and candidate.get("proactive")
+            ):
+                break
+            index += 1
+        ranges.append((start, index))
+    return ranges
+
+
 @dataclass
 class Session:
     key: str
@@ -63,6 +134,7 @@ class Session:
     updated_at: str = field(default_factory=lambda: datetime.now().astimezone().isoformat())
     metadata: JsonDict = field(default_factory=dict)
     last_consolidated: int = 0
+    context_compaction_generation: int = 0
     _reserved_message_id: str | None = field(default=None, repr=False, compare=False)
 
     def add_message(
@@ -115,6 +187,60 @@ class Session:
         if first_user is None:
             return []
         selected = selected[first_user:]
+        return self._project_messages(selected)
+
+    def history_units(self, *, after_seq: int = -1) -> tuple[CommittedContextUnit, ...]:
+        """Render immutable, complete logical turns with SessionDB provenance.
+
+        Aligned with the upstream ``Session.history_units``. Tool calls and all of
+        their results remain inside the assistant row that closes a user turn.
+        """
+
+        if not isinstance(after_seq, int) or isinstance(after_seq, bool) or after_seq < -1:
+            raise ValueError("history unit after_seq 必须是大于等于 -1 的整数")
+        units: list[CommittedContextUnit] = []
+        for unit_index, (start, end) in enumerate(_logical_history_unit_ranges(self.messages)):
+            source_rows = self.messages[start:end]
+            source_ids: list[str] = []
+            source_seqs: list[int] = []
+            rendered: list[JsonDict] = []
+            refs: list[tuple[str, int]] = []
+            for row in source_rows:
+                raw_id = row.get("id")
+                raw_seq = row.get("seq")
+                if not isinstance(raw_id, str) or not raw_id or not isinstance(raw_seq, int):
+                    source_ids = [f"active:unpersisted:{unit_index}"]
+                    source_seqs = []
+                    break
+                source_ids.append(raw_id)
+                source_seqs.append(raw_seq)
+            for row in source_rows:
+                row_messages = self._project_messages([row])
+                raw_id = row.get("id")
+                raw_seq = row.get("seq")
+                ref = (
+                    (raw_id, raw_seq)
+                    if isinstance(raw_id, str) and raw_id and isinstance(raw_seq, int)
+                    else (source_ids[0], 0)
+                )
+                rendered.extend(row_messages)
+                refs.extend(ref for _ in row_messages)
+            if not rendered:
+                continue
+            if source_seqs and max(source_seqs) <= after_seq:
+                continue
+            units.append(
+                CommittedContextUnit(
+                    source_from_seq=min(source_seqs) if source_seqs else 0,
+                    consolidated_through_seq=max(source_seqs) if source_seqs else 0,
+                    source_message_ids=tuple(dict.fromkeys(source_ids)),
+                    messages=tuple(rendered),
+                    message_refs=tuple(refs),
+                )
+            )
+        return tuple(units)
+
+    def _project_messages(self, selected: List[JsonDict]) -> List[JsonDict]:
         out: List[JsonDict] = []
         for msg in selected:
             role = msg.get("role")
@@ -192,6 +318,7 @@ class Session:
             "updated_at": self.updated_at,
             "metadata": self.metadata,
             "last_consolidated": self.last_consolidated,
+            "context_compaction_generation": self.context_compaction_generation,
         }
 
     @classmethod
@@ -203,6 +330,7 @@ class Session:
             updated_at=str(data.get("updated_at") or datetime.now().astimezone().isoformat()),
             metadata=dict(data.get("metadata") or {}),
             last_consolidated=int(data.get("last_consolidated") or 0),
+            context_compaction_generation=int(data.get("context_compaction_generation") or 0),
         )
         for seq, message in enumerate(session.messages):
             message.setdefault("seq", seq)
@@ -252,7 +380,8 @@ class SessionManager:
             return self._cache[key]
         with self._index_lock:
             row = self._index.execute(
-                "SELECT created_at, updated_at, metadata_json, last_consolidated "
+                "SELECT created_at, updated_at, metadata_json, last_consolidated, "
+                "context_compaction_generation "
                 "FROM sessions WHERE key = ?",
                 (key,),
             ).fetchone()
@@ -267,6 +396,7 @@ class SessionManager:
                     updated_at=str(row[1]),
                     metadata=dict(json.loads(str(row[2]))),
                     last_consolidated=int(row[3]),
+                    context_compaction_generation=int(row[4]),
                 )
         self._cache[key] = session
         return session
@@ -326,6 +456,126 @@ class SessionManager:
         """Persist session without blocking the channel event loop."""
 
         await asyncio.to_thread(self.save, session)
+
+    def get_compaction_head(self, session_key: str) -> CompactionHead:
+        """Read Reference's monotonic ledger head from the authoritative DB."""
+
+        session = self.get_or_create(session_key)
+        with self._index_lock:
+            row = self._index.execute(
+                "SELECT COALESCE(MAX(generation), 0) FROM session_compactions "
+                "WHERE session_key = ?",
+                (session_key,),
+            ).fetchone()
+        maximum = int(row[0]) if row else 0
+        cursor = int(session.context_compaction_generation)
+        if cursor < 0 or cursor > maximum:
+            raise ValueError("session compaction cursor 超出 ledger head")
+        return CompactionHead(session_key, cursor, maximum + 1)
+
+    def get_active_compaction(self, session_key: str) -> PersistedSessionCompaction | None:
+        session = self.get_or_create(session_key)
+        generation = int(session.context_compaction_generation)
+        if generation <= 0:
+            return None
+        with self._index_lock:
+            row = self._index.execute(
+                "SELECT parent_generation, summary, source_ref, source_from_seq, "
+                "consolidated_through_seq, source_message_ids_json, retained_tail_json, "
+                "trigger, context_window, threshold_tokens, hard_input_tokens, "
+                "keep_recent_tokens, tokens_before, tokens_after, summary_usage_json, "
+                "model_runtime_id, model, created_at FROM session_compactions "
+                "WHERE session_key = ? AND generation = ?",
+                (session_key, generation),
+            ).fetchone()
+        if row is None:
+            raise ValueError("session compaction cursor 未指向 ledger row")
+        return PersistedSessionCompaction(
+            session_key=session_key,
+            generation=generation,
+            parent_generation=int(row[0]),
+            summary=str(row[1]),
+            source_ref=str(row[2]),
+            source_from_seq=int(row[3]),
+            consolidated_through_seq=int(row[4]),
+            source_message_ids=tuple(json.loads(str(row[5]))),
+            retained_tail=tuple(json.loads(str(row[6]))),
+            trigger=str(row[7]),
+            context_window=int(row[8]),
+            threshold_tokens=int(row[9]),
+            hard_input_tokens=int(row[10]),
+            keep_recent_tokens=int(row[11]),
+            tokens_before=int(row[12]),
+            tokens_after=int(row[13]),
+            summary_usage=dict(json.loads(str(row[14]))),
+            model_runtime_id=str(row[15]),
+            model=str(row[16]),
+            created_at=str(row[17]),
+        )
+
+    def persist_context_compaction(
+        self,
+        session: Session,
+        checkpoint: ContextCompaction,
+        *,
+        head: CompactionHead,
+    ) -> PersistedSessionCompaction:
+        """Atomically append a Reference-format checkpoint and advance its cursor."""
+
+        if checkpoint.generation != head.next_generation or checkpoint.parent_generation != head.parent_generation:
+            raise RuntimeError("context compaction generation conflict")
+        if tuple(checkpoint.source_message_ids) == ():
+            raise ValueError("temporary active-turn compaction must not be persisted")
+        source_ids = set(checkpoint.source_message_ids)
+        canonical = {
+            str(item.get("id")): int(item.get("seq"))
+            for item in session.messages
+            if isinstance(item.get("id"), str) and isinstance(item.get("seq"), int)
+        }
+        if any(message_id not in canonical for message_id in source_ids):
+            raise RuntimeError("context compaction provenance is not in SessionDB")
+        usage = checkpoint.summary_usage.to_dict() if checkpoint.summary_usage else {}
+        now = datetime.now().astimezone().isoformat()
+        with self._index_lock:
+            self._index.execute("BEGIN IMMEDIATE")
+            try:
+                current = self._index.execute(
+                    "SELECT context_compaction_generation FROM sessions WHERE key = ?",
+                    (session.key,),
+                ).fetchone()
+                if current is None or int(current[0]) != head.parent_generation:
+                    raise RuntimeError("context compaction ledger head changed")
+                self._index.execute(
+                    "INSERT INTO session_compactions("
+                    "session_key,generation,parent_generation,created_at,trigger,summary_format_version,"
+                    "summary,source_ref,source_plan_digest,source_from_seq,consolidated_through_seq,"
+                    "source_message_ids_json,retained_tail_json,model_runtime_id,model,context_window,"
+                    "threshold_tokens,hard_input_tokens,keep_recent_tokens,tokens_before,tokens_after,"
+                    "summary_usage_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (
+                        session.key, checkpoint.generation, checkpoint.parent_generation, now,
+                        checkpoint.trigger, 1, checkpoint.summary, checkpoint.source_ref,
+                        source_plan_digest(checkpoint.selected_source_messages),
+                        checkpoint.source_from_seq, checkpoint.consolidated_through_seq,
+                        json.dumps(list(checkpoint.source_message_ids), ensure_ascii=False),
+                        json.dumps(list(checkpoint.retained_tail), ensure_ascii=False),
+                        checkpoint.model_runtime_id, checkpoint.model, checkpoint.context_window,
+                        checkpoint.soft_limit_tokens, checkpoint.hard_input_tokens,
+                        checkpoint.keep_recent_tokens, checkpoint.estimated_tokens_before,
+                        checkpoint.estimated_tokens_after,
+                        json.dumps(usage, ensure_ascii=False),
+                    ),
+                )
+                self._index.execute(
+                    "UPDATE sessions SET context_compaction_generation = ? WHERE key = ?",
+                    (checkpoint.generation, session.key),
+                )
+                self._index.commit()
+            except BaseException:
+                self._index.rollback()
+                raise
+        session.context_compaction_generation = checkpoint.generation
+        return self.get_active_compaction(session.key)  # type: ignore[return-value]
 
     def search_messages(self, query: str, limit: int = 10) -> List[JsonDict]:
         needle = query.lower().strip()
@@ -435,6 +685,9 @@ class SessionManager:
             self._index.execute("BEGIN IMMEDIATE")
             try:
                 self._index.execute("DELETE FROM messages WHERE session_key = ?", (key,))
+                self._index.execute(
+                    "DELETE FROM session_compactions WHERE session_key = ?", (key,)
+                )
                 self._index.execute("DELETE FROM session_admissions WHERE session_key = ?", (key,))
                 self._index.execute("DELETE FROM sessions WHERE key = ?", (key,))
                 self._index.commit()
@@ -507,7 +760,8 @@ class SessionManager:
             self._index.execute(
                 "CREATE TABLE IF NOT EXISTS sessions ("
                 "key TEXT PRIMARY KEY, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, "
-                "metadata_json TEXT NOT NULL, last_consolidated INTEGER NOT NULL DEFAULT 0)"
+                "metadata_json TEXT NOT NULL, last_consolidated INTEGER NOT NULL DEFAULT 0, "
+                "context_compaction_generation INTEGER NOT NULL DEFAULT 0)"
             )
             self._index.execute(
                 "CREATE TABLE IF NOT EXISTS messages ("
@@ -532,11 +786,27 @@ class SessionManager:
                 "session_key TEXT PRIMARY KEY, owner_id TEXT NOT NULL, acquired_at TEXT NOT NULL)"
             )
             self._index.execute(
+                "CREATE TABLE IF NOT EXISTS session_compactions ("
+                "session_key TEXT NOT NULL, generation INTEGER NOT NULL, "
+                "parent_generation INTEGER NOT NULL, created_at TEXT NOT NULL, "
+                "trigger TEXT NOT NULL, summary_format_version INTEGER NOT NULL, "
+                "summary TEXT NOT NULL, source_ref TEXT NOT NULL, "
+                "source_plan_digest TEXT NOT NULL, source_from_seq INTEGER NOT NULL, "
+                "consolidated_through_seq INTEGER NOT NULL, "
+                "source_message_ids_json TEXT NOT NULL, retained_tail_json TEXT NOT NULL, "
+                "model_runtime_id TEXT NOT NULL, model TEXT NOT NULL, "
+                "context_window INTEGER NOT NULL, threshold_tokens INTEGER NOT NULL, "
+                "hard_input_tokens INTEGER NOT NULL, keep_recent_tokens INTEGER NOT NULL, "
+                "tokens_before INTEGER NOT NULL, tokens_after INTEGER NOT NULL, "
+                "summary_usage_json TEXT NOT NULL, "
+                "PRIMARY KEY(session_key, generation), UNIQUE(session_key, source_ref))"
+            )
+            self._index.execute(
                 "CREATE TABLE IF NOT EXISTS session_schema ("
                 "key TEXT PRIMARY KEY, value TEXT NOT NULL)"
             )
             self._index.execute(
-                "INSERT OR REPLACE INTO session_schema(key, value) VALUES('version', '2')"
+                "INSERT OR REPLACE INTO session_schema(key, value) VALUES('version', '3')"
             )
             self._initialize_messages_fts()
             self._index.commit()
@@ -700,14 +970,15 @@ class SessionManager:
 
     def _insert_session_and_messages(self, session: Session) -> None:
         self._index.execute(
-            "INSERT INTO sessions(key, created_at, updated_at, metadata_json, last_consolidated) "
-            "VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO sessions(key, created_at, updated_at, metadata_json, last_consolidated, "
+            "context_compaction_generation) VALUES (?, ?, ?, ?, ?, ?)",
             (
                 session.key,
                 session.created_at,
                 session.updated_at,
                 json.dumps(session.metadata, ensure_ascii=False, sort_keys=True),
                 int(session.last_consolidated),
+                int(session.context_compaction_generation),
             ),
         )
         self._index.executemany(
@@ -734,17 +1005,19 @@ class SessionManager:
                             "正常消息保存不得更新已持久化消息: %s" % persisted["id"]
                         )
                 self._index.execute(
-                    "INSERT INTO sessions(key, created_at, updated_at, metadata_json, last_consolidated) "
-                    "VALUES (?, ?, ?, ?, ?) "
+                    "INSERT INTO sessions(key, created_at, updated_at, metadata_json, last_consolidated, "
+                    "context_compaction_generation) VALUES (?, ?, ?, ?, ?, ?) "
                     "ON CONFLICT(key) DO UPDATE SET updated_at=excluded.updated_at, "
                     "metadata_json=excluded.metadata_json, "
-                    "last_consolidated=excluded.last_consolidated",
+                    "last_consolidated=excluded.last_consolidated, "
+                    "context_compaction_generation=excluded.context_compaction_generation",
                     (
                         session.key,
                         session.created_at,
                         session.updated_at,
                         json.dumps(session.metadata, ensure_ascii=False, sort_keys=True),
                         int(session.last_consolidated),
+                        int(session.context_compaction_generation),
                     ),
                 )
                 self._index.executemany(

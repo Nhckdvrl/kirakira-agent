@@ -17,10 +17,8 @@ system_prompt = "你是 Kirakira。使用与用户相同的语言回答；执行
 
 # 可选：显式覆盖派生值。留空则由 context_window 决定。
 # [agent.context]
-# effective_context_percent = 0.9
-# memory_window = 40
-# 超限时会依次移除 skills catalog、recent context、长期记忆、检索记忆，最后缩短历史；
-# 每次尝试的 section/token 明细会写进 session 消息的 context_trace。
+# memory_window = 40  # 长期记忆窗口；不是 Session 历史切片条数。
+# 模型输入在 context_window 的 74% 触发结构化压缩，并为 max_tokens 保留 hard limit。
 
 [memory]
 enabled = true

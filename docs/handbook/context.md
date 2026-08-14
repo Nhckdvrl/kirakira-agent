@@ -1,83 +1,66 @@
 # 上下文治理
 
-上下文治理的核心是把“完整历史”和“这次发给模型的内容”分开。
+完整历史永远留在 `sessions.db/messages`；模型看到的只是本次请求的工作投影。上下文压缩不会更新或删除原始 message、tool result 和 tool trace。
 
-## 真相与投影
+## 请求门禁
 
-`sessions.db/messages` 保存完整历史，正常写入为 append-only。模型请求使用可重算投影：
-
-```text
-完整 Session
-  → 读取当前历史窗口
-  → 渲染具名 PromptBlock
-  → 加入 Context Frame、当前消息、工具 schema 和图片
-  → 本次模型请求
-```
-
-context limit 只能让本次投影变小，不能删除或覆盖持久消息。
-
-## Prompt 结构
-
-稳定 section 包括 identity、behavior rules、skills catalog、self model、长期记忆和 session
-context。动态 Context Frame 包括 recent context、active skills、retrieved memory、turn injection
-和 plugin hints。
-
-动态块明确标记为系统提供的候选上下文，不冒充用户原话。每个 retry 都重新执行 prompt hooks，避免
-沿用上一计划的过期产物。
-
-## 预算
+每次调用主模型前都经过 `ContextCompactor.prepare()`。估算范围包括 system prompt、记忆与检索、session 历史、当前请求、tool result、工具 schema 和协议开销。
 
 ```text
-input_budget = floor(context_window × effective_context_percent) - max_tokens
+soft_limit = floor(context_window × 0.74)
+hard_limit = context_window - max_output_tokens
 ```
 
-预算覆盖 system、消息字段、工具 schema、图片和输出预留。当前 token estimate 是近似值，trace
-标记 `estimate_quality=approximate`；计费和真实使用量以 provider usage 为准。
+达到任一边界就尝试压缩，不等到窗口完全用尽。Provider 返回精确 input usage 后，同一请求的后续估算会优先使用“精确值 + 新增消息估算”。
 
-## 分级降载
+## 完整历史单元
 
-外层 attempt 依次尝试：
+Session 历史按 `CommittedContextUnit` 组织，不再按消息条数切 `history[-N:]`。一个单元包含完整的 user 到 assistant 交互，assistant 内的 tool call 和全部 tool result 一起闭合。正在运行的 shell execution 会锁定切点，不会从执行中间切断。
 
-1. 完整内容；
-2. 去 skills catalog；
-3. 去 recent context；
-4. 去 long-term memory；
-5. 去 retrieved memory；
-6. 历史投影缩到 50%；
-7. 历史投影缩到 0。
+压缩时从最新单元向前累积，至少保留 `20_000` tokens 原文。这是目标下限；因为不拆单元，实际保留量可以更大。
 
-历史切片回退到 user 边界，不从半组 tool call 开始。2026-08-04 的在线验证在 60 条持久消息上
-降到 0 条历史投影后成功，原消息 id 和顺序不变。
+## 滚动结构化摘要
 
-## ReAct 工具批次压缩
+较旧的已闭合单元由模型生成 task-state 摘要，严格使用以下标题：
 
-同一请求执行很多工具时，`QueryCompactor` 可以总结已闭合的旧工具批次，用
-`context_compact` 协议消息继续。它至少保留最新批次，只压缩完整的 tool-call/tool-result 组。
+```text
+## Goal
+## Constraints & Preferences
+## Progress
+### Done
+### In Progress
+### Blocked
+## Key Decisions
+## Next Steps
+## Critical Context
+```
 
-仍在运行的 Shell 起点会被 pin；只有 `write_stdin`、`task_output` 或 `task_stop` 表明执行结束后，
-相关批次才可压缩。压缩摘要也算一次模型请求并计入 usage。
+摘要保留文件路径、symbol、命令、错误、数值、工具结果、外部副作用、验证结果和未结束 shell 的 execution id。下一代摘要会同时读取上一代摘要和新的旧历史，形成滚动 checkpoint。
 
-## Usage
+模型收到的形式是 system block：
 
-每个模型请求都计数，即使 provider 没返回 usage。聚合字段包括 input/output、cached input、
-reasoning output、request count 和 covered request count。
+```xml
+<session-context-compaction>
+generation=3; source_ref=...
+...
+</session-context-compaction>
+```
 
-`coverage` 有三种：
+它是模型工作上下文，不是用户陈述。
 
-- `exact`：所有请求都有完整 input/output usage；
-- `partial`：只覆盖部分请求或部分字段；
-- `unavailable`：provider 没提供可用数据。
+## 两层压缩
 
-缺遥测不能记成 0。
+1. 已提交的 session 历史生成持久 ledger checkpoint。`session_compactions` 只追加，Session 有独立的 compaction cursor。
+2. 当前 ReAct 内已闭合的 tool batch 仍可进一步临时压缩。这一层 generation 为 0，只是当前 turn 的 ephemeral projection，不写 ledger，也不写 assistant message metadata。
 
-## 去哪里看
+## 与 Akasha 的边界
 
-每条 assistant 消息的 `context_trace` 保存所有 attempt、section 大小、预算、选中计划、ReAct
-估算和 model usage。控制面还会发布 `ContextPrepared` 与 `ContextBudgetUpdated` 事件。
+Context compaction 解决“当前 session 放不下”；Akasha 解决长期记忆。两者都从原始 transcript 出发，Akasha 不把 compaction summary 当成长期记忆原料，避免反复摘要累积误差。
 
 ## 不变量
 
-- 检索记忆不冒充用户原话。
-- context pressure 不修改持久历史。
-- 工具 schema、图片、摘要请求和输出预留都进入预算或 usage。
-- provider 已产生可见 streaming delta 后不能切换备用模型。
+- 数据库保真，prompt 可有损。
+- 只在完整交互和完整 tool batch 边界压缩。
+- 持久 checkpoint 只引用 SessionDB 中已提交的 source message id。
+- 临时 active-turn projection 不能消耗 ledger generation。
+- 压缩后仍超过 soft 或 hard boundary 时明确失败，不静默丢历史。

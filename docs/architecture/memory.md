@@ -8,12 +8,15 @@ Kirakira 把“会话事实”“上下文投影”“结构化长期记忆”�
 | 数据 | 权威位置 | 作用 |
 | --- | --- | --- |
 | 完整会话与 usage | `sessions.db` | turn 历史、工具轨迹、token 账本 |
+| Session compaction ledger | `sessions.db/session_compactions` | 当前任务的滚动工作摘要与来源边界 |
 | Markdown 记忆 | `memory/*.md` | 可读、可编辑的身份、偏好、近期上下文 |
 | DefaultMemoryEngine | `memory/coremem.db` | 结构化记忆、embedding、检索证据 |
 | Akasha v1 | `memory/akasha.db` | 可选的图式记忆与检索 |
 
 Prompt 中看到的消息只是按预算生成的 projection。压缩或裁剪 projection 不会删除 `sessions.db` 中的
 原始消息。
+
+Context compaction 只为当前 session 续跑生成投影；Default Memory 和 Akasha 仍消费完整 completed transcript，不消费 compaction summary。Markdown consolidation 的 `last_consolidated` 与 context compaction cursor 是两个独立状态。
 
 ## 服务边界
 

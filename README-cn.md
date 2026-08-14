@@ -38,7 +38,7 @@ Kirakira 是一个本地优先、多渠道的 AI Agent Runtime。它把被动对
 | Agent 如何工作 | 被动 Turn、Proactive 和 Drift 三条链共用模型、工具、记忆与 Channel |
 | 数据放在哪里 | Session、Memory、任务和运行轨迹默认保存在本地 workspace |
 | 如何扩展 | 用 Plugin、MCP、Skill、Tool 和 Proactive Source 增加能力 |
-| 如何控制上下文 | 完整历史持久化，本轮只生成受预算约束的 Context Frame 投影 |
+| 如何控制上下文 | 完整历史持久化，旧历史滚动摘要，近 20k token 保留原文 |
 | 如何排查运行过程 | 保存 tool chain、context trace、token usage、tick 和 module step |
 | 模型是否绑定 | 通过 OpenAI-compatible 接口接入主模型、轻模型和独立 embedding 服务 |
 
@@ -89,9 +89,6 @@ context_window = 128000 # 按供应商公布值填写
 max_tokens = 8192
 max_iterations = 40
 
-[agent.context]
-effective_context_percent = 0.9
-
 [memory]
 enabled = true
 plugin = "akasha" # 可选 default / akasha；当前可继续使用 Akasha v1
@@ -109,7 +106,8 @@ api_key = "${EMBEDDING_API_KEY}"
 ### 上下文治理
 
 - `sessions.db/messages` 是权威历史；正常保存只能追加，不能删除或覆盖旧消息。
-- 每次模型请求只渲染一份当前投影：先丢可选 prompt block，再逐级缩小历史窗口。
+- 每次模型请求前都经过 compaction gate：74% 触发，hard limit 为 `context_window - max_tokens`。
+- 历史按完整 interaction unit 切分，旧单元进入滚动结构化摘要，最新至少 20k token 原文保留。
 - 上下文超长重试不会修改数据库；下一轮仍从完整持久历史重新投影。
 - 工具 schema、图片和输出预留进入同一预算；压缩不能丢掉仍在运行的 Shell 起点。
 - 每轮保存所选计划、各 section 大小、近似 token 估算和模型实际 usage。
@@ -171,7 +169,7 @@ uv run kirakira-verify-online
 - token usage 归一化；
 - embedding；
 - Runtime 真实执行并消费 `read_file`；
-- 长历史投影成功且持久历史不变；
+- 长历史生成 session compaction ledger，且持久历史不变；
 - Akasha v1 turn 摄入、召回以及模型消费召回内容。
 
 ## 目录

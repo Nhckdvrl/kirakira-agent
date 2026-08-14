@@ -1,6 +1,6 @@
 # Reference 对齐状态
 
-审计基线：`af49848937c4b62abb2f40a7d91b5f90ea71be6d`（2026-08-03）。
+审计基线：`ac6f7652`（2026-08-15 同步的最新 Reference main）。
 
 ## 对齐口径
 
@@ -18,7 +18,7 @@
 | 能力 | 当前实现 |
 | --- | --- |
 | Workspace | 单实例锁、Yoyo ledger、origin migration、append-only 检查 |
-| Context | 持久历史 append-only、每请求投影、具名 section 降载、ReAct 压缩、usage coverage |
+| Context | 持久历史 append-only、CommittedContextUnit、74%/hard gate、20k raw tail、滚动 summary ledger、active-turn ephemeral compaction、usage coverage |
 | Model runtime | async/stream、DeepSeek reasoning/tool call、错误分类、轻模型安全 fallback |
 | Tool runtime | ToolMeta、deferred search、统一 Shell/PTY/stdin、owner cleanup |
 | Subagent | inline/background、独立 Session、容量、取消和完成回注 |

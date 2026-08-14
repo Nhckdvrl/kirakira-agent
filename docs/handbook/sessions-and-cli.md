@@ -22,8 +22,7 @@ python -m kirakira_agent --session research
 `<workspace>/sessions.db` 是 Session 和消息的权威存储。每条消息有稳定 id 和单调 seq；正常保存只
 允许追加。旧 `sessions/*.json` 只用于一次性导入或可读镜像，不能恢复覆盖 SQLite 当前状态。
 
-模型历史由 `SessionManager.get_history()` 重建，包括 assistant tool calls、tool results、
-reasoning 和 `react_compaction`。界面上的工具摘要只是展示，不能代替模型历史。
+模型历史按完整 logical unit 重建，包括 assistant tool calls、tool results 和 reasoning。新版上下文压缩使用独立 ledger；旧消息中的 `react_compaction` 只做兼容回放。界面上的工具摘要只是展示，不能代替模型历史。
 
 ## Streaming 终态
 

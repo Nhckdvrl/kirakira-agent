@@ -2,6 +2,8 @@
 
 from typing import Any, List, Protocol
 
+from agent.model_runtime.usage import ModelUsage, UsageCoverage
+
 from core.schema import JsonDict, ModelResponse, ToolSpec
 
 
@@ -35,3 +37,14 @@ class ModelClient(Protocol):
         {"type":"function","function":{"name":...}}。调用方只在需要强制时才传,
         因此仅实现旧签名的测试替身在不使用该能力时依然兼容。"""
         ...
+
+
+__all__ = [
+    "ContentSafetyError",
+    "ContextLengthError",
+    "ModelClient",
+    "ModelRequestError",
+    "ModelUsage",
+    "RetryableModelError",
+    "UsageCoverage",
+]

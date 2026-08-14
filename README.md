@@ -40,7 +40,7 @@ local workspace by default.
 | How does the agent run? | Passive turns, Proactive, and Drift share models, tools, memory, and channels |
 | Where does data live? | Sessions, memory, jobs, and traces stay in the selected local workspace by default |
 | How is it extended? | Plugins, MCP, skills, tools, and proactive sources |
-| How is context governed? | Durable history remains complete; each request gets a budgeted Context Frame projection |
+| How is context governed? | Durable history stays complete; old units roll into a task summary while the newest 20k tokens stay raw |
 | How is execution inspected? | Tool chains, context traces, token usage, ticks, and module steps are persisted |
 | Is it tied to one model? | Main, light, and embedding models use configurable OpenAI-compatible endpoints |
 
@@ -81,8 +81,6 @@ base_url = "https://api.deepseek.com/v1"
 api_key = "${DEEPSEEK_API_KEY}"
 context_window = 128000 # use the capacity advertised by your provider
 
-[agent.context]
-effective_context_percent = 0.9
 ```
 
 Embeddings are configured separately under `[memory.embedding]`; a chat-completion
@@ -92,9 +90,9 @@ endpoint is not assumed to provide embeddings.
 
 - SQLite is the authoritative session/message store. Normal saves are append-only;
   prompt pressure never deletes or rewrites durable history.
-- Every model attempt renders a bounded projection. It can drop optional prompt
-  sections and progressively reduce projected history, while storing the selected
-  plan, approximate input estimate and exact/partial/unavailable provider usage.
+- Every model call passes the context compaction gate. At 74% of the model window,
+  older complete interactions become a rolling structured summary while the newest
+  20k tokens remain raw; the hard edge reserves `max_tokens` for output.
 - Shell execution uses one lifecycle for foreground/background processes, PTY input,
   output polling, cancellation and process-group cleanup. Child agents have isolated
   execution ownership and bounded admission.

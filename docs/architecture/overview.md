@@ -43,7 +43,7 @@ Proactive tick → Deliver/Drift ────┴→ 使用相同 Runtime 边界�
 
 | 文件 | owner | 作用 |
 | --- | --- | --- |
-| `sessions.db` | `SessionManager` | Session 和消息真相 |
+| `sessions.db` | `SessionManager` | Session、消息真相和只追加的 context compaction ledger |
 | `memory/coremem.db` | Default Memory | 结构化长期记忆 |
 | `memory/akasha.db` | Akasha | 图、激活和查询状态 |
 | `proactive.db` | Proactive state | 事件、决策、ACK、feedback、tick trace |
@@ -53,7 +53,7 @@ Proactive tick → Deliver/Drift ────┴→ 使用相同 Runtime 边界�
 
 ## 四条关键不变量
 
-1. Session 历史与模型上下文投影分离；context limit 不能删除历史。
+1. Session 历史与模型上下文投影分离；context limit 只能推进 summary ledger，不能删除历史。
 2. 热更新只切换新 turn 的 current snapshot；在途 turn 继续使用原代际。
 3. 外部副作用以真实 delivery/tool result 为提交边界，不能先写“成功”。
 4. `Reference/` 只用于开发审计，不能成为运行依赖。

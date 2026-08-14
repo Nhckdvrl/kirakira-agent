@@ -10,10 +10,7 @@ import urllib.request
 from typing import Any, Callable, Dict, List, Optional
 
 from core.schema import JsonDict, ModelResponse, ToolCall, ToolSpec
-from agent.model_runtime.context_policy import (
-    build_runtime_context_budget,
-    estimate_context_tokens,
-)
+from agent.model_runtime.context_policy import estimate_context_tokens
 from agent.model_runtime.types import (
     ContentSafetyError,
     ContextLengthError,
@@ -386,20 +383,16 @@ class OpenAICompatibleClient:
     ) -> None:
         if not self.context_window:
             return
-        budget = build_runtime_context_budget(
-            self.context_window,
-            self.effective_context_percent,
-            max_tokens,
-        )
+        input_budget = self.context_window - max_tokens
         estimated = estimate_context_tokens(
             messages,
             tools,
             system_prompt=system,
         )
-        if estimated > budget.input_budget:
+        if estimated > input_budget:
             raise ContextLengthError(
                 "Model context estimate exceeds budget: estimated=%d budget=%d quality=approximate"
-                % (estimated, budget.input_budget)
+                % (estimated, input_budget)
             )
 
     def _open(self, payload: Dict[str, Any]):

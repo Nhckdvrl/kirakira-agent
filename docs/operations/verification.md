@@ -4,11 +4,11 @@
 
 ## 最近一次完整结果
 
-环境：2026-08-04，本仓库当前 Python/uv 环境。
+环境：2026-08-15，本仓库当前 Python/uv 环境。
 
 | 验证 | 结果 |
 | --- | --- |
-| 全量测试 | 584 passed，另有 4 个 subtests 通过 |
+| 全量测试 | 588 passed，另有 4 个 subtests 通过 |
 | 构建 | 成功 |
 | CLI smoke | 成功 |
 | 删除/移走 Reference 后测试、构建、CLI | 成功 |
@@ -25,7 +25,9 @@ Reference 独立性验证证明外层 Kirakira 不 import、不读取、也不�
 - forced tool call 协议，参数为 `probe-ok`；
 - 默认工具 `read_file` 的真实 AgentLoop 调用；
 - 1024 维 embedding 写入与查询；
-- 60 条持久历史在本轮按 `memory_window` 投影为 0 条，同时原始历史保持 60 条；
+- 长 session 真实触发 context compaction，生成 generation 1 ledger；
+- 摘要覆盖 52 条 source messages，保留 246 条 provider 投影消息，原始 message id 和顺序不变；
+- 摘要的 Goal / Progress / Decisions / Next Steps / Critical Context 标题合同通过；
 - context trace 中模型请求 usage coverage 为 `exact`；
 - Akasha v1 摄入、检索、回源，并由模型在最终回答中消费证据。
 

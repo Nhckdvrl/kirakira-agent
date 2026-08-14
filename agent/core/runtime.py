@@ -14,12 +14,19 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from types import SimpleNamespace
 
 from bus.queue import MessageBus
 from agent.prompting.context_builder import ContextBuilder
-from agent.model_runtime.context_policy import (
-    build_runtime_context_budget,
-    estimate_context_tokens,
+from agent.model_runtime.context_policy import estimate_context_tokens
+from agent.model_runtime.context_compaction import (
+    ContextCompactionError,
+    ContextCompactor,
+    ContextPayloadSegments,
+    PreparedQueryContext,
+    compaction_scope_id,
+    hard_input_limit,
+    window_initial_context_units,
 )
 from bus.event_bus import EventBus
 from bus.events import InboundMessage, OutboundMessage
@@ -51,13 +58,10 @@ from core.memory.engine import (
 from core.memory.services import MemoryServices
 from agent.looping.ports import ContextServices, SessionServices
 from agent.model_runtime.types import ContentSafetyError, ContextLengthError, ModelClient
-from agent.model_runtime.query_compaction import (
-    ContextCompactionError,
-    QueryCompactor,
-)
 from agent.model_runtime.usage import aggregate_usage, usage_from_mapping
 from core.schema import ModelResponse, ToolCall, ToolResult, assistant_message_from_response, tool_result_message
 from session.manager import SessionManager
+from session.compaction_runtime import CompactionProjection, SessionCompactionRuntime
 from agent.plugins.snapshot import (
     RuntimeSnapshotStore,
     SnapshotToolView,
@@ -102,7 +106,24 @@ class ReasonerResult:
     context_trace: JsonDict = field(default_factory=dict)
     # 本轮是否有工具声明需要用户确认;None 表示没有。
     mobile_attention: Optional[str] = None
-    react_compaction: JsonDict | None = None
+
+
+class _CompactionProviderAdapter:
+    """Expose Kirakira's model client through Reference's compactor contract."""
+
+    runtime_id = "main"
+
+    def __init__(self, reasoner: "DefaultReasoner") -> None:
+        self._reasoner = reasoner
+        self.context_window = max(0, int(reasoner.config.context_window))
+        self.max_output_tokens = max(0, int(reasoner.config.max_tokens))
+        self.model = reasoner.config.model
+
+    def estimate_context_tokens(self, messages: list[dict], tools: list[dict]) -> int:
+        return estimate_context_tokens(messages, tools)
+
+    def estimate_appended_message_tokens(self, messages: list[dict]) -> int:
+        return estimate_context_tokens(messages, []) if messages else 0
 
 
 async def _run_plugin_modules(modules: List[object], ctx: Any) -> Any:
@@ -165,8 +186,44 @@ class DefaultReasoner:
         extra_hints: Optional[List[str]],
         disabled_tools: Optional[set[str]] = None,
         max_iterations_override: Optional[int] = None,
+        session: Any | None = None,
+        compaction_runtime: SessionCompactionRuntime | None = None,
     ) -> ReasonerResult:
-        source_history = list(history)
+        provider_adapter = _CompactionProviderAdapter(self)
+        projection: CompactionProjection | None = None
+        canonical_history = (
+            session.get_history(max_messages=max(1, len(session.messages)))
+            if session is not None
+            else None
+        )
+        if (
+            session is not None
+            and compaction_runtime is not None
+            and list(history) == canonical_history
+        ):
+            projection = compaction_runtime.projection(
+                session, prefix=[], current_anchor=[], pending=[]
+            )
+            committed_units = projection.segments.committed_units
+            if projection.active is None and projection.head.next_generation == 1:
+                committed_units = window_initial_context_units(
+                    provider_adapter, committed_units
+                )
+            source_history = [
+                *projection.segments.prefix,
+                *[message for unit in committed_units for message in unit.messages],
+            ]
+            projection = CompactionProjection(
+                segments=ContextPayloadSegments(
+                    prefix=projection.segments.prefix,
+                    committed_units=committed_units,
+                    current_anchor=(),
+                ),
+                active=projection.active,
+                head=projection.head,
+            )
+        else:
+            source_history = list(history)
         attempts = self._build_attempt_plans(len(source_history))
         retry_trace: JsonDict = {"attempts": [], "selected_plan": None}
         tools = SnapshotToolView(self.tools, get_current_runtime_snapshot())
@@ -178,8 +235,10 @@ class DefaultReasoner:
             if spec.name not in disabled
         ]
         for attempt, plan in enumerate(attempts):
-            history_for_attempt = self._slice_history(
-                source_history, int(plan["history_window"])
+            history_for_attempt = (
+                list(source_history)
+                if projection is not None
+                else self._slice_history(source_history, int(plan["history_window"]))
             )
             render_ctx = PromptRenderCtx(
                 session_key=session_key,
@@ -219,11 +278,9 @@ class DefaultReasoner:
             estimated = estimate_context_tokens(rendered.messages, visible_specs)
             input_budget = 0
             if self.config.context_window:
-                input_budget = build_runtime_context_budget(
-                    self.config.context_window,
-                    self.config.effective_context_percent,
-                    self.config.max_tokens,
-                ).input_budget
+                input_budget = hard_input_limit(
+                    provider_adapter, self.config.max_tokens
+                )
             sections = tuple(
                 {
                     "name": item.name,
@@ -262,6 +319,14 @@ class DefaultReasoner:
                 )
             )
             try:
+                payload_segments: ContextPayloadSegments | None = None
+                if projection is not None:
+                    history_count = len(source_history)
+                    payload_segments = ContextPayloadSegments(
+                        prefix=(rendered.messages[0], *projection.segments.prefix),
+                        committed_units=projection.segments.committed_units,
+                        current_anchor=tuple(rendered.messages[1 + history_count :]),
+                    )
                 result = await self.run(
                     rendered.messages,
                     session_key=session_key,
@@ -270,6 +335,10 @@ class DefaultReasoner:
                     request_text=msg.content,
                     disabled_tools=disabled_tools,
                     max_iterations_override=max_iterations_override,
+                    session=session,
+                    compaction_runtime=compaction_runtime,
+                    compaction_projection=projection,
+                    payload_segments=payload_segments,
                 )
             except (ContextLengthError, ContentSafetyError) as exc:
                 attempt_trace["error"] = type(exc).__name__
@@ -304,6 +373,10 @@ class DefaultReasoner:
         request_text: str,
         disabled_tools: Optional[set[str]] = None,
         max_iterations_override: Optional[int] = None,
+        session: Any | None = None,
+        compaction_runtime: SessionCompactionRuntime | None = None,
+        compaction_projection: CompactionProjection | None = None,
+        payload_segments: ContextPayloadSegments | None = None,
     ) -> ReasonerResult:
         tools_used: List[str] = []
         tool_chain: List[JsonDict] = []
@@ -324,39 +397,76 @@ class DefaultReasoner:
             if max_iterations_override is None
             else max(1, int(max_iterations_override))
         )
-        context_window = max(0, int(self.config.context_window))
-        compaction_hard_limit = context_window
-        if context_window:
-            compaction_hard_limit = build_runtime_context_budget(
-                context_window,
-                self.config.effective_context_percent,
-                self.config.max_tokens,
-            ).input_budget
         compaction_specs: List[Any] = []
-        compactor = QueryCompactor(
-            base_messages=messages,
-            context_window=context_window,
-            soft_limit_tokens=(
-                int(compaction_hard_limit * 0.74) if compaction_hard_limit else 0
-            ),
-            hard_limit_tokens=compaction_hard_limit,
-            scope_id=session_key,
-            estimate=lambda items: estimate_context_tokens(items, compaction_specs),
-        )
+        compactor: ContextCompactor | None = None
+        compaction_head = compaction_projection.head if compaction_projection else None
+        if (
+            session is not None
+            and compaction_runtime is not None
+            and compaction_projection is not None
+            and payload_segments is not None
+        ):
+            provider_adapter = _CompactionProviderAdapter(self)
 
-        async def summarize_compaction(prompt: str) -> str:
-            summary_response = await self._complete_model(
-                [{"role": "user", "content": prompt}],
-                [],
-                session_key=session_key,
-                channel=channel,
-                chat_id=chat_id,
-                iteration=-1,
+            async def summarize_compaction(*, provider: Any, **request: Any) -> Any:
+                summary_response = await self._complete_model(
+                    list(request["messages"]),
+                    [],
+                    session_key=session_key,
+                    channel=channel,
+                    chat_id=chat_id,
+                    iteration=-1,
+                )
+                usage = usage_from_mapping(summary_response.usage)
+                model_usages.append(dict(summary_response.usage or {}))
+                return SimpleNamespace(
+                    content=summary_response.text,
+                    tool_calls=summary_response.tool_calls,
+                    usage=usage,
+                )
+
+            compactor = ContextCompactor(
+                provider=provider_adapter,
+                model=self.config.model,
+                scope_id=compaction_scope_id(session.key, session.created_at),
+                active_compaction=compaction_projection.active,
+                current_query=request_text,
+                payload_segments=payload_segments,
+                max_output_tokens=self.config.max_tokens,
+                ledger_parent_generation=compaction_projection.head.parent_generation,
+                next_generation=compaction_projection.head.next_generation,
+                chat_call=summarize_compaction,
             )
-            if summary_response.tool_calls:
-                return ""
-            model_usages.append(dict(summary_response.usage or {}))
-            return summary_response.text
+
+        async def prepare_compaction(
+            *, trigger: str = "soft_limit", force: bool = False
+        ) -> PreparedQueryContext | None:
+            nonlocal compaction_head
+            if compactor is None:
+                return None
+            compactor.set_pending(messages)
+            prepared = await compactor.prepare(
+                messages,
+                pending_start=compactor.pending_start,
+                tools=compaction_specs,
+                trigger=trigger,  # type: ignore[arg-type]
+                force=force,
+                max_output_tokens=self.config.max_tokens,
+            )
+            checkpoint = prepared.checkpoint
+            if prepared.compacted and checkpoint is not None and checkpoint.committable:
+                if compaction_head is None:
+                    raise RuntimeError("compaction ledger head missing")
+                row = compaction_runtime.commit_checkpoint(
+                    session, checkpoint, head=compaction_head
+                )
+                compaction_head = type(compaction_head)(
+                    session_key=session.key,
+                    parent_generation=row.generation,
+                    next_generation=row.generation + 1,
+                )
+                compactor.acknowledge_committed_checkpoint(row.generation)
+            return prepared
 
         while iteration_limit <= 0 or iteration < iteration_limit:
             visible_specs = [
@@ -365,11 +475,18 @@ class DefaultReasoner:
                 if spec.name not in disabled
             ]
             visible_names = tuple(spec.name for spec in visible_specs)
-            compaction_specs[:] = visible_specs
-            await compactor.prepare(
-                messages,
-                summarize=summarize_compaction,
-            )
+            compaction_specs[:] = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": spec.name,
+                        "description": spec.description,
+                        "parameters": spec.input_schema,
+                    },
+                }
+                for spec in visible_specs
+            ]
+            await prepare_compaction()
             batch_start = len(messages)
             before_step = BeforeStepCtx(
                 session_key=session_key,
@@ -388,7 +505,6 @@ class DefaultReasoner:
                     tool_chain=tool_chain,
                     thinking=final_thinking,
                     mobile_attention=mobile_attention,
-                    react_compaction=compactor.persistence_payload(),
                 )
             if before_step.extra_hints:
                 messages.append(
@@ -418,16 +534,12 @@ class DefaultReasoner:
             except ContextLengthError as overflow:
                 pending_count = len(messages) - batch_start
                 try:
-                    compacted = await compactor.prepare(
-                        messages,
-                        summarize=summarize_compaction,
-                        pending_start=batch_start,
-                        trigger="context_overflow",
-                        force=True,
+                    compacted = await prepare_compaction(
+                        trigger="context_overflow", force=True
                     )
                 except ContextCompactionError:
                     raise overflow
-                if not compacted:
+                if compacted is None or not compacted.compacted:
                     raise overflow
                 batch_start = len(messages) - pending_count
                 response = await self._complete_model(
@@ -469,7 +581,6 @@ class DefaultReasoner:
                         )
                     },
                     mobile_attention=mobile_attention,
-                    react_compaction=compactor.persistence_payload(),
                 )
 
             group = {
@@ -549,7 +660,8 @@ class DefaultReasoner:
                     unlocked.add(call.name)
                     self._remember_unlocked(session_key, unlocked)
             tool_chain.append(group)
-            compactor.record_completed_batch(messages[batch_start:])
+            if compactor is not None:
+                compactor.record_completed_batch(messages, batch_start=batch_start)
             await self._after_step(
                 session_key,
                 channel,
@@ -603,7 +715,6 @@ class DefaultReasoner:
                 "react_stats": self._react_stats(react_input_samples, model_usages)
             },
             mobile_attention=mobile_attention,
-            react_compaction=compactor.persistence_payload(),
         )
 
     @staticmethod
@@ -666,19 +777,6 @@ class DefaultReasoner:
                         "name": trim_plan.name,
                         "disabled_sections": disabled,
                         "history_window": total_history,
-                    }
-                )
-        final_disabled = set(DEFAULT_CONTEXT_TRIM_PLANS[-1].drop_sections)
-        for ratio in (0.5, 0.0):
-            window = int(total_history * ratio)
-            key = (tuple(sorted(final_disabled)), window)
-            if key not in seen:
-                seen.add(key)
-                attempts.append(
-                    {
-                        "name": "trim_retrieved_memory_history_%d" % int(ratio * 100),
-                        "disabled_sections": set(final_disabled),
-                        "history_window": window,
                     }
                 )
         return attempts
@@ -1128,10 +1226,9 @@ class PassiveTurnPipeline:
         guard_reply = await self._guard_memory_context(session, key)
         if guard_reply:
             return await self._dispatch_if_needed(state, guard_reply)
-        history = session.get_history(
-            max_messages=self.config.history_window,
-            start_index=session.last_consolidated,
-        )
+        # SessionDB is the source of truth. The model-facing projection is built
+        # later from complete logical units; no message-count tail slicing here.
+        history = session.get_history(max_messages=max(1, len(session.messages)))
         retrieved = ""
         if not msg.metadata.get("skip_memory_retrieval"):
             engine = (
@@ -1259,12 +1356,10 @@ class PassiveTurnPipeline:
                 skill_names=before_reasoning.skill_names,
                 extra_hints=before_reasoning.extra_hints,
                 disabled_tools=self._disabled_tools(msg),
+                session=session,
+                compaction_runtime=SessionCompactionRuntime(self.session_manager),
             )
             state.extra_metadata["context_trace"] = dict(turn.context_trace)
-            if turn.react_compaction is not None:
-                state.extra_metadata["react_compaction"] = dict(
-                    turn.react_compaction
-                )
         finally:
             self.tools.reset_context(context_token)
         # 入站 metadata 里的 mobile_attention 一律丢弃,只认本轮工具自己声明的
@@ -1406,10 +1501,7 @@ class PassiveTurnPipeline:
             ),
             attempts[-1] if attempts else {},
         )
-        history = session.get_history(
-            max_messages=self.config.history_window,
-            start_index=session.last_consolidated,
-        )
+        history = session.get_history(max_messages=max(1, len(session.messages)))
         post_reply_budget = {
             "history_messages": len(history),
             "history_tokens_estimate": estimate_context_tokens(history, []),

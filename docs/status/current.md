@@ -1,6 +1,6 @@
 # 当前状态
 
-更新日期：2026-08-04。
+更新日期：2026-08-15。
 
 ## 已完成
 
@@ -9,7 +9,7 @@
 - 项目不依赖本地 `Reference/`。移走该目录后，全量测试、构建和 CLI 都能完成。
 - Session 使用 SQLite 作为权威存储；正常保存为 append-only。上下文压力只改变当前请求投影，
   不删除历史。
-- ReAct 支持工具批次压缩、活跃 Shell pin、统一 usage 统计和分级 context retry。
+- Context compaction 已对齐最新机制：74% soft gate、输出预留 hard gate、完整 interaction unit、近 20k token 原文、滚动结构化摘要、持久 session ledger 和临时 active-turn 压缩。
 - Shell 支持前台/后台、PTY、`write_stdin`、增量输出、取消和进程组清理。
 - 子 Agent 有独立 Session 和执行 owner，并共享全局容量限制。
 - Scheduler 支持 one-shot、duration、interval、5/6 段 cron、IANA timezone、instant/soft tier。
