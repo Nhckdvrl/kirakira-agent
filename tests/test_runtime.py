@@ -14,7 +14,10 @@ from bus.event_bus import EventBus
 from bus.events import InboundMessage, OutboundMessage
 from core.memory.legacy import MemoryRuntime
 from agent.model_runtime.types import ContextLengthError
-from agent.core.runtime import AgentLoop, DefaultReasoner, PassiveTurnPipeline, RuntimeConfig
+from agent.core.loop import AgentLoop
+from agent.core.reasoner import DefaultReasoner
+from agent.core.pipeline import PassiveTurnPipeline
+from agent.core.contracts import RuntimeConfig
 from core.schema import ModelResponse, ToolCall, ToolSpec
 from session.manager import SessionManager
 from agent.plugins.snapshot import RuntimeSnapshotStore, compile_snapshot

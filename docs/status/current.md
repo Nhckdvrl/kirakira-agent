@@ -1,6 +1,17 @@
 # 当前状态
 
-更新日期：2026-10-02。本轮改动基于本地 `b6c4143`，上游 pin 与分析见[重构审计](../engineering/akashic-review-2026-10-02.md)。
+更新日期：2026-10-03。本轮改动基于本地 `b6c4143`，上游 pin 与分析见[重构审计](../engineering/akashic-review-2026-10-02.md)。
+
+## 第三轮 core 重构
+
+职责与边界见 [ADR0008](../decisions/0008-core-execution-and-admission.md)。
+
+- 原大型 runtime 拆为上下文程序、共享推理器、模型/工具 I/O、会话 pipeline、准入和渠道调度。
+- 同步 Agent 删除独立循环；对话、直接/控制、Wake、Drift 和子任务使用共享执行器。
+- 会话排队与中断保存下沉至 pipeline，异步流式取消等待 worker 收束。
+- bootstrap 注入持久执行日志，工具意图先落地；未知结果阻止继续执行，重启标记待核对而不重放。
+- 工具执行后的上下文拒绝不从头重跑整轮；发送前必要状态写入失败不投递。
+- 保留消息与记忆提交合同；内部子任务结果排除长期学习。
 
 ## 第二轮对齐
 
@@ -40,7 +51,7 @@ Session SQLite append-only、上下文投影/compaction ledger、Shell/PTY/stdin
 | 大历史性能 | 学习时重建历史前缀内存 FTS，成本随历史增长 | 测量 p50/p95、历史规模与内存，再做增量索引 |
 | 主动质量池 | 有持久 checked/retry；有本地版本/CAS，仍没有上游 decaying eventmail pool | 来源修订/CAS、到达驱动、日预算、价值/打扰标注实验 |
 | 内部主动提案 | 仍是 Skill + hazard + scratchpad | 明确 proposal 生命周期、选择和投递结算后替换 |
-| 持久程序执行 | scoped 调用没有上游完整消息日志、writer grants、supersession 和续跑 | 模型/工具中断后恢复语义明确，不重复外部副作用 |
+| 持久程序执行 | 已记录模型/工具事实并识别未知结果；仍无上游完整 Message 程序、writer grants 和自动续跑 | 模型/工具中断后恢复语义明确，不重复外部副作用 |
 | 跨用户/隔离图 | 传递真实 MemoryScope；不等于 global/isolated/off 图路由 | 明确单用户跨渠道与多租户的不同合同 |
 | 完整抢占/外部副作用 | 模型返回后和 Drift 提交前已检查活动与来源；已交给渠道的发送无法撤回 | 未来持久程序和外部工具的取消/恢复合同 |
 | 真实质量评测 | 离线回归不是 LongMemEval/PersonaMem 或主动体验质量结果 | 固定数据、预算、judge、原始轨迹、失败与重复尝试策略 |

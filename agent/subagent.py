@@ -13,7 +13,7 @@ from uuid import uuid4
 from bus.events import InboundMessage
 from bus.queue import MessageBus
 from core.memory.legacy import MemoryRuntime
-from agent.core.runtime import DefaultReasoner
+from agent.core.reasoner import DefaultReasoner
 from core.schema import ToolSpec
 from session.manager import SessionManager
 from agent.tools.registry import ToolRegistry, object_schema
@@ -325,6 +325,7 @@ class SubagentManager:
             tool_chain=result.tool_chain,
             reasoning_content=result.thinking,
             parent_session_key=parent_session,
+            skip_post_memory=True,
         )
         self.sessions.save(session)
         return {

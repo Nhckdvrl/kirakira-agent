@@ -49,6 +49,7 @@ from agent.lifecycle.phase import topo_sort_modules
 from proactive_v2.frame import new_proactive_frame
 from plugins.proactive_flow.judge import Decision, ProactiveJudge, format_context
 from plugins.proactive_flow.admission import AdmissionStamp, DecisionSuperseded
+from agent.plugins.snapshot import bind_runtime_snapshot, reset_runtime_snapshot
 from plugins.proactive_flow.modules import build_default_proactive_modules
 from plugins.wake_proactive.sources import SourceRegistry
 from plugins.wake_proactive.state import ProactiveStateStore
@@ -85,6 +86,7 @@ class ProactiveLoop:
         plugin_generations: Any = None,
         snapshot_store: Any = None,
         mcp_gateway: Any = None,
+        execution_store: Any = None,
     ) -> None:
         self._cfg = config
         self._bus = bus
@@ -101,6 +103,7 @@ class ProactiveLoop:
             model_client,
             model=config.model,
             max_tokens=config.max_tokens,
+            execution_store=execution_store,
         )
         self._running = False
         self._tick_lock = asyncio.Lock()
@@ -236,11 +239,13 @@ class ProactiveLoop:
                 await self._run_modules(modules)
                 return
             lease = store.lease()
+            snapshot_token = bind_runtime_snapshot(lease)
             if self._mcp_gateway is not None:
                 self._mcp_gateway.pin_snapshot(lease.snapshot)
             try:
                 await self._run_modules(modules)
             finally:
+                reset_runtime_snapshot(snapshot_token)
                 if self._mcp_gateway is not None:
                     self._mcp_gateway.pin_snapshot(None)
                 await lease.release()

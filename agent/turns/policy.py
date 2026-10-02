@@ -21,6 +21,7 @@ class ReasoningPolicy:
     # A program may narrow its grant after a successful action. The executor
     # re-reads it between calls, including calls in the same provider batch.
     current_tools: Callable[[], frozenset[str]] | None = None
+    check_current: Callable[[], None] | None = None
 
     def allows(self, name: str) -> bool:
         return ((self.allowed_tools is None or name in self.allowed_tools)

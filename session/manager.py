@@ -1044,6 +1044,11 @@ class SessionManager:
                 self._index.rollback()
                 raise
 
+    def recover_admissions(self) -> None:
+        """Clear crash leftovers at startup, while holding the workspace lock."""
+        with self._index_lock, self._index:
+            self._index.execute("DELETE FROM session_admissions")
+
     def acquire_admission(self, session_key: str) -> str:
         owner_id = uuid4().hex
         with self._index_lock:

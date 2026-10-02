@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, List
 
 from agent.core.runner import Agent, DEFAULT_SYSTEM
+from agent.core.execution import ExecutionStore
 from agent.config import config_value, load_dotenv, load_toml_config, require_env
 from bus.queue import MessageBus
 from infra.channels.contract import ChannelContext
@@ -44,13 +45,11 @@ from bootstrap.dashboard_api import DashboardService
 from plugins.default_memory.inspector import RecallInspector
 from agent.restart import RestartCoordinator, SupervisorCommitChannel
 from agent.supervisor import RESTART_EXIT_CODE
-from agent.core.runtime import (
-    AgentLoop,
-    CoreRuntime,
-    DefaultReasoner,
-    PassiveTurnPipeline,
-    RuntimeConfig,
-)
+from agent.core.loop import AgentLoop
+from agent.core.runtime import CoreRuntime
+from agent.core.reasoner import DefaultReasoner
+from agent.core.pipeline import PassiveTurnPipeline
+from agent.core.contracts import RuntimeConfig
 from core.schema import JsonDict
 from session.manager import SessionManager
 from agent.plugins.snapshot import RuntimeSnapshotStore
@@ -365,6 +364,7 @@ def _build_proactive(
     plugin_generations: Any = None,
     snapshot_store: Any = None,
     drift_skill_roots_provider: Any = None,
+    execution_store: Any = None,
 ) -> tuple[ProactiveLoop | None, DriftRunner | None]:
     """按配置装配主动推送链路与 Drift 链路；未启用则返回 (None, None)。"""
     cfg = ProactiveConfig.from_app_config(app_config, default_model=default_model)
@@ -396,6 +396,7 @@ def _build_proactive(
             target_chat_id=cfg.chat_id,
             skill_roots_provider=drift_skill_roots_provider,
             passive_busy_fn=passive_busy_fn,
+            execution_store=execution_store,
         )
         drift_hook = drift_runner.maybe_run
 
@@ -414,6 +415,7 @@ def _build_proactive(
         memory=long_term_source,
         drift_hook=drift_hook,
         passive_busy_fn=passive_busy_fn,
+        execution_store=execution_store,
         memory_services=memory_services,
         plugin_generations=plugin_generations,
         snapshot_store=snapshot_store,
@@ -546,6 +548,7 @@ async def build_runtime(
     push_tool = MessagePushTool(chat_lane=bus.chat_lane)
     event_bus = EventBus()
     session_manager = SessionManager(workdir)
+    session_manager.recover_admissions()
     # 记忆 DI 缝先建立:引擎是 coremem.db 的唯一 owner,旧 MemoryRuntime 共享它的连接,
     # 也让显式记忆工具(Stage 5)能在注册表构建时就拿到引擎。
     memory_provider = ModelClientProvider(memory_client)
@@ -670,12 +673,15 @@ async def build_runtime(
         repeated_tool_call_limit=int(os.getenv("AGENT_REPEATED_TOOL_LIMIT", "3")),
         stream=_env_bool("AGENT_STREAM", True),
     )
+    execution_store = ExecutionStore(workdir / ".kirakira" / "executions.db")
+    execution_store.recover()
     reasoner = DefaultReasoner(
         model_client=client,
         tools=registry,
         config=config,
         context=context,
         event_bus=event_bus,
+        execution_store=execution_store,
     )
     subagents = SubagentManager(
         reasoner=reasoner,
@@ -798,6 +804,7 @@ async def build_runtime(
         plugin_generations=plugin_manager.generations,
         snapshot_store=snapshot_store,
         drift_skill_roots_provider=lambda: plugin_manager.drift_skill_roots,
+        execution_store=execution_store,
     )
     # 回填晚于面板构造的两条链路,Dashboard 的主动/Drift 面板由此拿到真实数据。
     dashboard.proactive_loop = proactive_loop

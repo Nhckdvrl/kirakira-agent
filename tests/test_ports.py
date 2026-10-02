@@ -18,7 +18,9 @@ from agent.looping.ports import (
     MemoryServices,
     SessionServices,
 )
-from agent.core.runtime import PassiveTurnPipeline, RuntimeConfig
+from agent.core.pipeline import PassiveTurnPipeline
+from bus.event_bus import EventBus
+from agent.core.contracts import RuntimeConfig
 
 
 class ConfigTests(unittest.TestCase):
@@ -67,7 +69,7 @@ class PipelineConsumesServicePacksTests(unittest.TestCase):
     def _pipeline(self, **kwargs) -> PassiveTurnPipeline:
         return PassiveTurnPipeline(
             bus=SimpleNamespace(),
-            event_bus=SimpleNamespace(),
+            event_bus=EventBus(),
             memory=SimpleNamespace(),
             tools=SimpleNamespace(),
             reasoner=SimpleNamespace(),

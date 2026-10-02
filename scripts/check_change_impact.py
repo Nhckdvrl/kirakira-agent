@@ -14,6 +14,7 @@ IMPACT_RULES: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
     (("session/", "agent/core/", "agent/model_runtime/"), (
         "tests/semantic/test_context_history_contract.py",
         "tests/test_runtime.py",
+        "tests/test_core_execution.py",
         "tests/test_query_compaction.py",
         "tests/test_proactive_decisions.py",
         "tests/test_drift.py",

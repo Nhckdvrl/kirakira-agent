@@ -17,6 +17,14 @@ Scheduler soft turn ───────────────┐
 Proactive tick → Deliver/Drift ────┴→ 使用相同 Runtime 边界，但使用隔离 Session/提交语义
 ```
 
+## 执行职责
+
+`runtime.py` 只负责装配后的生命周期与直接入口；`loop.py` 负责渠道调度。
+`pipeline.py` 负责对话提交与记忆边界，`admission.py` 为渠道、直接和控制调用统一排队与取消。
+`conversation.py` 构造上下文，`reasoner.py` 执行共享循环，`model_io.py` 与 `tool_io.py` 拥有 I/O。
+同步 Agent、scoped Wake/Drift 与子任务都复用该循环。`execution.py` 保存执行事实和不确定结果，
+不把执行完成等同于渠道送达。恢复限制见 [ADR0008](../decisions/0008-core-execution-and-admission.md)。
+
 ## 目录 owner
 
 | 目录 | 负责什么 |
@@ -48,6 +56,7 @@ Proactive tick → Deliver/Drift ────┴→ 使用相同 Runtime 边界�
 | `memory/akasha.db` | Akasha | 图、激活和查询状态 |
 | `proactive.db` | Proactive state | 事件、决策、ACK、feedback、tick trace |
 | `drift/drift.db` | Drift state | run、journal、continuity、hazard schedule |
+| `.kirakira/executions.db` | `ExecutionStore` | 模型/工具事实、终态与待核对调用；不自动重放 |
 | `.kirakira/control.db` | ControlStore | programmatic turn 状态 |
 | `migrations.sqlite3` | Yoyo | workspace migration ledger |
 

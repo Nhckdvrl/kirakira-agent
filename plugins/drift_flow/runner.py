@@ -59,6 +59,7 @@ class DriftRunner:
         max_tokens: int = 4000,
         skill_roots_provider: Callable[[], Sequence[Path]] | None = None,
         passive_busy_fn: Callable[[str], bool] | None = None,
+        execution_store=None,
     ) -> None:
         self._cfg = config
         self._workspace = Path(workspace)
@@ -72,6 +73,7 @@ class DriftRunner:
         self._max_tokens = max_tokens
         self._skill_roots_provider = skill_roots_provider or (lambda: ())
         self._passive_busy_fn = passive_busy_fn
+        self._execution_store = execution_store
         self._state = DriftStateStore(self._workspace / "drift" / "drift.db")
         self._rng = random.Random()
 
@@ -253,6 +255,7 @@ class DriftRunner:
                 system=skill.body, prompt=briefing, session_key="drift:" + uuid4().hex,
                 channel=self._channel, chat_id=self._chat_id,
                 max_steps=self._cfg.max_steps, max_tokens=self._max_tokens,
+                execution_store=self._execution_store,
                 policy=ReasoningPolicy(
                     allowed_tools=frozenset(registry.names()),
                     terminal_tools=frozenset({"finish_drift"}),

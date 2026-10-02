@@ -14,7 +14,8 @@ from types import SimpleNamespace
 from typing import Any
 
 from core.memory.services import MemoryServices
-from agent.core.runtime import PassiveTurnPipeline, RuntimeConfig
+from agent.core.pipeline import PassiveTurnPipeline
+from agent.core.contracts import RuntimeConfig
 
 
 class _Session:

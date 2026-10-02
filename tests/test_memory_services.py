@@ -20,7 +20,7 @@ from core.memory.services import (
     memory_engine_enabled,
 )
 from agent.config_models import build_config
-from agent.core.runtime import _engine_can_retrieve
+from agent.core.pipeline import _engine_can_retrieve
 
 
 class _StubClient:

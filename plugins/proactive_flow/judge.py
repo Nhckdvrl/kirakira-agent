@@ -48,10 +48,12 @@ class ProactiveJudge:
         *,
         model: str,
         max_tokens: int,
+        execution_store=None,
     ) -> None:
         self._client = model_client
         self._model = model
         self._max_tokens = max_tokens
+        self._execution_store = execution_store
 
     async def _decide(self, prompt: str, ids: set[str], *, alert: bool = False) -> Decision:
         registry = ToolRegistry()
@@ -92,11 +94,13 @@ class ProactiveJudge:
                 model_client=self._client, registry=registry, model=self._model,
                 system=_SYSTEM, prompt=prompt, session_key="wake:" + uuid4().hex,
                 max_steps=2, max_tokens=self._max_tokens,
+                execution_store=self._execution_store, channel="wake",
                 policy=ReasoningPolicy(allowed_tools=names, terminal_tools=names,
                     tool_choice="required", summarize_on_exhaustion=False,
                     exclusive_terminal=True),
             )
             trace = {"tool_chain": result.tool_chain, "context": result.context_trace,
+                     "execution_id": result.execution_id,
                      "prompt": prompt, "model": self._model}
             if len(decisions) != 1:
                 return Decision(False, "", [], status="invalid", reason="missing unique decision", trace=trace)

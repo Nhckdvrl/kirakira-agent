@@ -149,11 +149,15 @@ async def commit_turn_result(
     """按 decision 提交一次 turn 的产物与副作用。
 
     顺序是刻意的:通用副作用先跑(它们常用于"发送前先落地状态,避免重复"),
-    然后投递,最后按投递结果跑成功/失败副作用。单个副作用失败只记录,不影响其余,
-    也不改变投递结论——投递是否成功是渠道说了算,不是副作用说了算。
+    然后投递,最后按投递结果跑成功/失败副作用。发送前副作用失败会阻止投递;
+    发送后副作用失败只记录,不会改变渠道已经确认的投递结论。
     """
     outcome = TurnCommitOutcome(dispatched=False)
     await _run_side_effects(result.side_effects, outcome)
+    if outcome.failures:
+        # Preconditions such as durable intent must succeed before dispatch.
+        # No channel call occurred, so do not run an uncertain-send rollback.
+        return outcome
 
     if result.decision == "skip":
         # skip 不是失败:没有尝试投递,不跑 failure 回滚(照 Reference turns/orchestrator.py)。

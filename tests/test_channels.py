@@ -21,7 +21,10 @@ from infra.channels.web_chat_channel import WebChannel
 from agent.prompting.context_builder import ContextBuilder
 from bus.event_bus import EventBus
 from core.memory.legacy import MemoryRuntime
-from agent.core.runtime import AgentLoop, DefaultReasoner, PassiveTurnPipeline, RuntimeConfig
+from agent.core.loop import AgentLoop
+from agent.core.reasoner import DefaultReasoner
+from agent.core.pipeline import PassiveTurnPipeline
+from agent.core.contracts import RuntimeConfig
 from core.schema import ModelResponse
 from bus.events import OutboundMessage
 from session.manager import SessionManager
