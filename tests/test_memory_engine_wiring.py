@@ -188,6 +188,8 @@ class ProactiveInterestTests(unittest.TestCase):
         from proactive_v2.loop import ProactiveLoop
 
         loop = ProactiveLoop.__new__(ProactiveLoop)
+        from proactive_v2.config import ProactiveConfig
+        loop._cfg = ProactiveConfig(channel="web", chat_id="one")
         loop._memory_services = MemoryServices(engine=engine) if engine else None
         return loop
 
@@ -211,6 +213,7 @@ class ProactiveInterestTests(unittest.TestCase):
             self.assertEqual(request.intent, "interest")
             self.assertEqual(request.effect, "read_only")
             self.assertEqual(request.filters.relevance_floor, "strong")
+            self.assertEqual(request.scope.session_key, "web:one")
 
         asyncio.run(scenario())
 

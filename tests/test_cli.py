@@ -315,14 +315,14 @@ chat_id = "u1"
         env["MODEL_ID"] = "fake"
         env["OPENAI_COMPATIBLE_BASE_URL"] = "http://example.test/v1"
         env["OPENAI_COMPATIBLE_API_KEY"] = ""
-        proc = subprocess.run(
-            [sys.executable, "-m", "kirakira_agent"],
-            input="/tools\n/exit\n",
-            text=True,
-            capture_output=True,
-            env=env,
-            timeout=10,
-        )
+        env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1])
+        # CLI startup must not inherit runtime state produced by other tests.
+        with tempfile.TemporaryDirectory() as tmp:
+            proc = subprocess.run(
+                [sys.executable, "-m", "kirakira_agent"],
+                input="/tools\n/exit\n",
+                text=True, capture_output=True, env=env, cwd=tmp, timeout=10,
+            )
 
         self.assertEqual(proc.returncode, 0)
         self.assertIn("bash", proc.stdout)

@@ -80,6 +80,19 @@ CREATE TABLE IF NOT EXISTS tick_step_log (
     PRIMARY KEY(tick_id, step_index)
 );
 CREATE INDEX IF NOT EXISTS idx_tick_log_started ON tick_log(started_at DESC);
+CREATE TABLE IF NOT EXISTS content_checks (
+    item_id TEXT PRIMARY KEY,
+    checked_at TEXT NOT NULL,
+    retry_at TEXT,
+    status TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS decision_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_key TEXT NOT NULL,
+    decided_at TEXT NOT NULL,
+    candidates TEXT NOT NULL,
+    decision TEXT NOT NULL
+);
 """
 
 
@@ -162,6 +175,46 @@ class ProactiveStateStore:
             [(item_id,) for item_id in ids],
         )
         self._db.commit()
+
+    def pending_content(self, now: datetime) -> List[Dict[str, Any]]:
+        """Arrival and evaluation are distinct durable facts.
+
+        Cooling down does not consume an arrival. A valid skip is checked once;
+        model/delivery failures are eligible after a bounded retry delay.
+        """
+        checks = {row["item_id"]: row for row in self._db.execute(
+            "SELECT item_id, retry_at FROM content_checks"
+        )}
+        return [item for item in self.unread("content")
+                if item["item_id"] not in checks or (
+                    checks[item["item_id"]]["retry_at"] is not None
+                    and datetime.fromisoformat(checks[item["item_id"]]["retry_at"]) <= now
+                )]
+
+    def record_content_check(
+        self, session_key: str, candidates: Sequence[Dict[str, Any]],
+        decision: Dict[str, Any], now: datetime, *, retry_seconds: float | None = None,
+    ) -> None:
+        retry_at = ((now + timedelta(seconds=retry_seconds)).isoformat()
+                    if retry_seconds is not None else None)
+        with self._db:
+            self._db.execute(
+                "INSERT INTO decision_runs(session_key, decided_at, candidates, decision) VALUES (?, ?, ?, ?)",
+                (session_key, now.isoformat(), json.dumps(list(candidates), ensure_ascii=False),
+                 json.dumps(decision, ensure_ascii=False)),
+            )
+            self._db.executemany(
+                "INSERT INTO content_checks VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(item_id) DO UPDATE SET checked_at=excluded.checked_at, "
+                "retry_at=excluded.retry_at, status=excluded.status",
+                [(item["item_id"], now.isoformat(), retry_at, decision["status"]) for item in candidates],
+            )
+
+    def recent_decision_runs(self, limit: int = 10) -> List[Dict[str, Any]]:
+        return [{**dict(row), "candidates": json.loads(row["candidates"]),
+                 "decision": json.loads(row["decision"])} for row in self._db.execute(
+            "SELECT * FROM decision_runs ORDER BY id DESC LIMIT ?", (limit,)
+        )]
 
     def consume_and_queue_ack(
         self,

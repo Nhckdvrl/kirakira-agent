@@ -8,11 +8,12 @@ akasha 记忆引擎 — 生产运行时层
 from __future__ import annotations
 
 import json
+import asyncio
 import hashlib
 import sqlite3
 import threading
 from contextlib import closing
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
@@ -21,16 +22,13 @@ import numpy as np
 
 from plugins.akasha.core import (
     # 与 core 共享的类型
-    ActivationEventRow,
     ActivationTrace,
     AkashaActivationSnapshot,
-    ActivationUpdate,
     AkashaCandidate,
     AkashaNode,
     CoreConfig,
     DENSE_CANDIDATE_LIMIT,
     DENSE_SEED_LIMIT,
-    EdgeUpdate,
     RecallBudget,
     SourceMessage,
     build_dense_message_index,
@@ -38,21 +36,15 @@ from plugins.akasha.core import (
     parse_ts_unix,
     turn_key,
     # 算法函数（按内部约定统一使用 _ 前缀别名）
-    activation_edge_updates as _activation_edge_updates,
-    local_residual as _local_residual,
-    activation_updates as _activation_updates,
     compute_candidates as _core_compute_candidates,
     compute_candidates_from_snapshot as _core_compute_candidates_from_snapshot,
     dense_message_candidates as _dense_message_candidates,
     edges_by_src as _edges_by_src,
-    effective_edge_weight as _effective_edge_weight,
     fan_counts as _fan_counts,
     graph_seed_keys_from_snapshot as _graph_seed_keys_from_snapshot,
     parse_turn_key as _parse_turn_key,
-    bounded_add as _bounded_add,
     recall_budget_from_dense as _recall_budget_from_dense,
     reinforce_boost_from_payload as _reinforce_boost_from_payload,
-    reinforced_activation_items as _reinforced_activation_items,
 )
 from agent.config_models import Config  # noqa: F401
 from bus.events_lifecycle import TurnCommitted
@@ -92,15 +84,6 @@ class AkashaCard:
     score: float
     lane: str
     signals: dict[str, object]
-
-
-@dataclass(frozen=True)
-class PendingActivation:
-    query_id: str
-    seq: int          # 仅作 query_log 标识用
-    ts: float         # 用于 EdgeUpdate / last_used_ts
-    items: list[AkashaCandidate]
-    query_vec: np.ndarray = field(default_factory=lambda: np.array([], dtype=np.float32))
 
 
 class AkashaMemoryEngine:
@@ -161,8 +144,7 @@ class AkashaMemoryEngine:
             requester=http_resources.external_default,
         )
         self._event_bus = event_publisher
-        self._pending_by_session: dict[str, PendingActivation] = {}
-        self._prev_activation_by_session: dict[str, list[AkashaCandidate]] = {}
+        self._commit_lock = asyncio.Lock()
         self._graph_lock = threading.RLock()
         self._nodes: dict[str, AkashaNode] = {}
         self._edges: dict[tuple[str, str], float] = {}
@@ -296,7 +278,7 @@ class AkashaMemoryEngine:
         if not query_text:
             return MemoryQueryResult(trace={"engine": self.DESCRIPTOR.name, "hit_count": 0})
 
-        # 3. 检索旧 turn 图，并在 context 入口记录本轮激活。
+        # 3. 检索旧 turn 图；所有查询入口都不学习。
         now_ts = _query_timestamp_unix(request)
         if now_ts is None:
             return MemoryQueryResult(
@@ -313,10 +295,7 @@ class AkashaMemoryEngine:
             query_vec,
             request,
             now_ts=now_ts,
-            update_state=stateful,
         )
-        if stateful and request.intent in {"context", "answer"}:
-            self._remember_pending_activation(request, result.activation_items, query_vec, now_ts=now_ts)
 
         # 4. dense 高原越强，左脑少展示重复共振，右脑多展开。
         budget = result.budget
@@ -574,7 +553,7 @@ class AkashaMemoryEngine:
         _ = (item_id, top_k, memory_type, score_threshold, include_superseded)
         return []
 
-    # 检索 Akasha 图并更新旧节点激活。
+    # 检索 Akasha 图；学习只在提交周期内发生。
     def _retrieve(
         self,
         query: str,
@@ -582,7 +561,6 @@ class AkashaMemoryEngine:
         request: MemoryQuery,
         *,
         now_ts: float,
-        update_state: bool,
     ) -> "_AkashaRetrieval":
         # 1. 准备内存图和当前查询所在的预测 seq。
         snapshot = self._graph_snapshot_at(now_ts)
@@ -643,11 +621,6 @@ class AkashaMemoryEngine:
             if source_db is not None:
                 source_db.close()
 
-        # 3. 只读查询没有记忆动力学副作用。
-        if update_state:
-            updates = _activation_updates(activation_items, snapshot.nodes, now_ts)
-            self._store.update_activation_batch(updates)
-            self._apply_activation_updates(updates)
         return _AkashaRetrieval(
             dense_items=dense_items,
             ripple_items=ripple_items,
@@ -657,126 +630,43 @@ class AkashaMemoryEngine:
             seq=seq,
         )
 
-    # 暂存本轮激活，等待 after-turn 拿到真实 message id 后建边。
-    def _remember_pending_activation(
-        self,
-        request: MemoryQuery,
-        items: list[AkashaCandidate],
-        query_vec: np.ndarray,
-        *,
-        now_ts: float,
-    ) -> None:
-        # 1. 没有 session_key 时仍可检索，但不建当前 turn 的共激活边。
-        if not request.scope.session_key or not items:
-            return
-        seq = _current_query_seq(self._session_db_path, request.scope)
-        self._pending_by_session[request.scope.session_key] = PendingActivation(
-            query_id=f"{request.scope.session_key}:{seq}",
-            seq=seq,
-            ts=now_ts,
-            items=list(items),
-            query_vec=query_vec,
-        )
-
-    # TurnCommitted 后把真实 user/assistant 写入 sidecar，并补本轮共激活边。
     async def _on_turn_committed(self, event: TurnCommitted) -> None:
-        # 1. 跳过不应进入记忆的系统轮次。
+        """Learn only committed facts, once, through the same cycle as replay."""
         if event.session_key.startswith("scheduler:") or bool((event.extra or {}).get("skip_post_memory")):
             return
-        messages = _load_committed_turn_messages(self._session_db_path, event)
-        if not messages:
-            return
+        from plugins.akasha.cycle import apply_committed_turn, validate_turn
+        from plugins.akasha.replay import ReplayMessage
 
-        # 2. 分别 embed user 和 assistant，再按 cross CLI 规则合并到 turn 节点。
-        embeddings = await self._embedder.embed_batch([message.content for message in messages])
-        if len(embeddings) != len(messages):
-            raise ValueError(
-                "Akasha embedding 数量与已提交消息数量不一致: "
-                f"messages={len(messages)} embeddings={len(embeddings)}"
-            )
-        current_key = ""
-        for message, embedding in zip(messages, embeddings, strict=True):
-            self._embedding_store.upsert(
-                message_id=message.id,
-                content=message.content,
-                model=self._config.memory.embedding.model,
-                embedding=embedding,
-            )
-            current_key = self._store.upsert_message_node(message, embedding)
-            self._refresh_cached_node(current_key)
-            self._refresh_cached_message(
-                message,
-                embedding,
-                current_key,
-                rebuild_index=False,
-            )
-        with self._graph_lock:
-            self._message_index = build_dense_message_index(self._message_embeddings)
-
-        # 3. 用真实 current_key 建边，并记录激活诊断。
-        #    reinforce 标记 = 本轮调用了 reinforce_memory 工具(记在 tool_chain)或 extra 回填；
-        #    与离线重建(build._load_reinforce_boosts)读同一来源，live 与重放一致。
-        reinforce_boost = _reinforce_boost_for_turn(
-            event.extra,
-            event.tool_chain_raw,
-        )
-        pending = self._pending_by_session.pop(event.session_key, None)
-        if current_key and pending is not None:
-            self._commit_pending_activation(
-                current_key,
-                pending,
-                session_key=event.session_key,
-                reinforce_boost=reinforce_boost,
-            )
-
-    # 把 pending activation 转成边和事件。
-    def _commit_pending_activation(
-        self,
-        current_key: str,
-        pending: PendingActivation,
-        session_key: str = "",
-        reinforce_boost: float = 1.0,
-    ) -> None:
-        query_residual = self._compute_query_residual(pending.query_vec, current_key)
-        prev_by_session = getattr(self, "_prev_activation_by_session", {})
-        edge_items = _reinforced_activation_items(
-            pending.items,
-            prev_by_session.get(session_key, []),
-            reinforce_boost,
-        )
-        with self._graph_lock:
-            edge_nodes = dict(getattr(self, "_nodes", {}))
-        edge_updates = _activation_edge_updates(
-            current_key,
-            edge_items,
-            pending.ts,
-            query_residual=query_residual,
-            reinforce_boost=reinforce_boost,
-            nodes=edge_nodes,
-        )
-        self._store.upsert_edges(edge_updates)
-        self._apply_edge_updates(edge_updates)
-        if session_key:
-            prev_by_session[session_key] = list(pending.items)
-            self._prev_activation_by_session = prev_by_session
-
-        # 2. 记录本轮激活明细，便于之后诊断。
-        self._store.insert_activation_events([
-            ActivationEventRow(
-                seq=pending.seq,
-                query_id=pending.query_id,
-                activated_key=item.key,
-                source=item.source,
-                score=item.score,
-                direct_score=item.direct,
-                state_score=item.state,
-                edge_score=item.edge,
-                long_score=item.long,
-                resource=item.resource,
-                fan=item.fan,
-            )
-            for item in pending.items
-        ])
+        async with self._commit_lock:
+            messages = _load_committed_turn_messages(self._session_db_path, event)
+            if not messages:
+                return
+            model = self._config.memory.embedding.model
+            vectors = [self._embedding_store.get(message_id=m.id, content=m.content, model=model)
+                       for m in messages]
+            missing = [i for i, vector in enumerate(vectors) if vector is None]
+            if missing:
+                fresh = await self._embedder.embed_batch([messages[i].content for i in missing])
+                if len(fresh) != len(missing):
+                    raise ValueError("embedding count differs from committed messages")
+                for index, vector in zip(missing, fresh, strict=True):
+                    vectors[index] = vector
+            items = [ReplayMessage(message, vector) for message, vector in zip(messages, vectors, strict=True)]
+            validate_turn(items)
+            for item in items:
+                self._embedding_store.upsert(message_id=item.message.id, content=item.message.content,
+                                             model=model, embedding=item.embedding)
+            try:
+                apply_committed_turn(
+                    store=self._store, config=self._akasha_config,
+                    source_db_path=self._session_db_path, items=items, model=model,
+                    message_embeddings=self._message_embeddings,
+                    message_turn_keys=self._message_turn_keys,
+                    reinforce_boost=_reinforce_boost_for_turn(event.extra, event.tool_chain_raw),
+                )
+            finally:
+                # A failed transaction cannot leave a partially learned in-memory graph.
+                self._load_graph_cache()
 
     # 启动时加载一次内存图。
     def _load_graph_cache(self) -> None:
@@ -942,91 +832,6 @@ class AkashaMemoryEngine:
             message_turn_keys=visible_turn_keys,
             message_index=build_dense_message_index(visible_embeddings),
         )
-
-    # 把查询产生的状态更新同步进内存图。
-    def _apply_activation_updates(self, updates: list[ActivationUpdate]) -> None:
-        if not updates:
-            return
-        with self._graph_lock:
-            for item in updates:
-                node = self._nodes.get(item.key)
-                if node is None:
-                    continue
-                self._nodes[item.key] = replace(
-                    node,
-                    strength=item.strength,
-                    resource=item.resource,
-                    recall_count=item.recall_count,
-                    last_activated_ts=item.ts,
-                    last_strength_ts=item.ts,
-                    last_resource_ts=item.ts,
-                )
-
-    # 把新写入或合并的节点同步进内存图。
-    def _refresh_cached_node(self, key: str) -> None:
-        node = self._store.get_node(key)
-        if node is None:
-            return
-        with self._graph_lock:
-            self._nodes[key] = node
-
-    # 把 message-level dense 缓存同步进内存图。
-    def _refresh_cached_message(
-        self,
-        message: SourceMessage,
-        embedding: list[float],
-        turn_key_value: str,
-        *,
-        rebuild_index: bool = True,
-    ) -> None:
-        with self._graph_lock:
-            self._message_embeddings[message.id] = np.array(embedding, dtype=np.float32)
-            self._message_turn_keys[message.id] = turn_key_value
-            self._message_timestamps[message.id] = parse_ts_unix(message.ts)
-            if rebuild_index:
-                self._message_index = build_dense_message_index(self._message_embeddings)
-
-    # ν_turn = 1 − max_{j<i} cos(query, prior_j)²；当前 turn 自身排除。
-    def _compute_query_residual(self, query_vec: np.ndarray, current_key: str) -> float:
-        if query_vec.size == 0:
-            return 1.0
-        with self._graph_lock:
-            embeddings = [
-                node.embedding
-                for key, node in getattr(self, "_nodes", {}).items()
-                if key != current_key and node.embedding.size > 0
-            ]
-        if not embeddings:
-            return 1.0
-        prior = np.stack(embeddings).astype(np.float32)
-        norms = np.linalg.norm(prior, axis=1, keepdims=True)
-        norms[norms == 0] = 1.0
-        prior = prior / norms
-        return _local_residual(query_vec, prior)
-
-    # 把新增或增强的边同步进内存图。
-    def _apply_edge_updates(self, updates: list[EdgeUpdate]) -> None:
-        if not updates:
-            return
-        with self._graph_lock:
-            for item in updates:
-                if item.src_key == item.dst_key:
-                    continue
-                edge_key = (item.src_key, item.dst_key)
-                old = self._edges.get(edge_key)
-                if old is None:
-                    weight = 0.12 * item.strength
-                else:
-                    decayed = _effective_edge_weight(
-                        old,
-                        self._edges_meta.get(edge_key, 0.0),
-                        item.ts,
-                    )
-                    weight = _bounded_add(decayed, 0.12 * item.strength, 2.0)
-                self._edges[edge_key] = weight
-                self._edges_meta[edge_key] = item.ts
-                self._edges_by_src.setdefault(item.src_key, {})[item.dst_key] = weight
-            self._fan = _fan_counts(self._edges)
 
     # 删除 dashboard 移除的节点和相关边。
     def _remove_cached_nodes(self, ids: list[str]) -> None:
@@ -1252,9 +1057,9 @@ class _AkashaRetrieval:
 
 def _reinforce_boost_for_turn(
     event_extra: dict[str, object] | None,
-    tool_chain: list[dict[str, object]],
+    tool_chain: list[dict[str, object]] | tuple[dict[str, object], ...],
 ) -> float:
-    return _reinforce_boost_from_payload(event_extra, tool_chain)
+    return _reinforce_boost_from_payload(event_extra, list(tool_chain))
 
 
 def _core_config(config: AkashaConfig) -> CoreConfig:
@@ -1404,60 +1209,42 @@ def _current_query_seq(
 
 # 从 sessions.db 反查 after-turn 已经持久化的本轮消息。
 def _load_committed_turn_messages(
-    session_db_path: Path,
-    event: TurnCommitted,
+    session_db_path: Path, event: TurnCommitted,
 ) -> list[SourceMessage]:
-    # 1. after-turn 发生在 append_messages 后，这里用内容和相邻 seq 反查稳定 id。
-    if not session_db_path.exists() or not (event.persisted_user_message or event.input_message):
+    """Stable IDs select the exact committed pair; legacy content lookup must be unique."""
+    if not session_db_path.exists():
         return []
-    user_text = event.persisted_user_message or event.input_message
-    with closing(sqlite3.connect(str(session_db_path))) as db:
+    with closing(sqlite3.connect(f"{session_db_path.resolve().as_uri()}?mode=ro", uri=True)) as db:
         db.row_factory = sqlite3.Row
-        row = db.execute(
-            """
-            SELECT
-                u.id AS user_id, u.session_key AS session_key, u.seq AS user_seq,
-                u.content AS user_content, u.ts AS user_ts,
-                a.id AS assistant_id, a.seq AS assistant_seq,
-                a.content AS assistant_content, a.ts AS assistant_ts
-            FROM messages u
-            LEFT JOIN messages a
-                ON a.session_key = u.session_key
-               AND a.seq = u.seq + 1
-               AND a.role = 'assistant'
-               AND a.content = ?
-            WHERE u.session_key = ?
-              AND u.role = 'user'
-              AND u.content = ?
-            ORDER BY u.seq DESC
-            LIMIT 1
-            """,
-            (event.assistant_response, event.session_key, user_text),
-        ).fetchone()
-    if row is None:
+        params = [event.session_key]
+        condition = "u.session_key = ?"
+        if event.assistant_message_id:
+            condition += " AND a.id = ?"
+            params.append(event.assistant_message_id)
+            if event.user_message_id:
+                condition += " AND u.id = ?"
+                params.append(event.user_message_id)
+        else:
+            condition += " AND u.content = ? AND a.content = ?"
+            params.extend([event.persisted_user_message or event.input_message, event.assistant_response])
+        pairs = db.execute(
+            "SELECT u.id AS uid, a.id AS aid FROM messages u JOIN messages a "
+            "ON a.session_key=u.session_key AND a.seq=u.seq+1 AND a.role='assistant' "
+            "WHERE u.role='user' AND " + condition, params,
+        ).fetchall()
+        if not pairs:
+            return []
+        if len(pairs) != 1:
+            raise ValueError("ambiguous legacy commit; stable message IDs required")
+        rows = db.execute("SELECT * FROM messages WHERE id IN (?, ?) ORDER BY seq",
+                          (pairs[0]["uid"], pairs[0]["aid"])).fetchall()
+    if any(json.loads(row["extra_json"] or "{}").get("skip_post_memory")
+           or json.loads(row["extra_json"] or "{}").get("proactive") for row in rows):
         return []
-    messages = [
-        SourceMessage(
-            id=str(row["user_id"]),
-            session_key=str(row["session_key"]),
-            seq=int(row["user_seq"]),
-            role="user",
-            content=str(row["user_content"] or ""),
-            ts=str(row["user_ts"] or ""),
-        )
-    ]
-    if row["assistant_id"] is not None:
-        messages.append(
-            SourceMessage(
-                id=str(row["assistant_id"]),
-                session_key=str(row["session_key"]),
-                seq=int(row["assistant_seq"]),
-                role="assistant",
-                content=str(row["assistant_content"] or ""),
-                ts=str(row["assistant_ts"] or ""),
-            )
-        )
-    return messages
+    if rows[1]["content"] == "[interrupted]" or any(not row["content"].strip() for row in rows):
+        return []
+    return [SourceMessage(id=row["id"], session_key=row["session_key"], seq=row["seq"],
+                          role=row["role"], content=row["content"], ts=row["ts"]) for row in rows]
 
 
 # 从 sessions.db 读取 turn card。

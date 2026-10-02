@@ -1,6 +1,6 @@
 """Drift runner：把"一轮 Drift"跑成一次 agent run。
 
-复用 kirakira 现有的 ``Agent`` loop 与 ``build_default_registry`` 工具集，
+复用被动对话的 ``DefaultReasoner`` 与 ``build_default_registry`` 工具集，
 额外挂上 ``message_push`` / ``finish_drift`` 收尾工具。SKILL.md 正文作为
 system prompt，Drift Briefing 作为首条消息注入。跑完把结果落到 drift.db，
 并在主事件循环上投递草稿消息。
@@ -19,7 +19,8 @@ from pathlib import Path
 from typing import Any, Callable, List, Optional, Sequence
 from uuid import uuid4
 
-from agent.core.runner import Agent
+from agent.core.scoped import run_scoped
+from agent.turns.policy import ReasoningPolicy
 from bus.queue import MessageBus
 from plugins.drift_flow.skills import DriftSkill, discover_skills, ensure_example_skill
 from plugins.drift_flow.drive import sample_drift_delay_hours
@@ -98,7 +99,7 @@ class DriftRunner:
         logger.info("[drift] 开始 skill=%s", skill.name)
 
         try:
-            await asyncio.to_thread(self._run_agent, skill, briefing, ctx, session_key)
+            await self._run_agent(skill, briefing, ctx, session_key)
         except Exception:
             logger.exception("[drift] agent run 失败 skill=%s", skill.name)
             self._state.record_run(
@@ -110,7 +111,7 @@ class DriftRunner:
             )
             return True
 
-        message_result = await self._commit(ctx, session_key)
+        message_result = await self._commit(ctx, session_key) if ctx.finished else "silent"
         self._state.record_run(
             skill=skill.name,
             now=now,
@@ -224,14 +225,14 @@ class DriftRunner:
             key=lambda s: last_run[s.name].isoformat() if s.name in last_run else "",
         )
 
-    def _run_agent(
+    async def _run_agent(
         self,
         skill: DriftSkill,
         briefing: str,
         ctx: DriftRunContext,
         session_key: str,
     ) -> None:
-        """在工作线程里同步跑一次 agent run。"""
+        """通过共享异步 reasoner 执行隔离的后台程序。"""
         registry = build_default_registry(
             self._workspace,
             memory=self._memory,
@@ -239,36 +240,24 @@ class DriftRunner:
             bus=self._bus,
         )
         register_drift_tools(registry, ctx)
-        token = registry.set_context(
-            channel=self._channel,
-            chat_id=self._chat_id,
-            session_key=session_key,
-        )
         try:
-            agent = Agent(
-                model_client=self._client,
-                tool_registry=registry,
-                model=self._model,
-                workdir=self._workspace,
-                system=skill.body,
-                max_tokens=self._max_tokens,
-            )
-            # 照 Reference drift 主循环(plugins/drift_flow/runtime.py):每步必须调工具,
-            # 预算最后一步具名强制 finish_drift,finish 执行后立即收束——收尾由服务端
-            # tool_choice 保证,不再只靠 briefing 里的一句提示。
-            agent.run(
-                [{"role": "user", "content": briefing}],
-                max_rounds=self._cfg.max_steps,
-                tool_choice="required",
-                final_tool_choice={
-                    "type": "function",
-                    "function": {"name": "finish_drift"},
-                },
-                stop_tools={"finish_drift"},
+            await run_scoped(
+                model_client=self._client, registry=registry, model=self._model,
+                system=skill.body, prompt=briefing, session_key="drift:" + uuid4().hex,
+                channel=self._channel, chat_id=self._chat_id,
+                max_steps=self._cfg.max_steps, max_tokens=self._max_tokens,
+                policy=ReasoningPolicy(
+                    allowed_tools=frozenset(registry.names()),
+                    terminal_tools=frozenset({"finish_drift"}),
+                    tool_choice="required",
+                    final_tool_choice={"type": "function", "function": {"name": "finish_drift"}},
+                    summarize_on_exhaustion=False, exclusive_terminal=True,
+                    current_tools=lambda: frozenset({"finish_drift"}) if ctx.message_pushed
+                    else frozenset(registry.names()),
+                ),
             )
         finally:
-            registry.reset_context(token)
-            asyncio.run(registry.shutdown())
+            await registry.shutdown()
 
     async def _commit(self, ctx: DriftRunContext, session_key: str) -> str:
         """把 Drift 草稿投递，并按 Reference 修正为 sent / silent。

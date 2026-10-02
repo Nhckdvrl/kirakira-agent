@@ -43,6 +43,22 @@ engine protocol 接入，operator 可以切换，但数据不会假装自动互�
 当前 Akasha v1 可用，暂不为了追随新版实现而强制升级。架构已留出独立 adapter、store 和 migration
 空间，未来升级不需要改 AgentLoop。
 
+## Akasha 提交与重建（2026-10）
+
+所有查询入口都不修改学习图；`read_only` 查询还不写诊断 query log。`TurnCommitted` 使用稳定 user/assistant
+消息 ID 从原始库选择完整相邻消息对，拒绝歧义旧事件，排除 scheduler、proactive、明确 skip 和中断消息。
+向量以消息 ID、内容 hash、模型身份固定；模型/维度或学习配置变化必须显式重建。
+
+`plugins/akasha/cycle.py::apply_committed_turn` 为唯一生产学习周期。一个事务发布节点/边、激活与
+`akasha_commits` 消费收据。重复通知不再学习，失败不留下半张图；同 session 上一轮激活从收据恢复。
+原始 Session 提交和记忆事务不是跨库原子提交，因此仍需区分“聊天已提交”和“记忆已消费”。
+
+历史学习的 dense、FTS 和 IDF 只见已学习前缀。离线重建使用同一周期和固定向量，不能用未来消息改变
+过去一次学习，也不隐式调用 provider 补向量。命令与迁移步骤见[记忆评测](../operations/memory-evaluation.md)。
+
+当前仍是 v1 算法，未实现上游完整 v2 消费者、scope 图路由和自动追赶任务；明确边界在
+[当前状态](../status/current.md)，取舍见[ADR0006](../decisions/0006-shared-reasoning-and-committed-memory.md)。
+
 ## Consolidation
 
 `MarkdownMemoryMaintenance` 是当前归档驱动方。它订阅已提交 turn，按 session 串行更新 Markdown

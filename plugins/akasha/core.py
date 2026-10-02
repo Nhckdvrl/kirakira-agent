@@ -14,6 +14,8 @@ import re
 import struct
 import sqlite3
 import warnings
+from contextlib import contextmanager
+from contextvars import ContextVar
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime
@@ -146,6 +148,32 @@ FTS_OVERLAP_BOOST = 1.3    # Dense ∩ FTS 时 seed_energy 倍数
 
 # 模块级 IDF 表（由 engine 调用 set_idf_table 注入）
 _IDF_TABLE: dict[str, float] = {}
+_QUERY_IDF: ContextVar[dict[str, float] | None] = ContextVar("akasha_query_idf", default=None)
+
+
+@contextmanager
+def lexical_statistics(table: dict[str, float]):
+    """Bind causal lexical statistics without changing another engine's state."""
+    token = _QUERY_IDF.set(table)
+    try:
+        yield
+    finally:
+        _QUERY_IDF.reset(token)
+
+
+def document_idf(contents: Iterable[str]) -> dict[str, float]:
+    from collections import Counter
+
+    frequencies: Counter[str] = Counter()
+    count = 0
+    jieba = _load_jieba()
+    for content in contents:
+        count += 1
+        tokens = {"".join(ch for ch in str(word).strip() if ch.isalnum()).lower()
+                  for word in jieba.cut_for_search(content)}
+        frequencies.update(token for token in tokens if len(token) > 1)
+    return {word: math.log((count + 1) / (frequency + 1)) + 1
+            for word, frequency in frequencies.items()}
 
 
 def _load_jieba() -> ModuleType:
@@ -926,8 +954,11 @@ def get_jieba_keywords(text: str) -> str:
         if len(token) < FTS_MIN_TOKEN_LEN or token in seen:
             return
         seen.add(token)
-        if _IDF_TABLE:
-            idf = _IDF_TABLE.get(token, 6.0)  # \u672a\u89c1\u8fc7\u89c6\u4e3a\u7a00\u6709
+        table = _QUERY_IDF.get()
+        if table is None:
+            table = _IDF_TABLE
+        if table:
+            idf = table.get(token, 6.0)  # unseen terms are treated as rare
             if idf < FTS_MIN_IDF:
                 return
             pairs.append((token, idf))

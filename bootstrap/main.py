@@ -112,6 +112,8 @@ def main(argv: list[str] | None = None) -> None:
     if command not in {"", "setup", "init", "gateway", "supervise", "memory", "control"}:
         raise SystemExit(f"未知命令: {command}\n\n{HELP}")
 
+    if command == "supervise":
+        _validate_supervise_args(args[1:])
     config_path = Path(_flag_value(args, "--config") or "config.toml").expanduser().resolve()
     bootstrap = command in {"setup", "init"} or (not command and not config_path.exists())
     workspace = _workspace(args, config_path, allow_default=bootstrap)
@@ -152,8 +154,6 @@ def main(argv: list[str] | None = None) -> None:
         from bootstrap.control_cli import main as control_main
 
         raise SystemExit(control_main(args[1:], workspace))
-    if command == "supervise":
-        _validate_supervise_args(args[1:])
     if not config_path.exists():
         if not sys.stdin.isatty():
             raise SystemExit(f"找不到配置文件 {config_path}；请先运行 uv run python main.py setup")

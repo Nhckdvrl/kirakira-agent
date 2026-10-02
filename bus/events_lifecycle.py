@@ -173,6 +173,7 @@ class TurnCommitted:
     tools_used: Tuple[str, ...]
     turn_id: str = ""
     assistant_message_id: str | None = None
+    user_message_id: str | None = None
     thinking: str | None = None
     raw_reply: str | None = None
     meme_tag: str | None = None
@@ -199,6 +200,7 @@ class TurnCommitted:
         assistant_reply: str = "",
         turn_id: str = "",
         assistant_message_id: str | None = None,
+        user_message_id: str | None = None,
         thinking: str | None = None,
         raw_reply: str | None = None,
         meme_tag: str | None = None,
@@ -222,6 +224,7 @@ class TurnCommitted:
         object.__setattr__(self, "tools_used", tuple(tools_used))
         object.__setattr__(self, "turn_id", turn_id)
         object.__setattr__(self, "assistant_message_id", assistant_message_id)
+        object.__setattr__(self, "user_message_id", user_message_id)
         object.__setattr__(self, "thinking", thinking)
         object.__setattr__(self, "raw_reply", raw_reply)
         object.__setattr__(self, "meme_tag", meme_tag)

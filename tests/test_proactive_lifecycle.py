@@ -162,6 +162,7 @@ class TickGenerationLeaseTests(unittest.TestCase):
         from proactive_v2.loop import ProactiveLoop
 
         loop = ProactiveLoop.__new__(ProactiveLoop)
+        loop._tick_lock = asyncio.Lock()
         loop._plugin_generations = generations
         loop._snapshot_store = snapshot_store
         loop._mcp_gateway = gateway

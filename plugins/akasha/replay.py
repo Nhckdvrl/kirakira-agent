@@ -122,6 +122,7 @@ class AkashaReplayRuntime:
         message_embeddings: dict[str, np.ndarray],
         message_turn_keys: dict[str, str],
         reinforce_boosts: dict[str, float] | None = None,
+        previous_activations: dict[str, list[AkashaCandidate]] | None = None,
     ) -> None:
         self._store = store
         self._config = config
@@ -132,7 +133,7 @@ class AkashaReplayRuntime:
         self._message_turn_keys = dict(message_turn_keys)
         # turn_key -> gain_boost：来自 messages.extra["akasha_reinforce"]，重放时定向加厚该轮边。
         self._reinforce_boosts = dict(reinforce_boosts or {})
-        self._prev_activation_by_session: dict[str, list[AkashaCandidate]] = {}
+        self._prev_activation_by_session = dict(previous_activations or {})
 
     # 按线上状态机回放一轮：先激活旧图，再提交当前 turn。
     def replay_turn(
@@ -171,11 +172,9 @@ class AkashaReplayRuntime:
     ) -> ReplayActivation:
         if message.role != "user":
             return _empty_activation()
-        query_text = message.content.strip()
+        query_text = message.content
         if not query_text:
             return _empty_activation()
-        if query_text != message.content:
-            raise ValueError(f"Akasha replay 缺少 strip 后 query embedding: {message.id}")
         nodes = {node.key: node for node in self._store.list_nodes()}
         if not nodes:
             return _empty_activation()

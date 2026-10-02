@@ -24,7 +24,7 @@ from plugins.wake_proactive.sources import (
     build_file_inbox_registry,
 )
 from plugins.wake_proactive.state import ProactiveStateStore
-from core.schema import ModelResponse
+from core.schema import ModelResponse, ToolCall
 from session.manager import SessionManager
 
 NOW = datetime(2026, 7, 22, 12, 0, 0, tzinfo=timezone.utc)
@@ -169,11 +169,16 @@ class _FakeClient:
         self.alert_msg = alert_msg
         self.content_decision = content_decision or {"decision": "skip"}
 
-    def complete(self, messages, tools, system, model, max_tokens):
-        prompt = messages[0]["content"]
+    def complete(self, messages, tools, system, model, max_tokens, tool_choice=None):
+        prompt = next(m["content"] for m in messages if m["role"] == "user")
         if "【通道】alert" in prompt:
-            return ModelResponse(text=json.dumps({"message": self.alert_msg}))
-        return ModelResponse(text=json.dumps(self.content_decision))
+            return ModelResponse(tool_calls=[ToolCall("alert", "share_alert", {"message": self.alert_msg, "items": ["demo:a1"]})])
+        data = self.content_decision
+        if data.get("decision") == "send":
+            return ModelResponse(tool_calls=[ToolCall("share", "share_content", {
+                "message": data["message"], "items": data["cited_ids"],
+            })])
+        return ModelResponse(tool_calls=[ToolCall("skip", "skip_content", {"reason": "not relevant"})])
 
 
 class _FlakyAckSource:

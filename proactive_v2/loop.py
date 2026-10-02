@@ -13,6 +13,7 @@ import logging
 import random
 import time
 from contextlib import asynccontextmanager, contextmanager
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional
@@ -23,6 +24,7 @@ from core.memory.engine import (
     MemoryCapability,
     MemoryQuery,
     MemoryQueryFilters,
+    MemoryScope,
 )
 from bus.events import OutboundMessage
 from agent.turns.result import (
@@ -100,6 +102,7 @@ class ProactiveLoop:
             max_tokens=config.max_tokens,
         )
         self._running = False
+        self._tick_lock = asyncio.Lock()
         self._wake = asyncio.Event()
         self._workspace = Path(session_manager.workspace)
         # tick 的两份代际租约(与被动 turn 同一对保证,见 runtime.AgentLoop.run):
@@ -175,6 +178,7 @@ class ProactiveLoop:
                 self._cfg.session_key, now, self._cfg.delivery_cooldown_hours
             ),
             "recent_decisions": self._state.recent_decisions(10),
+            "decision_runs": self._state.recent_decision_runs(10),
             "recent_ticks": self._state.recent_ticks(10),
             "sources": [s.id for s in self._sources.sources],
             "drift_enabled": self._cfg.drift.enabled,
@@ -225,7 +229,7 @@ class ProactiveLoop:
         插件换代/热重载,本轮仍用开始时的模块集合与工具代际跑完,新代际下一轮生效。
         """
         modules = list(self._modules)
-        async with self._plugin_generation_lease():
+        async with self._tick_lock, self._plugin_generation_lease():
             store = self._snapshot_store
             if store is None or store.current is None:
                 await self._run_modules(modules)
@@ -359,12 +363,29 @@ class ProactiveLoop:
             recent_proactive=recent_proactive,
         )
         if not decision.send:
+            self._state.record_content_check(
+                self._cfg.session_key, page, asdict(decision), now,
+                retry_seconds=300 if decision.status in {"error", "invalid"} else None,
+            )
             return False
-        await self._deliver(decision, now, decision.cited_ids)
+        self._state.record_content_check(self._cfg.session_key, page,
+            {**asdict(decision), "status": "delivery_pending"}, now, retry_seconds=300)
+        try:
+            delivered = await self._deliver(decision, now, decision.cited_ids)
+        except OutboundDeliveryError:
+            self._state.record_content_check(
+                self._cfg.session_key, page,
+                {**asdict(decision), "status": "delivery_failed"}, now, retry_seconds=300,
+            )
+            raise
+        self._state.record_content_check(self._cfg.session_key, page,
+            {**asdict(decision), "status": "delivered" if delivered else "deduplicated"}, now)
         # 只消费/ACK 被真正引用的内容
         cited = set(decision.cited_ids)
         selected = [c for c in contracts if c.item_id in cited]
         self._state.consume([c.item_id for c in selected], now)
+        if not delivered:
+            return False
         feedback_by_source: Dict[str, List[str]] = {}
         for contract in selected:
             source_id = str(contract.raw.get("_source") or "").strip()
@@ -388,7 +409,7 @@ class ProactiveLoop:
 
     async def _deliver(
         self, decision: Decision, now: datetime, evidence_item_ids: List[str]
-    ) -> None:
+    ) -> bool:
         message = decision.message.strip()
         if not message:
             raise OutboundDeliveryError("主动决策未生成可发送内容")
@@ -403,7 +424,7 @@ class ProactiveLoop:
         ):
             logger.info("[proactive] 命中投递去重,跳过发送")
             self._state.record_decision(now, "delivery_deduped", message[:120])
-            return
+            return False
 
         async def mark_intent() -> None:
             # **发送前**落地投递意图:进程若在渠道成功与本地提交之间崩溃,
@@ -450,6 +471,7 @@ class ProactiveLoop:
             # 保持既有契约:调用方靠这个异常决定"保留未读、不消费事件"。
             raise OutboundDeliveryError("主动消息渠道发送失败")
         logger.info("[proactive] 已推送 message=%r", message[:120])
+        return True
 
     def _record_proactive_message(
         self, message: str, delivery_id: str, evidence_item_ids: List[str]
@@ -573,6 +595,7 @@ class ProactiveLoop:
             result = await engine.query(
                 MemoryQuery(
                     text=query,
+                    scope=MemoryScope(session_key=self._cfg.session_key, channel=self._cfg.channel, chat_id=self._cfg.chat_id),
                     intent="interest",
                     effect="read_only",
                     filters=MemoryQueryFilters(relevance_floor="strong"),
@@ -585,7 +608,9 @@ class ProactiveLoop:
             logger.warning("[proactive] 兴趣检索失败: %s", exc)
             return ""
         lines = [
-            "- %s" % str(record.summary).strip()[:300]
+            "- %s [evidence: %s]" % (str(record.summary).strip()[:300], ", ".join(
+                ref.source_ref or ",".join(ref.refs) for ref in record.evidence
+            ) or record.id)
             for record in result.records
             if str(record.summary).strip()
         ]

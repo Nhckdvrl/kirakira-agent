@@ -15,6 +15,8 @@ IMPACT_RULES: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
         "tests/semantic/test_context_history_contract.py",
         "tests/test_runtime.py",
         "tests/test_query_compaction.py",
+        "tests/test_proactive_decisions.py",
+        "tests/test_drift.py",
     )),
     (("agent/tools/", "agent/subagent.py"), (
         "tests/test_tools.py",
@@ -24,6 +26,15 @@ IMPACT_RULES: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
     (("proactive_v2/", "plugins/proactive_flow/", "plugins/wake_proactive/"), (
         "tests/test_proactive.py",
         "tests/test_proactive_lifecycle.py",
+        "tests/test_proactive_decisions.py",
+    )),
+    (("plugins/akasha/", "session/embedding_store.py", "bus/events_lifecycle.py", "scripts/replay_akasha.py"), (
+        "tests/test_memory_commit_cycle.py",
+        "tests/test_akasha.py",
+        "tests/test_memory_engine_wiring.py",
+    )),
+    (("plugins/drift_flow/", "agent/turns/policy.py"), (
+        "tests/test_drift.py", "tests/test_drift_journal.py", "tests/test_proactive_decisions.py",
     )),
     (("agent/migrations/", "migrations/", "bootstrap/workspace_lock.py"), (
         "tests/test_migration_runner.py",
@@ -60,7 +71,12 @@ def changed_paths(base: str) -> list[str]:
     )
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or "git diff failed")
-    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    untracked = subprocess.run(
+        ["git", "-C", str(ROOT), "ls-files", "--others", "--exclude-standard"],
+        text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True,
+    )
+    return sorted({line.strip() for line in (result.stdout + untracked.stdout).splitlines()
+                   if line.strip()})
 
 
 def main() -> int:

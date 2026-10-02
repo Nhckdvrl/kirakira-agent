@@ -1251,6 +1251,7 @@ class WorkspaceTools:
                 MemoryQuery(
                     text=text,
                     intent=_normalize_recall_intent(intent),
+                    effect="read_only",
                     scope=self._memory_scope(),
                     filters=MemoryQueryFilters(
                         kinds=kinds,

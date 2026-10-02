@@ -107,6 +107,31 @@ class _ScriptedClient:
 
 
 class DriftRunnerTests(unittest.TestCase):
+    def test_unfinished_draft_is_never_delivered(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                workdir = Path(tmp)
+                sessions = SessionManager(workdir)
+                bus = MessageBus()
+                runner = DriftRunner(
+                    config=DriftConfig(enabled=True, min_interval_hours=0, max_steps=1),
+                    workspace=workdir, bus=bus, session_manager=sessions,
+                    model_client=_ScriptedClient(), model="fake",
+                    target_channel="web", target_chat_id="u1",
+                )
+                # The provider ignores forced finish and only stages a draft.
+                # Delivery would wait on the bus; fail immediately if attempted.
+                async def forbidden_delivery(*args, **kwargs):
+                    raise AssertionError("unfinished draft must not reach delivery")
+                runner._commit = forbidden_delivery
+                self.assertTrue(await runner.maybe_run(NOW, "web:u1"))
+                recent = runner._state.recent_runs()
+                self.assertEqual(recent[0]["status"], "paused")
+                self.assertEqual(recent[0]["message_result"], "silent")
+                runner.close()
+                sessions.close()
+        asyncio.run(scenario())
+
     def test_end_to_end_run_pushes_and_records(self):
         async def scenario():
             tmp = tempfile.TemporaryDirectory()

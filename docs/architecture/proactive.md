@@ -24,8 +24,9 @@ Gate
 都记录 started/completed/skipped/failed 与耗时。terminal 明确说明本轮停止原因，例如 gated、delivered、
 no-candidate 或 error。
 
-source fetch 抛错会进入 step/tick error，不会伪装成“没有内容”。alert 判断失败可以退回原文；content
-判断失败则安全跳过，避免误打扰。
+模块抛错进入 step/tick error。当前 SourceRegistry 的单源抓取异常会记录日志并返回空列表，
+不等于已有结构化 source error 状态。Alert 判断失败可以退回原文；Content 判断失败保留候选，
+按持久 retry_at 延后重试。
 
 ## 快照和租约
 
@@ -56,3 +57,20 @@ Drift 运行记录和 hazard schedule 位于 `drift/drift.db`。hazard 使用采
 
 配置、事件类型和排查方式见[主动执行手册](../handbook/proactive.md)；Drift 见
 [Drift 手册](../handbook/drift.md)。
+
+## 共享执行与决策权限（2026-10）
+
+被动对话、ProactiveJudge、DriftRunner 共用 `DefaultReasoner.run`。后台通过 `run_scoped` 传入冻结输入、
+工具授权、步数、终结工具；不把内部判别过程写成用户对话。scoped 自身不负责持久程序恢复或上下文压缩。
+
+Content 只允许 `share_content(message, items)` / `skip_content(reason)`；Alert 只允许 `share_alert`。
+引用必须是本轮候选中 1–5 个不重复的 ID，未知 ID 或冲突终结批次整体失败。普通回复即使长得像 JSON
+也没有投递权限。只有 handler 成功后才结束循环，owner 在循环外负责渠道提交。
+
+`content_checks` 记录 checked/retry 状态；`decision_runs` 保存输入候选、prompt、模型和工具轨迹。
+冷却不消费待检查资格，有效 skip 不被每次 tick 重判，非法决策/模型错误/投递失败延后 300 秒重试。
+发送前先保存 delivery_pending，因此发送途中退出仍有候选审计记录。真正的外部投递仍受上面的去重窗口限制。
+这些表存有对话材料，应沿用 workspace 的本地数据保护与保留策略。
+
+Drift 的 `message_push` 只暂存草稿，之后动态收窄到 `finish_drift`；同批后续工具也会被执行器拒绝。
+没有 finish 的运行记录为 paused，不能投递草稿。它仍沿用 Skill/hazard 设计，不等同于最新 Akashic proposal owner。

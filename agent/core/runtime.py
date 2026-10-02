@@ -79,6 +79,7 @@ from agent.prompting import (
     build_context_frame_message,
 )
 from agent.retrieval.default_pipeline import RetrievalRequest
+from agent.turns.policy import ReasoningPolicy
 
 logger = logging.getLogger(__name__)
 JsonDict = Dict[str, Any]
@@ -149,7 +150,7 @@ class DefaultReasoner:
         model_client: ModelClient,
         tools: ToolRegistry,
         config: RuntimeConfig,
-        context: ContextBuilder,
+        context: ContextBuilder | None,
         event_bus: EventBus,
     ) -> None:
         self.model_client = model_client
@@ -377,7 +378,9 @@ class DefaultReasoner:
         compaction_runtime: SessionCompactionRuntime | None = None,
         compaction_projection: CompactionProjection | None = None,
         payload_segments: ContextPayloadSegments | None = None,
+        policy: ReasoningPolicy | None = None,
     ) -> ReasonerResult:
+        policy = policy or ReasoningPolicy()
         tools_used: List[str] = []
         tool_chain: List[JsonDict] = []
         final_reply = ""
@@ -472,7 +475,7 @@ class DefaultReasoner:
             visible_specs = [
                 spec
                 for spec in tools.visible_specs(unlocked)
-                if spec.name not in disabled
+                if spec.name not in disabled and policy.allows(spec.name)
             ]
             visible_names = tuple(spec.name for spec in visible_specs)
             compaction_specs[:] = [
@@ -521,6 +524,10 @@ class DefaultReasoner:
                     )
                 )
 
+            choice = policy.tool_choice
+            if policy.final_tool_choice is not None and iteration == iteration_limit - 1:
+                choice = policy.final_tool_choice
+            model_options = {"tool_choice": choice} if choice is not None else {}
             react_input_samples.append(before_step.input_tokens_estimate)
             try:
                 response = await self._complete_model(
@@ -530,6 +537,7 @@ class DefaultReasoner:
                     channel=channel,
                     chat_id=chat_id,
                     iteration=iteration,
+                    **model_options,
                 )
             except ContextLengthError as overflow:
                 pending_count = len(messages) - batch_start
@@ -549,6 +557,7 @@ class DefaultReasoner:
                     channel=channel,
                     chat_id=chat_id,
                     iteration=iteration,
+                    **model_options,
                 )
             model_usages.append(dict(response.usage or {}))
             final_reply = response.text or ""
@@ -588,13 +597,22 @@ class DefaultReasoner:
                 "reasoning_content": response.reasoning_content or "",
                 "calls": [],
             }
+            terminal_succeeded = False
+            conflicting_batch = policy.exclusive_terminal and len(response.tool_calls) != 1 and any(
+                call.name in policy.terminal_tools for call in response.tool_calls
+            )
             for call in response.tool_calls:
                 signature = "%s:%s" % (
                     call.name,
                     json.dumps(call.arguments, ensure_ascii=False, sort_keys=True, default=str),
                 )
                 repeated_calls[signature] = repeated_calls.get(signature, 0) + 1
-                if call.name in disabled:
+                if conflicting_batch or not policy.allows(call.name):
+                    result = await self._deny_tool(
+                        call, session_key, channel, chat_id, iteration,
+                        "Error: tool batch violates this turn's execution policy",
+                    )
+                elif call.name in disabled:
                     result = await self._deny_tool(
                         call,
                         session_key,
@@ -632,6 +650,8 @@ class DefaultReasoner:
                         iteration,
                         tools,
                     )
+                if call.name in policy.terminal_tools and result["status"] == "success":
+                    terminal_succeeded = True
                 tools_used.append(call.name)
                 if result.get("mobile_attention") is not None:
                     mobile_attention = str(result["mobile_attention"])
@@ -673,12 +693,18 @@ class DefaultReasoner:
                 tools_used,
                 tool_chain,
                 final_thinking,
-                has_more=True,
+                has_more=not terminal_succeeded,
             )
+            if terminal_succeeded:
+                return ReasonerResult(
+                    final_reply, tools_used, tool_chain, final_thinking,
+                    context_trace={"react_stats": self._react_stats(react_input_samples, model_usages)},
+                    mobile_attention=mobile_attention,
+                )
             iteration += 1
         self._remember_unlocked(session_key, unlocked)
         summary_reply = ""
-        if messages:
+        if messages and policy.summarize_on_exhaustion:
             summary_messages = [
                 *messages,
                 {
@@ -806,7 +832,9 @@ class DefaultReasoner:
         channel: str,
         chat_id: str,
         iteration: int,
+        tool_choice: object | None = None,
     ) -> ModelResponse:
+        options = {"tool_choice": tool_choice} if tool_choice is not None else {}
         timeout = max(1.0, float(self.config.model_timeout_seconds))
         stream_method = getattr(self.model_client, "complete_stream", None)
         acomplete = getattr(self.model_client, "acomplete", None)
@@ -820,6 +848,7 @@ class DefaultReasoner:
                         "",
                         self.config.model,
                         self.config.max_tokens,
+                        **options,
                     )
                 else:
                     call = asyncio.to_thread(
@@ -829,6 +858,7 @@ class DefaultReasoner:
                         "",
                         self.config.model,
                         self.config.max_tokens,
+                        **options,
                     )
                 return await asyncio.wait_for(call, timeout=timeout)
             queue: asyncio.Queue[Tuple[str, str]] = asyncio.Queue()
@@ -848,6 +878,7 @@ class DefaultReasoner:
                         self.config.model,
                         self.config.max_tokens,
                         on_delta,
+                        **options,
                     )
                 )
             else:
@@ -860,6 +891,7 @@ class DefaultReasoner:
                         self.config.model,
                         self.config.max_tokens,
                         on_delta,
+                        **options,
                     )
                 )
             deadline = loop.time() + timeout
@@ -1456,14 +1488,17 @@ class PassiveTurnPipeline:
     async def _commit_and_dispatch(self, state: TurnState, result: AfterReasoningResult) -> OutboundMessage:
         session = state.session
         msg = state.msg
+        if msg.metadata.get("skip_post_memory") or msg.metadata.get("omit_user_turn"):
+            state.extra_metadata["skip_post_memory"] = True
+        committed_user = None
         if not msg.metadata.get("omit_user_turn"):
-            session.add_message(
+            committed_user = session.add_message(
                 "user",
                 msg.content,
                 media=msg.media,
                 inbound_timestamp=msg.timestamp.isoformat(),
             )
-        session.add_message(
+        committed_assistant = session.add_message(
             "assistant",
             result.outbound.content,
             media=result.outbound.media,
@@ -1530,7 +1565,15 @@ class PassiveTurnPipeline:
             channel=msg.channel,
             chat_id=msg.chat_id,
             user_content=msg.content,
+            user_message_id=committed_user["id"] if committed_user else None,
+            assistant_message_id=committed_assistant["id"],
             assistant_reply=result.outbound.content,
+            tool_chain_raw=tuple(result.ctx.tool_chain),
+            timestamp=msg.timestamp,
+            extra={**state.extra_metadata, "skip_post_memory": bool(
+                msg.metadata.get("skip_post_memory") or msg.metadata.get("omit_user_turn")
+                or state.extra_metadata.get("skip_post_memory")
+            )},
             tools_used=result.ctx.tools_used,
         )
         await self.event_bus.fanout(committed)

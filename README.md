@@ -33,6 +33,12 @@ conversation, proactive execution, long-term memory, and idle background work in
 one observable, extensible runtime. Sessions and runtime state stay in the selected
 local workspace by default.
 
+The October refactor focuses on auditable proactive decisions and commit-only
+memory learning: all three paths share one reasoner, decision tools have explicit
+grants, and Akasha v1 uses the same transactional cycle online and during rebuild.
+See the [source-pinned architecture review](./docs/engineering/akashic-review-2026-10-02.md)
+for upstream attribution, tradeoffs, and remaining gaps.
+
 ## At a glance
 
 | Question | Kirakira's approach |

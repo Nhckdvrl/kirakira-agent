@@ -172,7 +172,7 @@ class AlertModule(_LoopModule):
 
 
 class ContentModule(_LoopModule):
-    """只有出现新内容且不在冷却期时才做兴趣判断。"""
+    """从持久待判断集合取候选；冷却和重启不能吞掉新到达。"""
 
     slot = "proactive.content"
     requires = ("proactive.alert",)
@@ -181,9 +181,8 @@ class ContentModule(_LoopModule):
     async def execute(self, frame: ProactiveFrame) -> ProactiveFrame:
         loop = self._loop
         now = frame.now
-        contents = loop._state.unread("content")
-        has_new = bool(contents and frame.get(SLOT_NEW_CONTENT))
-        if not has_new or loop._state.in_cooldown(
+        contents = loop._state.pending_content(now)
+        if not contents or loop._state.in_cooldown(
             frame.session_key, now, loop._cfg.delivery_cooldown_hours
         ):
             frame.slots[SLOT_PROPOSAL_CONTENT] = None

@@ -1,38 +1,41 @@
 # 当前状态
 
-更新日期：2026-08-15。
+更新日期：2026-10-02。本轮改动基于本地 `b6c4143`，上游 pin 与分析见[重构审计](../engineering/akashic-review-2026-10-02.md)。
 
-## 已完成
+## 本轮完成
 
-- Runtime 已按 `agent/`、`bootstrap/`、`bus/`、`core/`、`infra/`、`session/`、
-  `memory2/`、`plugins/`、`proactive_v2/` 等 owner 收敛；`kirakira_agent/` 只保留公开入口。
-- 项目不依赖本地 `Reference/`。移走该目录后，全量测试、构建和 CLI 都能完成。
-- Session 使用 SQLite 作为权威存储；正常保存为 append-only。上下文压力只改变当前请求投影，
-  不删除历史。
-- Context compaction 已对齐最新机制：74% soft gate、输出预留 hard gate、完整 interaction unit、近 20k token 原文、滚动结构化摘要、持久 session ledger 和临时 active-turn 压缩。
-- Shell 支持前台/后台、PTY、`write_stdin`、增量输出、取消和进程组清理。
-- 子 Agent 有独立 Session 和执行 owner，并共享全局容量限制。
-- Scheduler 支持 one-shot、duration、interval、5/6 段 cron、IANA timezone、instant/soft tier。
-- Default Memory 与 Akasha v1 都能实际使用；Akasha v1 已通过在线摄入和召回验证。
-- Proactive 已有模块 DAG、snapshot lease、ACK/feedback、delivery dedup 和 tick/step trace。
-- Workspace 使用单实例锁和 Yoyo migration ledger。
-- 已有语义合同、change-impact gate、全量测试和真实 DeepSeek 在线 smoke test。
+- 被动对话、主动决策和 Drift 共用 `DefaultReasoner`；后台入口显式限制工具集合、终结动作和步数。
+- 主动内容不再解析回复中的 JSON：使用 share/skip 工具、冻结候选 ID 校验和冲突批次拒绝。
+- 候选检查、失败重试和决策输入/轨迹持久化；冷却期间到达的事件可在重启后继续判断；tick 串行化。
+- Drift 使用异步共享执行器；草稿产生后工具授权收窄，必须 finish 才能提交草稿。
+- Akasha v1 查询不学习；完整持久消息对在提交后学习。使用稳定消息 ID，图更新与幂等消费收据同事务。
+- 线上学习和离线重建共用 cycle；上一轮激活可重启恢复，学习的 dense/FTS/IDF 只见已学习历史前缀。
+- 新增只读快照重建命令：验证固定向量与配置，发布新 sidecar，不覆盖或自动激活旧库。
+- 删除退休的查询学习/缓存更新旁路，扩展变更影响门禁；修复 CLI 参数验证顺序及测试 workspace 隔离。
 
-## 明确延期
+## 既有能力
 
-1. **Akasha v2**：当前继续使用可工作的 Akasha v1。以后在现有 memory plugin 边界内替换。
-2. **前端与移动后端对齐**：保留现有 TUI、Web 和 dashboard；暂不复刻 Android pairing、
-   mobile realtime 与 WebUI OTA。
-3. **完整 benchmark 与运维体系**：当前不复刻 Reference 的 Docker/Harbor 私有 campaign、
-   systemd 和全部 Linux guardian 合同。
+Session SQLite append-only、上下文投影/compaction ledger、Shell/PTY/stdin、独立子任务、Scheduler、
+插件代际和 snapshot lease、MCP、多渠道投递、ACK/feedback、去重窗口、workspace 锁与 Yoyo ledger 均保留。
+本轮没有重跑收费在线验证；历史在线结果与本次离线结果分开记录在[验证记录](../operations/verification.md)。
 
-## 可以继续加厚，但不阻塞当前使用
+## 尚未完成与下一阶段
 
-- Proactive 的日配额、累计 hazard、兴趣 embedding 和更细的数据源失败策略。
-- 更多 provider profile、reasoning effort 与设置 UI。
-- 插件非 Git 来源、版本缓存和独立 MCP venv。
-- Agent 轨迹的专用前端页面。后端已有 `tool_chain`、`context_trace`、`tick_log` 和
-  `tick_step_log`。
-- 渠道 turn 与 restart commit 的完整联动；控制面重启链已经可用。
+| 工作 | 当前边界 | 进入条件/验收方向 |
+| --- | --- | --- |
+| Akasha2 算法迁移 | 仍为 v1；事务/重放合同不是 v2 parity | 同 embedding/语料/预算的 dense、v1、v2 消融后决定 |
+| 记忆自动 catch-up | handler 失败保留来源和日志，没有持久自动补消费 worker | 故障注入证明遗漏通知可追赶，不能改变既有消费顺序 |
+| 大历史性能 | 学习时重建历史前缀内存 FTS，成本随历史增长 | 测量 p50/p95、历史规模与内存，再做增量索引 |
+| 主动质量池 | 有持久 checked/retry；没有上游 decaying eventmail pool | 来源修订/CAS、到达驱动、日预算、价值/打扰标注实验 |
+| 内部主动提案 | 仍是 Skill + hazard + scratchpad | 明确 proposal 生命周期、选择和投递结算后替换 |
+| 持久程序执行 | scoped 调用没有上游完整消息日志、writer grants、supersession 和续跑 | 模型/工具中断后恢复语义明确，不重复外部副作用 |
+| 跨用户/隔离图 | 传递真实 MemoryScope；不等于 global/isolated/off 图路由 | 明确单用户跨渠道与多租户的不同合同 |
+| 被动交互抢占 | tick 开始有忙闲门禁，模型运行中用户再次说话的精确抢占尚未闭合 | 在最终投递前检查输入版本与目标活动状态 |
+| 真实质量评测 | 离线回归不是 LongMemEval/PersonaMem 或主动体验质量结果 | 固定数据、预算、judge、原始轨迹、失败与重复尝试策略 |
+| 产品/运维扩展 | 未追平上游移动端、完整 provider catalog 与发布设施 | 由实际产品需求驱动，不为目录对齐扩张 |
 
-完整差异见 [Reference 对齐状态](./reference-alignment.md)。
+## 已知迁移边界
+
+旧 v1 图没有消费收据，可继续摄入新 turn；重试旧 turn 或改变算法参数/embedding 空间需要显式重建。
+新建数据库测试中的 online/replay 一致，不能反推未经重建的旧库也具有完整来源证明。
+主动投递仍为[去重窗口语义](../decisions/0004-delivery-dedup.md)，不是 exactly-once。

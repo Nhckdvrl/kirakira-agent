@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 import threading
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,6 +24,23 @@ from plugins.akasha.core import (
 
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS akasha_commits (
+    turn_key TEXT PRIMARY KEY,
+    fingerprint TEXT NOT NULL,
+    session_key TEXT NOT NULL,
+    committed_at TEXT NOT NULL,
+    activation_json TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS akasha_learning_space (
+    singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+    model TEXT NOT NULL,
+    dimension INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS akasha_cycle_config (
+    singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+    config_json TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS akasha_query_log (
     query_id              TEXT PRIMARY KEY,
     session_key           TEXT NOT NULL,
@@ -137,6 +155,9 @@ CREATE TABLE IF NOT EXISTS akasha_source_session_snapshot (
 
 RESET_SQL = """
 DROP TABLE IF EXISTS akasha_query_log;
+DROP TABLE IF EXISTS akasha_commits;
+DROP TABLE IF EXISTS akasha_learning_space;
+DROP TABLE IF EXISTS akasha_cycle_config;
 DROP TABLE IF EXISTS akasha_activation_events;
 DROP TABLE IF EXISTS akasha_edges;
 DROP TABLE IF EXISTS akasha_nodes;
@@ -182,10 +203,32 @@ class AkashaStore:
         self._db.row_factory = sqlite3.Row
         self._lock = threading.RLock()
         self._closed = False
+        self._transaction_depth = 0
 
         # 2. schema 初始化和迁移只属于显式写模式。
         if not read_only:
             self.ensure_schema()
+
+    def _commit(self) -> None:
+        if not self._transaction_depth:
+            self._db.commit()
+
+    @contextmanager
+    def transaction(self):
+        """Graph updates and their consumption receipt commit together."""
+        with self._lock:
+            if self._transaction_depth:
+                raise RuntimeError("nested Akasha learning transaction")
+            self._db.execute("BEGIN IMMEDIATE")
+            self._transaction_depth = 1
+            try:
+                yield
+                self._db.commit()
+            except BaseException:
+                self._db.rollback()
+                raise
+            finally:
+                self._transaction_depth = 0
 
     @property
     def db(self) -> sqlite3.Connection:
@@ -208,7 +251,7 @@ class AkashaStore:
             if "message_count" not in _table_columns(self._db, "akasha_migration_runs"):
                 _ = self._db.execute("DROP TABLE IF EXISTS akasha_migration_runs")
             _ = self._db.executescript(SCHEMA)
-            self._db.commit()
+            self._commit()
 
     # 清空并重建 Akasha 状态表。
     def reset_schema(self) -> None:
@@ -216,7 +259,7 @@ class AkashaStore:
         with self._lock:
             _ = self._db.executescript(RESET_SQL)
             _ = self._db.executescript(SCHEMA)
-            self._db.commit()
+            self._commit()
 
     def list_cached_embedding_rows(
         self,
@@ -267,7 +310,7 @@ class AkashaStore:
                     now,
                 ),
             )
-            self._db.commit()
+            self._commit()
         return run_id
 
     # 完成一次 Akasha 迁移记录。
@@ -304,7 +347,7 @@ class AkashaStore:
                     run_id,
                 ),
             )
-            self._db.commit()
+            self._commit()
 
     # 保存迁移开始时的 session 游标快照。
     def insert_session_snapshots(
@@ -334,7 +377,7 @@ class AkashaStore:
                     for item in snapshots
                 ],
             )
-            self._db.commit()
+            self._commit()
 
     # 插入或更新一条 message 对应的 turn 节点。
     def upsert_message_node(
@@ -396,7 +439,7 @@ class AkashaStore:
                     ),
                 )
                 self._write_salience_state_locked(next_sum, next_count, now)
-                self._db.commit()
+                self._commit()
                 return key
 
             old_embedding = deserialize_f32(row["embedding"])
@@ -423,7 +466,7 @@ class AkashaStore:
                 ),
             )
             self._write_salience_state_locked(next_sum, next_count, now)
-            self._db.commit()
+            self._commit()
         return key
 
     def _load_salience_state_locked(self) -> tuple[np.ndarray | None, int]:
@@ -526,7 +569,7 @@ class AkashaStore:
                     for item in updates
                 ],
             )
-            self._db.commit()
+            self._commit()
 
     # 批量写入或增强共激活边。
     def upsert_edges(self, updates: list[EdgeUpdate]) -> None:
@@ -588,7 +631,7 @@ class AkashaStore:
                     "UPDATE akasha_edges SET weight = ? WHERE src_key = ? AND dst_key = ?",
                     (new_w, src_key, dst_key),
                 )
-            self._db.commit()
+            self._commit()
 
     # 批量记录本轮激活诊断事件。
     def insert_activation_events(self, rows: list[ActivationEventRow]) -> None:
@@ -617,7 +660,7 @@ class AkashaStore:
                     for row in rows
                 ],
             )
-            self._db.commit()
+            self._commit()
 
     # 读取 dashboard 需要的节点列表。
     def list_items_for_dashboard(
@@ -678,7 +721,7 @@ class AkashaStore:
                 "DELETE FROM akasha_edges WHERE src_key = ? OR dst_key = ?",
                 (item_id, item_id),
             )
-            self._db.commit()
+            self._commit()
         return cur.rowcount > 0
 
     # 批量物理删除 Akasha 节点。
@@ -715,7 +758,7 @@ class AkashaStore:
                     "DELETE FROM akasha_activation_events WHERE query_id = ?",
                     (f"{session_key}:{seq}",),
                 )
-            self._db.commit()
+            self._commit()
 
     # 写入一条检索诊断日志。
     def insert_query_log(
@@ -759,7 +802,7 @@ class AkashaStore:
                     text_block_preview,
                 ),
             )
-            self._db.commit()
+            self._commit()
 
     # 读取检索诊断日志列表（仅轻量字段）。
     def list_query_logs(
