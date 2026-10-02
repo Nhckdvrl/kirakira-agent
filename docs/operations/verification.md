@@ -14,6 +14,7 @@
 | 新增执行合同与服务注入回归 | 22 passed；模型为确定性模拟，本地 Session/Execution SQLite 为真实组件 |
 | 核心静态检查 | Ruff I/F 检查通过；不声称全项目类型检查通过 |
 | 迁移不可变检查 | 对 origin/main 通过；本轮未修改既有迁移 |
+| 构建 | sdist、wheel 成功；核对最终制品中的共享执行器、日志、兼容入口和 inspector 与当前源码相同；不含真实 workspace |
 | 实际 CLI | 主入口与 inspector 帮助通过；同步 Agent 位置参数 → 共享执行器 → SQLite → 独立 inspector CLI 闭环通过 |
 | 文档 | 仓库相对链接检查通过；修订稿 15 个固定提交上游链接均对应实际文件 |
 | diff | `git diff --check` 通过 |
