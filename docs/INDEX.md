@@ -53,6 +53,7 @@
 ## 工程记录
 
 - [2026-10-02 对照审计](./engineering/akashic-review-2026-10-02.md)：双主动、Akasha2 取舍、Akashic/Maka/DeepSeek Harness 比较与本轮重构。
+- [持久补消费与主动过期判断](./decisions/0007-durable-consumption-and-proactive-supersession.md)：第二轮对齐、源身份、候选版本与失败恢复。
 - [共享推理与提交后学习](./decisions/0006-shared-reasoning-and-committed-memory.md)：本轮运行合同和恢复边界。
 - [工程方法](./engineering/method.md)：如何判断地基问题、验证调用链和清理过渡态。
 - [decisions/](./decisions/)：仍需保留的架构决策。被取代的 decision 会明确标为 superseded。

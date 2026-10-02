@@ -395,6 +395,7 @@ def _build_proactive(
             target_channel=cfg.channel,
             target_chat_id=cfg.chat_id,
             skill_roots_provider=drift_skill_roots_provider,
+            passive_busy_fn=passive_busy_fn,
         )
         drift_hook = drift_runner.maybe_run
 

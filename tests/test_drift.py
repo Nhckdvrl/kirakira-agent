@@ -107,6 +107,36 @@ class _ScriptedClient:
 
 
 class DriftRunnerTests(unittest.TestCase):
+    def test_user_activity_during_drift_prevents_draft_delivery(self):
+        async def scenario():
+            with tempfile.TemporaryDirectory() as tmp:
+                sessions = SessionManager(Path(tmp))
+                runner = DriftRunner(
+                    config=DriftConfig(enabled=True, min_interval_hours=0),
+                    workspace=Path(tmp), bus=MessageBus(), session_manager=sessions,
+                    model_client=_ScriptedClient(), model="fake",
+                    target_channel="web", target_chat_id="u1",
+                )
+
+                async def changed(_skill, _briefing, ctx, key):
+                    ctx.finished = True
+                    ctx.message_pushed = True
+                    ctx.draft_message = "stale draft"
+                    session = sessions.get_or_create(key)
+                    session.add_message("user", "wait")
+                    sessions.save(session)
+
+                async def forbidden(*_args):
+                    raise AssertionError("superseded draft must stay private")
+
+                runner._run_agent = changed
+                runner._commit = forbidden
+                await runner.maybe_run(NOW, "web:u1")
+                self.assertEqual(runner._state.recent_runs()[0]["status"], "paused")
+                runner.close()
+                sessions.close()
+        asyncio.run(scenario())
+
     def test_unfinished_draft_is_never_delivered(self):
         async def scenario():
             with tempfile.TemporaryDirectory() as tmp:

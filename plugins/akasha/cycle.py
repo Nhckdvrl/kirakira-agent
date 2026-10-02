@@ -70,6 +70,7 @@ def apply_committed_turn(
     items: list[ReplayMessage], model: str,
     message_embeddings: dict[str, np.ndarray], message_turn_keys: dict[str, str],
     reinforce_boost: float = 1.0,
+    source_position: int | None = None,
 ) -> bool:
     validate_turn(items)
     user, assistant = (item.message for item in items)
@@ -94,6 +95,8 @@ def apply_committed_turn(
         if prior is not None:
             if prior[0] != fingerprint:
                 raise ValueError("committed memory input changed; explicit rebuild required")
+            if source_position is not None:
+                _advance_cursor(store, source_position)
             return False
         if store.db.execute("SELECT 1 FROM akasha_nodes WHERE key=?", (key,)).fetchone():
             raise ValueError("legacy turn has no commit receipt; rebuild to replay it")
@@ -134,4 +137,11 @@ def apply_committed_turn(
             key, fingerprint, user.session_key, assistant.ts,
             json.dumps([asdict(item) for item in result.activation_items], sort_keys=True),
         ))
+        if source_position is not None:
+            _advance_cursor(store, source_position)
     return True
+
+
+def _advance_cursor(store: AkashaStore, position: int) -> None:
+    store.db.execute("UPDATE akasha_source_cursor SET position=? WHERE singleton=1 AND position < ?",
+                     (position, position))

@@ -375,6 +375,14 @@ class SessionManager:
             except OSError:
                 pass
 
+    def message_head(self, key: str) -> tuple[int, str] | None:
+        """Read the durable conversation version without loading a projection."""
+        with self._index_lock:
+            row = self._index.execute(
+                "SELECT seq,id FROM messages WHERE session_key=? ORDER BY seq DESC LIMIT 1", (key,)
+            ).fetchone()
+        return (int(row[0]), str(row[1])) if row else None
+
     def get_or_create(self, key: str) -> Session:
         if key in self._cache:
             return self._cache[key]
@@ -753,6 +761,8 @@ class SessionManager:
         return self.session_dir / ("%s.json" % _legacy_safe_key(key))
 
     def _initialize_index(self) -> bool:
+        from session.publications import ensure_publications
+
         with self._index_lock:
             self._index.execute("PRAGMA journal_mode=WAL")
             self._index.execute("PRAGMA synchronous=FULL")
@@ -809,6 +819,7 @@ class SessionManager:
                 "INSERT OR REPLACE INTO session_schema(key, value) VALUES('version', '3')"
             )
             self._initialize_messages_fts()
+            ensure_publications(self._index)
             self._index.commit()
             return True
 

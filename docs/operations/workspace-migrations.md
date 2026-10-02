@@ -23,3 +23,12 @@ uv run pytest -q tests/test_migration_runner.py tests/test_yoyo_migration_append
 ```
 
 这些测试覆盖 migration runner、append-only 目录合同和 workspace 初始化/锁边界。
+
+## 2026-10-02：消息发布位置
+
+新增 `20261002_01_message_publications`，依赖 context compaction migration；历史迁移文件未修改。
+仅增加 source stream 身份、assistant publication 表及 INSERT trigger，不补写既有历史，也不复制正文。
+新 SessionManager 启动同样确保这份 schema，因此直接构造 SessionManager 的测试/CLI 路径行为一致。
+
+Akasha sidecar 首次激活记录 cutover，之后 source cursor 与图同事务推进。恢复备份时需要匹配的 source/graph，
+源流身份改变或源 head 回退会明确失败。具体行为见[ADR0007](../decisions/0007-durable-consumption-and-proactive-supersession.md)。

@@ -105,7 +105,8 @@ class ProactiveJudge:
             return decision
         except Exception as exc:
             logger.exception("[proactive.judge] decision execution failed")
-            return Decision(False, "", [], status="error", reason=type(exc).__name__)
+            return Decision(False, "", [], status="error", reason=type(exc).__name__,
+                            trace={"prompt": prompt, "model": self._model})
         finally:
             await registry.shutdown()
 

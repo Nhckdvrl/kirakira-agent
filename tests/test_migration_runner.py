@@ -12,7 +12,7 @@ from bootstrap.workspace_lock import WorkspaceInstanceLock
 ROOT = Path(__file__).parents[1]
 ORIGIN_ID = "20260804_01_kirakira_origin"
 CONTEXT_COMPACTION_ID = "20260815_01_session_context_compaction"
-PROJECT_MIGRATIONS = (ORIGIN_ID, CONTEXT_COMPACTION_ID)
+PROJECT_MIGRATIONS = (ORIGIN_ID, CONTEXT_COMPACTION_ID, "20261002_01_message_publications")
 
 
 def _runner(root: Path, *, repo_root: Path = ROOT) -> MigrationRunner:

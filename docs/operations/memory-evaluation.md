@@ -50,7 +50,7 @@ replacement oracle、Akasha 新版 parity 和 PersonaMem schema 漂移适配。�
 ## v1 事务学习与显式重建
 
 ```bash
-uv run pytest -q tests/test_memory_commit_cycle.py tests/test_proactive_decisions.py tests/test_drift.py
+uv run pytest -q tests/test_memory_commit_cycle.py tests/test_memory_recovery.py tests/test_proactive_decisions.py tests/test_proactive_admission.py tests/test_drift.py
 uv run python -m scripts.replay_akasha --help
 uv run python -m scripts.replay_akasha \
   --source /absolute/workspace/sessions.db \
@@ -66,7 +66,8 @@ uv run python -m scripts.replay_akasha \
 `--config-dir /absolute/workspace/plugin-data/akasha-builtin`，该目录必须确实包含 `config.local.toml`；
 请按实际 workspace 配置目录填写。比较 online/replay 时必须匹配算法配置、模型身份、来源及强化标记。
 确认候选图后，停止 runtime，再修改 Akasha 的 workspace 内 `db_path` 指向候选库，保留原库以便回退。
-本轮未对真实用户历史执行重建或切换。
+本轮未对真实用户历史执行重建或切换。候选保留快照的源 stream/head；切换后的后台维护继续消费快照之后到达的消息。
+首次启用补消费使用 cutover，不会自动补学升级前历史。
 
 旧 v1 图无消费收据，仅继续摄入新 turn 并不能证明全图 replay parity。
 手动删除 sidecar 节点也会改变状态，完整重建会按原始事实重新产生它；删除原始事实与删除索引是不同操作。

@@ -24,6 +24,18 @@ from plugins.akasha.core import (
 
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS akasha_source_binding (
+    singleton INTEGER PRIMARY KEY CHECK(singleton=1), stream_id TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS akasha_source_cursor (
+    singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+    position INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS akasha_source_skips (
+    position INTEGER PRIMARY KEY,
+    message_id TEXT NOT NULL,
+    reason TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS akasha_commits (
     turn_key TEXT PRIMARY KEY,
     fingerprint TEXT NOT NULL,
@@ -158,6 +170,9 @@ DROP TABLE IF EXISTS akasha_query_log;
 DROP TABLE IF EXISTS akasha_commits;
 DROP TABLE IF EXISTS akasha_learning_space;
 DROP TABLE IF EXISTS akasha_cycle_config;
+DROP TABLE IF EXISTS akasha_source_cursor;
+DROP TABLE IF EXISTS akasha_source_binding;
+DROP TABLE IF EXISTS akasha_source_skips;
 DROP TABLE IF EXISTS akasha_activation_events;
 DROP TABLE IF EXISTS akasha_edges;
 DROP TABLE IF EXISTS akasha_nodes;

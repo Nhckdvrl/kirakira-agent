@@ -2,6 +2,10 @@
 
 审计日期：2026-10-02。本文是设计分析，不是质量 benchmark。测试证据集中在[验证记录](../operations/verification.md)。
 
+后续实现更新：第二轮已继续审计至 `7cf10136932d5fe0205727c803c00861272db0b8`，增加持久补消费、
+主动输入过期检查和本地候选修订结算。下文比较表记录第一轮起点，当前实现以
+[状态页](../status/current.md)和[ADR0007](../decisions/0007-durable-consumption-and-proactive-supersession.md)为准。
+
 ## 结论
 
 Kirakira 的核心问题不是少几个 Tool、MCP 或渠道，而是亮点还没有变成足够坚实、可验证的运行合同：
@@ -150,7 +154,7 @@ share/skip 理由、最终 ACK 和后续反馈；重放同一输入能复查这�
 ## 本轮交付及简历表述
 
 执行与持久化的具体合同见 [ADR0006](../decisions/0006-shared-reasoning-and-committed-memory.md)。
-本轮没有替换实际用户数据库，没有调用收费 provider，也没有发布或 push。
+重构没有替换实际用户数据库；本轮验证使用模拟 provider，没有调用收费模型。
 
 可按实际完成情况把简历的两个亮点改成：
 

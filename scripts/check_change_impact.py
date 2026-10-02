@@ -17,6 +17,8 @@ IMPACT_RULES: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
         "tests/test_query_compaction.py",
         "tests/test_proactive_decisions.py",
         "tests/test_drift.py",
+        "tests/test_memory_recovery.py",
+        "tests/test_proactive_admission.py",
     )),
     (("agent/tools/", "agent/subagent.py"), (
         "tests/test_tools.py",
@@ -27,9 +29,11 @@ IMPACT_RULES: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
         "tests/test_proactive.py",
         "tests/test_proactive_lifecycle.py",
         "tests/test_proactive_decisions.py",
+        "tests/test_proactive_admission.py",
     )),
     (("plugins/akasha/", "session/embedding_store.py", "bus/events_lifecycle.py", "scripts/replay_akasha.py"), (
         "tests/test_memory_commit_cycle.py",
+        "tests/test_memory_recovery.py",
         "tests/test_akasha.py",
         "tests/test_memory_engine_wiring.py",
     )),

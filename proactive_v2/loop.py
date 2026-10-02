@@ -48,6 +48,7 @@ from proactive_v2.contracts import (
 from agent.lifecycle.phase import topo_sort_modules
 from proactive_v2.frame import new_proactive_frame
 from plugins.proactive_flow.judge import Decision, ProactiveJudge, format_context
+from plugins.proactive_flow.admission import AdmissionStamp, DecisionSuperseded
 from plugins.proactive_flow.modules import build_default_proactive_modules
 from plugins.wake_proactive.sources import SourceRegistry
 from plugins.wake_proactive.state import ProactiveStateStore
@@ -318,7 +319,10 @@ class ProactiveLoop:
         proactive_context: str,
         context_text: str,
         recent_proactive: str = "",
+        *, admission: AdmissionStamp | None = None,
     ) -> None:
+        admission = admission or self._capture_admission()
+        self._validate_admission(admission, [alert_event])
         contract = normalize_alert(alert_event)
         decision = await self._judge.decide_alert(
             contract,
@@ -328,17 +332,9 @@ class ProactiveLoop:
             current_context=context_text,
             recent_proactive=recent_proactive,
         )
+        self._validate_admission(admission, [alert_event])
         await self._deliver(decision, now, [contract.item_id])
-        source_id = str(alert_event.get("_source") or "")
-        source_event_id = str(
-            alert_event.get("event_id") or alert_event.get("id") or ""
-        )
-        acknowledgements = (
-            {source_id: [source_event_id]} if source_id and source_event_id else {}
-        )
-        self._state.consume_and_queue_ack(
-            [contract.item_id], acknowledgements, now
-        )
+        self._state.consume_snapshot([alert_event], now, acknowledge=True)
         await self._flush_pending_acknowledgements()
 
     async def _push_content(
@@ -350,9 +346,12 @@ class ProactiveLoop:
         proactive_context: str,
         context_text: str,
         recent_proactive: str = "",
+        *, admission: AdmissionStamp | None = None,
     ) -> bool:
         # 新内容优先，避免总在最旧的候选上打转
         page = rank_content(content_events)[: self._cfg.content_limit]
+        admission = admission or self._capture_admission()
+        self._validate_admission(admission, page)
         contracts = [normalize_content(event) for event in page]
         decision = await self._judge.decide_content(
             contracts,
@@ -362,6 +361,12 @@ class ProactiveLoop:
             current_context=context_text,
             recent_proactive=recent_proactive,
         )
+        try:
+            self._validate_admission(admission, page)
+        except DecisionSuperseded as exc:
+            self._state.record_content_check(self._cfg.session_key, page,
+                {**asdict(decision), "status": "superseded", "reason": str(exc)}, now, retry_seconds=300)
+            raise
         if not decision.send:
             self._state.record_content_check(
                 self._cfg.session_key, page, asdict(decision), now,
@@ -383,11 +388,13 @@ class ProactiveLoop:
         # 只消费/ACK 被真正引用的内容
         cited = set(decision.cited_ids)
         selected = [c for c in contracts if c.item_id in cited]
-        self._state.consume([c.item_id for c in selected], now)
+        settled = set(self._state.consume_snapshot([c.raw for c in selected], now))
         if not delivered:
             return False
         feedback_by_source: Dict[str, List[str]] = {}
         for contract in selected:
+            if contract.item_id not in settled:
+                continue
             source_id = str(contract.raw.get("_source") or "").strip()
             event_id = str(
                 contract.raw.get("event_id") or contract.raw.get("id") or ""
@@ -404,6 +411,19 @@ class ProactiveLoop:
             )
         await self._flush_pending_feedback()
         return True
+
+    def _capture_admission(self) -> AdmissionStamp:
+        return AdmissionStamp(self._sessions.message_head(self._cfg.session_key), self._read_context_file())
+
+    def _validate_admission(self, stamp: AdmissionStamp, candidates: List[dict]) -> None:
+        if self._passive_busy_fn is not None and self._passive_busy_fn(self._cfg.session_key):
+            raise DecisionSuperseded("passive conversation became busy")
+        if self._sessions.message_head(self._cfg.session_key) != stamp.session_head:
+            raise DecisionSuperseded("conversation changed during decision")
+        if self._read_context_file() != stamp.rules:
+            raise DecisionSuperseded("proactive rules changed during decision")
+        if not self._state.snapshot_is_current(candidates):
+            raise DecisionSuperseded("candidate revision changed or was withdrawn")
 
     # ── 交付 ────────────────────────────────────────────────────
 

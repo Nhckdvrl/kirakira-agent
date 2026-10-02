@@ -8,6 +8,7 @@ akasha 记忆引擎 — 生产运行时层
 from __future__ import annotations
 
 import json
+import logging
 import asyncio
 import hashlib
 import sqlite3
@@ -72,6 +73,9 @@ from session.embedding_store import MessageEmbeddingStore
 if TYPE_CHECKING:
     from bus.event_bus import EventBus
     from core.net.http import SharedHttpResources
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -145,6 +149,14 @@ class AkashaMemoryEngine:
         )
         self._event_bus = event_publisher
         self._commit_lock = asyncio.Lock()
+        from plugins.akasha.consumption import initialize_cursor
+        try:
+            initialize_cursor(self._store, self._session_db_path)
+        except BaseException:
+            self._embedder.close()
+            self._embedding_store.close()
+            self._store.close()
+            raise
         self._graph_lock = threading.RLock()
         self._nodes: dict[str, AkashaNode] = {}
         self._edges: dict[tuple[str, str], float] = {}
@@ -631,42 +643,77 @@ class AkashaMemoryEngine:
         )
 
     async def _on_turn_committed(self, event: TurnCommitted) -> None:
-        """Learn only committed facts, once, through the same cycle as replay."""
-        if event.session_key.startswith("scheduler:") or bool((event.extra or {}).get("skip_post_memory")):
-            return
+        # A notification is only a wake-up. The durable source queue owns order
+        # and payload, so a later turn cannot jump over a failed predecessor.
+        await self.catch_up()
+
+    async def run_maintenance(self) -> None:
+        while True:
+            try:
+                await self.catch_up()
+            except Exception:
+                logger.exception("Akasha recovery paused at unconsumed publication; will retry")
+            await asyncio.sleep(30)
+
+    async def catch_up(self, *, max_items: int = 64) -> int:
+        from plugins.akasha.consumption import initialize_cursor, publications, skip_publication
+
+        async with self._commit_lock:
+            initialize_cursor(self._store, self._session_db_path)
+            cursor = self._store.db.execute("SELECT position FROM akasha_source_cursor").fetchone()[0]
+            pending = publications(self._session_db_path, cursor, max_items)
+            for publication in pending:
+                if publication["extra_json"] is None:
+                    skip_publication(self._store, publication, "source_deleted")
+                    continue
+                extra = json.loads(publication["extra_json"] or "{}")
+                if publication["session_key"].startswith("scheduler:"):
+                    skip_publication(self._store, publication, "scheduler")
+                    continue
+                event = TurnCommitted(
+                    session_key=publication["session_key"], channel="memory", chat_id="",
+                    assistant_message_id=publication["message_id"], extra=extra,
+                    tool_chain_raw=tuple(extra.get("tool_chain") or ()),
+                )
+                messages = _load_committed_turn_messages(self._session_db_path, event)
+                if not messages:
+                    skip_publication(self._store, publication, "ineligible_or_incomplete_turn")
+                    continue
+                await self._learn_committed(event, messages, publication["position"])
+            return len(pending)
+
+    async def _learn_committed(self, event, messages, source_position: int) -> None:
         from plugins.akasha.cycle import apply_committed_turn, validate_turn
         from plugins.akasha.replay import ReplayMessage
 
-        async with self._commit_lock:
-            messages = _load_committed_turn_messages(self._session_db_path, event)
-            if not messages:
-                return
-            model = self._config.memory.embedding.model
-            vectors = [self._embedding_store.get(message_id=m.id, content=m.content, model=model)
-                       for m in messages]
-            missing = [i for i, vector in enumerate(vectors) if vector is None]
-            if missing:
-                fresh = await self._embedder.embed_batch([messages[i].content for i in missing])
-                if len(fresh) != len(missing):
-                    raise ValueError("embedding count differs from committed messages")
-                for index, vector in zip(missing, fresh, strict=True):
-                    vectors[index] = vector
-            items = [ReplayMessage(message, vector) for message, vector in zip(messages, vectors, strict=True)]
-            validate_turn(items)
-            for item in items:
-                self._embedding_store.upsert(message_id=item.message.id, content=item.message.content,
-                                             model=model, embedding=item.embedding)
-            try:
-                apply_committed_turn(
-                    store=self._store, config=self._akasha_config,
-                    source_db_path=self._session_db_path, items=items, model=model,
-                    message_embeddings=self._message_embeddings,
-                    message_turn_keys=self._message_turn_keys,
-                    reinforce_boost=_reinforce_boost_for_turn(event.extra, event.tool_chain_raw),
-                )
-            finally:
-                # A failed transaction cannot leave a partially learned in-memory graph.
-                self._load_graph_cache()
+        model = self._config.memory.embedding.model
+        vectors = [self._embedding_store.get(message_id=m.id, content=m.content, model=model)
+                   for m in messages]
+        missing = [i for i, vector in enumerate(vectors) if vector is None]
+        if missing:
+            fresh = await self._embedder.embed_batch([messages[i].content for i in missing])
+            if len(fresh) != len(missing):
+                raise ValueError("embedding count differs from committed messages")
+            for index, vector in zip(missing, fresh, strict=True):
+                vectors[index] = vector
+        items = [ReplayMessage(message, vector) for message, vector in zip(messages, vectors, strict=True)]
+        validate_turn(items)
+        if _load_committed_turn_messages(self._session_db_path, event) != messages:
+            raise ValueError("memory source changed while generating embeddings")
+        for item in items:
+            self._embedding_store.upsert(message_id=item.message.id, content=item.message.content,
+                                         model=model, embedding=item.embedding)
+        try:
+            apply_committed_turn(
+                store=self._store, config=self._akasha_config,
+                source_db_path=self._session_db_path, items=items, model=model,
+                message_embeddings=self._message_embeddings,
+                message_turn_keys=self._message_turn_keys,
+                reinforce_boost=_reinforce_boost_for_turn(event.extra, event.tool_chain_raw),
+                source_position=source_position,
+            )
+        finally:
+            self._load_graph_cache()
 
     # 启动时加载一次内存图。
     def _load_graph_cache(self) -> None:

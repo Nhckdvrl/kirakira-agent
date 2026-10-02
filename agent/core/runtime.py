@@ -1866,6 +1866,10 @@ class CoreRuntime:
             asyncio.create_task(self.loop.run(), name="agent_loop"),
             asyncio.create_task(self.bus.dispatch_outbound(), name="bus_dispatch"),
         ]
+        if self.memory_services is not None:
+            tasks.append(asyncio.create_task(
+                self.memory_services.run_maintenance(), name="memory_maintenance"
+            ))
         if start_channels and self.channel_host is not None:
             await self.channel_host.start_all()
         if self.scheduler is not None:

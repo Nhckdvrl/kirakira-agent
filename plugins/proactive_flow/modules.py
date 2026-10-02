@@ -31,6 +31,7 @@ from proactive_v2.frame import (
     ProactiveFrame,
 )
 from plugins.proactive_flow.judge import format_context
+from plugins.proactive_flow.admission import DecisionSuperseded
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +125,7 @@ class JudgeContextModule(_LoopModule):
     async def execute(self, frame: ProactiveFrame) -> ProactiveFrame:
         loop = self._loop
         frame.slots[SLOT_JUDGE_CONTEXT] = {
+            "admission": loop._capture_admission(),
             "memory_text": loop._read_memory(),
             "recent_conversation": loop._recent_conversation(frame.session_key),
             "recent_proactive": loop._recent_proactive(frame.session_key),
@@ -156,7 +158,11 @@ class AlertModule(_LoopModule):
                 ctx.get("proactive_context", ""),
                 frame.get(SLOT_CONTEXT_TEXT, ""),
                 ctx.get("recent_proactive", ""),
+                admission=ctx.get("admission"),
             )
+        except DecisionSuperseded as exc:
+            loop._state.record_decision(now, "superseded", str(exc))
+            return frame.finish("superseded")
         except OutboundDeliveryError as exc:
             logger.error("[proactive] alert 渠道发送失败，保留未读: %s", exc)
             loop._state.record_decision(now, "delivery_failed", "alert: %s" % str(exc))
@@ -205,7 +211,11 @@ class ContentModule(_LoopModule):
                 ctx.get("proactive_context", ""),
                 frame.get(SLOT_CONTEXT_TEXT, ""),
                 ctx.get("recent_proactive", ""),
+                admission=ctx.get("admission"),
             )
+        except DecisionSuperseded as exc:
+            loop._state.record_decision(now, "superseded", str(exc))
+            return frame.finish("superseded")
         except OutboundDeliveryError as exc:
             logger.error("[proactive] content 渠道发送失败，保留未读: %s", exc)
             loop._state.record_decision(now, "delivery_failed", "content: %s" % str(exc))
@@ -234,6 +244,13 @@ class DriftModule(_LoopModule):
     async def execute(self, frame: ProactiveFrame) -> ProactiveFrame:
         loop = self._loop
         drifted = False
+        ctx = frame.get(SLOT_JUDGE_CONTEXT) or {}
+        if ctx.get("admission") is not None:
+            try:
+                loop._validate_admission(ctx["admission"], [])
+            except DecisionSuperseded as exc:
+                loop._state.record_decision(frame.now, "superseded", str(exc))
+                return frame.finish("superseded")
         if loop._drift_hook is not None:
             drifted = await loop._drift_hook(frame.now, frame.session_key)
         frame.slots[SLOT_PROPOSAL_DRIFT] = "drifted" if drifted else None

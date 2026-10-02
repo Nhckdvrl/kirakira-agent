@@ -74,3 +74,13 @@ Content 只允许 `share_content(message, items)` / `skip_content(reason)`；Ale
 
 Drift 的 `message_push` 只暂存草稿，之后动态收窄到 `finish_drift`；同批后续工具也会被执行器拒绝。
 没有 finish 的运行记录为 paused，不能投递草稿。它仍沿用 Skill/hazard 设计，不等同于最新 Akashic proposal owner。
+
+## 输入变化与候选修订
+
+判断材料装配时捕获 Session message head 与规则；模型调用前后验证忙闲、head、规则和候选 revision。
+过期判断以 superseded 结束 tick，Content 延后重判；Alert 保留未读；不得继续 Drift。
+Drift 自身也在执行前后校验用户活动，防止投递已经不合时宜的草稿。
+
+来源内容变化形成新的本地不可变 revision，重置待判断资格。检查状态、消费和 ACK/feedback 结算只针对
+当初使用的版本；发送期间到达的新版本不会被旧结果误消费。外部 source ACK 尚无远端 revision CAS，
+已开始的渠道发送无法撤回。细节见[ADR0007](../decisions/0007-durable-consumption-and-proactive-supersession.md)。

@@ -43,6 +43,12 @@ class MemoryServices:
     # 四文件 Markdown 长期档案 + consolidation 维护(Reference 里与 engine 并列)。
     markdown: Any = None
 
+    async def run_maintenance(self) -> None:
+        """Optional engine-owned recovery loop; runtime owns its task lifetime."""
+        maintain = getattr(self.engine, "run_maintenance", None)
+        if callable(maintain):
+            await maintain()
+
     async def aclose(self) -> None:
         """关闭引擎持有的资源(store / embedder / 事件订阅)。
 

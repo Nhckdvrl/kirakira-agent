@@ -1,7 +1,7 @@
 # Reference 对齐状态
 
 审计日期：2026-10-02。原对齐点 `ac6f7652` 是 2026-08-15 的历史记录。
-本轮对照 Akashic `0be132326ee6c410d1b2eaa85c09e1b50dcc5a9e`，不能再用“最新已对齐”概括全项目。
+第一轮对照 Akashic `0be132326ee6c410d1b2eaa85c09e1b50dcc5a9e`，第二轮更新至 `7cf10136932d5fe0205727c803c00861272db0b8`，不能再用“最新已对齐”概括全项目。
 
 ## 对齐口径
 
@@ -11,9 +11,9 @@
 | 领域 | Kirakira 当前落点 | 与本次上游 pin 的关系 |
 | --- | --- | --- |
 | 执行内核 | DefaultReasoner + scoped 调用 + ReasoningPolicy | 共用循环与授权原则；不是上游 OrderedReact 消息程序系统 |
-| 主动决策 | share/skip 工具、候选身份检查、持久检查/重试与审计 | 对齐决策边界；没有完整 Eventmail 和质量衰减池 |
+| 主动决策 | share/skip 工具、候选身份检查、持久检查/重试、版本结算与过期判断 | 对齐决策边界；没有完整 Eventmail 和质量衰减池 |
 | Drift | 共享异步执行、收窄工具、finish 后提交 | 保留旧 Skill 产品语义；尚非最新持久 proposal 服务 |
-| Akasha | v1 数学 + 原子提交收据 + 同 cycle 重建 | 对齐部分可恢复性原则；不是 v2 算法或 scope 路由 |
+| Akasha | v1 数学 + 原子提交收据/消费位置 + 同 cycle 重建 + cutover 后补消费 | 对齐部分可恢复性原则；不是 v2 算法或 scope 路由 |
 | Session/Context | 原始消息、compaction ledger、预算投影 | 既有合同保留；不宣称完整上游消息绑定/归档模型 |
 | Plugin/MCP | 代际、快照、准入、热更新、owner cleanup | 既有实现；未移植当前 plugin_composition 内核 |
 | Workspace/工具/调度 | 锁、Yoyo、Shell/PTY、子任务、cron | 本轮保留的基础能力，不能凭功能同名推断完全 parity |

@@ -56,7 +56,7 @@ engine protocol 接入，operator 可以切换，但数据不会假装自动互�
 历史学习的 dense、FTS 和 IDF 只见已学习前缀。离线重建使用同一周期和固定向量，不能用未来消息改变
 过去一次学习，也不隐式调用 provider 补向量。命令与迁移步骤见[记忆评测](../operations/memory-evaluation.md)。
 
-当前仍是 v1 算法，未实现上游完整 v2 消费者、scope 图路由和自动追赶任务；明确边界在
+当前仍是 v1 算法，未实现上游完整 v2 消费者与 scope 图路由；明确边界在
 [当前状态](../status/current.md)，取舍见[ADR0006](../decisions/0006-shared-reasoning-and-committed-memory.md)。
 
 ## Consolidation
@@ -85,3 +85,13 @@ engine protocol 接入，operator 可以切换，但数据不会假装自动互�
 3. 后台提取失败不能改写已提交聊天的结果。
 4. 检索结果必须保留 source reference，便于回源和审计。
 5. Reference 目录存在与否不影响任何记忆路径。
+
+## 消费恢复
+
+SessionDB 的 `message_publications` 由 assistant INSERT 的同事务 trigger 写入。首次启用记录 cutover，
+之后通知只是唤醒信号，来源序列才是学习顺序的依据；图、收据和 cursor 原子推进。失败阻塞后继，
+不合格/被删除来源写 skip 记录。stream ID 和 head 校验阻止错误连接另一个原库或已回退的备份。
+
+后台 Runtime 的维护任务启动即扫描并每 30 秒重试，每次最多 64 条，关闭时先取消任务再关 store。
+重建库保留源快照 head，以便切换后消费新到达。升级前无 publication 的历史不自动补学。
+完整故障语义见[ADR0007](../decisions/0007-durable-consumption-and-proactive-supersession.md)。

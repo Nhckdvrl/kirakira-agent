@@ -36,6 +36,8 @@ local workspace by default.
 The October refactor focuses on auditable proactive decisions and commit-only
 memory learning: all three paths share one reasoner, decision tools have explicit
 grants, and Akasha v1 uses the same transactional cycle online and during rebuild.
+Durable publication cursors recover missed learning notifications; proactive
+decisions are invalidated when conversation, rules, or candidate revisions change.
 See the [source-pinned architecture review](./docs/engineering/akashic-review-2026-10-02.md)
 for upstream attribution, tradeoffs, and remaining gaps.
 

@@ -110,7 +110,7 @@ def test_cooldown_arrival_survives_restart_without_another_new_event(tmp_path):
         store.mark_push("web:one", NOW)
         called = []
 
-        async def push(contents, *_args):
+        async def push(contents, *_args, **_kwargs):
             called.extend(contents)
             return True
 

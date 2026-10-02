@@ -58,6 +58,7 @@ class DriftRunner:
         target_chat_id: str = "",
         max_tokens: int = 4000,
         skill_roots_provider: Callable[[], Sequence[Path]] | None = None,
+        passive_busy_fn: Callable[[str], bool] | None = None,
     ) -> None:
         self._cfg = config
         self._workspace = Path(workspace)
@@ -70,6 +71,7 @@ class DriftRunner:
         self._chat_id = target_chat_id
         self._max_tokens = max_tokens
         self._skill_roots_provider = skill_roots_provider or (lambda: ())
+        self._passive_busy_fn = passive_busy_fn
         self._state = DriftStateStore(self._workspace / "drift" / "drift.db")
         self._rng = random.Random()
 
@@ -80,6 +82,9 @@ class DriftRunner:
         """满足条件则跑一轮 Drift，返回是否真的跑了。"""
         if not self._cfg.enabled:
             return False
+        if self._passive_busy_fn is not None and self._passive_busy_fn(session_key):
+            return False
+        session_head = self._sessions.message_head(session_key)
         ensure_example_skill(self._workspace)
         skills = discover_skills(
             self._workspace,
@@ -111,12 +116,14 @@ class DriftRunner:
             )
             return True
 
-        message_result = await self._commit(ctx, session_key) if ctx.finished else "silent"
+        superseded = (self._sessions.message_head(session_key) != session_head or
+                      (self._passive_busy_fn is not None and self._passive_busy_fn(session_key)))
+        message_result = await self._commit(ctx, session_key) if ctx.finished and not superseded else "silent"
         self._state.record_run(
             skill=skill.name,
             now=now,
-            status=ctx.status if ctx.finished else "paused",
-            briefing=ctx.briefing or "(未填写)",
+            status=ctx.status if ctx.finished and not superseded else "paused",
+            briefing="conversation superseded this run" if superseded else ctx.briefing or "(未填写)",
             message_result=message_result,
         )
         # run 期间只收集意图,这里统一落库:中途异常不会留下半条 journal。

@@ -2,7 +2,19 @@
 
 更新日期：2026-10-02。本轮改动基于本地 `b6c4143`，上游 pin 与分析见[重构审计](../engineering/akashic-review-2026-10-02.md)。
 
-## 本轮完成
+## 第二轮对齐
+
+上游审计点更新为 `7cf10136932d5fe0205727c803c00861272db0b8`；契约见
+[ADR0007](../decisions/0007-durable-consumption-and-proactive-supersession.md)。
+
+- Session 消息与 publication 位置原子提交，Akasha 从持久位置按序补消费；失败不越过、重启不重学。
+- Runtime 管理每 30 秒运行的记忆维护任务；首次激活固定 cutover，源身份/回退不一致明确失败。
+- 重建候选保留快照 head，切换后继续处理快照之后的消息。
+- Content/Alert 的判断检查会话 head、忙闲、规则和候选版本；旧决策终止 tick，不继续 Drift。
+- 本地事件保留不可变修订；旧判断和发送结果不能消费、检查或反馈新版本。
+- Drift 用户活动变化后不投递旧草稿；仍保留既有 Skill/hazard 产品语义。
+
+## 第一轮完成
 
 - 被动对话、主动决策和 Drift 共用 `DefaultReasoner`；后台入口显式限制工具集合、终结动作和步数。
 - 主动内容不再解析回复中的 JSON：使用 share/skip 工具、冻结候选 ID 校验和冲突批次拒绝。
@@ -24,13 +36,13 @@ Session SQLite append-only、上下文投影/compaction ledger、Shell/PTY/stdin
 | 工作 | 当前边界 | 进入条件/验收方向 |
 | --- | --- | --- |
 | Akasha2 算法迁移 | 仍为 v1；事务/重放合同不是 v2 parity | 同 embedding/语料/预算的 dense、v1、v2 消融后决定 |
-| 记忆自动 catch-up | handler 失败保留来源和日志，没有持久自动补消费 worker | 故障注入证明遗漏通知可追赶，不能改变既有消费顺序 |
+| 记忆恢复扩展 | 新 cutover 后支持持久补消费；升级前缺口不自动补学 | 显式重建处理旧历史；进一步测量大积压吞吐 |
 | 大历史性能 | 学习时重建历史前缀内存 FTS，成本随历史增长 | 测量 p50/p95、历史规模与内存，再做增量索引 |
-| 主动质量池 | 有持久 checked/retry；没有上游 decaying eventmail pool | 来源修订/CAS、到达驱动、日预算、价值/打扰标注实验 |
+| 主动质量池 | 有持久 checked/retry；有本地版本/CAS，仍没有上游 decaying eventmail pool | 来源修订/CAS、到达驱动、日预算、价值/打扰标注实验 |
 | 内部主动提案 | 仍是 Skill + hazard + scratchpad | 明确 proposal 生命周期、选择和投递结算后替换 |
 | 持久程序执行 | scoped 调用没有上游完整消息日志、writer grants、supersession 和续跑 | 模型/工具中断后恢复语义明确，不重复外部副作用 |
 | 跨用户/隔离图 | 传递真实 MemoryScope；不等于 global/isolated/off 图路由 | 明确单用户跨渠道与多租户的不同合同 |
-| 被动交互抢占 | tick 开始有忙闲门禁，模型运行中用户再次说话的精确抢占尚未闭合 | 在最终投递前检查输入版本与目标活动状态 |
+| 完整抢占/外部副作用 | 模型返回后和 Drift 提交前已检查活动与来源；已交给渠道的发送无法撤回 | 未来持久程序和外部工具的取消/恢复合同 |
 | 真实质量评测 | 离线回归不是 LongMemEval/PersonaMem 或主动体验质量结果 | 固定数据、预算、judge、原始轨迹、失败与重复尝试策略 |
 | 产品/运维扩展 | 未追平上游移动端、完整 provider catalog 与发布设施 | 由实际产品需求驱动，不为目录对齐扩张 |
 

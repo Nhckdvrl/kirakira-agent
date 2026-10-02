@@ -85,6 +85,10 @@ def rebuild(source: Path, output: Path, model: str, *, config: AkashaConfig | No
                     apply_committed_turn(store=store, config=config, source_db_path=snapshot,
                         items=items, model=model, message_embeddings=vectors,
                         message_turn_keys=keys, reinforce_boost=boost)
+                # Preserve the snapshot's cutover so messages arriving between
+                # backup and activation are still consumed after activation.
+                from plugins.akasha.consumption import initialize_cursor
+                initialize_cursor(store, snapshot)
                 receipt_rows = [tuple(row) for row in store.db.execute(
                     "SELECT turn_key,fingerprint FROM akasha_commits ORDER BY turn_key")]
             finally:

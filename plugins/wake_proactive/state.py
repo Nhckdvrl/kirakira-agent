@@ -80,6 +80,13 @@ CREATE TABLE IF NOT EXISTS tick_step_log (
     PRIMARY KEY(tick_id, step_index)
 );
 CREATE INDEX IF NOT EXISTS idx_tick_log_started ON tick_log(started_at DESC);
+CREATE TABLE IF NOT EXISTS event_revisions (
+    item_id TEXT NOT NULL,
+    revision INTEGER NOT NULL,
+    payload TEXT NOT NULL,
+    seen_at TEXT NOT NULL,
+    PRIMARY KEY(item_id, revision)
+);
 CREATE TABLE IF NOT EXISTS content_checks (
     item_id TEXT PRIMARY KEY,
     checked_at TEXT NOT NULL,
@@ -103,6 +110,10 @@ class ProactiveStateStore:
         self._db = sqlite3.connect(str(path))
         self._db.row_factory = sqlite3.Row
         self._db.executescript(_SCHEMA)
+        columns = {row[1] for row in self._db.execute("PRAGMA table_info(events)")}
+        if "revision" not in columns:
+            self._db.execute("ALTER TABLE events ADD COLUMN revision INTEGER NOT NULL DEFAULT 1")
+        self._db.execute("INSERT OR IGNORE INTO event_revisions SELECT item_id,revision,payload,first_seen_at FROM events")
         self._db.commit()
 
     def close(self) -> None:
@@ -114,42 +125,66 @@ class ProactiveStateStore:
         events: Sequence[Dict[str, Any]],
         now: datetime,
     ) -> List[str]:
-        """入库一批事件，返回本轮**新出现**的 item_id（已存在的忽略）。"""
-        new_ids: List[str] = []
-        for event in events:
-            item_id = str(event.get("item_id") or "").strip()
-            if not item_id:
-                continue
-            source_id = str(event.get("_source") or "").strip()
-            source_event_id = str(
-                event.get("event_id") or event.get("id") or ""
-            ).strip()
-            cursor = self._db.execute(
-                """
-                INSERT OR IGNORE INTO events
-                    (item_id, channel, source_id, source_event_id,
-                     payload, first_seen_at, status)
-                VALUES (?, ?, ?, ?, ?, ?, 'unread')
-                """,
-                (
-                    item_id,
-                    channel,
-                    source_id,
-                    source_event_id,
-                    json.dumps(event, ensure_ascii=False),
-                    now.isoformat(),
-                ),
-            )
-            if cursor.rowcount:
-                new_ids.append(item_id)
-        self._db.commit()
-        return new_ids
+        """Persist a new revision only when source payload changes; return arrivals."""
+        arrivals = []
+        with self._db:
+            for event in events:
+                item_id = str(event.get("item_id") or "").strip()
+                if not item_id:
+                    continue
+                source_id = str(event.get("_source") or "").strip()
+                source_event_id = str(event.get("event_id") or event.get("id") or "").strip()
+                old = self._db.execute("SELECT * FROM events WHERE item_id=?", (item_id,)).fetchone()
+                payload = _canonical_payload(event)
+                if old and (old["channel"], old["source_id"], old["source_event_id"]) != (channel, source_id, source_event_id):
+                    raise ValueError("event identity cannot change owner or channel: " + item_id)
+                if old and _canonical_payload(json.loads(old["payload"])) == payload:
+                    continue
+                revision = old["revision"] + 1 if old else 1
+                self._db.execute(
+                    "INSERT INTO events(item_id,channel,source_id,source_event_id,payload,first_seen_at,status,revision) "
+                    "VALUES (?, ?, ?, ?, ?, ?, 'unread', ?) ON CONFLICT(item_id) DO UPDATE SET "
+                    "payload=excluded.payload,first_seen_at=excluded.first_seen_at,status='unread',revision=excluded.revision",
+                    (item_id, channel, source_id, source_event_id, payload, now.isoformat(), revision),
+                )
+                self._db.execute("INSERT INTO event_revisions VALUES (?, ?, ?, ?)",
+                                 (item_id, revision, payload, now.isoformat()))
+                self._db.execute("DELETE FROM content_checks WHERE item_id=?", (item_id,))
+                arrivals.append(item_id)
+        return arrivals
+
+    def snapshot_is_current(self, candidates: Sequence[Dict[str, Any]]) -> bool:
+        return all(self._current_candidate(item) for item in candidates)
+
+    def _current_candidate(self, item: Dict[str, Any]) -> bool:
+        row = self._db.execute("SELECT revision,payload,status FROM events WHERE item_id=?", (item["item_id"],)).fetchone()
+        if not row or row["status"] != "unread":
+            return False
+        if "_revision" in item:
+            return row["revision"] == item["_revision"]
+        return _canonical_payload(json.loads(row["payload"])) == _canonical_payload(item)
+
+    def consume_snapshot(self, candidates: Sequence[Dict[str, Any]], now: datetime, *, acknowledge: bool = False) -> list[str]:
+        """CAS settlement: a completed old delivery cannot consume a newer revision."""
+        settled = []
+        with self._db:
+            for item in candidates:
+                if not self._current_candidate(item):
+                    continue
+                self._db.execute("UPDATE events SET status='consumed' WHERE item_id=?", (item["item_id"],))
+                settled.append(item["item_id"])
+                source = str(item.get("_source") or "")
+                event_id = str(item.get("event_id") or item.get("id") or "")
+                if acknowledge and source and event_id:
+                    self._db.execute("INSERT OR IGNORE INTO pending_acknowledgements VALUES (?, ?, ?)",
+                                     (source, event_id, now.isoformat()))
+        return settled
 
     def unread(self, channel: str) -> List[Dict[str, Any]]:
         """返回未读事件（含 first_seen_at 注解）。"""
         rows = self._db.execute(
             """
-            SELECT item_id, source_id, source_event_id, payload, first_seen_at
+            SELECT item_id, source_id, source_event_id, payload, first_seen_at, revision
             FROM events
             WHERE channel = ? AND status = 'unread'
             ORDER BY first_seen_at ASC
@@ -162,6 +197,7 @@ class ProactiveStateStore:
             event["item_id"] = row["item_id"]
             event["_source"] = row["source_id"]
             event["first_seen_at"] = row["first_seen_at"]
+            event["_revision"] = row["revision"]
             out.append(event)
         return out
 
@@ -207,7 +243,8 @@ class ProactiveStateStore:
                 "INSERT INTO content_checks VALUES (?, ?, ?, ?) "
                 "ON CONFLICT(item_id) DO UPDATE SET checked_at=excluded.checked_at, "
                 "retry_at=excluded.retry_at, status=excluded.status",
-                [(item["item_id"], now.isoformat(), retry_at, decision["status"]) for item in candidates],
+                [(item["item_id"], now.isoformat(), retry_at, decision["status"]) for item in candidates
+                 if self._current_candidate(item)],
             )
 
     def recent_decision_runs(self, limit: int = 10) -> List[Dict[str, Any]]:
@@ -573,3 +610,9 @@ class ProactiveStateStore:
             return False
         elapsed_hours = (now - last).total_seconds() / 3600.0
         return elapsed_hours < cooldown_hours
+
+
+def _canonical_payload(event: Dict[str, Any]) -> str:
+    payload = {key: value for key, value in event.items() if key not in {"_revision", "first_seen_at"}}
+    payload["_source"] = str(payload.get("_source") or "").strip()
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, allow_nan=False)
