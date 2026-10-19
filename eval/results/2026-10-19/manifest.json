@@ -71,14 +71,22 @@
     "analysis.json": "cf0f67cd8b0946c43858ba681433423782fd3b6efff90afc463b0ccf6a973117",
     "case-matrix.csv": "2198d28ca1b4b389f94d178a5028531a4d144dd965fda63d58c8fc8b63a23ee9",
     "README.md": "e092bd82a100726b58272744df7bdc36e2ba5a88486108e5a3b13f9fda361083",
-    "tests.txt": "536b1b0746786123bb7bf4c318ec0bb0fe0fc63ee9e2cc39f7ef045878004e41"
+    "tests.txt": "536b1b0746786123bb7bf4c318ec0bb0fe0fc63ee9e2cc39f7ef045878004e41",
+    "tests-py311.txt": "813d3298675aefb6358223fbae089d856ced2860ec7dfb28b9f9c6db0b950f15"
   },
   "verification": {
     "tests": 661,
     "subtests": 4,
     "seconds": 49.82,
     "legacy_warnings": 22,
-    "native_functional_cases": 17
+    "native_functional_cases": 17,
+    "python311": {
+      "version": "3.11.15",
+      "tests": 661,
+      "subtests": 4,
+      "seconds": 49.59,
+      "warnings": 25
+    }
   },
   "gold_pair_metric_cases": 32,
   "projection_gap_cases": [

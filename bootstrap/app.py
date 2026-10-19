@@ -15,6 +15,7 @@ from agent.core.execution import ExecutionStore
 from agent.composition import ServiceRegistry
 from plugins.default_memory.contract import MEMORY_SERVICES, MEMORY_READER, MemoryReader
 from agent.model_runtime.retry import ModelRetryPolicy
+from agent.model_runtime.types import ModelClient
 from agent.config import config_value, load_dotenv, load_toml_config, require_env
 from bus.queue import MessageBus
 from infra.channels.contract import ChannelContext
@@ -360,7 +361,7 @@ def _build_proactive(
     bus: MessageBus,
     session_manager: SessionManager,
     memory: MemoryRuntime,
-    client: OpenAICompatibleClient,
+    client: ModelClient,
     passive_busy_fn: Any | None = None,
     memory_services: Any = None,
     plugin_sources: Any = None,
