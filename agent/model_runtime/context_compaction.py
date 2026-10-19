@@ -339,6 +339,20 @@ class ContextCompactor:
             pending=tuple(_copy_message(message) for message in messages[base:]),
         )
 
+    def refresh_system(self, message: dict[str, Any]) -> None:
+        """Refresh live request material without changing historical evidence."""
+        if (
+            message.get("role") != "system"
+            or not self._segments.prefix
+            or self._segments.prefix[0].get("role") != "system"
+        ):
+            raise ValueError("live system refresh requires the existing system prefix")
+        self._segments = replace(
+            self._segments,
+            prefix=(_copy_message(message), *self._segments.prefix[1:]),
+        )
+        self._meter.invalidate()
+
     def acknowledge_committed_checkpoint(self, generation: int) -> None:
         """Advance the in-turn Store head after a committed checkpoint."""
 

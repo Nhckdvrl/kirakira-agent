@@ -15,6 +15,7 @@
 | --- | --- |
 | [当前状态](./status/current.md) | 已完成能力、明确延期、非阻塞增强项 |
 | [Reference 对齐状态](./status/reference-alignment.md) | 对齐口径、已闭合 gap、仍保留的差异 |
+| [完整功能清单](./status/akashic-features.md) | 固定上游 70 个生产插件、SDK/客户端/部署和逐项功能验收 |
 
 ## 使用手册
 
@@ -23,6 +24,7 @@
 | [Session、CLI 与 TUI](./handbook/sessions-and-cli.md) | 启动本地客户端、切换 Session、理解流式终态 |
 | [上下文治理](./handbook/context.md) | 排查上下文过长、历史投影、压缩和 token usage |
 | [工具、Shell、子 Agent 与 Scheduler](./handbook/tools-and-scheduler.md) | 使用执行工具、后台任务、子 Agent 和定时任务 |
+| [项目与会话工作目录](./handbook/projects-and-directories.md) | Web/API 创建项目、设置默认目录、独立切换、实时仓库规则 |
 | [使用记忆系统](./handbook/memory.md) | 配置 Default/Akasha、embedding、管理与排错 |
 | [开发和管理插件](./handbook/plugins.md) | 编写插件、安装、启停和查看错误 |
 | [配置 Workspace MCP](./handbook/workspace-mcp.md) | 声明、热更新和排查 MCP server |
@@ -46,6 +48,7 @@
 | 文档 | 内容 |
 | --- | --- |
 | [验证记录](./operations/verification.md) | 当前离线、在线和 Reference 独立性结果 |
+| [项目与目录功能](./operations/evaluations/2026-10-19-workspace-functions.md) | 同库创建、文件/Shell/子任务、规则替换、Web/RPC 与 Step5 重启功能 |
 | [主链功能与性能](./operations/evaluations/2026-10-19-core.md) | 工具并发、物理取消、Step5 矩阵、千轮压力与复现命令 |
 | [记忆评测](./operations/memory-evaluation.md) | 离线合同、Step5 实测和固定质量协议 |
 | [记忆机制与系统对照](./operations/evaluations/2026-10-19-memory-followup.md) | 72 个公开问题、双通道读出、真实 Mem0 对照及上游机制复测 |
@@ -58,6 +61,7 @@
 
 ## 工程记录
 
+- [项目默认值与会话目录](./decisions/0015-projects-and-session-directories.md)：同库创建事务、独立 cwd、稳定回执与实时仓库材料。
 - [主链工具并发与物理排空](./decisions/0014-main-chain-batches-and-physical-drain.md)：读取并发、写入屏障、全部入口关闭与中断控制投影。
 - [Akasha2 双通道读出](./decisions/0012-akasha2-dual-lane-readout.md)：精确召回、联想召回与统一上下文预算。
 - [原文证据与恢复输入](./decisions/0013-original-message-evidence.md)：完整引用展开、单视图校验与固定向量缓存。
@@ -77,7 +81,7 @@
 ## 维护规则
 
 - 当前事实只写一处，其他文档链接过去。
-- 未完成事项只写在 `status/current.md`。
+- 推进顺序和范围写在 `status/current.md`，逐项功能状态与验收写在 `status/akashic-features.json`；对应 Markdown 由脚本生成。
 - 实际执行证据只写在 `operations/verification.md`。
 - 文件或目录改名时必须运行链接检查。
 - `Reference/` 是开发审计输入，不是文档或运行时依赖。

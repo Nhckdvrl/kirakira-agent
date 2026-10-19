@@ -241,7 +241,11 @@ class PassiveTurnPipeline:
     async def _run_turn(
         self, msg: InboundMessage, key: str, *, dispatch_outbound: bool = True
     ) -> OutboundMessage:
-        session = self.session_manager.get_or_create(key)
+        metadata = (
+            {"project_id": msg.metadata["project_id"]}
+            if "project_id" in msg.metadata else None
+        )
+        session = self.session_manager.get_or_create(key, metadata=metadata)
         state = TurnState(
             msg=msg,
             session_key=key,

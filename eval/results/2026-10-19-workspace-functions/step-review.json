@@ -1,0 +1,783 @@
+{
+  "endpoint": "https://api.stepfun.com/step_plan/v1",
+  "model": "step-5-preview",
+  "reasoning_effort": "medium",
+  "purpose": "functional parity only",
+  "billing_surface": "step_plan",
+  "cases": [
+    {
+      "kind": "project",
+      "repeat": 0,
+      "reply": "Done.\n\n- **Write**: `write_file` wrote 25 bytes to `created.txt` (in the current working directory — unchanged).\n- **Verify**: `read_file` returned the exact contents: `KIRA_LITERAL_04f0dece87cf`\n\nThe file content matches the literal string you specified, with no extra characters or trailing content.",
+      "status": "passed",
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 3.717472678050399,
+          "usage": {
+            "prompt_tokens": 1618,
+            "completion_tokens": 181,
+            "total_tokens": 1799,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "write_file"
+          ],
+          "seconds": 6.001009656116366
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 3.6173884477466345,
+          "usage": {
+            "cached_tokens": 1280,
+            "prompt_tokens": 1821,
+            "completion_tokens": 32,
+            "total_tokens": 1853,
+            "prompt_tokens_details": {
+              "cached_tokens": 1280
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_file"
+          ],
+          "seconds": 3.999532390385866
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.0823489744216204,
+          "usage": {
+            "cached_tokens": 1536,
+            "prompt_tokens": 1880,
+            "completion_tokens": 76,
+            "total_tokens": 1956,
+            "prompt_tokens_details": {
+              "cached_tokens": 1536
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.041811862960458
+        }
+      ]
+    },
+    {
+      "kind": "directory",
+      "repeat": 0,
+      "reply": "Done.\n\n- **Working directory** (after `set_working_directory`): `/tmp/kirakira-workspace-step-final-20261019/directory-0/repo-b`\n- **`pwd` output** (login=false): `/tmp/kirakira-workspace-step-final-20261019/directory-0/repo-b`\n- **Exact contents of `value.txt`**: `KIRA_LITERAL_8e3869b913f1` (single line, no surrounding whitespace observed)",
+      "status": "passed",
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 4.534017410129309,
+          "usage": {
+            "prompt_tokens": 1643,
+            "completion_tokens": 61,
+            "total_tokens": 1704,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "set_working_directory"
+          ],
+          "seconds": 5.206980710849166
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 6.99193243868649,
+          "usage": {
+            "prompt_tokens": 1859,
+            "completion_tokens": 66,
+            "total_tokens": 1925,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_file",
+            "bash"
+          ],
+          "seconds": 7.696878945454955
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.3854909762740135,
+          "usage": {
+            "cached_tokens": 1792,
+            "prompt_tokens": 2055,
+            "completion_tokens": 111,
+            "total_tokens": 2166,
+            "prompt_tokens_details": {
+              "cached_tokens": 1792
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.530633984133601
+        }
+      ]
+    },
+    {
+      "kind": "directory",
+      "repeat": 1,
+      "reply": "Done.\n\n- **Working directory** (verified via `pwd`, login=false): `/tmp/kirakira-workspace-step-final-20261019/directory-1/repo-b`\n- **Exact contents of `value.txt`**: `KIRA_LITERAL_ed23ec86c32f`\n\nThe directory switch from repo-a to repo-b succeeded first, then I read the file and confirmed the current path.",
+      "status": "passed",
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.0421399232000113,
+          "usage": {
+            "prompt_tokens": 1643,
+            "completion_tokens": 76,
+            "total_tokens": 1719,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "set_working_directory"
+          ],
+          "seconds": 2.83752578496933
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.0013025179505348,
+          "usage": {
+            "prompt_tokens": 1874,
+            "completion_tokens": 85,
+            "total_tokens": 1959,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_file",
+            "bash"
+          ],
+          "seconds": 1.9097725581377745
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.2657538317143917,
+          "usage": {
+            "cached_tokens": 1792,
+            "prompt_tokens": 2089,
+            "completion_tokens": 149,
+            "total_tokens": 2238,
+            "prompt_tokens_details": {
+              "cached_tokens": 1792
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 3.2975843120366335
+        }
+      ]
+    },
+    {
+      "kind": "restart",
+      "repeat": 0,
+      "reply": "Done.\n\n- **Working directory (from `pwd`):** `/tmp/kirakira-workspace-step-final-20261019/restart-0/repo-b`\n- **Contents of `value.txt` (exact):** `KIRA_LITERAL_4cf58d75e939`\n\nBoth the `set_working_directory` call (revision 2, switched from `repo-a`) and the `pwd` execution confirm the current directory is `repo-b`.",
+      "restart_reply": "Re-read of `value.txt` (relative path, current directory: `/tmp/kirakira-workspace-step-final-20261019/restart-0/repo-b`):\n\n**Exact contents:** `KIRA_LITERAL_4cf58d75e939`",
+      "status": "passed",
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.8310845270752907,
+          "usage": {
+            "prompt_tokens": 1648,
+            "completion_tokens": 62,
+            "total_tokens": 1710,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "set_working_directory"
+          ],
+          "seconds": 3.5237611662596464
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.168762508779764,
+          "usage": {
+            "prompt_tokens": 1869,
+            "completion_tokens": 67,
+            "total_tokens": 1936,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_file",
+            "bash"
+          ],
+          "seconds": 2.8669855762273073
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.543853770941496,
+          "usage": {
+            "cached_tokens": 1536,
+            "prompt_tokens": 2067,
+            "completion_tokens": 104,
+            "total_tokens": 2171,
+            "prompt_tokens_details": {
+              "cached_tokens": 1536
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.8488121144473553
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.9090474508702755,
+          "usage": {
+            "cached_tokens": 1024,
+            "prompt_tokens": 2204,
+            "completion_tokens": 79,
+            "total_tokens": 2283,
+            "prompt_tokens_details": {
+              "cached_tokens": 1024
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_file"
+          ],
+          "seconds": 3.943269770592451
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.1995624788105488,
+          "usage": {
+            "cached_tokens": 1792,
+            "prompt_tokens": 2310,
+            "completion_tokens": 83,
+            "total_tokens": 2393,
+            "prompt_tokens_details": {
+              "cached_tokens": 1792
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.1838355753570795
+        }
+      ]
+    },
+    {
+      "kind": "project",
+      "repeat": 1,
+      "reply": "完成。\n\n- **写入**：使用 write_file 将字符串 `KIRA_LITERAL_9b4327dcaf9f` 写入 `/tmp/kirakira-workspace-step-final-20261019/project-1/repo-a/created.txt`（25 字节）。\n- **验证**：read_file 读回内容，与目标字符串完全一致：`KIRA_LITERAL_9b4327dcaf9f`\n- 工作目录未做任何更改。",
+      "status": "passed",
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.3667368087917566,
+          "usage": {
+            "prompt_tokens": 1619,
+            "completion_tokens": 131,
+            "total_tokens": 1750,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "write_file"
+          ],
+          "seconds": 3.0896099247038364
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "usage": {
+            "cached_tokens": 1280,
+            "prompt_tokens": 1794,
+            "completion_tokens": 47,
+            "total_tokens": 1841,
+            "prompt_tokens_details": {
+              "cached_tokens": 1280
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_file"
+          ],
+          "seconds": 1.4714473634958267
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.9724900890141726,
+          "usage": {
+            "cached_tokens": 1536,
+            "prompt_tokens": 1869,
+            "completion_tokens": 120,
+            "total_tokens": 1989,
+            "prompt_tokens_details": {
+              "cached_tokens": 1536
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 3.4326021522283554
+        }
+      ]
+    },
+    {
+      "kind": "directory",
+      "repeat": 2,
+      "reply": "Working directory switched successfully.\n\n- **Working directory (from `pwd`):** `/tmp/kirakira-workspace-step-final-20261019/directory-2/repo-b`\n- **Contents of `value.txt`:** `KIRA_LITERAL_7efc48d6cc71`\n\nThe file was read from the relative path `value.txt` within the new working directory, and `pwd` (run with `login=false`) confirms the same directory as the requested path.",
+      "status": "passed",
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.4387468360364437,
+          "usage": {
+            "prompt_tokens": 1643,
+            "completion_tokens": 72,
+            "total_tokens": 1715,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "set_working_directory"
+          ],
+          "seconds": 2.2266994528472424
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.7901963088661432,
+          "usage": {
+            "prompt_tokens": 1870,
+            "completion_tokens": 81,
+            "total_tokens": 1951,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_file",
+            "bash"
+          ],
+          "seconds": 2.609953785315156
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.8948274776339531,
+          "usage": {
+            "cached_tokens": 1536,
+            "prompt_tokens": 2083,
+            "completion_tokens": 105,
+            "total_tokens": 2188,
+            "prompt_tokens_details": {
+              "cached_tokens": 1536
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.07679040171206
+        }
+      ]
+    },
+    {
+      "kind": "project",
+      "repeat": 2,
+      "reply": "Done. ✅\n\n- **Write:** `created.txt` was written with 25 bytes containing exactly `KIRA_LITERAL_3c97d8174226` (24 characters + newline).\n- **Verify:** `read_file` returned `KIRA_LITERAL_3c97d8174226`, matching the intended literal string exactly.\n\nThe working directory was not changed — the file was created at `/tmp/kirakira-workspace-step-final-20261019/project-2/repo-a/created.txt`.",
+      "status": "passed",
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.1428026370704174,
+          "usage": {
+            "prompt_tokens": 1618,
+            "completion_tokens": 184,
+            "total_tokens": 1802,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "write_file"
+          ],
+          "seconds": 3.4642900712788105
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 3.6993492487818003,
+          "usage": {
+            "cached_tokens": 1280,
+            "prompt_tokens": 1824,
+            "completion_tokens": 43,
+            "total_tokens": 1867,
+            "prompt_tokens_details": {
+              "cached_tokens": 1280
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_file"
+          ],
+          "seconds": 4.194597467780113
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.4761682692915201,
+          "usage": {
+            "cached_tokens": 1536,
+            "prompt_tokens": 1894,
+            "completion_tokens": 112,
+            "total_tokens": 2006,
+            "prompt_tokens_details": {
+              "cached_tokens": 1536
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.8349390868097544
+        }
+      ]
+    },
+    {
+      "kind": "restart",
+      "repeat": 1,
+      "reply": "Done. Here are the results:\n\n**Working directory** (from `pwd`, login=false):\n```\n/tmp/kirakira-workspace-step-final-20261019/restart-1/repo-b\n```\n\n**File contents of `value.txt`** (read relative to the new working directory):\n```\nKIRA_LITERAL_a11f9ca4a74e\n```",
+      "restart_reply": "`value.txt` contents (read relative to the current working directory `/tmp/kirakira-workspace-step-final-20261019/restart-1/repo-b`):\n\n```\nKIRA_LITERAL_a11f9ca4a74e\n```",
+      "status": "passed",
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 20.385520920157433,
+          "usage": {
+            "prompt_tokens": 1648,
+            "completion_tokens": 83,
+            "total_tokens": 1731,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "set_working_directory"
+          ],
+          "seconds": 21.187112798914313
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 3.96496176533401,
+          "usage": {
+            "prompt_tokens": 1890,
+            "completion_tokens": 97,
+            "total_tokens": 1987,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_file",
+            "bash"
+          ],
+          "seconds": 4.967359943315387
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.5140350330621004,
+          "usage": {
+            "cached_tokens": 1792,
+            "prompt_tokens": 2120,
+            "completion_tokens": 92,
+            "total_tokens": 2212,
+            "prompt_tokens_details": {
+              "cached_tokens": 1792
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.1718980129808187
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "usage": {
+            "prompt_tokens": 2235,
+            "completion_tokens": 25,
+            "total_tokens": 2260,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_file"
+          ],
+          "seconds": 3.087381437420845
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.583941327407956,
+          "usage": {
+            "prompt_tokens": 2288,
+            "completion_tokens": 56,
+            "total_tokens": 2344,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 3.199010604992509
+        }
+      ]
+    },
+    {
+      "kind": "restart",
+      "repeat": 2,
+      "reply": "Done.\n\n- **Working directory** (from `set_working_directory`, confirmed by `pwd`): `/tmp/kirakira-workspace-step-final-20261019/restart-2/repo-b`\n- **value.txt contents (exact)**: `KIRA_LITERAL_0967bb6c0642`\n\nThe switch was performed first as its own step, and then the file read and `pwd` (login=false) were run, both succeeding.",
+      "restart_reply": "Re-read `value.txt` (relative to the current working directory `/tmp/kirakira-workspace-step-final-20261019/restart-2/repo-b`).\n\n**Exact contents:** `KIRA_LITERAL_0967bb6c0642`\n\nSame as before — no change.",
+      "status": "passed",
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 3.257636995986104,
+          "usage": {
+            "prompt_tokens": 1648,
+            "completion_tokens": 60,
+            "total_tokens": 1708,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "set_working_directory"
+          ],
+          "seconds": 3.969734340906143
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.3831064235419035,
+          "usage": {
+            "prompt_tokens": 1867,
+            "completion_tokens": 68,
+            "total_tokens": 1935,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_file",
+            "bash"
+          ],
+          "seconds": 2.0519916359335184
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.8596310429275036,
+          "usage": {
+            "cached_tokens": 1536,
+            "prompt_tokens": 2065,
+            "completion_tokens": 102,
+            "total_tokens": 2167,
+            "prompt_tokens_details": {
+              "cached_tokens": 1536
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.1168053299188614
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "usage": {
+            "prompt_tokens": 2201,
+            "completion_tokens": 25,
+            "total_tokens": 2226,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_file"
+          ],
+          "seconds": 5.645155927166343
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 3.832233937457204,
+          "usage": {
+            "prompt_tokens": 2253,
+            "completion_tokens": 112,
+            "total_tokens": 2365,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 5.400368373841047
+        }
+      ]
+    }
+  ],
+  "source_sha256": {
+    "plugins/projects/__init__.py": "b5c6cdfc37d49279dadd40bdbab2e871d9172db652dc18fb0e012aed7f44ae0d",
+    "plugins/projects/service.py": "7f687fa0261082ee3aeaad3185194a0015097cec919244bc92b76443bafdbb73",
+    "plugins/working_directory/__init__.py": "4b770fab00fb90d4f05172f8dd5b58f98339146dd90862f6215ceda2009d0019",
+    "plugins/working_directory/service.py": "776ad11b46ba1ee48de1abaca9b03e488ad9132f5e3e26c75674ec246b15b01e",
+    "bootstrap/workspace.py": "6a1e2b64a609bf5dd6285907fb75c6f8b915ff51d400a820cc50e4eb4cca4b80",
+    "session/owner_store.py": "d1546d972b487a1f8d3a5d15e18d9fcb0c51b42b751f2a801e8e1f47b7336380",
+    "session/manager.py": "875e2ba200e3ee13f44ff5beebb5f4d98b4bb7d0a9282b560827edef8a1dfb80",
+    "agent/core/reasoner.py": "0bb82cfb68f821cf7fae9ea8c5adfd98455854b3ea3399ce30f4236c76249d39",
+    "agent/core/tool_io.py": "3c58d095980009fa836d23064aa2e2149754b3a31f79d59e62e928b7cd972ebb"
+  },
+  "passed": 9,
+  "total": 9
+}

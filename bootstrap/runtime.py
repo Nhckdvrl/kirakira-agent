@@ -198,6 +198,9 @@ async def _compose_runtime(
     session_manager = SessionManager(workdir)
     rollback.callback(session_manager.close)
     session_manager.recover_admissions()
+    from bootstrap.workspace import build_workspace_services, publish_workspace_services
+
+    workspace_services = build_workspace_services(session_manager)
     # 记忆 DI 缝先建立:引擎是 coremem.db 的唯一 owner,旧 MemoryRuntime 共享它的连接,
     # 也让显式记忆工具(Stage 5)能在注册表构建时就拿到引擎。
     memory_provider = ModelClientProvider(memory_client)
@@ -214,6 +217,7 @@ async def _compose_runtime(
     )
     rollback.push_async_callback(memory_services.aclose)
     capabilities = ServiceRegistry()
+    publish_workspace_services(capabilities, workspace_services)
     capabilities.publish(
         "bootstrap:memory",
         {
@@ -251,6 +255,7 @@ async def _compose_runtime(
         bus=bus,
         push_tool=push_tool,
         memory_services=memory_services,
+        workspace_services=workspace_services,
     )
     rollback.push_async_callback(registry.shutdown)
     # 能力快照：MCP 换代只切换 current 快照，在途 turn 用完旧租约后旧进程才断开。
@@ -545,6 +550,7 @@ async def _compose_runtime(
             workspace=workdir,
             pipeline=pipeline,
             sessions=session_manager,
+            workspace_services=workspace_services,
             endpoint=os.getenv("KIRAKIRA_CONTROL_ENDPOINT", "").strip() or None,
             workspace_token=os.getenv("KIRAKIRA_CONTROL_TOKEN", "").strip() or None,
             boot_id=commit_channel.boot_id if commit_channel is not None else None,
@@ -558,6 +564,7 @@ async def _compose_runtime(
     rollback.push_async_callback(control_service.shutdown)
     rollback.push_async_callback(control_server.stop)
     dashboard.restart_coordinator = restart_coordinator
+    dashboard.extra["workspace_control"] = control_service
     if restart_coordinator is not None:
         register_agent_restart_tool(registry, restart_coordinator)
     return CoreRuntime(

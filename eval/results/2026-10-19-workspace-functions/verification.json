@@ -1,0 +1,160 @@
+{
+  "date": "2026-10-19",
+  "base": "3b392fa5915e187dfe8842ce84e525584f582e46",
+  "reference": "21b38f0e102d9e1bdc5576725635dce29f135c0c",
+  "python": "3.14.6",
+  "environment": "single project .venv, frozen uv.lock",
+  "purpose": "functional alignment; no new performance optimization or benchmark",
+  "functional_scope": "Projects/default directory/Session cwd, actual tools, child inheritance, live AGENTS, RPC/Web and restart",
+  "test_results": {
+    "full": {
+      "passed": 736,
+      "subtests": 4,
+      "warnings": 22
+    },
+    "workspace_control_after_review": 32,
+    "initial_full": {
+      "failed": 4,
+      "passed": 717
+    }
+  },
+  "step": {
+    "rounds": [
+      {
+        "file": "step-evidence.json",
+        "passed": 9,
+        "total": 9,
+        "requests": 33,
+        "statuses": {
+          "completed": 33
+        },
+        "returned_total_tokens": 67393
+      },
+      {
+        "file": "step-first.json",
+        "passed": 9,
+        "total": 9,
+        "requests": 33,
+        "statuses": {
+          "completed": 33
+        },
+        "returned_total_tokens": 65795
+      },
+      {
+        "file": "step-release.json",
+        "passed": 9,
+        "total": 9,
+        "requests": 34,
+        "statuses": {
+          "completed": 34
+        },
+        "returned_total_tokens": 68097
+      },
+      {
+        "file": "step-review.json",
+        "passed": 9,
+        "total": 9,
+        "requests": 33,
+        "statuses": {
+          "completed": 33
+        },
+        "returned_total_tokens": 65856
+      }
+    ],
+    "scenario_executions": 36,
+    "returned_total_tokens": 267141
+  },
+  "checks": {
+    "feature_plugins": 70,
+    "partial": 54,
+    "missing": 16,
+    "aligned": 0,
+    "extra_surfaces": 3,
+    "fixed_reference_set_matches": true,
+    "akasha2_pinned_files_unchanged": 10,
+    "old_migrations_unchanged": true,
+    "new_modules_ruff_F_I": "passed",
+    "changed_existing_modules_ruff_F": "passed",
+    "web_javascript_node_check": "passed",
+    "local_markdown_links": 383,
+    "diff_check": "passed",
+    "build_and_cli": "passed"
+  },
+  "limits": [
+    "full upstream feature parity is incomplete",
+    "local filesystem/execution backend only",
+    "no full prepared tool recovery or HostBridge",
+    "no real-browser focus/responsive acceptance",
+    "project grouping is not memory or tenant isolation"
+  ],
+  "source_sha256": {
+    ".github/workflows/contracts.yml": "aa3d8616324edc30f7eb1a4eaf4f0858bd5e7a876ee5e99d5dbd789d098e35b0",
+    "README-cn.md": "de4ba74917a9db007b89e1715acfb2758031ed1f3b3ddd6be6ff9fb6125d7195",
+    "README.md": "bd226e7d3d1684374c1c34ea759e2aa8de4b8173bdc0124b9f916e9f23ba34ea",
+    "agent/control/protocol/models.py": "5b306414be8702318fd58bc9ff2166e5de95d415bba1cd8c7b4acacd9f6140d0",
+    "agent/control/protocol/router.py": "8237b1c451c8d1d106890bb60e536e298e41fe851a59ab3a8d3bbddefa76c282",
+    "agent/control/service.py": "2c85f54b4c87a6692b2baf37a29c332c32e32118e5d3cb8e26f364abb6087aa5",
+    "agent/core/pipeline.py": "a1f9bccbbdb50bd1b19fe475f0aa4a7b34929562f6573959d41f2f8ba66a6ac2",
+    "agent/core/reasoner.py": "c7fdc5917d0674d95acbb0d0aa21612e5f0ef7b5c3db2b5c0d40906b98017404",
+    "agent/core/runtime.py": "1175061b3b150dc3b2af23c90a2365a39364e5f76e2b6ccd6c35754818788b58",
+    "agent/core/tool_io.py": "8281f969dd023bb72b13c553d18a2e70df07abfa80f71f50dfc9746f9bea939f",
+    "agent/model_runtime/context_compaction.py": "aefec70ad443a6f626f7801418fac4527ee137c8d08ed434299516c38e0eaea1",
+    "agent/subagent.py": "95fd193834ec0140d64a5827f7f021c1cbf489cba5e0abf532f9bd2bef533d1e",
+    "agent/tools/builtins.py": "4e9f098f3054424598c5060a24ff0bf4503fce228e86a3db0474228db7f8b73a",
+    "agent/tools/registry.py": "d387e946b329c9d618282d58966184cedee5eccc06ba4ba823f81fcd006ebe42",
+    "bootstrap/control.py": "182e438a20edbd6503e15f9e00c7eefe2ed8da2ed612ff338576f484c63aeecd",
+    "bootstrap/runtime.py": "82fc8ef91ba795f7181feb0173196b756a08346e8641cae449e7d3914de5ab86",
+    "bootstrap/tools.py": "03a165fdf528afe3ed4b4a3721989f5727d958d44cc584e4820ace05d81f2fff",
+    "bootstrap/workspace.py": "6a1e2b64a609bf5dd6285907fb75c6f8b915ff51d400a820cc50e4eb4cca4b80",
+    "docs/INDEX.md": "33ce553fa1ce9ffa14afed36a957261f5193e9a55d4a15dc41f99a5a5268a91f",
+    "docs/architecture/overview.md": "8c54670eb8ab5d315cc4d550c90e5321589059eff81a38bb4e329b4fb7971504",
+    "docs/decisions/0015-projects-and-session-directories.md": "4c662fceda843aa848325364e740f09a1d97338f683c196a212c53af0a6faaaf",
+    "docs/handbook/projects-and-directories.md": "737a0e49d496412c0b19b089af68381ddffa271edafa83d121b14e146f689168",
+    "docs/handbook/tools-and-scheduler.md": "1f69d4cb6836c2567c9350e07d062537855e4cca256b3a9f69ec3d62999c7371",
+    "docs/operations/evaluations/2026-10-19-workspace-functions.md": "5dfc44ccae4ca7d52aac5cf89b431ee301580e49d9d3b5a371cd0114922a7048",
+    "docs/operations/verification.md": "eea2f844845c33bfc37adf84f5070c001a8abc307fd84820b5be7779acdede0f",
+    "docs/status/akashic-features.json": "5f2fa59d60df947962456c0918af38c723f1dedd751dc7b171064babf81e200c",
+    "docs/status/akashic-features.md": "a25d042ed5c4d3071ebfe25647f6616d857e7f726ca510ce969320b3dd4fcdd4",
+    "docs/status/current.md": "f88a506d2d2a461cf7002786e55bcbe187e31c25a11f00dfccb85fafd140c4cd",
+    "docs/status/reference-alignment.md": "dcac8a52d3af45b972e279f1fcd582324b6c4bd66578067a7980fd05547055cc",
+    "frontend/web_ui.py": "37c09fa630dc9b98bb1bc8526fb13fafe53d894094c28159d1e321af6b02c1f3",
+    "frontend/workspace_ui.py": "03e44b4ce23c7b5f3de25c74ca1e7d5b091636f599fa5e941993b545ef115825",
+    "infra/channels/web_chat_channel.py": "623755a847c6eb8e328f90b696ea573ad9a40f45328b6f97670d830c8c1a63a0",
+    "migrations/yoyo/20261019_02_workspace_owners.py": "59956208a6eceef7f1afd29c3cbc5c841f08d70076e4916b3fc9ea92b74b49dc",
+    "plugins/projects/__init__.py": "b5c6cdfc37d49279dadd40bdbab2e871d9172db652dc18fb0e012aed7f44ae0d",
+    "plugins/projects/service.py": "7f687fa0261082ee3aeaad3185194a0015097cec919244bc92b76443bafdbb73",
+    "plugins/working_directory/__init__.py": "4b770fab00fb90d4f05172f8dd5b58f98339146dd90862f6215ceda2009d0019",
+    "plugins/working_directory/service.py": "776ad11b46ba1ee48de1abaca9b03e488ad9132f5e3e26c75674ec246b15b01e",
+    "scripts/check_change_impact.py": "57d2665f137d625434ee60460223d7878207ac6b3a51a9621a633264489fa936",
+    "scripts/check_feature_alignment.py": "dac21c4213f03f76e5c3455e704e8d3793b14a2c88d9c9da2f5900b2cb908de2",
+    "scripts/verify_workspace_step_plan.py": "1c3645550f40435dda6ad2b9841a6cfcf7ecbed2f4d757b169427fab869f81bd",
+    "session/manager.py": "875e2ba200e3ee13f44ff5beebb5f4d98b4bb7d0a9282b560827edef8a1dfb80",
+    "session/owner_store.py": "d1546d972b487a1f8d3a5d15e18d9fcb0c51b42b751f2a801e8e1f47b7336380",
+    "tests/test_migration_runner.py": "b6623d25bb3f65579f947a291adb0c46510386a248b463372d0e9f425aa4644f",
+    "tests/test_workspace_features.py": "00b9e9d465a2579d289f54d22a044fb4f2bd02965e92f0e8791d9b7456485a6a"
+  },
+  "artifact_sha256": {
+    "step-first.json": "af8155c7dafb982b378aa24a40fefcab69946270b05ffde548bed21c742ed961",
+    "step-review.json": "005d027d7a6a662360bc27b88642c15f7dbc2df171db994c0870c3d924dfb8a2",
+    "step-release.json": "630f0ae6f732bbbf5334f44c94ca28ec110a6f26d34093350d88a83c4b66ca5f",
+    "step-evidence.json": "bacd038705c603cd0de29ea96b776f0c148d8395a7c9546ef77d8ebff47c672d",
+    "pytest-final.txt": "daf3cbbe7102dd31a81fea49ca352d74c807c67dc23b7c374e8753b069591d29",
+    "pytest-initial-failures.txt": "41416afdc3f0d898ed3c16c6f2af114ace0f7d80628cc53930488839826377a1",
+    "pytest-workspace-control.txt": "1deb962060a8cd444a659c85748020db67912e7591a89b4dc93a27e864d67c14",
+    "feature-catalog.json": "64e8c5cc440ed603e25b0b0f2c300aa48f1e5db12b035f59cf871bfb0b8adabc",
+    "change-impact.json": "92300dd5070dabb86944305e4049f6355d862f4ed66e7b2349926f88b384dd0e",
+    "step-summary.json": "7efe176c6b8e4682723b9ce6802aa7557545823fa75fdddb67bf78e579cbf9f0",
+    "package-check.json": "cd44a5704955a7f6ec5e6f546aa14f3b501ab716fc78056ae7aef7cc76cdb3d8",
+    "cli-help.txt": "957addb19363fe6283c75dec3a7923906cd089d9624aead0f589cfab28774029",
+    "doc-links.json": "e1717d83f13f8bddf14024a33076f84088722bb621b396baec9283632099f86f",
+    "lint-new.txt": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "lint-changed.txt": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "build-summary.txt": "cd9d414dc476fc6f8f28d16f9d45e9768f1f9b382a3f5109221aafdb04a3868f"
+  },
+  "artifact_normalization": {
+    "pytest-initial-failures.txt": {
+      "original_sha256": "c7646804892076f8f2b631889ce9b08d21fda9e7b11fa4f0b3a2bafaf6612a26",
+      "transformation": "strip trailing whitespace per line; retain all failure content"
+    }
+  }
+}

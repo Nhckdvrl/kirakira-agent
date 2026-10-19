@@ -61,6 +61,7 @@ scoped Wake/Drift 与子任务都复用该循环。`execution.py` 保存执行�
 
 工作区、网页与记忆工具分别由 `agent/tools/builtins.py`、`agent/tools/web.py` 和
 `plugins/memory_tools/tools.py` 实现，完整对话工具面由 `bootstrap/tools.py` 组合。
+项目和目录由 `bootstrap/workspace.py` 装配，经版本能力提供给消费者，工具、控制协议和 Web 共用服务。
 插件公共类型在 `agent/plugins/api.py`，管理器负责加载与代际操作。
 详见 [ADR0010](../decisions/0010-provider-ownership-and-runtime-disposal.md)。
 
@@ -68,7 +69,7 @@ scoped Wake/Drift 与子任务都复用该循环。`execution.py` 保存执行�
 
 | 文件 | owner | 作用 |
 | --- | --- | --- |
-| `sessions.db` | `SessionManager` | Session、消息真相和只追加的 context compaction ledger |
+| `sessions.db` | `SessionManager` / owner 记录 | Session、消息真相、compaction ledger；项目与 Session cwd 在同库按 owner 命名和版本保存 |
 | `memory/coremem.db` | Default Memory | 结构化长期记忆 |
 | `memory/akasha.db` | Akasha | v1 图、激活和查询状态 |
 | `memory/akasha2.db` | Akasha2 | 图、消费位置、向量空间与原始消息绑定的原子快照 |
@@ -84,6 +85,17 @@ scoped Wake/Drift 与子任务都复用该循环。`execution.py` 保存执行�
 2. 热更新只切换新 turn 的 current snapshot；在途 turn 继续使用原代际。
 3. 外部副作用以真实 delivery/tool result 为提交边界，不能先写“成功”。
 4. `Reference/` 只用于开发审计，不能成为运行依赖。
+
+## 项目与执行目录
+
+runtime workspace 保存运行状态，Session cwd 决定本轮文件和新 Shell 的代码目录。
+Project 默认目录只在 Session 真正创建时继承，与 Session、全部 initializer 同事务提交；
+旧会话从不回填。后续切换有独立修订和回执，外部操作经过 admission，Agent 工具要求独占批次。
+现有进程固定启动目录，子任务在自身 Session 创建时继承后独立。
+
+每次新模型生成读取当前仓库的 AGENTS 链，并同步 compactor 的实时 system 材料；
+这些规则不是原始会话事实，也不授予权限。目录丢失不回退或自动重建。
+合同和本地/远程边界见 [ADR0015](../decisions/0015-projects-and-session-directories.md)。
 
 从 [当前状态](../status/current.md) 继续了解已完成范围，或按
 [文档索引](../INDEX.md) 进入具体子系统。

@@ -139,6 +139,10 @@ class WebChannel:
 
             def do_GET(self) -> None:
                 parsed = urllib.parse.urlparse(self.path)
+                if parsed.path == "/workspace":
+                    from frontend.workspace_ui import WORKSPACE_HTML
+                    self._send_bytes(WORKSPACE_HTML.encode("utf-8"), "text/html; charset=utf-8")
+                    return
                 if parsed.path == "/":
                     self._send_bytes(CHAT_HTML.encode("utf-8"), "text/html; charset=utf-8")
                     return
@@ -206,6 +210,22 @@ class WebChannel:
                 self._send_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
 
             def do_POST(self) -> None:
+                if self.path == "/api/workspace":
+                    try:
+                        origin = self.headers.get("Origin")
+                        if origin is not None and urllib.parse.urlsplit(origin).netloc != self.headers.get("Host"):
+                            raise ValueError("cross-origin workspace requests are not allowed")
+                        payload = self._read_json()
+                        service = channel._dashboard().extra.get("workspace_control")
+                        if service is None or channel._loop is None:
+                            raise ValueError("workspace controls are unavailable")
+                        result = asyncio.run_coroutine_threadsafe(
+                            service.workspace_request(payload.get("method"), payload.get("params", {})), channel._loop
+                        ).result(timeout=channel.response_timeout)
+                        self._send_json({"result": result})
+                    except Exception as exc:
+                        self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                    return
                 if self.path in ("/api/memories/delete", "/api/dashboard/memories/batch-delete"):
                     try:
                         payload = self._read_json()
@@ -377,6 +397,12 @@ class WebChannel:
         if not session_id or len(session_id) > 200:
             raise ValueError("session_id must contain 1-200 characters")
         chat_id = self._chat_id(session_id)
+        project = payload.get("project_id")
+        if project is not None:
+            from plugins.projects.service import project_id
+            project = project_id(project)
+            if not chat_id.startswith(project + ":"):
+                chat_id = project + ":" + chat_id
         if text.lower() == "/stop":
             interrupted = bool(
                 self._ctx.interrupt
@@ -427,7 +453,7 @@ class WebChannel:
                     chat_id=chat_id,
                     content=text,
                     media=media,
-                    metadata={"client_request_id": request_id},
+                    metadata={"client_request_id": request_id, **({"project_id": payload["project_id"]} if payload.get("project_id") is not None else {})},
                 )
             )
             return await asyncio.wait_for(future, timeout=self.response_timeout)

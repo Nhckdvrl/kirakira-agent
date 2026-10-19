@@ -1,11 +1,8 @@
-"""协议方法的参数契约。
+"""Strict parameter contracts for Kirakira's JSON-RPC application methods.
 
-Reference 用 pydantic 的 ``StrictModel``(``extra="forbid"`` + ``strict=True``)。
-kirakira 全项目没有 pydantic 依赖(工具 schema 也是手写的 ``object_schema``),
-为一个文件引入它不划算,因此这里手写等价校验器。
-
-**线上契约与 Reference 逐字一致**:方法名、字段名、默认值、长度/范围约束、
-未知字段拒绝、以及"不做类型强转"这一条都保持不变;不同的只是校验器实现。
+Unknown fields and implicit type coercion are rejected. Method semantics follow
+the reference design where applicable; this is not full wire compatibility with
+every upstream client or plugin UI method.
 """
 
 from __future__ import annotations
@@ -147,6 +144,32 @@ METHOD_PARAMS: dict[str, ParamSpec] = {
         }
     ),
     "server/status": ParamSpec({}),
+    "project/list": ParamSpec({}),
+    "project/create": ParamSpec({
+        "projectId": Field(str, min_length=1),
+        "name": Field(str, min_length=1, max_length=80),
+        "directory": Field(str, required=False, default=None, nullable=True),
+    }),
+    "project/update": ParamSpec({
+        "projectId": Field(str, min_length=1),
+        "name": Field(str, required=False, default=None, nullable=True),
+        "archived": Field(bool, required=False, default=None, nullable=True),
+        "expectedRevision": Field(int, required=False, default=None, nullable=True, ge=0),
+    }),
+    "project/bindDirectory": ParamSpec({
+        "projectId": Field(str, min_length=1), "path": Field(str, min_length=1),
+    }),
+    "directory/current": ParamSpec(dict(_THREAD_ID)),
+    "directory/browse": ParamSpec({
+        "path": Field(str, min_length=1),
+        "after": Field(str, required=False, default=None, nullable=True),
+    }),
+    "directory/set": ParamSpec({
+        **_THREAD_ID,
+        "path": Field(str, min_length=1),
+        "requestId": Field(str, min_length=1, max_length=200),
+        "expectedRevision": Field(int, nullable=True, ge=0),
+    }),
     "thread/start": ParamSpec({"metadata": Field(dict, required=False, default_factory=dict)}),
     "thread/resume": ParamSpec(dict(_THREAD_ID)),
     "thread/list": ParamSpec(

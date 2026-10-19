@@ -174,13 +174,30 @@ class WorkspaceTools:
         bus: MessageBus | None = None,
         push_tool: Any = None,
     ) -> None:
-        self.workdir = workdir.resolve()
+        self._default_workdir = workdir.resolve()
         self.skill_loader = skill_loader
         self.registry = registry
         self.bus = bus
         self.push_tool = push_tool
         self._mutation_locks: dict[str, threading.Lock] = {}
         self._shell_processes = ShellProcessManager()
+
+    @property
+    def workdir(self):
+        provider = self.registry.directory_provider if self.registry is not None else None
+        key = str(self.registry.context.get("session_key") or "") if self.registry is not None else ""
+        if provider is not None and key:
+            current = provider.snapshot(key)
+            if current.path is not None:
+                return provider.check_absolute(current.path)
+        return self._default_workdir
+
+    def _file_path(self, path):
+        provider = self.registry.directory_provider if self.registry is not None else None
+        key = str(self.registry.context.get("session_key") or "") if self.registry is not None else ""
+        if provider is not None and key and provider.snapshot(key).path is not None:
+            return provider.resolve_target(key, path)[0]
+        return safe_path(self._default_workdir, path)
 
     async def bash(
         self,
@@ -341,7 +358,7 @@ class WorkspaceTools:
         return json.dumps(payload, ensure_ascii=False)
 
     def read_file(self, path: str, limit: Optional[int] = None, offset: int = 0) -> str:
-        target = safe_path(self.workdir, path)
+        target = self._file_path(path)
         if not target.is_file():
             return "Error: File does not exist: %s" % path
         with target.open("rb") as handle:
@@ -356,7 +373,7 @@ class WorkspaceTools:
         return truncate("\n".join(lines))
 
     def list_dir(self, path: str = ".") -> str:
-        target = safe_path(self.workdir, path)
+        target = self._file_path(path)
         if not target.exists():
             return "Error: Path does not exist: %s" % path
         if not target.is_dir():
@@ -365,14 +382,14 @@ class WorkspaceTools:
         for item in sorted(
             target.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())
         ):
-            rel = item.relative_to(self.workdir)
+            rel = item.relative_to(target)
             kind = "dir" if item.is_dir() else "file"
             size = "" if item.is_dir() else str(item.stat().st_size)
             rows.append("%s\t%s\t%s" % (kind, rel, size))
         return truncate("\n".join(rows) or "(empty)")
 
     def write_file(self, path: str, content: str) -> str:
-        target = safe_path(self.workdir, path)
+        target = self._file_path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
         with self._mutation_lock(target):
             self._atomic_write_text(target, content)
@@ -385,7 +402,7 @@ class WorkspaceTools:
         new_text: str,
         replace_all: bool = False,
     ) -> str:
-        target = safe_path(self.workdir, path)
+        target = self._file_path(path)
         if not old_text:
             return "Error: old_text cannot be empty"
         with self._mutation_lock(target):
@@ -443,7 +460,7 @@ class WorkspaceTools:
         content = [{"type": "text", "text": prompt}]
         total = 0
         for raw_path in image_paths[:8]:
-            path = safe_path(self.workdir, str(raw_path))
+            path = self._file_path(str(raw_path))
             if not path.is_file():
                 return "Error: Image does not exist: %s" % raw_path
             data = path.read_bytes()

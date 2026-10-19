@@ -4,6 +4,8 @@
 [`21b38f0e102d9e1bdc5576725635dce29f135c0c`](https://github.com/kachofugetsu09/akashic-agent/tree/21b38f0e102d9e1bdc5576725635dce29f135c0c)，记忆算法来源继续固定
 [`d85b00c233686b68b082052b1b20123905aeab13`](https://github.com/kachofugetsu09/akashic-agent/tree/d85b00c233686b68b082052b1b20123905aeab13)。
 Kirakira 按职责、运行合同和证据对齐，不按目录数量或功能名称判断整体 parity。
+全部 70 个生产插件及 SDK/部署/客户端已登记在[完整功能清单](./akashic-features.md)；
+该清单是逐项范围，下面仅概括架构落点。本阶段优先补功能，整体性能优化暂缓。
 
 | 领域 | Kirakira 当前落点 |
 | --- | --- |
@@ -15,10 +17,11 @@ Kirakira 按职责、运行合同和证据对齐，不按目录数量或功能�
 | Memory evidence | 原始消息回源、提交后学习、公开机制复测、72 个问题与真实 Mem0 子集；不继承上游质量结论 |
 | Session/Context | append-only 消息、compaction ledger、预算投影；未全面迁移最新上游 Ledger |
 | Scheduler | 来源会话、notify/run、none/session 历史、持久 fire 与回执结算；排队共享 admission，尚无工具边界让出并恢复同一程序 |
+| Projects/cwd | 同库 owner 记录、新 Session 原子继承、独立目录、实时 AGENTS、文件/Shell/子任务、控制协议与 Web 项目入口；仍缺 HostBridge/prepared 恢复和完整工作台 |
 | 产品面 | TUI/Web、渠道、MCP、Scheduler 保留；不宣称移动端或完整部署能力对齐 |
 
 来源、实现与合同见 [ADR0009](../decisions/0009-components-recovery-and-akasha2.md)。
-未完成事项只在[当前状态](./current.md)维护，实际结果只在[验证记录](../operations/verification.md)维护。
+推进顺序见[当前状态](./current.md)，逐项验收在完整清单维护，实际结果见[验证记录](../operations/verification.md)。
 
 ## 独立分发
 

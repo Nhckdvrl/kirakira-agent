@@ -54,6 +54,10 @@ class CoreRuntime:
     # supervisor 托管时非空;runtime_serve 等待它的 committed 事件并以 75 退出换代。
     restart_coordinator: Any | None = None
 
+    @property
+    def working_directories(self):
+        return self.tools.directory_provider
+
     _shutdown_scope: ResourceScope = field(
         default_factory=ResourceScope, init=False, repr=False
     )

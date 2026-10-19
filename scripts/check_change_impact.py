@@ -10,6 +10,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 IMPACT_RULES: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
+    (("bootstrap/workspace.py", "session/owner_store.py", "session/manager.py",
+      "plugins/projects/", "plugins/working_directory/", "frontend/workspace_ui.py",
+      "agent/core/reasoner.py", "agent/tools/builtins.py", "agent/subagent.py",
+      "agent/control/", "infra/channels/web_chat_channel.py"), (
+        "tests/test_workspace_features.py",
+    )),
     (("bootstrap/runtime.py", "bootstrap/app.py", "bootstrap/channels.py", "bootstrap/proactive.py", "bootstrap/tools.py", "bootstrap/restart.py"), (
         "tests/test_runtime_lifecycle.py", "tests/test_cli.py", "tests/test_channels.py",
         "tests/test_plugin_extensibility.py", "tests/test_memory_tool_provider.py",

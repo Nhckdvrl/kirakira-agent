@@ -44,6 +44,7 @@ Kirakira 是一个本地优先、多渠道的 AI Agent Runtime。它把被动对
 | --- | --- |
 | Agent 如何工作 | 被动 Turn、Proactive 和 Drift 三条链共用模型、工具、记忆与 Channel |
 | 数据放在哪里 | Session、Memory、任务和运行轨迹默认保存在本地 workspace |
+| 如何操作不同仓库 | 项目提供一次性默认值；各 Session 独立 cwd，文件/Shell/子任务和实时仓库规则共用目录 owner |
 | 如何记住过去 | 精确回忆与联想补全协作，保留原文证据、稳定消息身份和可重放图状态 |
 | 如何扩展 | 用 Plugin、MCP、Skill、Tool 和 Proactive Source 增加能力 |
 | 如何控制上下文 | 完整历史持久化，旧历史滚动摘要，近 20k token 保留原文 |
@@ -223,3 +224,5 @@ Kirakira learns from [Akashic Agent](https://github.com/kachofugetsu09/akashic-a
 The optional Akasha2 algorithms are adapted from commit `d85b00c`; the vendored
 [MIT license](./plugins/akasha2/LICENSE) and [file provenance](./plugins/akasha2/UPSTREAM.json)
 ship with the package. The runtime adapter and evaluation results are maintained here.
+项目与工作目录行为也参考当前上游设计；来源合同、本地实现与未覆盖的范围见
+[ADR0015](./docs/decisions/0015-projects-and-session-directories.md)。

@@ -19,8 +19,12 @@ def build_tool_registry(
     bus: MessageBus | None = None,
     push_tool: Any = None,
     memory_services: Any = None,
+    workspace_services: Any = None,
 ) -> ToolRegistry:
     registry = build_workspace_registry(workdir, bus=bus, push_tool=push_tool)
+    if workspace_services is not None:
+        registry.directory_provider = workspace_services.directories
+        workspace_services.directories.register_tools(registry)
     register_memory_tools(
         registry,
         memory=memory,

@@ -2,7 +2,7 @@
 
 ## ToolMeta 与 deferred 工具
 
-每个工具除了 JSON schema，还带有 `risk`、`always_on`、`preloadable`、`search_hint` 和来源
+每个工具除了 JSON schema，还带有 `risk`、`always_on`、`preloadable`、`search_hint`、`exclusive_batch` 和来源
 （builtin/MCP/plugin）。核心工具默认可见；较重的 MCP/plugin 工具可以 deferred。
 
 模型通过 `tool_search(query="select:工具名")` 解锁 deferred 工具。每个 Session 只保留有限 LRU，
@@ -12,6 +12,9 @@
 默认并发上限为 4，通过 `AGENT_MAX_PARALLEL_TOOLS` 调整；设为 1 使用串行执行。
 read_file/list_dir 已启用，其他工具默认串行；写入、tool_search 和终结工具会等待前面的读取结算。
 模型下一次请求看到的工具结果仍按原调用顺序排列。取消同步工具时，会等线程实际结束再释放会话。
+
+`exclusive_batch` 工具必须单独调用，混合批次整体拒绝。当前 `set_working_directory` 使用此合同，
+避免同一批读写分散到切换前后的目录。项目和 cwd 的 Web/API 使用见[项目与会话工作目录](./projects-and-directories.md)。
 
 ## Shell
 

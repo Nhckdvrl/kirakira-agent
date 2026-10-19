@@ -53,6 +53,7 @@ and [verification record](./docs/operations/verification.md).
 | --- | --- |
 | How does the agent run? | Passive turns, Proactive, and Drift share models, tools, memory, and channels |
 | Where does data live? | Sessions, memory, jobs, and traces stay in the selected local workspace by default |
+| Can sessions work in different repos? | Projects set a one-time default; each session has its own cwd, live repository rules, file tools, Shell, and child-task inheritance |
 | How does it remember? | Exact recall plus associative completion, with original-message references and replayable graph state |
 | How is it extended? | Plugins, MCP, skills, tools, and proactive sources |
 | How is context governed? | Durable history stays complete; old units roll into a task summary while the newest 20k tokens stay raw |
@@ -182,3 +183,6 @@ Kirakira learns from [Akashic Agent](https://github.com/kachofugetsu09/akashic-a
 The optional Akasha2 algorithms are adapted from commit `d85b00c`; the vendored
 [MIT license](./plugins/akasha2/LICENSE) and [file provenance](./plugins/akasha2/UPSTREAM.json)
 ship with the package. The runtime adapter and evaluation results are maintained here.
+Project and working-directory behavior also follows the current upstream design;
+its source contracts and local implementation boundary are recorded in
+[ADR0015](./docs/decisions/0015-projects-and-session-directories.md).

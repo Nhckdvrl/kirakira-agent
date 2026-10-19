@@ -2,14 +2,19 @@
 
 更新日期：2026-10-19。主链参考核对至 Akashic `21b38f0e102d9e1bdc5576725635dce29f135c0c`。
 记忆移植继续固定 `d85b00c233686b68b082052b1b20123905aeab13`；算法、双通道与公开 cost 协议未变。
-实现合同见 [ADR0009](../decisions/0009-components-recovery-and-akasha2.md)，实际运行结果见
-[验证记录](../operations/verification.md)。本页只维护能力范围和剩余工作。
+实现合同见 [ADR0009](../decisions/0009-components-recovery-and-akasha2.md) 和
+[ADR0015](../decisions/0015-projects-and-session-directories.md)，实际运行结果见
+[验证记录](../operations/verification.md)。本页维护阶段和能力范围，逐项验收来自
+[完整功能清单](./akashic-features.md)及其 JSON 数据源。
 
 项目统一使用 Python 3.14.6：`.python-version` 固定解释器，`uv.lock` 固定依赖，
 本地使用项目 `.venv`，CI 读取相同版本文件并只执行一个任务；不再维护多版本测试矩阵。
 
 ## 已落地
 
+- Projects 与 Session cwd 接入：稳定项目 ID、改名/归档、一次性目录默认值、创建事务快照、独立切换与回执/CAS。
+- 文件、Shell、子任务与实时 AGENTS 共用目录 owner；独占切换批次、现有进程 cwd 固定、旧会话不回填。
+- Web 项目/目录页面、项目聊天和控制协议共用同一服务及 admission；目录丢失不回退或自动重建。
 - 被动对话、Wake、Drift、子任务和 Scheduler 共用 reasoner 与工具授权边界；渠道、直接和控制入口共用 admission。
 - Scheduler 提供者使用来源会话、notify/run、none/session 历史与持久 fire；投递回执后完成，未知结果停止自动重放。
 - 删除未接线的旧同步 Agent、手工压缩入口和图快照代码；渠道排队与中断统一归 admission。
@@ -37,22 +42,38 @@ Session SQLite append-only、上下文投影与 compaction ledger、Shell/PTY/st
 插件/MCP 代际、多渠道投递、ACK/feedback、workspace 锁与 Yoyo ledger 继续使用现有实现。
 本次没有修改用户真实 workspace、迁移历史记忆或更换已有账户配置。
 
-## 尚未完成
+## 功能推进顺序
+
+范围包含上游全部 70 个生产插件（含可选提供方），以及 SDK、部署与客户端，不按当前默认启用集缩小。
+清单中的 partial/missing 都属于未完成，不能用测试数量、同名工具或算法来源 pin 充当整体对齐证据。
+
+| 顺序 | 功能链 | 完成要求 |
+| --- | --- | --- |
+| 1 | 消息、来源与回复程序 | 持久 Message/附件、同轮输入、后台结果注入、程序停止与重启续跑；已完成副作用不重放 |
+| 2 | 项目与执行宿主 | 在已接入的本地 Project/cwd 之上，补 prepared 目标、HostBridge、进程/Workload 生命周期 |
+| 3 | 双主动与投递 | Eventmail、Wake/Drift 完整状态链，Scheduler 工具边界让出，按固定来源投递和核对 |
+| 4 | 扩展与模型 | 插件发布/更新回执、资源提供方、UI 与检查能力；模型目录、角色、启停、引导及全部列出的驱动 |
+| 5 | 用户工作台 | 终端、改动视图、标题、附件/visuals、sites、浏览器、认证与完整会话流程 |
+| 6 | SDK 与交付 | SDK、Web/Android 协议、安装组合、部署、备份恢复和运维入口 |
+
+记忆保留当前实现与证据，继续列在全量范围内；本阶段优先补非记忆功能。
+整体吞吐、事件循环 lag 和记忆吞吐优化暂缓，历史性能结果保留，不作为功能验收替代品。
+
+## 尚未完成的合同
 
 | 工作 | 当前边界 | 下一步验收 |
 | --- | --- | --- |
 | Akasha2 生产使用 | 新引擎显式 opt-in；固定版本移植不等于全部上游 runtime parity | 完整证据覆盖、显式反馈/管理面、更大历史吞吐与向量空间稳定性 |
 | 记忆质量 | 有 36 题重复、24 题保留集及另 12 题读出验证；包含检索消融与真实 Mem0 子集，不等于官方全量榜单 | 全 500 题、多种 embedding、独立 judge、重复运行与区间 |
-| v1 大历史性能 | 已在 24 题实测分离学习/查询；历史前缀 FTS 仍逐条重建 | 在状态轨迹与召回不变的约束下优化因果索引/文档频率 |
 | 主动体验 | 兴趣池已接入；显式规则与证据估计仍需标注 | 实际来源上的有用率、打扰率、静默正确率及日预算 |
 | Scheduler 续跑 | 来源会话、notify/run、历史隔离、触发结算已接入；仍是整轮排队 | 工具边界让出用户、保存并恢复同一持久程序；已完成副作用不重放 |
 | 自主目标发现 | 提案队列已有持久生命周期，候选仍来自显式技能 | 有证据的 proposal planner、过期与用户意图修正 |
 | 组件全面拆分 | 通用能力宿主已接入插件和对话记忆；部分内置工具/维护仍由 bootstrap 装配 | 逐个迁移业务 owner，不能靠目录改名宣称完成 |
-| 主链高并发 | 有真实模型矩阵与 64 会话/千轮离线压力；同步持久化、上下文复制仍可能阻塞事件循环 | 按 profile 优化 writer/编码；保持 intent 先于副作用与关闭排空，不将耐久写入移入无主后台 |
+| 项目与目录 | 本地端到端功能已接入，不等于整个上游执行宿主或工作台 | prepared 目标与恢复、宿主路径能力、终端和改动视图 |
 | Session/Ledger | 沿用当前 append-only 消息与多份业务状态 | 不宣称已移植上游全部 Ledger 消息程序与跨业务事务 |
 | 多租户隔离 | 当前是单用户跨会话记忆；不把 MemoryScope 当租户安全边界 | 显式 isolated/global/off 图路由与独立授权 |
 | 未知外部结果 | 持久记录并停止自动重放；投递后崩溃仍可能需要核对 | 工具级幂等键、回执和人工/系统 reconciliation |
-| 产品/运维 | 未追平上游移动端、完整 provider catalog、bundle 模式和发布设施 | 根据实际产品需求逐步落地 |
+| 产品/运维 | 未追平上游移动端、完整 provider catalog、bundle 模式和发布设施 | 按完整功能清单逐项落地实际入口与验证 |
 
 ## 迁移边界
 

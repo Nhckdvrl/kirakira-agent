@@ -45,11 +45,13 @@ class ToolMeta:
     source_type: str = "builtin"
     source_name: str = ""
     parallel_safe: bool = False
+    exclusive_batch: bool = False
 
 
 class ToolRegistry:
     def __init__(self) -> None:
         self._tools: Dict[str, Tool] = {}
+        self.directory_provider = None
         self._shutdown_callbacks: List[Callable[[], Any]] = []
         self._shutdown_scope = ResourceScope()
         self._owner_cleanup_callbacks: List[Callable[[str], Any]] = []
@@ -71,6 +73,7 @@ class ToolRegistry:
         source_type: str = "builtin",
         source_name: str = "",
         parallel_safe: bool = False,
+        exclusive_batch: bool = False,
     ) -> None:
         if spec.name in self._tools:
             raise ValueError("Tool already registered: %s" % spec.name)
@@ -78,6 +81,8 @@ class ToolRegistry:
             raise ValueError("invalid tool risk: %s" % risk)
         if type(parallel_safe) is not bool or (parallel_safe and risk != "read-only"):
             raise ValueError("parallel_safe requires an explicitly read-only tool")
+        if type(exclusive_batch) is not bool or (exclusive_batch and parallel_safe):
+            raise ValueError("exclusive_batch must be boolean and cannot be parallel_safe")
         resolved_always_on = not deferred if always_on is None else bool(always_on)
         resolved_deferred = bool(deferred or not resolved_always_on)
         self._tools[spec.name] = Tool(
@@ -93,6 +98,7 @@ class ToolRegistry:
                 source_type=source_type,
                 source_name=source_name,
                 parallel_safe=parallel_safe,
+                exclusive_batch=exclusive_batch,
             ),
         )
 

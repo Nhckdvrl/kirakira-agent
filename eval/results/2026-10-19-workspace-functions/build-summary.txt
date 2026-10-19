@@ -1,0 +1,6 @@
+adding 'kirakira_agent-0.1.0.dist-info/entry_points.txt'
+adding 'kirakira_agent-0.1.0.dist-info/top_level.txt'
+adding 'kirakira_agent-0.1.0.dist-info/RECORD'
+removing build/bdist.linux-x86_64/wheel
+Successfully built dist/kirakira_agent-0.1.0.tar.gz
+Successfully built dist/kirakira_agent-0.1.0-py3-none-any.whl

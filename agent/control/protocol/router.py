@@ -61,7 +61,7 @@ class ConnectionRouter:
         # 1. 严格解析 UTF-8 JSON object。
         try:
             payload = json.loads(line.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        except (UnicodeDecodeError, json.JSONDecodeError):
             await self._send(JsonRpcError(-32700, "Parse error").envelope(None))
             return
         if not isinstance(payload, dict):
@@ -156,6 +156,15 @@ class ConnectionRouter:
         return await self._call_method(method, values)
 
     async def _call_method(self, method: str, values: dict[str, Any]) -> object:
+        if method.startswith(("project/", "directory/")):
+            try:
+                if method == "directory/set":
+                    return await self._service.set_directory(values)
+                from utils.async_tasks import run_sync_drained
+
+                return await run_sync_drained(self._service.workspace_call, method, values)
+            except (ValueError, OSError) as exc:
+                raise JsonRpcError(INVALID_PARAMS, str(exc)) from exc
         if method == "server/status":
             return self._service.status()
         if method == "thread/start":

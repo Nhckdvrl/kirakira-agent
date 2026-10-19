@@ -82,9 +82,18 @@ class ToolInvoker:
                         },
                     )
                     unsettled = ctx.store is not None
-                result = await registry.execute_async(
-                    ToolCall(call.id, tool_name, arguments)
+                token = registry.set_context(
+                    **{
+                        **registry.context,
+                        "tool_effect_key": f"{ctx.run_id if ctx else operation_id}:{call.id}",
+                    }
                 )
+                try:
+                    result = await registry.execute_async(
+                        ToolCall(call.id, tool_name, arguments)
+                    )
+                finally:
+                    registry.reset_context(token)
                 if ctx:
                     ctx.record(
                         "tool_result", {"operation_id": operation_id, **asdict(result)}

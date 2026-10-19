@@ -1,0 +1,46 @@
+{
+  "rounds": [
+    {
+      "file": "step-evidence.json",
+      "passed": 9,
+      "total": 9,
+      "requests": 33,
+      "statuses": {
+        "completed": 33
+      },
+      "returned_total_tokens": 67393
+    },
+    {
+      "file": "step-first.json",
+      "passed": 9,
+      "total": 9,
+      "requests": 33,
+      "statuses": {
+        "completed": 33
+      },
+      "returned_total_tokens": 65795
+    },
+    {
+      "file": "step-release.json",
+      "passed": 9,
+      "total": 9,
+      "requests": 34,
+      "statuses": {
+        "completed": 34
+      },
+      "returned_total_tokens": 68097
+    },
+    {
+      "file": "step-review.json",
+      "passed": 9,
+      "total": 9,
+      "requests": 33,
+      "statuses": {
+        "completed": 33
+      },
+      "returned_total_tokens": 65856
+    }
+  ],
+  "scenario_executions": 36,
+  "returned_total_tokens": 267141
+}

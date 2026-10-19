@@ -1,0 +1,17 @@
+{
+  "wheel": {
+    "sha256": "6d60e1093465880b9e14ce53952a39f3dee7992a47f3b403b7d0ec076beff20c"
+  },
+  "sdist": {
+    "sha256": "d550f93706a05012c6edd793853c128cc770a6611814770d952749fd32a17334"
+  },
+  "new_modules_match_source": [
+    "session/owner_store.py",
+    "bootstrap/workspace.py",
+    "plugins/projects/service.py",
+    "plugins/working_directory/service.py",
+    "frontend/workspace_ui.py",
+    "migrations/yoyo/20261019_02_workspace_owners.py"
+  ],
+  "runtime_databases_packaged": false
+}

@@ -115,6 +115,7 @@ textarea { flex: 1; min-height: 44px; max-height: 200px; resize: vertical; }
   <span class="spacer"></span>
   <button id="stop">中断本轮</button>
   <a href="/dashboard"><button type="button">仪表盘</button></a>
+  <a href="/workspace"><button type="button">项目与目录</button></a>
 </header>
 <section id="log"><div class="wrap" id="stream"></div></section>
 <form id="form">
@@ -129,8 +130,10 @@ const stream = document.querySelector("#stream");
 const log = document.querySelector("#log");
 const text = document.querySelector("#text");
 const dot = document.querySelector("#dot");
-const sessionId = localStorage.kirakiraSessionId || crypto.randomUUID();
-localStorage.kirakiraSessionId = sessionId;
+const projectId = new URLSearchParams(location.search).get("project_id");
+const storageKey = projectId ? "kirakiraSessionId:" + projectId : "kirakiraSessionId";
+const sessionId = localStorage[storageKey] || (projectId ? projectId + ":" : "") + crypto.randomUUID();
+localStorage[storageKey] = sessionId;
 document.querySelector("#sid").textContent = sessionId.slice(0, 8);
 
 function add(kind, who, value, meta) {
@@ -164,7 +167,7 @@ async function send() {
     const resp = await fetch("/message", {
       method: "POST",
       headers: {"content-type": "application/json"},
-      body: JSON.stringify({session_id: sessionId, text: value})
+      body: JSON.stringify({session_id: sessionId, text: value, ...(projectId ? {project_id: projectId} : {})})
     });
     const data = await resp.json();
     if (data.error) add("error", "错误", data.error);

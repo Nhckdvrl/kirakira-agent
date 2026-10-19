@@ -1,0 +1,198 @@
+........................................................................ [  9%]
+........................................................................ [ 19%]
+........................................................................ [ 29%]
+........................................................................ [ 39%]
+........................................................................ [ 49%]
+.......FFF...F.......................................................... [ 59%]
+........................................................................ [ 69%]
+........................................................................ [ 79%]
+........................................................................ [ 89%]
+.................................................................... [ 99%]
+.....                                                                    [100%]
+=================================== FAILURES ===================================
+______ test_origin_records_current_schema_without_touching_business_data _______
+
+self = <agent.migrations.runner.MigrationRunner object at 0x14b113040050>
+
+    def _apply_pending(self) -> MigrationOutcome:
+        migration_ids: tuple[str, ...] = ()
+        try:
+            if not self.migrations_root.is_dir():
+                raise FileNotFoundError(
+                    f"migration catalog does not exist: {self.migrations_root}"
+                )
+            self.ledger_path.parent.mkdir(parents=True, exist_ok=True)
+            migrations = read_migrations(str(self.migrations_root))
+            backend = get_backend(self._ledger_uri())
+            os.chmod(self.ledger_path, 0o600)
+            with (
+                _bind_yoyo_username(),
+                backend,
+                bind_migration_context(
+                    config_path=self.config_path,
+                    workspace=self.workspace,
+                ),
+            ):
+                pending = backend.to_apply(migrations)
+                migration_ids = tuple(migration.id for migration in pending)
+>               backend.apply_migrations(pending)
+
+agent/migrations/runner.py:71:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.14/site-packages/yoyo/backends/base.py:472: in apply_migrations
+    self.apply_migrations_only(migrations, force=force)
+.venv/lib/python3.14/site-packages/yoyo/backends/base.py:484: in apply_migrations_only
+    self.apply_one(m, force=force)
+.venv/lib/python3.14/site-packages/yoyo/backends/base.py:530: in apply_one
+    migration.process_steps(migration_backend, "apply", force=force)
+.venv/lib/python3.14/site-packages/yoyo/migrations.py:273: in process_steps
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.14/site-packages/yoyo/migrations.py:258: in process_steps
+    getattr(step, direction)(backend, force)
+.venv/lib/python3.14/site-packages/yoyo/migrations.py:315: in apply
+    getattr(self.step, direction)(backend, force)
+.venv/lib/python3.14/site-packages/yoyo/migrations.py:412: in apply
+    self._apply(backend.connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+_connection = <sqlite3.Connection object at 0x14b11300a4d0>
+
+    def create_owner_state(_connection):
+        path = current_migration_context().workspace / "sessions.db"
+        if not path.exists():
+            return
+        with sqlite3.connect(path) as db:
+>           db.execute("""CREATE TABLE IF NOT EXISTS owner_records (
+                owner TEXT NOT NULL, key TEXT NOT NULL, version INTEGER NOT NULL,
+                value_json TEXT NOT NULL, PRIMARY KEY(owner,key))""")
+E           sqlite3.DatabaseError: file is not a database
+
+migrations/yoyo/20261019_02_workspace_owners.py:17: DatabaseError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/tmp/pytest-of-xiang/pytest-166/test_origin_records_current_sc0')
+
+    def test_origin_records_current_schema_without_touching_business_data(
+        tmp_path: Path,
+    ) -> None:
+        root = tmp_path / "state"
+        workspace = root / "workspace"
+        memory = workspace / "memory"
+        memory.mkdir(parents=True)
+        fixtures = {
+            workspace / "sessions.db": b"session-v1",
+            memory / "coremem.db": b"default-memory-v1",
+            memory / "akasha.db": b"akasha-v1",
+            memory / "MEMORY.md": "stable profile\n".encode(),
+        }
+        for path, payload in fixtures.items():
+            path.write_bytes(payload)
+
+>       outcome = _runner(root).run()
+                  ^^^^^^^^^^^^^^^^^^^
+
+tests/test_migration_runner.py:49:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+agent/migrations/runner.py:46: in run
+    return self._apply_pending()
+           ^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <agent.migrations.runner.MigrationRunner object at 0x14b113040050>
+
+    def _apply_pending(self) -> MigrationOutcome:
+        migration_ids: tuple[str, ...] = ()
+        try:
+            if not self.migrations_root.is_dir():
+                raise FileNotFoundError(
+                    f"migration catalog does not exist: {self.migrations_root}"
+                )
+            self.ledger_path.parent.mkdir(parents=True, exist_ok=True)
+            migrations = read_migrations(str(self.migrations_root))
+            backend = get_backend(self._ledger_uri())
+            os.chmod(self.ledger_path, 0o600)
+            with (
+                _bind_yoyo_username(),
+                backend,
+                bind_migration_context(
+                    config_path=self.config_path,
+                    workspace=self.workspace,
+                ),
+            ):
+                pending = backend.to_apply(migrations)
+                migration_ids = tuple(migration.id for migration in pending)
+                backend.apply_migrations(pending)
+        except Exception as exc:
+>           raise RuntimeError(
+                f"Yoyo migration failed: ledger={self.ledger_path} detail={exc}"
+            ) from exc
+E           RuntimeError: Yoyo migration failed: ledger=/tmp/pytest-of-xiang/pytest-166/test_origin_records_current_sc0/state/workspace/migrations.sqlite3 detail=file is not a database
+
+agent/migrations/runner.py:73: RuntimeError
+__________________________ test_origin_is_idempotent ___________________________
+
+tmp_path = PosixPath('/tmp/pytest-of-xiang/pytest-166/test_origin_is_idempotent0')
+
+    def test_origin_is_idempotent(tmp_path: Path) -> None:
+        runner = _runner(tmp_path / "state")
+
+>       assert runner.run().migrations == PROJECT_MIGRATIONS
+E       AssertionError: assert ('20260804_01...space_owners') == ('20260804_01...scheduler_v2')
+E
+E         Left contains one more item: '20261019_02_workspace_owners'
+E         Use -v to get more diff
+
+tests/test_migration_runner.py:61: AssertionError
+__________ test_context_compaction_migration_backs_up_and_adds_schema __________
+
+tmp_path = PosixPath('/tmp/pytest-of-xiang/pytest-166/test_context_compaction_migrat0')
+
+    def test_context_compaction_migration_backs_up_and_adds_schema(tmp_path: Path) -> None:
+        root = tmp_path / "state"
+        workspace = root / "workspace"
+        workspace.mkdir(parents=True)
+        database = workspace / "sessions.db"
+        with sqlite3.connect(database) as connection:
+            connection.execute(
+                "CREATE TABLE sessions (key TEXT PRIMARY KEY, created_at TEXT NOT NULL, "
+                "updated_at TEXT NOT NULL, metadata_json TEXT NOT NULL, "
+                "last_consolidated INTEGER NOT NULL DEFAULT 0)"
+            )
+            connection.execute(
+                "INSERT INTO sessions VALUES ('s', 'created', 'updated', '{}', 7)"
+            )
+
+>       assert _runner(root).run().migrations == PROJECT_MIGRATIONS
+E       AssertionError: assert ('20260804_01...space_owners') == ('20260804_01...scheduler_v2')
+E
+E         Left contains one more item: '20261019_02_workspace_owners'
+E         Use -v to get more diff
+
+tests/test_migration_runner.py:81: AssertionError
+________________ test_ledger_supports_workspace_uri_characters _________________
+
+tmp_path = PosixPath('/tmp/pytest-of-xiang/pytest-166/test_ledger_supports_workspace0')
+
+    def test_ledger_supports_workspace_uri_characters(tmp_path: Path) -> None:
+        root = tmp_path / "state with # and ?"
+
+>       assert _runner(root).run().migrations == PROJECT_MIGRATIONS
+E       AssertionError: assert ('20260804_01...space_owners') == ('20260804_01...scheduler_v2')
+E
+E         Left contains one more item: '20261019_02_workspace_owners'
+E         Use -v to get more diff
+
+tests/test_migration_runner.py:163: AssertionError
+=============================== warnings summary ===============================
+tests/test_telegram_utils.py: 22 warnings
+  /home/xiang/projects/kirakira-agent/.venv/lib/python3.14/site-packages/telegram/error.py:243: PTBDeprecationWarning: Deprecated since version v22.2: In a future major version attribute `retry_after` will be of type `datetime.timedelta`. You can opt-in early by setting `PTB_TIMEDELTA=true` or ``PTB_TIMEDELTA=1`` as an environment variable.
+    return get_timedelta_value(  # type: ignore[return-value]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_migration_runner.py::test_origin_records_current_schema_without_touching_business_data
+FAILED tests/test_migration_runner.py::test_origin_is_idempotent - AssertionE...
+FAILED tests/test_migration_runner.py::test_context_compaction_migration_backs_up_and_adds_schema
+FAILED tests/test_migration_runner.py::test_ledger_supports_workspace_uri_characters
+4 failed, 717 passed, 22 warnings, 4 subtests passed in 53.77s

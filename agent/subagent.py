@@ -133,7 +133,15 @@ class SubagentManager:
                 self._release_admission(task_id)
                 return "Error: channel/chat context is required for background mode"
             task_dir = self._runs_dir / task_id
-            task_dir.mkdir(parents=True, exist_ok=False)
+            try:
+                task_dir.mkdir(parents=True, exist_ok=False)
+                self.sessions.get_or_create(
+                    f"{parent_session}:{task_id}",
+                    metadata={"parent_session_key": parent_session},
+                )
+            except BaseException:
+                self._release_admission(task_id)
+                raise
             self._jobs[task_id] = RunningSubagentJob(
                 task_id=task_id,
                 label=display_label,
@@ -190,6 +198,10 @@ class SubagentManager:
                 _MAX_BACKGROUND_JOBS,
             )
         try:
+            self.sessions.get_or_create(
+                f"{parent_session}:{task_id}",
+                metadata={"parent_session_key": parent_session},
+            )
             result = await self._run_child(
                 task_id,
                 task,

@@ -349,6 +349,7 @@ class SessionManager:
         self.session_dir = workspace / "sessions"
         self.session_dir.mkdir(parents=True, exist_ok=True)
         self._cache: Dict[str, Session] = {}
+        self._initializers = {}
         self._delete_callbacks: List[Callable[[str], None]] = []
         self._index_lock = threading.Lock()
         # SQLite 是会话与消息的唯一权威状态。sessions/*.json 只作为旧版一次性
@@ -383,31 +384,60 @@ class SessionManager:
             ).fetchone()
         return (int(row[0]), str(row[1])) if row else None
 
-    def get_or_create(self, key: str) -> Session:
+    def register_initializer(self, name, callback):
+        if name in self._initializers:
+            raise ValueError("session initializer already registered: " + name)
+        self._initializers[name] = callback
+
+    def get_or_create(self, key: str, *, metadata: JsonDict | None = None) -> Session:
+        def check_scope(session):
+            if metadata and "project_id" in metadata:
+                if session.metadata.get("project_id") != metadata["project_id"]:
+                    raise ValueError("an existing session cannot change its project")
+            return session
+
         if key in self._cache:
-            return self._cache[key]
+            return check_scope(self._cache[key])
         with self._index_lock:
-            row = self._index.execute(
-                "SELECT created_at, updated_at, metadata_json, last_consolidated, "
-                "context_compaction_generation "
-                "FROM sessions WHERE key = ?",
-                (key,),
-            ).fetchone()
-            if row is None:
-                session = Session(key=key)
-            else:
-                messages = self._load_message_rows(key)
-                session = Session(
-                    key=key,
-                    messages=messages,
-                    created_at=str(row[0]),
-                    updated_at=str(row[1]),
-                    metadata=dict(json.loads(str(row[2]))),
-                    last_consolidated=int(row[3]),
-                    context_compaction_generation=int(row[4]),
-                )
-        self._cache[key] = session
-        return session
+            if key in self._cache:
+                return check_scope(self._cache[key])
+            transactional = bool(self._initializers)
+            if transactional:
+                self._index.execute("BEGIN IMMEDIATE")
+            try:
+                row = self._index.execute(
+                    "SELECT created_at, updated_at, metadata_json, last_consolidated, "
+                    "context_compaction_generation FROM sessions WHERE key = ?",
+                    (key,),
+                ).fetchone()
+                if row is None:
+                    session = Session(key=key, metadata=dict(metadata or {}))
+                    if transactional:
+                        from session.owner_store import OwnerTransaction
+
+                        self._insert_session_and_messages(session)
+                        transaction = OwnerTransaction(self._index)
+                        for initialize in self._initializers.values():
+                            initialize(session, transaction)
+                else:
+                    session = Session(
+                        key=key,
+                        messages=self._load_message_rows(key),
+                        created_at=str(row[0]),
+                        updated_at=str(row[1]),
+                        metadata=dict(json.loads(str(row[2]))),
+                        last_consolidated=int(row[3]),
+                        context_compaction_generation=int(row[4]),
+                    )
+                    check_scope(session)
+                if transactional:
+                    self._index.commit()
+            except BaseException:
+                if transactional:
+                    self._index.rollback()
+                raise
+            self._cache[key] = session
+            return session
 
     def session_exists(self, key: str) -> bool:
         """判断会话是否已经存在,不像 ``get_or_create`` 那样顺带创建。
@@ -806,11 +836,13 @@ class SessionManager:
 
     def _initialize_index(self) -> bool:
         from session.publications import ensure_publications
+        from session.owner_store import ensure_owner_records
 
         with self._index_lock:
             self._index.execute("PRAGMA journal_mode=WAL")
             self._index.execute("PRAGMA synchronous=FULL")
             self._index.execute("PRAGMA foreign_keys=ON")
+            ensure_owner_records(self._index)
             self._index.execute(
                 "CREATE TABLE IF NOT EXISTS sessions ("
                 "key TEXT PRIMARY KEY, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, "

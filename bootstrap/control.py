@@ -138,6 +138,7 @@ def build_control_plane(
     workspace: Path,
     pipeline: Any,
     sessions: Any,
+    workspace_services: Any = None,
     endpoint: str | Path | None = None,
     workspace_token: str | None = None,
     boot_id: str | None = None,
@@ -159,6 +160,8 @@ def build_control_plane(
             quiesce=runtime.quiesce_for_restart,
             resume=runtime.resume_after_restart_cancel,
         )
+    if workspace_services is not None:
+        workspace_services.admission = pipeline.admission
     service = ControlService(
         runtime,
         sessions,
@@ -170,6 +173,7 @@ def build_control_plane(
         boot_id=boot_id,
         ready=lambda: True,
         restart_coordinator=restart_coordinator,
+        workspace_services=workspace_services,
     )
     resolved = endpoint or (Path(workspace) / ".kirakira" / "control.sock")
     server = SocketAppServer(resolved, service)

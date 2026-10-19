@@ -37,11 +37,13 @@ class ControlService:
         boot_id: str | None = None,
         ready: Callable[[], bool] | None = None,
         restart_coordinator: Any = None,
+        workspace_services: Any = None,
     ) -> None:
         self.runtime = runtime
         self.sessions = sessions
         self.store = store
         self.workspace = workspace.resolve()
+        self.workspace_services = workspace_services
         self._plugin_drain = plugin_drain
         self._consolidate = consolidate
         self._workspace_token = workspace_token
@@ -75,6 +77,64 @@ class ControlService:
             "protocolVersion": "1.0",
         }
 
+    async def workspace_request(self, method, params):
+        from agent.control.protocol.models import METHOD_PARAMS
+        from utils.async_tasks import run_sync_drained
+
+        if method == "thread/start":
+            values = METHOD_PARAMS[method].validate(params)
+            return await run_sync_drained(self.start_thread, values["metadata"])
+        if (
+            not isinstance(method, str)
+            or not method.startswith(("project/", "directory/"))
+            or method not in METHOD_PARAMS
+        ):
+            raise ValueError("unsupported workspace method")
+        if not isinstance(params, dict):
+            raise ValueError("params must be an object")
+        values = METHOD_PARAMS[method].validate(params)
+        if method == "directory/set":
+            return await self.set_directory(values)
+        return await run_sync_drained(self.workspace_call, method, values)
+
+    def workspace_call(self, method, values):
+        services = self.workspace_services
+        if services is None:
+            raise ValueError("workspace capabilities are unavailable")
+        projects, directories = services.projects, services.directories
+        if method == "project/list":
+            return {"items": projects.list()}
+        if method == "project/create":
+            return projects.create(values["projectId"], values["name"], values["directory"])
+        if method == "project/update":
+            return projects.update(
+                values["projectId"], name=values["name"], archived=values["archived"],
+                expected_version=values["expectedRevision"],
+            )
+        if method == "project/bindDirectory":
+            return projects.bind_directory(values["projectId"], values["path"])
+        if method == "directory/browse":
+            return directories.browse(values["path"], values["after"])
+        if method == "directory/current":
+            self._thread_record(values["threadId"])
+            return directories.current_info(values["threadId"])
+        raise ValueError("unknown workspace method")
+
+    async def set_directory(self, values):
+        self._thread_record(values["threadId"])
+        services = self.workspace_services
+        if services is None or services.admission is None:
+            raise ValueError("directory capability is unavailable")
+        from utils.async_tasks import run_sync_drained
+
+        async with services.admission.hold(values["threadId"]):
+            return await run_sync_drained(
+                services.directories.switch,
+                values["threadId"], values["path"],
+                receipt_key="control:" + values["threadId"] + ":" + values["requestId"],
+                expected_version=values["expectedRevision"],
+            )
+
     def notify_turn_delivered(self, turn_id: str) -> None:
         """terminal 事件已送达客户端 → 重启提交的第二个条件成立。"""
         if self._restart_coordinator is not None:
@@ -88,7 +148,7 @@ class ControlService:
 
     def start_thread(self, metadata: dict[str, Any]) -> dict[str, object]:
         thread_id = new_thread_id()
-        session = self.sessions.get_or_create(thread_id)
+        session = self.sessions.get_or_create(thread_id, metadata=metadata)
         session.metadata.update(metadata)
         self.sessions.save(session)
         return self._thread_record(thread_id).to_dict()

@@ -49,6 +49,7 @@ from core.schema import (
     tool_result_message,
 )
 from session.compaction_runtime import CompactionProjection, SessionCompactionRuntime
+from utils.async_tasks import run_sync_drained
 
 logger = logging.getLogger(__name__)
 JsonDict = Dict[str, Any]
@@ -154,6 +155,11 @@ class DefaultReasoner:
         policy: ReasoningPolicy | None = None,
     ) -> ReasonerResult:
         policy = policy or ReasoningPolicy()
+        system_base = (
+            str(messages[0].get("content") or "")
+            if messages and messages[0].get("role") == "system"
+            else None
+        )
         tools_used: List[str] = []
         tool_chain: List[JsonDict] = []
         final_reply = ""
@@ -246,6 +252,24 @@ class DefaultReasoner:
             return prepared
 
         while iteration_limit <= 0 or iteration < iteration_limit:
+            directories = self.tools.directory_provider
+            if directories is not None:
+                material = await run_sync_drained(directories.material, session_key)
+                if system_base is not None:
+                    addition = (
+                        "\n\n<working-directory-context>\n"
+                        + material
+                        + "\n</working-directory-context>"
+                        if material else ""
+                    )
+                    refreshed = system_base + addition
+                    if messages[0].get("content") != refreshed:
+                        messages[0] = {**messages[0], "content": refreshed}
+                        if compactor is not None:
+                            compactor.refresh_system(messages[0])
+                elif material:
+                    messages.insert(0, {"role": "system", "content": material})
+                    system_base = ""
             visible_specs = [
                 spec
                 for spec in tools.visible_specs(unlocked)
@@ -395,6 +419,14 @@ class DefaultReasoner:
                 and len(response.tool_calls) != 1
                 and any(
                     call.name in policy.terminal_tools for call in response.tool_calls
+                )
+            )
+            conflicting_batch = conflicting_batch or (
+                len(response.tool_calls) > 1
+                and any(
+                    (tool := tools.get_tool(call.name)) is not None
+                    and tool.meta.exclusive_batch
+                    for call in response.tool_calls
                 )
             )
             async def invoke(call):
