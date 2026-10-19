@@ -38,6 +38,24 @@ async def rebuild(source, output, model, embedding_endpoint):
         vectors, dimensions = {}, set()
         with closing(sqlite3.connect(snapshot)) as db:
             db.row_factory = sqlite3.Row
+            spaces = []
+            for item in db.execute("SELECT DISTINCT model FROM message_embeddings"):
+                try:
+                    space = json.loads(item[0])
+                except ValueError, TypeError:
+                    continue
+                if (
+                    isinstance(space, dict)
+                    and set(space) == {"model", "endpoint", "dimensions"}
+                    and space["model"] == model
+                    and space["endpoint"] == embedding_endpoint
+                ):
+                    spaces.append((item[0], space))
+            if len(spaces) > 1:
+                raise ValueError(
+                    "multiple fixed embedding spaces; isolate the intended source cache"
+                )
+            cache_key, cached_space = spaces[0] if spaces else (model, None)
             for row in db.execute(
                 "SELECT p.message_id,p.session_key FROM message_publications p ORDER BY p.position"
             ).fetchall():
@@ -58,7 +76,7 @@ async def rebuild(source, output, model, embedding_endpoint):
                         "WHERE message_id=? AND model=? AND content_hash=?",
                         (
                             message.id,
-                            model,
+                            cache_key,
                             hashlib.sha256(message.content.encode()).hexdigest(),
                         ),
                     ).fetchone()
@@ -80,6 +98,15 @@ async def rebuild(source, output, model, embedding_endpoint):
         if len(dimensions) != 1:
             raise ValueError("replay requires a nonempty, uniform embedding space")
 
+        if (
+            cached_space is not None
+            and cached_space["dimensions"] is not None
+            and cached_space["dimensions"] != next(iter(dimensions))
+        ):
+            raise ValueError(
+                "fixed vector dimensions disagree with their space identity"
+            )
+
         class FixedVectors:
             model_id = model
 
@@ -92,7 +119,9 @@ async def rebuild(source, output, model, embedding_endpoint):
                 embedding=MemoryEmbeddingConfig(
                     model=model,
                     base_url=embedding_endpoint,
-                    output_dimensionality=dimensions.pop(),
+                    output_dimensionality=cached_space["dimensions"]
+                    if cached_space is not None
+                    else next(iter(dimensions)),
                 )
             ),
         )
@@ -125,6 +154,9 @@ async def rebuild(source, output, model, embedding_endpoint):
         "learned_turns": learned,
         "source_cursor": cursor,
         "model": model,
+        "cache_identity": "full_space"
+        if cached_space is not None
+        else "legacy_model_only",
         "output": str(output),
         "sha256": hashlib.sha256(output.read_bytes()).hexdigest(),
     }

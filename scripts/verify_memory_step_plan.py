@@ -180,13 +180,63 @@ async def verify(a):
                     read_only=True,
                 )
 
+                observed_fetches = []
+                fetch = tools.get_tool("fetch_messages")
+                original_fetch = fetch.handler
+
+                def capture_fetch(source_ref, context=2):
+                    result = original_fetch(source_ref, context)
+                    observed_fetches.append(
+                        {
+                            "source_ref": source_ref,
+                            "returned_ids": [
+                                row["source_ref"] for row in json.loads(result)
+                            ],
+                        }
+                    )
+                    return result
+
+                fetch.handler = capture_fetch
+
                 async def recall(tools=tools):
                     result = await run(
                         tools,
-                        'What is the final deployment-handoff release code? First recall_memory with query "deployment-handoff release code". Then fetch_messages with a returned source_ref to check the original correction. Answer only the final code, not the obsolete code. Do not write memory.',
+                        'What is the final deployment-handoff release code? First recall_memory with query "deployment-handoff release code". Then fetch_messages with a returned source_ref to check the original correction. Answer only the final code, not the obsolete code. Do not write memory.'
+                        + (
+                            " Pass a returned source_ref unchanged to fetch_messages, including the complete JSON ID list; do not split it into single IDs."
+                            if kind == "akasha2"
+                            else ""
+                        ),
                     )
-                    assert {"recall_memory", "fetch_messages"} <= set(result.tools_used)
-                    assert nonce in result.reply and "OLD_OBSOLETE" not in result.reply
+                    diagnostic = json.dumps(
+                        {
+                            "tools": result.tools_used,
+                            "reply": result.reply,
+                            "fetches": observed_fetches,
+                        },
+                        ensure_ascii=False,
+                    )
+                    assert {"recall_memory", "fetch_messages"} <= set(
+                        result.tools_used
+                    ), diagnostic
+                    assert (
+                        nonce in result.reply and "OLD_OBSOLETE" not in result.reply
+                    ), diagnostic
+                    if kind == "akasha2":
+                        ranges = [
+                            entry
+                            for entry in observed_fetches
+                            if entry["source_ref"].startswith("[")
+                        ]
+                        assert ranges, (
+                            "model did not exercise the unchanged recall range: "
+                            + diagnostic
+                        )
+                        assert all(
+                            set(json.loads(entry["source_ref"]))
+                            <= set(entry["returned_ids"])
+                            for entry in ranges
+                        ), diagnostic
                     assert set(tools.names()) == {
                         "recall_memory",
                         "search_messages",
@@ -195,6 +245,7 @@ async def verify(a):
                     return {
                         "tools": result.tools_used,
                         "reply": result.reply,
+                        "fetches": observed_fetches,
                         "messages": sum(
                             len(s.messages) for s in sessions._cache.values()
                         ),

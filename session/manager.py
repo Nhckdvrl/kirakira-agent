@@ -607,33 +607,77 @@ class SessionManager:
         ]
 
     def fetch_messages(self, source_ref: str, context: int = 2) -> List[JsonDict]:
-        with self._index_lock:
-            target = self._index.execute(
-                "SELECT session_key, seq FROM messages WHERE id = ?", (source_ref,)
-            ).fetchone()
-            # 兼容旧 source_ref=session:index，但返回稳定 message id。
-            if target is None and ":" in source_ref:
-                session_key, raw_seq = source_ref.rsplit(":", 1)
-                try:
-                    target = (session_key, int(raw_seq))
-                except ValueError:
-                    target = None
-            if target is None:
-                return []
-            radius = max(0, int(context))
-            rows = self._index.execute(
-                "SELECT id, role, content, ts FROM messages "
-                "WHERE session_key = ? AND seq BETWEEN ? AND ? ORDER BY seq",
-                (str(target[0]), int(target[1]) - radius, int(target[1]) + radius),
-            ).fetchall()
+        """Resolve an exact ID or recall's JSON ID list through one source snapshot."""
+        from session.turn_source import original_message_snapshot
+
+        multiple = source_ref.lstrip().startswith("[")
+        identities = json.loads(source_ref) if multiple else [source_ref]
+        if (
+            not isinstance(identities, list)
+            or not 1 <= len(identities) <= 64
+            or any(
+                not isinstance(identity, str) or not identity.strip()
+                for identity in identities
+            )
+        ):
+            raise ValueError(
+                "source_ref requires one ID or a JSON list of 1..64 nonempty IDs"
+            )
+        identities = list(dict.fromkeys(identities))
+        radius = max(0, min(50, int(context)))
+        selected, sessions, anchors = {}, [], set()
+        with (
+            self._index_lock,
+            original_message_snapshot(self.workspace / "sessions.db") as db,
+        ):
+            for identity in identities:
+                target = db.execute(
+                    "SELECT id, session_key, seq FROM messages WHERE id=?", (identity,)
+                ).fetchone()
+                if target is None and not multiple and ":" in identity:
+                    session_key, raw_seq = identity.rsplit(":", 1)
+                    try:
+                        sequence = int(raw_seq)
+                    except ValueError:
+                        return []
+                    target = db.execute(
+                        "SELECT id, session_key, seq FROM messages WHERE session_key=? AND seq=?",
+                        (session_key, sequence),
+                    ).fetchone()
+                if target is None:
+                    if multiple:
+                        raise ValueError(
+                            "source_ref contains a missing original message"
+                        )
+                    return []
+                anchors.add(target["id"])
+                if target["session_key"] not in sessions:
+                    sessions.append(target["session_key"])
+                rows = db.execute(
+                    "SELECT id, session_key, seq, role, content, ts FROM messages "
+                    "WHERE session_key=? AND seq BETWEEN ? AND ? ORDER BY seq",
+                    (
+                        target["session_key"],
+                        target["seq"] - radius,
+                        target["seq"] + radius,
+                    ),
+                ).fetchall()
+                selected.update((row["id"], row) for row in rows)
+        ordered = sorted(
+            selected.values(),
+            key=lambda row: (sessions.index(row["session_key"]), row["seq"]),
+        )
         return [
             {
-                "source_ref": str(row[0]),
-                "role": str(row[1]),
-                "content": str(row[2]),
-                "timestamp": str(row[3]),
+                "source_ref": row["id"],
+                "session_key": row["session_key"],
+                "seq": row["seq"],
+                "role": row["role"],
+                "content": row["content"],
+                "timestamp": row["ts"],
+                "is_anchor": row["id"] in anchors,
             }
-            for row in rows
+            for row in ordered
         ]
 
     def list_sessions(self) -> List[JsonDict]:

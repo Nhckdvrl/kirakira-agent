@@ -1,7 +1,8 @@
 # 记忆评测
 
 合同回归与回答质量分别验证。确定性 hash 向量只用于消费、重放、幂等与持久化测试，不能支持记忆质量结论。
-本轮实测结果、逐题文件与限制见 [最新实验报告](./evaluations/2026-10-19-memory-followup.md)。
+公开 QA、逐题文件与限制见[公开机制与系统对照](./evaluations/2026-10-19-memory-followup.md)，
+原文证据、丢图重建和专项合同见[事件记忆实验](./evaluations/2026-10-19-episodic.md)。
 早期 graph-only 读出与配置修正保留在[历史报告](./evaluations/2026-10-19-memory.md)，不作当前 adapter 成绩。
 
 ## 三层证据
@@ -229,3 +230,55 @@ Mem0 的原始系统 prompt 保留，只有受校验的 HTTP 传输和 BGE query
 不能直接计算系统速度比。提取上限 32,768 与 reader/judge 8,192 分开记录。
 失败输入与失败模型调用必须保留；失败写入不进入 reader 猜答案，而是按 ingestion 错误计入分母。
 未完成、截断和发现 fixture ID 泄漏后中止的预检单独归档，不能挑其中成功案例并入最终成绩。
+
+## 事件记忆专项合同
+
+`episodic_fixture` 先固定合成数据、seed、全部题目和严格答案；它不是 LongMemEval 的新版本。
+六类各四题，包含偏好和弃答，不按某个系统得分挑选。所有模型调用前保留生成的 `protocol.json`。
+
+```bash
+uv run --frozen --group eval --group comparison python -m eval.episodic_fixture --output /tmp/episodic-new
+uv run --frozen --group eval --group comparison python -m eval.longmemeval.embed_local \
+  --dataset /tmp/episodic-new/dataset.json --selection /tmp/episodic-new/selection.json \
+  --cache /absolute/cache/models --output /tmp/episodic-new/vectors.npz
+uv run --frozen python -m eval.longmemeval.prepare_retrieval \
+  --dataset /tmp/episodic-new/dataset.json --selection /tmp/episodic-new/selection.json \
+  --embeddings /tmp/episodic-new/vectors.npz --workspace /tmp/episodic-new/cases \
+  --output /tmp/episodic-new/graph.jsonl --akasha2-only
+uv run --frozen python -m eval.longmemeval.baselines \
+  --dataset /tmp/episodic-new/dataset.json --embeddings /tmp/episodic-new/vectors.npz \
+  --graph-retrieval /tmp/episodic-new/graph.jsonl --output /tmp/episodic-new/baselines.jsonl
+```
+
+baseline 文件只含 BM25/RRF/recency；必须同时传入 graph 文件才包含 no_memory/dense/akasha2。
+按上一节使用同一合成 dataset/selection 运行真实 Mem0。其写入结束后统一评分：
+
+```bash
+uv run --frozen python -m eval.episodic_eval \
+  --dataset /tmp/episodic-new/dataset.json \
+  --retrieval /tmp/episodic-new/graph.jsonl /tmp/episodic-new/baselines.jsonl /tmp/mem0-new.retrieval.jsonl \
+  --output /tmp/episodic-new/answers.jsonl --key-file /absolute/private/step-plan.key
+```
+
+评分前保存输入、reader 源码及模型参数身份；续跑不允许更换身份。无模型 judge，按 JSON 精确值判定，
+格式错误留在分母。偏好短语、标识、关系与弃答分开报告；简单合同题通过不能证明普遍检索优势。
+
+## 原文展开与源库独立重建
+
+新 Akasha2 在线学习会保存按完整空间身份绑定的原始 float32 向量，再提交学习。离线重建自动识别
+新缓存；旧 model-only 缓存在报告中单独标记。缺失、损坏或多个不明确空间继续严格失败，不联网补算。
+已有旧历史不会自动回填，测试不得删除真实派生库来演练。
+
+`verify_episodic_recovery` 接收冻结和最终两版检索文件、最终测试 cases 与固定向量：
+验证 reader 输入不变、完整 source_ref 原文展开、重启记录相等，再只用源库从空图重建。
+结果同时比较学习表与完整消费 JSON，并拦截网络连接：
+
+```bash
+uv run --frozen python -m scripts.verify_episodic_recovery \
+  --original-retrieval /tmp/episodic-new/graph-frozen.jsonl \
+  --final-retrieval /tmp/episodic-new/graph-final.jsonl --cases /tmp/episodic-new/final-cases \
+  --embeddings /tmp/episodic-new/vectors.npz --output /tmp/episodic-new/recovery.json
+```
+
+旧/新源库 IO 对照使用 `scripts.benchmark_memory_source`，从有完整历史的本仓库加载固定旧版本。
+同图比较 source connections、恢复/query 样本、原文/顺序及分数差；报告包含先后测量和缓存限制。

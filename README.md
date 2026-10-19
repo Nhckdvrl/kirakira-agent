@@ -33,12 +33,19 @@ conversation, proactive execution, long-term memory, and idle background work in
 one observable, extensible runtime. Sessions and runtime state stay in the selected
 local workspace by default.
 
-The October 19 refactor adds generation-scoped service capabilities, bounded model
-recovery without replaying completed tools, a persistent interest-decay pool, and
-durable Drift proposals. An optional Akasha2 engine uses pinned upstream algorithms
-with Kirakira's original-message consumption and atomic checkpoint adapter; v1 remains
-available. See the [implementation contract](./docs/decisions/0009-components-recovery-and-akasha2.md),
-[current scope](./docs/status/current.md), and [evaluation protocol](./docs/operations/memory-evaluation.md).
+Its optional episodic memory keeps original conversations as the source of truth.
+Exact semantic recall and associative graph completion recover related experiences
+with dates and source references; the agent can expand those references to inspect
+the original exchange. Learning happens after a committed conversation, while
+explicit recall leaves the learned graph unchanged. Checkpoints support recovery
+and replay from verified source messages and fixed embeddings.
+
+Plugin services use generation-scoped leases. Model recovery preserves completed
+tool results, while proactive decisions and Drift proposals keep durable state.
+Akasha2 uses pinned upstream algorithms with Kirakira's source-consumption and
+atomic checkpoint adapter; v1 remains available. See the
+[architecture](./docs/architecture/overview.md), [current scope](./docs/status/current.md),
+and [verification record](./docs/operations/verification.md).
 
 ## At a glance
 
@@ -46,6 +53,7 @@ available. See the [implementation contract](./docs/decisions/0009-components-re
 | --- | --- |
 | How does the agent run? | Passive turns, Proactive, and Drift share models, tools, memory, and channels |
 | Where does data live? | Sessions, memory, jobs, and traces stay in the selected local workspace by default |
+| How does it remember? | Exact recall plus associative completion, with original-message references and replayable graph state |
 | How is it extended? | Plugins, MCP, skills, tools, and proactive sources |
 | How is context governed? | Durable history stays complete; old units roll into a task summary while the newest 20k tokens stay raw |
 | How is execution inspected? | Tool chains, context traces, token usage, ticks, and module steps are persisted |

@@ -33,7 +33,8 @@ from core.memory.engine import (
 )
 from memory2.embedder import Embedder
 from plugins.akasha.consumption import publications
-from session.turn_source import load_committed_turn_messages
+from session.embedding_store import MessageEmbeddingStore
+from session.turn_source import committed_turn_from_snapshot, original_message_snapshot
 
 from .application.cycle import MemoryCycle
 from .domain.model import ContextState, MemoryConfig, Turn
@@ -78,13 +79,17 @@ def _timestamp(value):
     return parsed
 
 
-def _vector(value):
+def _vector(value, *, normalized=False):
     vector = np.asarray(value, dtype=np.float64)
     if vector.ndim != 1 or not vector.size or not np.isfinite(vector).all():
         raise ValueError("embedding must be a finite nonempty vector")
     norm = np.linalg.norm(vector)
-    if norm <= 0:
-        raise ValueError("zero embedding cannot identify a memory space")
+    if not np.isfinite(norm) or norm <= 0:
+        raise ValueError("embedding must have a finite positive norm")
+    if normalized:
+        if not np.isclose(norm, 1.0, rtol=1e-12, atol=1e-12):
+            raise ValueError("checkpoint binding must retain a normalized embedding")
+        return vector
     return vector / norm
 
 
@@ -129,8 +134,10 @@ class Akasha2MemoryEngine:
         self._poisoned = False
         self._closed = False
         self._dirty = 0
+        self._fixed_vectors = None
         self._every = checkpoint_every
         embedding = config.memory.embedding
+        self._dimensions = embedding.output_dimensionality
         self._embedder = embedder or Embedder(
             base_url=embedding.base_url or "",
             api_key=embedding.api_key,
@@ -198,17 +205,19 @@ class Akasha2MemoryEngine:
             ).fetchone()[0]
         return stream, head
 
-    def _messages(self, assistant_id):
-        with closing(sqlite3.connect(self._source)) as db:
-            row = db.execute(
-                "SELECT session_key FROM messages WHERE id=?", (assistant_id,)
-            ).fetchone()
+    def _messages(self, assistant_id, source=None):
+        if source is None:
+            with original_message_snapshot(self._source) as source:
+                return self._messages(assistant_id, source)
+        row = source.execute(
+            "SELECT session_key FROM messages WHERE id=?", (assistant_id,)
+        ).fetchone()
         if row is None:
             raise ValueError(
                 "checkpoint source message is missing; explicit rebuild required"
             )
-        return load_committed_turn_messages(
-            self._source,
+        return committed_turn_from_snapshot(
+            source,
             TurnCommitted(
                 session_key=row[0],
                 channel="memory",
@@ -217,7 +226,16 @@ class Akasha2MemoryEngine:
             ),
         )
 
-    def _turn(self, messages, vectors, *, query=False, text="", timestamp=None):
+    def _turn(
+        self,
+        messages,
+        vectors,
+        *,
+        query=False,
+        text="",
+        timestamp=None,
+        normalized=False,
+    ):
         previous = self._cycle.turns[-1] if self._cycle.turns else None
         if query:
             when = timestamp.isoformat()
@@ -259,8 +277,10 @@ class Akasha2MemoryEngine:
             committed_at=when if query else messages[1].ts,
             user_text=user,
             assistant_text=assistant,
-            user_dense=_vector(vectors[0]),
-            assistant_dense=None if query else _vector(vectors[1]),
+            user_dense=_vector(vectors[0], normalized=normalized),
+            assistant_dense=None
+            if query
+            else _vector(vectors[1], normalized=normalized),
             user_terms=tuple(sorted(tokenize(user).items())),
             assistant_terms=tuple(sorted(tokenize(assistant).items())),
             inter_gap_seconds=gap,
@@ -286,30 +306,34 @@ class Akasha2MemoryEngine:
             )
         turns = []
         previous_position = 0
-        for binding in checkpoint.bindings:
-            with closing(sqlite3.connect(self._source)) as db:
-                position = db.execute(
+        with original_message_snapshot(self._source) as source:
+            for binding in checkpoint.bindings:
+                position = source.execute(
                     "SELECT position FROM message_publications WHERE message_id=?",
                     (binding.assistant_id,),
                 ).fetchone()
-            if (
-                position is None
-                or not previous_position < position[0] <= checkpoint.cursor
-            ):
-                raise ValueError(
-                    "checkpoint consumption order differs from source publications"
+                if (
+                    position is None
+                    or not previous_position < position[0] <= checkpoint.cursor
+                ):
+                    raise ValueError(
+                        "checkpoint consumption order differs from source publications"
+                    )
+                previous_position = position[0]
+                messages = self._messages(binding.assistant_id, source)
+                if not messages or _digest(messages) != binding.source_digest:
+                    raise ValueError(
+                        "original messages changed since learning; explicit rebuild required"
+                    )
+                # _turn uses the exact preceding original turn for the causal gap.
+                self._cycle.turns = turns
+                turns.append(
+                    self._turn(
+                        messages,
+                        [binding.user_dense, binding.assistant_dense],
+                        normalized=True,
+                    )
                 )
-            previous_position = position[0]
-            messages = self._messages(binding.assistant_id)
-            if not messages or _digest(messages) != binding.source_digest:
-                raise ValueError(
-                    "original messages changed since learning; explicit rebuild required"
-                )
-            # _turn uses the exact preceding original turn for the causal gap.
-            self._cycle.turns = turns
-            turns.append(
-                self._turn(messages, [binding.user_dense, binding.assistant_dense])
-            )
         graph, events, evidence, context, recalls, bursts = load_memory_state(
             self._path, turns=turns, config=self._cfg
         )
@@ -367,6 +391,55 @@ class Akasha2MemoryEngine:
             raise cancellation
         return result
 
+    async def _fixed_pair(self, messages):
+        # Raw float32 vectors are durable replay inputs; normalized bindings alone
+        # cannot recreate the original provider values after a sidecar is lost.
+        if self._fixed_vectors is None:
+            self._fixed_vectors = MessageEmbeddingStore(self._source)
+        vectors = [
+            self._fixed_vectors.get(
+                message_id=m.id, content=m.content, model=self._space
+            )
+            for m in messages
+        ]
+        missing = [i for i, vector in enumerate(vectors) if vector is None]
+        if missing:
+            fresh = await self._embedder.embed_batch(
+                [messages[i].content for i in missing]
+            )
+            if len(fresh) != len(missing):
+                raise ValueError("embedding count differs from original message pair")
+            for index, value in zip(missing, fresh, strict=True):
+                vectors[index] = value
+        if self._messages(messages[-1].id) != messages:
+            raise ValueError("memory source changed during embedding")
+        with np.errstate(over="ignore", invalid="ignore"):
+            canonical = [np.asarray(vector, dtype=np.float32) for vector in vectors]
+        for vector in canonical:
+            _vector(vector)
+            if self._dimensions is not None and vector.shape != (self._dimensions,):
+                raise ValueError(
+                    "embedding dimensions disagree with the declared space"
+                )
+        expected = (
+            self._cycle.turns[0].user_dense.shape
+            if self._cycle.turns
+            else canonical[0].shape
+        )
+        if any(vector.shape != expected for vector in canonical):
+            raise ValueError("embedding dimensions changed")
+        # Each successful write survives a failed learning/publish attempt. Source
+        # messages and publication order are untouched by this separate cache.
+        for index in missing:
+            message = messages[index]
+            self._fixed_vectors.upsert(
+                message_id=message.id,
+                content=message.content,
+                model=self._space,
+                embedding=canonical[index].tolist(),
+            )
+        return [vector.tolist() for vector in canonical]
+
     async def catch_up(self, *, max_items=64):
         async with self._lock:
             self._check()
@@ -384,15 +457,7 @@ class Akasha2MemoryEngine:
                 )
                 try:
                     if messages:
-                        vectors = await self._embedder.embed_batch(
-                            [m.content for m in messages]
-                        )
-                        if len(vectors) != 2:
-                            raise ValueError(
-                                "embedding count differs from original message pair"
-                            )
-                        if self._messages(publication["message_id"]) != messages:
-                            raise ValueError("memory source changed during embedding")
+                        vectors = await self._fixed_pair(messages)
                         turn = self._turn(messages, vectors)
                         if (
                             self._cycle.turns
@@ -482,38 +547,39 @@ class Akasha2MemoryEngine:
                 time_start=request.filters.time_start,
                 time_end=request.filters.time_end,
             )
-            for item in hits:
-                turn = self._cycle.turns[item.node_id]
-                messages = self._messages(turn.assistant_message_id)
-                if (
-                    _digest(messages)
-                    != self._checkpoint.bindings[item.node_id].source_digest
-                ):
-                    raise ValueError(
-                        "retrieved original messages changed; rebuild required"
+            with original_message_snapshot(self._source) as source:
+                for item in hits:
+                    turn = self._cycle.turns[item.node_id]
+                    messages = self._messages(turn.assistant_message_id, source)
+                    if (
+                        _digest(messages)
+                        != self._checkpoint.bindings[item.node_id].source_digest
+                    ):
+                        raise ValueError(
+                            "retrieved original messages changed; rebuild required"
+                        )
+                    refs = [turn.user_message_id, turn.assistant_message_id]
+                    records.append(
+                        MemoryRecord(
+                            id=turn.turn_id,
+                            kind="turn",
+                            summary=f"[{turn.started_at}] user: {messages[0].content}\nassistant: {messages[1].content}",
+                            score=item.score,
+                            engine_kind="akasha2",
+                            evidence=[
+                                EvidenceRef(
+                                    kind="message_range",
+                                    refs=refs,
+                                    source_ref=json.dumps(refs),
+                                )
+                            ],
+                            signals={
+                                "lane": item.lane,
+                                "sources": list(item.sources),
+                                "basin_ids": list(item.basin_ids),
+                            },
+                        )
                     )
-                refs = [turn.user_message_id, turn.assistant_message_id]
-                records.append(
-                    MemoryRecord(
-                        id=turn.turn_id,
-                        kind="turn",
-                        summary=f"[{turn.started_at}] user: {messages[0].content}\nassistant: {messages[1].content}",
-                        score=item.score,
-                        engine_kind="akasha2",
-                        evidence=[
-                            EvidenceRef(
-                                kind="message_range",
-                                refs=refs,
-                                source_ref=json.dumps(refs),
-                            )
-                        ],
-                        signals={
-                            "lane": item.lane,
-                            "sources": list(item.sources),
-                            "basin_ids": list(item.basin_ids),
-                        },
-                    )
-                )
             return MemoryQueryResult(
                 records=records,
                 text_block="\n\n".join(
@@ -526,6 +592,8 @@ class Akasha2MemoryEngine:
                     "state_version": self._cycle.state_version,
                     "cursor": self._checkpoint.cursor,
                     "checkpoint_pending": self._dirty,
+                    "source_snapshot": True,
+                    "verified_messages": 2 * len(records),
                     "pushes": ticket.completion.pushes,
                     "residual_l1": ticket.completion.residual_l1,
                 },
@@ -583,6 +651,8 @@ class Akasha2MemoryEngine:
                     self._publish()
             finally:
                 self._closed = True
+                if self._fixed_vectors is not None:
+                    self._fixed_vectors.close()
                 self._lease.close()
                 if self._unsubscribe:
                     self._unsubscribe()

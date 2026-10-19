@@ -26,19 +26,17 @@
   <img src="./docs/assets/readme/kirakira-agent-hero.png" alt="Kirakira Agent：空舞台、乐器、星光与三条运行链" width="100%">
 </p>
 
-2026-10-19 重构加入组件能力与代际租约、保留工具结果的生成恢复、持久兴趣衰减池、
-Drift 提案状态，以及可选 Akasha2 引擎。算法来源固定，原文消费和原子快照由 Kirakira adapter 负责；
-v1 继续可用，旧图不自动迁移。详见[实现合同](./docs/decisions/0009-components-recovery-and-akasha2.md)和
-[当前范围](./docs/status/current.md)。
-
 ## Kirakira 是什么
 
 Kirakira 是一个本地优先、多渠道的 AI Agent Runtime。它把被动对话、主动执行、长期记忆和空闲任务
 放在同一个可观测、可扩展的运行时中；会话和运行状态默认保存在本地 workspace。
 
-本轮重点是可审计的主动决策与提交后记忆学习：三条链共享 ReAct 执行器，主动判断使用受限决策工具，
-Akasha v1 的线上学习和离线重建共用事务周期，并支持提交后漏通知的持久补消费；主动决策会在输入变化后失效。设计取舍、上游来源与尚存差距见
-[2026-10-02 重构审计](./docs/engineering/akashic-review-2026-10-02.md)。
+可选的事件记忆以完整原始对话为事实源，将精确语义召回与图式联想补全结合，恢复带日期和来源的
+跨会话经历。模型能沿 `source_ref` 展开原文上下文，核对人物、对象、关系和历史更正；学习只在
+对话提交后发生，显式召回不改写学习图。原子快照与固定向量重放支持长期运行后的恢复和重建。
+
+运行合同、部署范围与实际验证见[架构总览](./docs/architecture/overview.md)、
+[当前状态](./docs/status/current.md)和[验证记录](./docs/operations/verification.md)。
 
 ## 一分钟了解
 
@@ -46,6 +44,7 @@ Akasha v1 的线上学习和离线重建共用事务周期，并支持提交后�
 | --- | --- |
 | Agent 如何工作 | 被动 Turn、Proactive 和 Drift 三条链共用模型、工具、记忆与 Channel |
 | 数据放在哪里 | Session、Memory、任务和运行轨迹默认保存在本地 workspace |
+| 如何记住过去 | 精确回忆与联想补全协作，保留原文证据、稳定消息身份和可重放图状态 |
 | 如何扩展 | 用 Plugin、MCP、Skill、Tool 和 Proactive Source 增加能力 |
 | 如何控制上下文 | 完整历史持久化，旧历史滚动摘要，近 20k token 保留原文 |
 | 如何排查运行过程 | 保存 tool chain、context trace、token usage、tick 和 module step |

@@ -1,0 +1,214 @@
+{
+  "dataset_sha256": "ded763421d1e220013a215ce7ce15dc721dae4065e23ff72931ed3ec73c869d1",
+  "evaluator_sha256": "9534a8f294a6a886c7f4c2fe9bfecf03f1465dcc25e67d3c315f1887e338a4ee",
+  "retrieval_sha256": {
+    "combined.jsonl": "5652b9c1660adf3557c4ecf208e517a36678e33bcf06afce30f5db4f2219dc50",
+    "mem0-ingestion.retrieval.jsonl": "c5f8a8829e8b027eb625154e189acaf267b4445e7da862f4e4f76cb9ab032c3c"
+  },
+  "endpoint": "https://api.stepfun.com/step_plan/v1",
+  "billing_surface": "step_plan",
+  "model": "step-5-preview",
+  "reasoning_effort": "medium",
+  "max_tokens": 8192,
+  "concurrency": 4,
+  "metric": "exact JSON answer, no LLM judge; errors remain incorrect",
+  "metrics": {
+    "bm25": {
+      "n": 24,
+      "correct": 24,
+      "errors": 0,
+      "input_tokens": 14420,
+      "output_tokens": 2631
+    },
+    "bm25/assistant_relation": {
+      "n": 4,
+      "correct": 4,
+      "errors": 0,
+      "input_tokens": 2289,
+      "output_tokens": 447
+    },
+    "mem0_oss": {
+      "n": 24,
+      "correct": 23,
+      "errors": 1,
+      "input_tokens": 16196,
+      "output_tokens": 2450
+    },
+    "mem0_oss/assistant_relation": {
+      "n": 4,
+      "correct": 4,
+      "errors": 0,
+      "input_tokens": 2727,
+      "output_tokens": 485
+    },
+    "rrf": {
+      "n": 24,
+      "correct": 24,
+      "errors": 0,
+      "input_tokens": 14861,
+      "output_tokens": 2547
+    },
+    "rrf/assistant_relation": {
+      "n": 4,
+      "correct": 4,
+      "errors": 0,
+      "input_tokens": 2514,
+      "output_tokens": 496
+    },
+    "recency": {
+      "n": 24,
+      "correct": 7,
+      "errors": 0,
+      "input_tokens": 14527,
+      "output_tokens": 2496
+    },
+    "recency/assistant_relation": {
+      "n": 4,
+      "correct": 0,
+      "errors": 0,
+      "input_tokens": 2428,
+      "output_tokens": 280
+    },
+    "bm25/exact_identifier": {
+      "n": 4,
+      "correct": 4,
+      "errors": 0,
+      "input_tokens": 2539,
+      "output_tokens": 384
+    },
+    "rrf/exact_identifier": {
+      "n": 4,
+      "correct": 4,
+      "errors": 0,
+      "input_tokens": 2470,
+      "output_tokens": 351
+    },
+    "mem0_oss/exact_identifier": {
+      "n": 4,
+      "correct": 4,
+      "errors": 0,
+      "input_tokens": 2452,
+      "output_tokens": 351
+    },
+    "recency/exact_identifier": {
+      "n": 4,
+      "correct": 0,
+      "errors": 0,
+      "input_tokens": 2391,
+      "output_tokens": 394
+    },
+    "rrf/temporal_update": {
+      "n": 4,
+      "correct": 4,
+      "errors": 0,
+      "input_tokens": 2495,
+      "output_tokens": 483
+    },
+    "bm25/temporal_update": {
+      "n": 4,
+      "correct": 4,
+      "errors": 0,
+      "input_tokens": 2521,
+      "output_tokens": 671
+    },
+    "recency/temporal_update": {
+      "n": 4,
+      "correct": 3,
+      "errors": 0,
+      "input_tokens": 2488,
+      "output_tokens": 413
+    },
+    "mem0_oss/temporal_update": {
+      "n": 4,
+      "correct": 4,
+      "errors": 0,
+      "input_tokens": 2720,
+      "output_tokens": 599
+    },
+    "bm25/cross_session_join": {
+      "n": 4,
+      "correct": 4,
+      "errors": 0,
+      "input_tokens": 2466,
+      "output_tokens": 428
+    },
+    "rrf/cross_session_join": {
+      "n": 4,
+      "correct": 4,
+      "errors": 0,
+      "input_tokens": 2466,
+      "output_tokens": 381
+    },
+    "mem0_oss/cross_session_join": {
+      "n": 4,
+      "correct": 4,
+      "errors": 0,
+      "input_tokens": 2621,
+      "output_tokens": 427
+    },
+    "recency/cross_session_join": {
+      "n": 4,
+      "correct": 0,
+      "errors": 0,
+      "input_tokens": 2411,
+      "output_tokens": 460
+    },
+    "bm25/user_preference": {
+      "n": 4,
+      "correct": 4,
+      "errors": 0,
+      "input_tokens": 2439,
+      "output_tokens": 289
+    },
+    "rrf/user_preference": {
+      "n": 4,
+      "correct": 4,
+      "errors": 0,
+      "input_tokens": 2449,
+      "output_tokens": 393
+    },
+    "mem0_oss/user_preference": {
+      "n": 4,
+      "correct": 3,
+      "errors": 1,
+      "input_tokens": 2744,
+      "output_tokens": 291
+    },
+    "recency/user_preference": {
+      "n": 4,
+      "correct": 0,
+      "errors": 0,
+      "input_tokens": 2408,
+      "output_tokens": 421
+    },
+    "bm25/unanswerable": {
+      "n": 4,
+      "correct": 4,
+      "errors": 0,
+      "input_tokens": 2166,
+      "output_tokens": 412
+    },
+    "rrf/unanswerable": {
+      "n": 4,
+      "correct": 4,
+      "errors": 0,
+      "input_tokens": 2467,
+      "output_tokens": 443
+    },
+    "mem0_oss/unanswerable": {
+      "n": 4,
+      "correct": 4,
+      "errors": 0,
+      "input_tokens": 2932,
+      "output_tokens": 297
+    },
+    "recency/unanswerable": {
+      "n": 4,
+      "correct": 4,
+      "errors": 0,
+      "input_tokens": 2401,
+      "output_tokens": 528
+    }
+  },
+  "scope": "synthetic targeted fixture, not a public benchmark score"
+}

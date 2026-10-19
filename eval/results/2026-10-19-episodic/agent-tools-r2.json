@@ -1,0 +1,107 @@
+{
+  "endpoint": "https://api.stepfun.com/step_plan/v1",
+  "model": "step-5-preview",
+  "reasoning_effort": "medium",
+  "billing_surface": "step_plan",
+  "embedding": "offline-hash-v1 (integration only)",
+  "cases": [
+    {
+      "name": "lexical_memorize",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "memorize"
+        ],
+        "reply": "Stored successfully.\n\n**Memory ID:** `mem_0001`\n**Content:** \"For the verification fixture, my preferred deployment codename is KIRA_847a05717690.\"\n**Type:** preference\n\nThe preference has been saved to long-term memory exactly as you stated it, and I can confirm the text was recorded verbatim — including the codename `KIRA_847a05717690`."
+      },
+      "seconds": 7.807579791173339
+    },
+    {
+      "name": "lexical_recall_and_forget",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "recall_memory",
+          "forget_memory"
+        ],
+        "reply": "Confirmed deletion.\n\n**Recalled matches for query \"deployment codename\":** 1 item\n- `mem_0001` — \"For the verification fixture, my preferred deployment codename is KIRA_847a05717690.\"\n\n**Action taken:** `forget_memory` was called with `[\"mem_0001\"]`, and the result reported `superseded_ids: [\"mem_0001\"]`, confirming the item was marked as forgotten.\n\nNo new memory was created."
+      },
+      "seconds": 8.069729531183839
+    },
+    {
+      "name": "akasha_recall_fetch_live",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "recall_memory",
+          "fetch_messages"
+        ],
+        "reply": "FINAL_dcd990a4bdc3§cited:[\"fixture:2:0\"]§",
+        "fetches": [
+          {
+            "source_ref": "[\"785f311ce1c44f978d68426fdede3300\", \"2eb7bb87d007437aa64437ce649d12dd\"]",
+            "returned_ids": [
+              "785f311ce1c44f978d68426fdede3300",
+              "2eb7bb87d007437aa64437ce649d12dd"
+            ]
+          }
+        ],
+        "messages": 6
+      },
+      "seconds": 9.614481261000037
+    },
+    {
+      "name": "akasha_recall_fetch_restart",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "recall_memory",
+          "fetch_messages"
+        ],
+        "reply": "FINAL_dcd990a4bdc3 §cited:[\"fixture:2:0\"]§",
+        "fetches": [
+          {
+            "source_ref": "[\"785f311ce1c44f978d68426fdede3300\", \"2eb7bb87d007437aa64437ce649d12dd\"]",
+            "returned_ids": [
+              "785f311ce1c44f978d68426fdede3300",
+              "2eb7bb87d007437aa64437ce649d12dd"
+            ]
+          }
+        ],
+        "messages": 6
+      },
+      "seconds": 25.50571941025555
+    },
+    {
+      "name": "akasha2_recall_fetch_live",
+      "status": "failed",
+      "error": "AssertionError",
+      "detail": "{\"tools\": [\"recall_memory\", \"fetch_messages\"], \"reply\": \"The final deployment-handoff release code is **FINAL_785937cea4fc** (the obsolete OLD_OBSOLETE has been explicitly invalidated by the later correction).\\n\\n§cited:[\\\"e64c6a589815499c9bbdee95597a3ed8\\\", \\\"098bbc4e99c34c37b45cb870c1e3c028\\\"]§\", \"fetches\": [{\"source_ref\": \"[\\\"e64c6a589815499c9bbdee95597a3ed8\\\", \\\"098bbc4e99c34c37b45cb870c1e3c028\\\"]\", \"returned_ids\": [\"e64c6a589815499c9bbdee95597a3ed8\", \"098bbc4e99c34c37b45cb870c1e3c028\"]}]}",
+      "seconds": 7.516123259440064
+    },
+    {
+      "name": "akasha2_recall_fetch_restart",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "recall_memory",
+          "fetch_messages"
+        ],
+        "reply": "FINAL_785937cea4fc\n\n§cited:[\"e64c6a589815499c9bbdee95597a3ed8\"]§",
+        "fetches": [
+          {
+            "source_ref": "[\"e64c6a589815499c9bbdee95597a3ed8\", \"098bbc4e99c34c37b45cb870c1e3c028\"]",
+            "returned_ids": [
+              "e64c6a589815499c9bbdee95597a3ed8",
+              "098bbc4e99c34c37b45cb870c1e3c028"
+            ]
+          }
+        ],
+        "messages": 6
+      },
+      "seconds": 8.56879736110568
+    }
+  ],
+  "passed": 5,
+  "total": 6
+}

@@ -48,6 +48,7 @@
 | [验证记录](./operations/verification.md) | 当前离线、在线和 Reference 独立性结果 |
 | [记忆评测](./operations/memory-evaluation.md) | 离线合同、Step5 实测和固定质量协议 |
 | [记忆机制与系统对照](./operations/evaluations/2026-10-19-memory-followup.md) | 72 个公开问题、双通道读出、真实 Mem0 对照及上游机制复测 |
+| [事件记忆专项与恢复](./operations/evaluations/2026-10-19-episodic.md) | 六类合同题、原文闭环、固定向量与源库独立重建 |
 | [来源会话 Scheduler 实测](./operations/evaluations/2026-10-19-scheduler.md) | 运行入口、触发恢复、真实 Step5 与本地回执 |
 | [组件收敛与实测](./operations/evaluations/2026-10-19-ownership.md) | 提供者归属、失败回收与 Step5 记忆工具链 |
 | [2026-10-19 实验结果](./operations/evaluations/2026-10-19-memory.md) | 两轮四组与 oracle 的逐题结果和限制 |
@@ -57,6 +58,8 @@
 ## 工程记录
 
 - [Akasha2 双通道读出](./decisions/0012-akasha2-dual-lane-readout.md)：精确召回、联想召回与统一上下文预算。
+- [原文证据与恢复输入](./decisions/0013-original-message-evidence.md)：完整引用展开、单视图校验与固定向量缓存。
+- [记忆设计与项目表达](./engineering/memory-design-and-evidence.md)：事件记忆的定位、可解释设计点与实验依据。
 - [来源会话 Scheduler](./decisions/0011-source-session-scheduler.md)：持久 fire、历史范围与回执结算。
 - [组件、恢复与 Akasha2](./decisions/0009-components-recovery-and-akasha2.md)：2026-10-19 的实现合同、来源与验证边界。
 

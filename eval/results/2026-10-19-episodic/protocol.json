@@ -1,0 +1,32 @@
+{
+  "dataset_id": "kirakira-episodic-contract-v1",
+  "seed": 2026101902,
+  "dataset_sha256": "ded763421d1e220013a215ce7ce15dc721dae4065e23ff72931ed3ec73c869d1",
+  "generator_sha256": "8826ca3246466190af7f70430bed7c9cae09939b66733f5c0b5057727839dfb2",
+  "frozen_before_model_calls": true,
+  "families": [
+    "assistant_relation",
+    "exact_identifier",
+    "temporal_update",
+    "cross_session_join",
+    "user_preference",
+    "unanswerable"
+  ],
+  "metric": "exact JSON answer (case-sensitive strings), all errors count incorrect; no model judge",
+  "scope": "targeted synthetic capability suite; not LongMemEval or population accuracy",
+  "budget": {
+    "max_pairs_or_facts": 10,
+    "max_chars": 24000,
+    "reader_max_tokens": 8192
+  },
+  "controls": [
+    "no_memory",
+    "recency",
+    "dense",
+    "bm25",
+    "rrf",
+    "akasha2",
+    "mem0_oss"
+  ],
+  "prohibition": "no answer-dependent selection, tuning, replacement or best-run score mixing"
+}

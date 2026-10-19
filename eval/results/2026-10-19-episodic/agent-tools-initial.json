@@ -1,0 +1,107 @@
+{
+  "endpoint": "https://api.stepfun.com/step_plan/v1",
+  "model": "step-5-preview",
+  "reasoning_effort": "medium",
+  "billing_surface": "step_plan",
+  "embedding": "offline-hash-v1 (integration only)",
+  "cases": [
+    {
+      "name": "lexical_memorize",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "memorize"
+        ],
+        "reply": "Confirmed. The preference has been saved to long-term memory (memory ID: mem_0001):\n\n> \"For the verification fixture, my preferred deployment codename is KIRA_1e1a13ddfff6.\"\n\nIs there anything else you'd like me to record or look up?"
+      },
+      "seconds": 3.9537575654685497
+    },
+    {
+      "name": "lexical_recall_and_forget",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "recall_memory",
+          "forget_memory"
+        ],
+        "reply": "Deletion confirmed. ✅\n\n**Summary of actions taken:**\n\n1. **Recall**: Searched long-term memory with the query `\"deployment codename\"` — returned **1 matching item**:\n   - `mem_0001` — *\"For the verification fixture, my preferred deployment codename is KIRA_1e1a13ddfff6.\"* (type: preference)\n\n2. **Forget**: Submitted `mem_0001` for deletion — the response confirmed `superseded_ids: [\"mem_0001\"]`, indicating the item was successfully forgotten.\n\n3. **No new memory was created**, per your instruction.\n\nThe memory item with ID `mem_0001` has been successfully removed from long-term memory."
+      },
+      "seconds": 7.53684545122087
+    },
+    {
+      "name": "akasha_recall_fetch_live",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "recall_memory",
+          "fetch_messages"
+        ],
+        "reply": "FINAL_8dd79861e0c1\n\n§cited:[fixture:2:0]§",
+        "fetches": [
+          {
+            "source_ref": "[\"beb5fce9188348ddbb0d59cfd6cc4197\", \"4b2b7985f5104624a9db1af76aedf7f1\"]",
+            "returned_ids": [
+              "beb5fce9188348ddbb0d59cfd6cc4197",
+              "4b2b7985f5104624a9db1af76aedf7f1"
+            ]
+          }
+        ],
+        "messages": 6
+      },
+      "seconds": 7.387497212737799
+    },
+    {
+      "name": "akasha_recall_fetch_restart",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "recall_memory",
+          "fetch_messages"
+        ],
+        "reply": "FINAL_8dd79861e0c1",
+        "fetches": [
+          {
+            "source_ref": "[\"beb5fce9188348ddbb0d59cfd6cc4197\", \"4b2b7985f5104624a9db1af76aedf7f1\"]",
+            "returned_ids": [
+              "beb5fce9188348ddbb0d59cfd6cc4197",
+              "4b2b7985f5104624a9db1af76aedf7f1"
+            ]
+          }
+        ],
+        "messages": 6
+      },
+      "seconds": 9.219165788963437
+    },
+    {
+      "name": "akasha2_recall_fetch_live",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "recall_memory",
+          "fetch_messages"
+        ],
+        "reply": "FINAL_363bc6a51332\n\n§cited:[\"0e6f0ec84a664e909b777efc49039837\", \"2e6563809feb44c8924aa61677ce4ba3\"]§",
+        "fetches": [
+          {
+            "source_ref": "[\"0e6f0ec84a664e909b777efc49039837\", \"2e6563809feb44c8924aa61677ce4ba3\"]",
+            "returned_ids": [
+              "0e6f0ec84a664e909b777efc49039837",
+              "2e6563809feb44c8924aa61677ce4ba3"
+            ]
+          }
+        ],
+        "messages": 6
+      },
+      "seconds": 6.362526277080178
+    },
+    {
+      "name": "akasha2_recall_fetch_restart",
+      "status": "failed",
+      "error": "AssertionError",
+      "detail": "",
+      "seconds": 8.085644459351897
+    }
+  ],
+  "passed": 5,
+  "total": 6
+}

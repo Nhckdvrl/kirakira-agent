@@ -585,9 +585,12 @@ def register_memory_tools(
     registry.register(
         ToolSpec(
             "fetch_messages",
-            "Fetch persisted chat messages around a source_ref.",
+            "Fetch original messages using the exact source_ref from recall/search (single ID or JSON ID list); include neighboring messages for context.",
             object_schema(
-                {"source_ref": {"type": "string"}, "context": {"type": "integer"}},
+                {
+                    "source_ref": {"type": "string"},
+                    "context": {"type": "integer", "minimum": 0, "maximum": 50},
+                },
                 ["source_ref"],
             ),
         ),
