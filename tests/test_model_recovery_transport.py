@@ -202,3 +202,28 @@ async def test_cancellation_interrupts_server_directed_backoff():
     with pytest.raises(asyncio.CancelledError):
         await asyncio.wait_for(task, 1)
     assert client.calls == 1
+
+
+def test_step5_uses_native_reasoning_effort_and_does_not_claim_thinking_is_off():
+    client = StepPlanClient(
+        api_key="unused", reasoning_effort="high", thinking_enabled=False
+    )
+    payload = client._build_payload([], [], "", "step5", 8192)
+    assert payload["model"] == "step-5-preview"
+    assert payload["reasoning_effort"] == "high" and "thinking" not in payload
+    with pytest.raises(ValueError, match="reasoning_effort"):
+        StepPlanClient(api_key="unused", reasoning_effort="disabled")
+
+
+def test_truncated_stream_keeps_usage_without_parsing_incomplete_tool_arguments():
+    client = OpenAICompatibleClient(base_url="http://unused", api_key="unused")
+    state = client._new_stream_state()
+    state.update(
+        finish_reason="length",
+        text_parts=["partial"],
+        chunks=[{"usage": {"prompt_tokens": 7, "completion_tokens": 12}}],
+        raw_calls={0: {"id": "c", "name": "write", "arguments": "{broken"}},
+    )
+    response = client._finalize_stream(state)
+    assert response.stop_reason == "length" and response.tool_calls == []
+    assert response.usage == {"prompt_tokens": 7, "completion_tokens": 12}

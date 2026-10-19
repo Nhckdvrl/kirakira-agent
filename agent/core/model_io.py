@@ -55,7 +55,8 @@ class ModelInvoker:
                 )
                 if result.stop_reason in {"length", "max_tokens", "max_output_tokens"}:
                     raise ModelOutputTruncated(
-                        "Model output was truncated; tool calls were not executed"
+                        "Model output was truncated; tool calls were not executed",
+                        response=result,
                     )
             except (RetryableModelError, TimeoutError) as exc:
                 delay = policy.delay(attempt, getattr(exc, "retry_after", None))

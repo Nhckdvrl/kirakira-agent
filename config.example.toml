@@ -10,6 +10,8 @@ base_url = "https://api.deepseek.com/v1"
 enable_thinking = false
 # 单个模型生成最多重试 10 次；已完成的工具结果保留。
 max_retries = 10
+# Step5 原生推理强度：low / medium / high；Step5 不使用 thinking=false。
+# reasoning_effort = "medium"
 # 模型真实上下文容量。memory_window 与 max_tokens 未显式配置时按它等比例派生。
 context_window = 128000
 

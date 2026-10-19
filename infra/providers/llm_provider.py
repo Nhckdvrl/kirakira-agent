@@ -164,7 +164,8 @@ class OpenAICompatibleClient:
         if not finish_reason:
             raise RetryableModelError('Model stream ended without a terminal finish reason')
         if finish_reason == 'length':
-            return ModelResponse(text=''.join(state['text_parts']), stop_reason='length')
+            return ModelResponse(text=''.join(state['text_parts']), stop_reason='length',
+                usage=next((dict(chunk['usage']) for chunk in reversed(chunks) if chunk.get('usage')), {}))
         calls = []
         for index in sorted(state["raw_calls"]):
             item = state["raw_calls"][index]
@@ -210,7 +211,7 @@ class OpenAICompatibleClient:
         content = json.dumps(payload).encode("utf-8")
         state = self._new_stream_state()
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=False) as client:
                 async with client.stream(
                     "POST", url, content=content, headers=headers
                 ) as response:
@@ -275,7 +276,7 @@ class OpenAICompatibleClient:
 
     async def _arequest(self, payload: Dict[str, Any]) -> str:
         import httpx
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=False) as client:
             try:
                 response = await client.post(self._chat_completions_url(),
                     content=json.dumps(payload).encode('utf-8'), headers=self._headers())

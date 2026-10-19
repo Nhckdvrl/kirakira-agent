@@ -102,14 +102,20 @@ async def verify(a):
         runtime = loop()
         await runtime.tick_once()
         assert len(client.requests) == count and len(received) == 1
-        assert source.acknowledgements == [
-            {"ids": ["relevant", "excluded"], "feedback": None},
-            {"ids": ["relevant"], "feedback": "interesting"},
+        receipts = [ack for ack in source.acknowledgements if ack["feedback"] is None]
+        feedback = [
+            ack for ack in source.acknowledgements if ack["feedback"] is not None
         ]
+        assert len(receipts) == 1 and set(receipts[0]["ids"]) == {
+            "relevant",
+            "excluded",
+        }
+        assert feedback == [{"ids": ["relevant"], "feedback": "interesting"}]
         report = {
             "endpoint": STEP_PLAN_BASE_URL,
             "model": STEP5_MODEL,
             "billing_surface": "step_plan",
+            "reasoning_effort": "medium",
             "status": "passed",
             "received": received,
             "feedback": source.acknowledgements,

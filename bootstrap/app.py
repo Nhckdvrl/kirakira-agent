@@ -71,6 +71,7 @@ def build_agent(workdir: Path) -> Agent:
     if not model:
         model = require_env("MODEL_ID")
     client = create_model_client(
+        reasoning_effort=config_value(app_config, "llm", "main", "reasoning_effort", default="medium"),
         base_url=os.getenv("OPENAI_COMPATIBLE_BASE_URL")
         or config_value(app_config, "llm", "main", "base_url"),
         api_key=os.getenv("OPENAI_COMPATIBLE_API_KEY")
@@ -478,6 +479,7 @@ async def build_runtime(
     if not model:
         model = require_env("MODEL_ID")
     client = create_model_client(
+        reasoning_effort=config_value(app_config, "llm", "main", "reasoning_effort", default="medium"),
         base_url=os.getenv("OPENAI_COMPATIBLE_BASE_URL")
         or config_value(app_config, "llm", "main", "base_url"),
         api_key=os.getenv("OPENAI_COMPATIBLE_API_KEY")
@@ -509,6 +511,7 @@ async def build_runtime(
         from agent.model_runtime.fallback import ResilientModelClient
 
         light_client = create_model_client(
+            reasoning_effort=config_value(app_config, "llm", "light", "reasoning_effort", default="medium"),
             base_url=light_base_url,
             api_key=os.getenv("LIGHT_OPENAI_COMPATIBLE_API_KEY")
             or config_value(app_config, "llm", "light", "api_key", default="")

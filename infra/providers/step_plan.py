@@ -37,14 +37,19 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 class StepPlanClient(OpenAICompatibleClient):
     billing_surface = "step_plan"
 
-    def __init__(self, *, base_url=STEP_PLAN_BASE_URL, **kwargs):
+    def __init__(
+        self, *, base_url=STEP_PLAN_BASE_URL, reasoning_effort="medium", **kwargs
+    ):
+        if reasoning_effort not in {"low", "medium", "high"}:
+            raise ValueError("Step5 reasoning_effort must be low, medium, or high")
+        self.reasoning_effort = reasoning_effort
         super().__init__(base_url=validate_step_plan_url(base_url), **kwargs)
 
     def _chat_completions_url(self):
         return validate_step_plan_url(self.base_url) + "/chat/completions"
 
     def _build_payload(self, messages, tools, system, model, max_tokens, **kwargs):
-        return super()._build_payload(
+        payload = super()._build_payload(
             messages,
             tools,
             system,
@@ -52,6 +57,12 @@ class StepPlanClient(OpenAICompatibleClient):
             max_tokens,
             **kwargs,
         )
+
+        if payload["model"] == STEP5_MODEL:
+            # Step5 documents reasoning_effort, not DeepSeek's thinking object.
+            payload.pop("thinking", None)
+            payload["reasoning_effort"] = self.reasoning_effort
+        return payload
 
     def _open(self, payload):
         import json
@@ -79,9 +90,11 @@ class StepPlanClient(OpenAICompatibleClient):
             ) from exc
 
 
-def create_model_client(**kwargs):
+def create_model_client(*, reasoning_effort="medium", **kwargs):
     url = str(kwargs.get("base_url") or "")
     client_type = (
         StepPlanClient if "/step_plan" in urlsplit(url).path else OpenAICompatibleClient
     )
+    if client_type is StepPlanClient:
+        kwargs["reasoning_effort"] = reasoning_effort
     return client_type(**kwargs)

@@ -52,6 +52,7 @@ async def verify(a):
         "endpoint": STEP_PLAN_BASE_URL,
         "model": STEP5_MODEL,
         "billing_surface": "step_plan",
+        "reasoning_effort": "medium",
         "cases": [],
     }
     client = StepPlanClient(

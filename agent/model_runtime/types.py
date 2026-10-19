@@ -38,6 +38,10 @@ class ModelRetriesExhausted(RetryableModelError):
 class ModelOutputTruncated(ModelRequestError):
     """An incomplete output cannot authorize any requested tools."""
 
+    def __init__(self, message, *, response=None):
+        super().__init__(message)
+        self.response = response
+
 
 class ModelClient(Protocol):
     def complete(

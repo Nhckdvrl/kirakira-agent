@@ -23,12 +23,17 @@ from .judge_prompt import get_anscheck_prompt
 
 async def run(a):
     client = StepPlanClient(
-        api_key=a.key_file.read_text().strip(), timeout=120, thinking_enabled=False
+        api_key=a.key_file.read_text().strip(),
+        timeout=120,
+        reasoning_effort=a.reasoning_effort,
     )
     invoker = ModelInvoker(
         client,
         RuntimeConfig(
-            model=STEP5_MODEL, stream=False, max_tokens=4096, model_timeout_seconds=150
+            model=STEP5_MODEL,
+            stream=False,
+            max_tokens=a.max_tokens,
+            model_timeout_seconds=150,
         ),
         EventBus(),
     )
@@ -108,7 +113,18 @@ async def run(a):
                 result.update(status="ok", correct=verdict == "yes", judge=judgement)
             except Exception as exc:  # noqa: BLE001 -- record every failed benchmark case
                 # Do not serialize auth headers, client configuration, or arbitrary server bodies.
-                result.update(error=type(exc).__name__, correct=False)
+                result.update(
+                    error=type(exc).__name__,
+                    correct=False,
+                    error_phase="judge" if "reader" in result else "reader",
+                )
+                partial = getattr(exc, "response", None)
+                if partial is not None:
+                    result["truncated_response"] = {
+                        "text": partial.text,
+                        "stop_reason": partial.stop_reason,
+                        "usage": usage_from_mapping(partial.usage).to_dict(),
+                    }
             with a.output.open("a") as output:
                 output.write(json.dumps(result, ensure_ascii=False) + "\n")
                 output.flush()
@@ -155,7 +171,7 @@ async def run(a):
             s["n"] += 1
             s["correct"] += int(r["correct"])
             s["errors"] += r["status"] != "ok"
-            for phase in ("reader", "judge"):
+            for phase in ("reader", "judge", "truncated_response"):
                 usage = r.get(phase, {}).get("usage", {})
                 s["input_tokens"] += usage.get("input_tokens") or 0
                 s["output_tokens"] += usage.get("output_tokens") or 0
@@ -172,8 +188,12 @@ async def run(a):
         "retrieval_sha256": hashlib.sha256(a.retrieval.read_bytes()).hexdigest(),
         "cases": len(rows),
         "arms": list(rows[0]["arms"]),
-        "max_tokens": 4096,
-        "thinking": False,
+        "max_tokens": a.max_tokens,
+        "reasoning_effort": a.reasoning_effort,
+        "client_sha256": hashlib.sha256(
+            Path("infra/providers/step_plan.py").read_bytes()
+        ).hexdigest(),
+        "reader_code_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         "concurrency": a.concurrency,
         "metrics": dict(counts),
         "limitations": [
@@ -193,6 +213,10 @@ def main():
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--key-file", type=Path, required=True)
     p.add_argument("--concurrency", type=int, default=4)
+    p.add_argument("--max-tokens", type=int, default=8192)
+    p.add_argument(
+        "--reasoning-effort", choices=("low", "medium", "high"), default="medium"
+    )
     p.add_argument("--follow", action="store_true")
     p.add_argument("--expected-cases", type=int, default=36)
     asyncio.run(run(p.parse_args()))

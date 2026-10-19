@@ -36,7 +36,7 @@ TUI 展示次数、等待与恢复。终止原因缺失的 SSE 不算完整回�
 进程崩溃后的未知外部工具结果仍需核对，不自动重放。它与单次生成的网络重试是不同合同。
 
 Step Plan 专用客户端只接受官方 HTTPS `/step_plan/v1`，禁止跨计费面的重定向；
-Step5 实际模型 ID 是 `step-5-preview`。验证器不读取私人 workspace 配置，不回落到现金 API。
+Step5 实际模型 ID 是 `step-5-preview`，原生推理控制为 `reasoning_effort`；不发送未获文档支持的 `thinking` 字段。验证器不读取私人 workspace 配置，不回落到现金 API。
 
 ## 两条主动链
 
