@@ -1,0 +1,114 @@
+{
+  "protocol": "akashic d85b00c public cost scenario; Kirakira pure-cycle/persistence driver",
+  "turns": 1024,
+  "dimensions": 384,
+  "seed": 20260929,
+  "python_hash_seed": "0",
+  "python": "3.14.6 (main, Jul 18 2026, 17:01:31) [Clang 22.1.3 ]",
+  "packages": {
+    "numpy": "2.5.1",
+    "pydantic": "2.14.1",
+    "jieba": "0.42.1"
+  },
+  "blas": {
+    "Compilers": {
+      "c": {
+        "name": "gcc",
+        "linker": "ld.bfd",
+        "version": "14.2.1",
+        "commands": "cc"
+      },
+      "cython": {
+        "name": "cython",
+        "linker": "cython",
+        "version": "3.2.8",
+        "commands": "cython"
+      },
+      "c++": {
+        "name": "gcc",
+        "linker": "ld.bfd",
+        "version": "14.2.1",
+        "commands": "c++"
+      }
+    },
+    "Machine Information": {
+      "host": {
+        "cpu": "x86_64",
+        "family": "x86_64",
+        "endian": "little",
+        "system": "linux"
+      },
+      "build": {
+        "cpu": "x86_64",
+        "family": "x86_64",
+        "endian": "little",
+        "system": "linux"
+      }
+    },
+    "Build Dependencies": {
+      "blas": {
+        "name": "scipy-openblas",
+        "found": true,
+        "version": "0.3.33.112.0",
+        "detection method": "pkgconfig",
+        "include directory": "/opt/_internal/cpython-3.14.3/lib/python3.14/site-packages/scipy_openblas64/include",
+        "lib directory": "/opt/_internal/cpython-3.14.3/lib/python3.14/site-packages/scipy_openblas64/lib",
+        "openblas configuration": "OpenBLAS 0.3.33.112.0  USE64BITINT DYNAMIC_ARCH NO_AFFINITY Haswell MAX_THREADS=64",
+        "pc file directory": "/project/.openblas"
+      },
+      "lapack": {
+        "name": "scipy-openblas",
+        "found": true,
+        "version": "0.3.33.112.0",
+        "detection method": "pkgconfig",
+        "include directory": "/opt/_internal/cpython-3.14.3/lib/python3.14/site-packages/scipy_openblas64/include",
+        "lib directory": "/opt/_internal/cpython-3.14.3/lib/python3.14/site-packages/scipy_openblas64/lib",
+        "openblas configuration": "OpenBLAS 0.3.33.112.0  USE64BITINT DYNAMIC_ARCH NO_AFFINITY Haswell MAX_THREADS=64",
+        "pc file directory": "/project/.openblas"
+      }
+    },
+    "Python Information": {
+      "path": "/tmp/build-env-phs97gf4/bin/python",
+      "version": "3.14"
+    },
+    "SIMD Extensions": {
+      "baseline": [
+        "X86_V2"
+      ],
+      "found": [
+        "X86_V3"
+      ],
+      "not found": [
+        "X86_V4",
+        "AVX512_ICL",
+        "AVX512_SPR"
+      ]
+    }
+  },
+  "blas_threads": 1,
+  "input_sha256": "6141b9f44f1805f69e08e3e594de38d04f1573b74790c1f094a235eb77e50e34",
+  "source_sha256": {
+    "/home/xiang/projects/kirakira-agent/eval/memory_cost.py": "1b7700b03e10bc8b71b879eb2d8712f6727c9f728ca493ed62a1aa993208cdab",
+    "plugins/akasha2/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "plugins/akasha2/application/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "plugins/akasha2/application/cycle.py": "da334a3befb1152ad8f3675ed36e165a992fd121bd7efacfef0699e8c8cf934e",
+    "plugins/akasha2/domain/__init__.py": "31704fdd527e81239c8aca67643849f6b92ab07355041eb58a73aae07e97a4ca",
+    "plugins/akasha2/domain/diffusion.py": "07476a613e856d9547e56d61b5ff100d3b8a753449e9b27a6bca3798f98cfda6",
+    "plugins/akasha2/domain/features.py": "4bd29c33e52673a6b8a0db8f1b5e1dac43ab6c8dff362dd462792394a96b995e",
+    "plugins/akasha2/domain/graph.py": "c735b64b2a442e69894b19a29b818c0866d3dc110f26b377ae161f7d439ed800",
+    "plugins/akasha2/domain/model.py": "545b408562d8be227232be831eb28f1ca2ac42a2fc56b25d212707ef9c7ae81d",
+    "plugins/akasha2/domain/readout.py": "eff13a88b1aa10b4b1a0ffdb180a580057a05e4c0a78f3ecc4a79e80f2927f5f",
+    "plugins/akasha2/engine.py": "21e22f30b424d9d56c2360c460a835ff4ddf249d98c5a53dff185df02989c9bc",
+    "plugins/akasha2/infrastructure/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "plugins/akasha2/infrastructure/consumption.py": "caad8024d60944b8ba2b97976561d2eb62ee62f97049db3919f77878751d8155",
+    "plugins/akasha2/infrastructure/lexical.py": "7489144ad5c3fc7fe5287377eed753d704769a74ec9c822e2eb9da2d5affa8e2",
+    "plugins/akasha2/infrastructure/persistence.py": "413de783cfb61a87a157302133b460d0784d1a9a8f45b71c5c6cd0cfe137aa90",
+    "plugins/akasha2/lease.py": "31ddf4c9f821aa86e5423807149cc0adc0431b02e4ea8ba5f567eb25d07d7018",
+    "plugins/akasha2/plugin.py": "920993f6d301128e119e2a5a0b67037d38cab162aeab2398f76090e20c3f7240"
+  },
+  "limitations": [
+    "synthetic vectors, not semantic retrieval quality",
+    "pure cycle/persistence, not whole Runtime",
+    "finite same-platform evidence, not universal equivalence"
+  ]
+}

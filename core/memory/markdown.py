@@ -13,12 +13,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, cast, runtime_checkable
 
 from agent.model_runtime.json_utils import load_json_object_loose
-from core.memory.store import MemoryStore
 from agent.prompting.context_frame import is_context_frame
-from infra.providers.model_client_adapter import LLMProvider
 from bus.publisher import TurnCommitted
 from core.memory.events import ConsolidationCommitted
+from core.memory.store import MemoryStore
 from infra.persistence.json_store import atomic_write_text
+from infra.providers.model_client_adapter import LLMProvider
+from session.turn_source import is_memory_source
 
 if TYPE_CHECKING:
     from bus.publisher import EventBus
@@ -76,6 +77,7 @@ class MemoryProfileApi(Protocol):
     def get_memory_context(self) -> str: ...
 
     def has_long_term_memory(self) -> bool: ...
+
 
 _ALLOWED_PENDING_TAGS = frozenset(
     {
@@ -205,7 +207,7 @@ def _build_consolidation_source_ref(window: _ConsolidationWindow) -> str:
     ids = [
         str(msg["id"])
         for msg in window.old_messages
-        if msg.get("id") and not _is_context_frame_message(msg)
+        if msg.get("id") and not _exclude_memory_message(msg)
     ]
     return json.dumps(ids, ensure_ascii=False)
 
@@ -220,7 +222,7 @@ def _build_entry_source_ref(base_source_ref: str, entry: str) -> str:
 def _format_conversation_for_consolidation(old_messages: list[dict]) -> str:
     lines = []
     for message in old_messages:
-        if _is_context_frame_message(message):
+        if _exclude_memory_message(message):
             continue
         if not message.get("content") or message.get("role") == "tool":
             continue
@@ -262,7 +264,9 @@ def _normalize_history_entries(
         candidates.extend(raw_entries)
     elif raw_entries is not None:
         if not isinstance(raw_entries, str | dict):
-            raise _ConsolidationPayloadError("history_entries must be an array or object")
+            raise _ConsolidationPayloadError(
+                "history_entries must be an array or object"
+            )
         candidates.append(raw_entries)
     if fallback_entry is not None and not isinstance(raw_entries, list):
         candidates.append(fallback_entry)
@@ -298,15 +302,20 @@ def _message_time(message: dict) -> str:
     return str(message.get("timestamp") or "").strip()
 
 
-def _is_context_frame_message(message: dict) -> bool:
+def _exclude_memory_message(message: dict) -> bool:
     content = str(message.get("content") or "")
-    return is_context_frame(content)
+    return not is_memory_source(message) or is_context_frame(content)
+
+
+def _recent_memory_messages(messages: list[dict], limit: int) -> list[dict]:
+    eligible = [message for message in messages if not _exclude_memory_message(message)]
+    return eligible[-limit:] if limit > 0 else []
 
 
 def _format_recent_context_messages(messages: list[dict]) -> str:
     lines = []
     for message in messages:
-        if _is_context_frame_message(message):
+        if _exclude_memory_message(message):
             continue
         content = str(message.get("content") or "").strip()
         role = str(message.get("role") or "").lower()
@@ -347,7 +356,7 @@ def _replace_recent_turns_block(existing_text: str, recent_turns: str) -> str:
 def _format_conversation_for_recent_context(messages: list[dict]) -> str:
     lines = []
     for message in messages:
-        if _is_context_frame_message(message):
+        if _exclude_memory_message(message):
             continue
         content = str(message.get("content") or "").strip()
         role = str(message.get("role") or "").upper()
@@ -367,9 +376,7 @@ def _render_recent_context(
 ) -> str:
     compression = {} if compression is None else compression
     ongoing_threads = [
-        item.strip()
-        for item in compression.get("ongoing_threads", [])
-        if item.strip()
+        item.strip() for item in compression.get("ongoing_threads", []) if item.strip()
     ]
     sections = [
         ("最近持续关注", compression.get("active_topics", [])),
@@ -377,7 +384,12 @@ def _render_recent_context(
         ("最近待延续话题", compression.get("follow_ups", [])),
         ("最近避免事项", compression.get("avoidances", [])),
     ]
-    lines = ["# Recent Context", "", "## Compression", f"until: {compression_until or 'none'}"]
+    lines = [
+        "# Recent Context",
+        "",
+        "## Compression",
+        f"until: {compression_until or 'none'}",
+    ]
     rendered_any = False
     for title, items in sections:
         cleaned = [item.strip() for item in items if item.strip()]
@@ -393,7 +405,9 @@ def _render_recent_context(
             lines.append(f"- {item}")
     else:
         lines.append("- none")
-    lines.extend(["", "## Recent Turns", "<!-- a-preview = assistant reply preview only -->"])
+    lines.extend(
+        ["", "## Recent Turns", "<!-- a-preview = assistant reply preview only -->"]
+    )
     if recent_turns.strip():
         lines.append(recent_turns.strip())
     else:
@@ -416,9 +430,7 @@ class _MarkdownConsolidationWorker:
         self._provider = provider
         self._model = model
         self._recent_context_provider = recent_context_provider or provider
-        self._recent_context_model = (
-            str(recent_context_model or "").strip() or model
-        )
+        self._recent_context_model = str(recent_context_model or "").strip() or model
         self._keep_count = keep_count
         self._consolidation_min_new_messages = max(5, keep_count // 2)
 
@@ -647,12 +659,14 @@ ongoing_threads 严格限制：
     ) -> str | _ConsolidationFailure:
         """读取会话窗口并生成近期语境快照。"""
         # 1. 复用调用方已读取的 recent context，保证两个模型步骤看到同一版本。
-        tail = list(session.messages[-self._keep_count :]) if self._keep_count > 0 else []
+        tail = _recent_memory_messages(session.messages, self._keep_count)
         recent_count = min(len(tail), _recent_turn_count(self._keep_count))
         session_messages = list(session.messages)
         if archive_all:
             compact_source = (
-                session_messages[:-recent_count] if recent_count > 0 else session_messages
+                session_messages[:-recent_count]
+                if recent_count > 0
+                else session_messages
             )
         else:
             compact_source = list(window.old_messages) if window is not None else []
@@ -723,7 +737,11 @@ ongoing_threads 严格限制：
                 or (
                     match.group(1).strip()
                     if old_recent_context.strip()
-                    and (match := re.search(r"^until:\s*(.+)$", old_recent_context, flags=re.M))
+                    and (
+                        match := re.search(
+                            r"^until:\s*(.+)$", old_recent_context, flags=re.M
+                        )
+                    )
                     else ""
                 )
             ),
@@ -734,7 +752,7 @@ ongoing_threads 严格限制：
         """刷新 RECENT_CONTEXT.md 的 recent turns 区块。"""
         # 1. 读取当前会话尾部并渲染稳定的 recent turns 格式。
         profile = self._profile_maint if profile_maint is None else profile_maint
-        tail = list(session.messages[-self._keep_count :]) if self._keep_count > 0 else []
+        tail = _recent_memory_messages(session.messages, self._keep_count)
         recent_count = min(len(tail), _recent_turn_count(self._keep_count))
         recent_turns = tail[-recent_count:] if recent_count > 0 else []
         rendered_recent_turns = _format_recent_context_messages(recent_turns)
@@ -999,8 +1017,6 @@ history_entries.emotional_weight 规则：
         )
 
 
-
-
 class MarkdownMemoryStore(MemoryStore):
     def backup_long_term(self, backup_name: str = "MEMORY.bak.md") -> None:
         self._backup_profile(self.memory_file, backup_name)
@@ -1149,7 +1165,7 @@ class MarkdownMemoryMaintenance:
             return
         try:
             await asyncio.wait_for(asyncio.shield(task), timeout=max(0.1, timeout))
-        except (asyncio.TimeoutError, TimeoutError):
+        except asyncio.TimeoutError, TimeoutError:
             logger.warning(
                 "markdown memory maintenance wait timed out: session=%s", session_key
             )
@@ -1174,7 +1190,9 @@ class MarkdownMemoryMaintenance:
                 name=f"markdown-memory-maintenance:{session_key}",
             )
             self._maintenance_tasks[session_key] = next_task
-            next_task.add_done_callback(lambda t: self._on_maintenance_done(t, session_key))
+            next_task.add_done_callback(
+                lambda t: self._on_maintenance_done(t, session_key)
+            )
         else:
             _ = self._maintenance_queues.pop(session_key, None)
         if task.cancelled():
@@ -1182,7 +1200,11 @@ class MarkdownMemoryMaintenance:
             return
         exc = task.exception()
         if exc is not None:
-            logger.warning("markdown memory maintenance failed: session=%s err=%s", session_key, exc)
+            logger.warning(
+                "markdown memory maintenance failed: session=%s err=%s",
+                session_key,
+                exc,
+            )
 
     def _should_consolidate_session(self, session: object) -> bool:
         return (
@@ -1204,7 +1226,28 @@ class MarkdownMemoryMaintenance:
         async with lock:
             return await self._consolidate_unlocked(request)
 
-    async def _consolidate_unlocked(self, request: ConsolidateRequest) -> ConsolidateResult:
+    async def _consolidate_unlocked(
+        self, request: ConsolidateRequest
+    ) -> ConsolidateResult:
+        window = _select_consolidation_window(
+            request.session,
+            keep_count=self._keep_count,
+            consolidation_min_new_messages=self._consolidation_min_new_messages,
+            archive_all=request.archive_all,
+            force=request.force,
+        )
+        if window is not None and not _format_conversation_for_consolidation(
+            window.old_messages
+        ):
+            # Advancing an excluded range does not create a memory fact, call an
+            # extractor, rewrite a profile, or emit a consolidation event.
+            request.session.last_consolidated = (
+                0 if request.archive_all else window.consolidate_up_to
+            )
+            return ConsolidateResult(
+                consolidated_count=len(window.old_messages),
+                trace={"mode": "markdown", "excluded_sources": True},
+            )
         draft = await self._worker.prepare_consolidation(
             request.session,
             archive_all=request.archive_all,

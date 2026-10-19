@@ -25,7 +25,7 @@ from session.turn_source import load_committed_turn_messages
 
 from .dataset import load_longmemeval
 from .offline_ab import _turn_groups
-from .protocol import chronological, select, timestamp
+from .protocol import chronological, select_fixed, timestamp
 
 
 class CachedEmbedder:
@@ -63,7 +63,7 @@ def bounded(records, max_chars=24000, limit=10):
 
 
 async def prepare(a):
-    cases = select(load_longmemeval(a.dataset), a.per_type)
+    cases = select_fixed(load_longmemeval(a.dataset), a.per_type, a.selection)
     embedder = CachedEmbedder(a.embeddings)
     expected_ids = json.loads(a.embeddings.with_suffix(".json").read_text())["case_ids"]
     if expected_ids != [c.question_id for c in cases]:
@@ -108,6 +108,7 @@ async def prepare(a):
             config=config, workspace=path, http_resources=http, embedder=embedder
         )
         refs, turns = {}, []
+        timings = {"ingest_seconds": {}, "query_seconds": {}}
         excluded_messages = 0
         index_time = max(
             [
@@ -159,9 +160,11 @@ async def prepare(a):
                         "texts": [t.content for t in group],
                     }
                 )
-        for engine in (v1, v2):
+        for name, engine in (("akasha", v1), ("akasha2", v2)):
+            phase_started = time.perf_counter()
             while await engine.catch_up():
                 pass
+            timings["ingest_seconds"][name] = time.perf_counter() - phase_started
         v1._ensure_idf_table()
         query = await embedder.embed(case.question)
         dense = sorted(
@@ -188,14 +191,26 @@ async def prepare(a):
                 records = dense
             else:
                 e = v1 if name == "akasha" else v2
-                result = await e.query(
-                    MemoryQuery(
-                        case.question,
-                        limit=10,
-                        effect="read_only",
-                        timestamp=index_time,
+                samples = []
+                first_records = None
+                for _ in range(5):
+                    phase_started = time.perf_counter()
+                    result = await e.query(
+                        MemoryQuery(
+                            case.question,
+                            limit=10,
+                            effect="read_only",
+                            timestamp=index_time,
+                        )
                     )
-                )
+                    samples.append(time.perf_counter() - phase_started)
+                    if first_records is None:
+                        first_records = result.records
+                    elif result.records != first_records:
+                        raise ValueError(
+                            "repeated read-only query changed returned evidence"
+                        )
+                timings["query_seconds"][name] = samples
                 records = [
                     {
                         "id": r.id,
@@ -239,6 +254,7 @@ async def prepare(a):
             "unpaired_messages_excluded_from_all_arms": excluded_messages,
             "index_time": index_time.isoformat(),
             "seconds": time.monotonic() - start,
+            "adapter_timings": timings,
             "arms": arms,
         }
         with a.output.open("a") as out:
@@ -283,7 +299,9 @@ async def prepare(a):
                     )
                     for f in Path(root).rglob("*.py")
                 },
-                "selection": "sha256(kirakira-20261019:question_id), first per type, no label selection",
+                "selection": json.loads(a.selection.read_text())
+                if a.selection
+                else "sha256(kirakira-20261019:question_id), first per type, no label selection",
                 "case_ids": [c.question_id for c in cases],
                 "context_chars": 24000,
                 "max_turns": 10,
@@ -306,6 +324,7 @@ def main():
     p.add_argument("--workspace", type=Path, required=True)
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--per-type", type=int, default=6)
+    p.add_argument("--selection", type=Path)
     p.add_argument("--shards", type=int, default=1)
     p.add_argument("--shard-index", type=int, default=0)
     asyncio.run(prepare(p.parse_args()))

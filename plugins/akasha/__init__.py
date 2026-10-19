@@ -8,7 +8,7 @@
 
 移植边界:
 - `core.py` 与 `fast/` 逐字节镜像(它们零框架依赖,只用 numpy + jieba + stdlib);
-- `store/graph_snapshot/replay/engine/config/memory_plugin` 只改 import 命名空间;
+- `store/replay/engine/config/memory_plugin` 只改 import 命名空间;
 - 框架设施由 `agent/plugins/config.py` 与 `infra/persistence/json_store.py` 提供。
 
 未移植的两个文件及理由见 docs/ALIGNMENT.md:`plugin.py`(依赖 PhaseFrame 与

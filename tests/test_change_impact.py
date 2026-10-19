@@ -8,7 +8,7 @@ def test_context_change_selects_semantic_and_runtime_contracts() -> None:
 
 
 def test_scheduler_change_stays_targeted_but_keeps_global_boundaries() -> None:
-    selected = impacted_tests(["agent/scheduler.py"])
+    selected = impacted_tests(["plugins/scheduler/service.py"])
     assert "tests/test_scheduler.py" in selected
     assert "tests/semantic/test_reference_independence_contract.py" in selected
     assert "tests/test_proactive.py" not in selected

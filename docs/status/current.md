@@ -10,6 +10,8 @@
 ## 已落地
 
 - 被动对话、Wake、Drift、子任务和 Scheduler 共用 reasoner 与工具授权边界；渠道、直接和控制入口共用 admission。
+- Scheduler 提供者使用来源会话、notify/run、none/session 历史与持久 fire；投递回执后完成，未知结果停止自动重放。
+- 删除未接线的旧同步 Agent、手工压缩入口和图快照代码；渠道排队与中断统一归 admission。
 - 模型当前生成有界重试、Retry-After、可取消等待、流片段 reset、TUI 状态及截断拒绝；已执行工具不因网络恢复重复。
 - Plugin API 3：提供者拥有版本能力，消费者声明依赖并持有 generation lease；资源 scope 物理排空，缺失依赖拒绝发布并撤销贡献。
 - 记忆构造归 bootstrap、工具归 memory_tools 提供者；工作区工具不持有记忆服务，Drift 显式只读记忆。
@@ -36,7 +38,7 @@ Session SQLite append-only、上下文投影与 compaction ledger、Shell/PTY/st
 | 记忆质量 | 有可复现的固定公开样本四组实验；不等于官方全量榜单 | 全 500 题、多种 embedding、独立 judge、重复运行与区间 |
 | v1 大历史性能 | 历史前缀 FTS 重建成本随历史增长 | 分规模测量 p50/p95 后优化索引 |
 | 主动体验 | 兴趣池已接入；显式规则与证据估计仍需标注 | 实际来源上的有用率、打扰率、静默正确率及日预算 |
-| Scheduler 新合同 | 仍使用 instant/soft 与隔离任务会话 | 来源会话、notify/run、独立历史、持久触发结算与插话恢复一体迁移 |
+| Scheduler 续跑 | 来源会话、notify/run、历史隔离、触发结算已接入；仍是整轮排队 | 工具边界让出用户、保存并恢复同一持久程序；已完成副作用不重放 |
 | 自主目标发现 | 提案队列已有持久生命周期，候选仍来自显式技能 | 有证据的 proposal planner、过期与用户意图修正 |
 | 组件全面拆分 | 通用能力宿主已接入插件和对话记忆；部分内置工具/维护仍由 bootstrap 装配 | 逐个迁移业务 owner，不能靠目录改名宣称完成 |
 | Session/Ledger | 沿用当前 append-only 消息与多份业务状态 | 不宣称已移植上游全部 Ledger 消息程序与跨业务事务 |

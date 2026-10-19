@@ -12,21 +12,16 @@ import hashlib
 import logging
 import random
 import time
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import asynccontextmanager
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 from uuid import uuid4
 
-from bus.queue import MessageBus, OutboundDeliveryError
-from core.memory.engine import (
-    MemoryCapability,
-    MemoryQuery,
-    MemoryQueryFilters,
-    MemoryScope,
-)
-from bus.events import OutboundMessage
+from agent.lifecycle.phase import topo_sort_modules
+from agent.model_runtime.types import ModelClient
+from agent.plugins.snapshot import bind_runtime_snapshot, reset_runtime_snapshot
 from agent.turns.result import (
     BusOutboundPort,
     CallableSideEffect,
@@ -35,25 +30,28 @@ from agent.turns.result import (
     TurnTrace,
     commit_turn_result,
 )
-from agent.model_runtime.types import ModelClient
+from bus.queue import MessageBus, OutboundDeliveryError
+from core.memory.engine import (
+    MemoryCapability,
+    MemoryQuery,
+    MemoryQueryFilters,
+    MemoryScope,
+)
+from plugins.proactive_flow.admission import AdmissionStamp, DecisionSuperseded
+from plugins.proactive_flow.judge import Decision, ProactiveJudge
+from plugins.proactive_flow.modules import build_default_proactive_modules
 from plugins.wake_proactive import energy
+from plugins.wake_proactive.sources import SourceRegistry
+from plugins.wake_proactive.state import ProactiveStateStore
 from proactive_v2.config import ProactiveConfig
 from proactive_v2.contracts import (
     normalize_alert,
     normalize_content,
-    normalize_context,
-    rank_alerts,
     rank_content,
 )
-from agent.lifecycle.phase import topo_sort_modules
 from proactive_v2.frame import new_proactive_frame
-from plugins.proactive_flow.judge import Decision, ProactiveJudge, format_context
-from plugins.proactive_flow.admission import AdmissionStamp, DecisionSuperseded
-from agent.plugins.snapshot import bind_runtime_snapshot, reset_runtime_snapshot
-from plugins.proactive_flow.modules import build_default_proactive_modules
-from plugins.wake_proactive.sources import SourceRegistry
-from plugins.wake_proactive.state import ProactiveStateStore
 from session.manager import SessionManager
+from session.turn_source import is_memory_source
 
 logger = logging.getLogger(__name__)
 
@@ -199,9 +197,7 @@ class ProactiveLoop:
             tick_jitter=self._cfg.tick_jitter,
             rng=self._rng,
         )
-        logger.info(
-            "[proactive] 下次 tick 间隔=%ds base_score=%.3f", interval, score
-        )
+        logger.info("[proactive] 下次 tick 间隔=%ds base_score=%.3f", interval, score)
         return interval
 
     def _current_base_score(self) -> float:
@@ -324,7 +320,8 @@ class ProactiveLoop:
         proactive_context: str,
         context_text: str,
         recent_proactive: str = "",
-        *, admission: AdmissionStamp | None = None,
+        *,
+        admission: AdmissionStamp | None = None,
     ) -> None:
         admission = admission or self._capture_admission()
         self._validate_admission(admission, [alert_event])
@@ -344,34 +341,58 @@ class ProactiveLoop:
 
     async def _content_pool(self, pending, now, context):
         from plugins.wake_proactive.pool import mass, shortlist
+
         # Recent conversation changes frequently. Explicit rules and durable memory
         # define the score identity; exact source revision defines candidate identity.
-        fingerprint = hashlib.sha256((self._cfg.model + "\n" + context).encode()).hexdigest()
-        unread = self._state.unread('content')
-        missing = [item for item in unread if self._state.interest_score(item, fingerprint) is None]
+        fingerprint = hashlib.sha256(
+            (self._cfg.model + "\n" + context).encode()
+        ).hexdigest()
+        unread = self._state.unread("content")
+        missing = [
+            item
+            for item in unread
+            if self._state.interest_score(item, fingerprint) is None
+        ]
         for offset in range(0, len(missing), 8):
-            batch = missing[offset:offset + 8]
+            batch = missing[offset : offset + 8]
             estimates = await self._judge.score_content(batch, context)
             for item in batch:
-                self._state.save_interest_score(item, fingerprint, estimates[item['item_id']], now)
+                self._state.save_interest_score(
+                    item, fingerprint, estimates[item["item_id"]], now
+                )
         candidates = []
         for item in unread:
             row = self._state.interest_score(item, fingerprint)
-            if row is None: continue  # revision changed while model was scoring
-            score = mass(row['initial'], datetime.fromisoformat(item['first_seen_at']), now,
-                         half_life_hours=self._cfg.pool_half_life_hours)
-            if score >= .02:
-                candidates.append({**item, '_pool_mass': score})
-        total = sum(item['_pool_mass'] for item in candidates)
-        self._state.record_decision(now, 'pool_scored', f'mass={total:.6f}; candidates={len(candidates)}')
+            if row is None:
+                continue  # revision changed while model was scoring
+            score = mass(
+                row["initial"],
+                datetime.fromisoformat(item["first_seen_at"]),
+                now,
+                half_life_hours=self._cfg.pool_half_life_hours,
+            )
+            if score >= 0.02:
+                candidates.append({**item, "_pool_mass": score})
+        total = sum(item["_pool_mass"] for item in candidates)
+        self._state.record_decision(
+            now, "pool_scored", f"mass={total:.6f}; candidates={len(candidates)}"
+        )
         if total < self._cfg.pool_threshold:
-            self._state.record_content_check(self._cfg.session_key, pending,
-                {'status': 'pool_wait', 'mass': total}, now)
+            self._state.record_content_check(
+                self._cfg.session_key,
+                pending,
+                {"status": "pool_wait", "mass": total},
+                now,
+            )
             return []
         # One arrival may wake one pool judgement. Unselected arrivals must also
         # be settled, or the same high-ranked old page would wake every tick.
-        self._state.record_content_check(self._cfg.session_key, pending,
-            {'status': 'pool_reviewed', 'mass': total}, now)
+        self._state.record_content_check(
+            self._cfg.session_key,
+            pending,
+            {"status": "pool_reviewed", "mass": total},
+            now,
+        )
         return shortlist(candidates, limit=self._cfg.content_limit)
 
     async def _push_content(
@@ -383,10 +404,13 @@ class ProactiveLoop:
         proactive_context: str,
         context_text: str,
         recent_proactive: str = "",
-        *, admission: AdmissionStamp | None = None,
+        *,
+        admission: AdmissionStamp | None = None,
     ) -> bool:
         # 新内容优先，避免总在最旧的候选上打转
-        page = (content_events if self._cfg.pool_enabled else rank_content(content_events))[: self._cfg.content_limit]
+        page = (
+            content_events if self._cfg.pool_enabled else rank_content(content_events)
+        )[: self._cfg.content_limit]
         admission = admission or self._capture_admission()
         self._validate_admission(admission, page)
         contracts = [normalize_content(event) for event in page]
@@ -401,27 +425,50 @@ class ProactiveLoop:
         try:
             self._validate_admission(admission, page)
         except DecisionSuperseded as exc:
-            self._state.record_content_check(self._cfg.session_key, page,
-                {**asdict(decision), "status": "superseded", "reason": str(exc)}, now, retry_seconds=300)
+            self._state.record_content_check(
+                self._cfg.session_key,
+                page,
+                {**asdict(decision), "status": "superseded", "reason": str(exc)},
+                now,
+                retry_seconds=300,
+            )
             raise
         if not decision.send:
             self._state.record_content_check(
-                self._cfg.session_key, page, asdict(decision), now,
+                self._cfg.session_key,
+                page,
+                asdict(decision),
+                now,
                 retry_seconds=300 if decision.status in {"error", "invalid"} else None,
             )
             return False
-        self._state.record_content_check(self._cfg.session_key, page,
-            {**asdict(decision), "status": "delivery_pending"}, now, retry_seconds=300)
+        self._state.record_content_check(
+            self._cfg.session_key,
+            page,
+            {**asdict(decision), "status": "delivery_pending"},
+            now,
+            retry_seconds=300,
+        )
         try:
             delivered = await self._deliver(decision, now, decision.cited_ids)
         except OutboundDeliveryError:
             self._state.record_content_check(
-                self._cfg.session_key, page,
-                {**asdict(decision), "status": "delivery_failed"}, now, retry_seconds=300,
+                self._cfg.session_key,
+                page,
+                {**asdict(decision), "status": "delivery_failed"},
+                now,
+                retry_seconds=300,
             )
             raise
-        self._state.record_content_check(self._cfg.session_key, page,
-            {**asdict(decision), "status": "delivered" if delivered else "deduplicated"}, now)
+        self._state.record_content_check(
+            self._cfg.session_key,
+            page,
+            {
+                **asdict(decision),
+                "status": "delivered" if delivered else "deduplicated",
+            },
+            now,
+        )
         # 只消费/ACK 被真正引用的内容
         cited = set(decision.cited_ids)
         selected = [c for c in contracts if c.item_id in cited]
@@ -450,10 +497,17 @@ class ProactiveLoop:
         return True
 
     def _capture_admission(self) -> AdmissionStamp:
-        return AdmissionStamp(self._sessions.message_head(self._cfg.session_key), self._read_context_file())
+        return AdmissionStamp(
+            self._sessions.message_head(self._cfg.session_key),
+            self._read_context_file(),
+        )
 
-    def _validate_admission(self, stamp: AdmissionStamp, candidates: List[dict]) -> None:
-        if self._passive_busy_fn is not None and self._passive_busy_fn(self._cfg.session_key):
+    def _validate_admission(
+        self, stamp: AdmissionStamp, candidates: List[dict]
+    ) -> None:
+        if self._passive_busy_fn is not None and self._passive_busy_fn(
+            self._cfg.session_key
+        ):
             raise DecisionSuperseded("passive conversation became busy")
         if self._sessions.message_head(self._cfg.session_key) != stamp.session_head:
             raise DecisionSuperseded("conversation changed during decision")
@@ -582,6 +636,8 @@ class ProactiveLoop:
         recent_count = 0
         window_start = now.timestamp() - 24 * 3600
         for msg in session.messages:
+            if not is_memory_source(msg):
+                continue
             ts = _parse_ts(msg.get("timestamp"))
             role = msg.get("role")
             if ts is not None and ts.timestamp() >= window_start:
@@ -598,7 +654,8 @@ class ProactiveLoop:
         except Exception:
             return ""
         lines: List[str] = []
-        for msg in session.messages[-limit:]:
+        eligible = [msg for msg in session.messages if is_memory_source(msg)]
+        for msg in eligible[-limit:]:
             role = msg.get("role")
             if role not in ("user", "assistant"):
                 continue
@@ -652,7 +709,11 @@ class ProactiveLoop:
             result = await engine.query(
                 MemoryQuery(
                     text=query,
-                    scope=MemoryScope(session_key=self._cfg.session_key, channel=self._cfg.channel, chat_id=self._cfg.chat_id),
+                    scope=MemoryScope(
+                        session_key=self._cfg.session_key,
+                        channel=self._cfg.channel,
+                        chat_id=self._cfg.chat_id,
+                    ),
                     intent="interest",
                     effect="read_only",
                     filters=MemoryQueryFilters(relevance_floor="strong"),
@@ -665,9 +726,14 @@ class ProactiveLoop:
             logger.warning("[proactive] 兴趣检索失败: %s", exc)
             return ""
         lines = [
-            "- %s [evidence: %s]" % (str(record.summary).strip()[:300], ", ".join(
-                ref.source_ref or ",".join(ref.refs) for ref in record.evidence
-            ) or record.id)
+            "- %s [evidence: %s]"
+            % (
+                str(record.summary).strip()[:300],
+                ", ".join(
+                    ref.source_ref or ",".join(ref.refs) for ref in record.evidence
+                )
+                or record.id,
+            )
             for record in result.records
             if str(record.summary).strip()
         ]

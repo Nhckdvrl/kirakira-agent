@@ -107,7 +107,8 @@ endpoint is not assumed to provide embeddings.
   output polling, cancellation and process-group cleanup. Child agents have isolated
   execution ownership and bounded admission.
 - Schedules support one-shot, duration, interval and 5/6-field cron triggers with
-  IANA time zones, instant/soft tiers and isolated soft-turn sessions.
+  IANA time zones, source-session notify/run actions, explicit history scope, durable
+  fire identities and confirmed local delivery receipts.
 - Tools carry risk, discovery and source metadata. MCP/plugin tools can remain
   deferred until `tool_search` unlocks them.
 - Workspace schema changes run through a locked Yoyo migration ledger. Migration

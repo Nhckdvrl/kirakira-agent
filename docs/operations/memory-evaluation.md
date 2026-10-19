@@ -76,13 +76,12 @@ Drift 的静默、实际投递、来源失效与 paused 分别验证。
 ## 准备与执行
 
 先从上述固定 revision 下载 `longmemeval_s_cleaned.json`，核对 SHA-256。数据和缓存留在仓库外。
-为免费 CPU embedding 单独创建环境，不把 FastEmbed 加入生产依赖：
+免费 CPU embedding 与 Agent 共用项目 `.venv` / Python 3.14.6；FastEmbed 仅属于可选 eval 依赖组：
 
 ```bash
-uv venv /tmp/kirakira-embedding-env
-uv pip install --python /tmp/kirakira-embedding-env/bin/python fastembed
+uv sync --frozen --group dev --group eval
 
-/tmp/kirakira-embedding-env/bin/python -m eval.longmemeval.embed_local \
+uv run --frozen --group eval python -m eval.longmemeval.embed_local \
   --dataset /absolute/cache/longmemeval_s_cleaned.json \
   --output /absolute/cache/bge-36.npz \
   --cache /absolute/cache/models --per-type 6
@@ -129,3 +128,59 @@ session recall 只说明某个相关 session 被命中过，不能证明答案�
 错误与截断、reader/judge usage，以及 oracle 对错误的诊断。成功响应 usage 不等于包含所有失败尝试的计费账单。
 同模型 judge 存在偏差；小样本、单轮和单 embedding 不能支持显著性或整体领先结论。首轮曾发送未获文档支持的 thinking=false、上限 4096；
 该轮原样保留并标明实际推理强度未指定，统一原生配置的复跑另存为独立轮次。
+
+
+## 公开机制、成本与检索基线
+
+当前 Akashic 的 LongMemEval/PersonaMem 入口已退役；其公开可复现重点是
+[scripts/akasha_cost_scenario.py](https://github.com/kachofugetsu09/akashic-agent/blob/d85b00c233686b68b082052b1b20123905aeab13/scripts/akasha_cost_scenario.py)
+和[机制/成本报告](https://github.com/kachofugetsu09/akashic-agent/blob/d85b00c233686b68b082052b1b20123905aeab13/docs/design/akasha-memory-cost.md)。
+Kirakira 同时保留公开任务质量和机制验证，不把上游私人语料成绩当成本项目成绩。
+
+```bash
+PYTHONHASHSEED=0 uv run --frozen python -m eval.memory_cost --output /tmp/cost-seed0
+PYTHONHASHSEED=42 uv run --frozen python -m eval.memory_cost --output /tmp/cost-seed42
+uv run --frozen python -m scripts.check_akasha2_properties --output /tmp/upstream-properties
+
+uv run --frozen python -m eval.longmemeval.baselines \
+  --dataset /absolute/cache/longmemeval_s_cleaned.json \
+  --embeddings /absolute/cache/bge-36.npz \
+  --graph-retrieval /tmp/kirakira-retrieval.jsonl \
+  --output /tmp/kirakira-baselines.jsonl
+```
+
+`memory_cost` 使用与上游相同的 272 条合成经历协议：跨会话、长间隔、remember/forget、
+部分缺向量、9 个查询、连续写入与完整 writer 的全表比较、16 次重启，以及 file fsync/replace/
+directory fsync 故障。报告同时保存完整状态与召回摘要、学习/查询/发布/恢复 p50/p95、RSS 和数据库大小。
+这是纯 MemoryCycle 与快照开销，不包含模型、远程 embedding 或完整宿主；合成向量不证明语义质量。
+
+数学性质检查固定独立引擎提交，运行其数值断言；仅改导入路径和三个 list/array 读法，保留全部
+数值不等式。独立引擎的 CLI/schema 专属测试明确排除，以 Kirakira 的两种哈希种子实验另验确定性。
+
+基线增加 FTS5 BM25、Dense/BM25 RRF（k=60）和近期原文窗口，均最多 10 对/24,000 字符。
+这些是可复现的检索控制，不是 Mem0/Zep 的实现或产品成绩。源 ID 回源校验后才计算标注消息对覆盖率，
+同时记录回答正确率、完整覆盖、MRR、生成用量和延迟。
+
+新增题集须先冻结 selection JSON，以 `--selection` 同时传给 embedding 与 prepare_retrieval；
+原来的固定 36 题默认协议保持。题目保留集与历史语料完全独立是不同要求，报告必须标明分割单位。
+
+
+## Mem0 OSS 实际对照
+
+在同一个项目环境安装可选对比组：`uv sync --frozen --group dev --group eval --group comparison`。
+`compare_mem0_step_plan` 固定本地 Qdrant 与 BGE、关闭 telemetry，真实 Mem0 执行提取/更新/搜索，
+只有模型 HTTP 传输改接受校验的 Step Token Plan。没有访问默认 OpenAI 计费端点。
+
+```bash
+uv run --frozen --group eval --group comparison python -m scripts.compare_mem0_step_plan \
+  --dataset /absolute/cache/longmemeval_s_cleaned.json \
+  --selection eval/results/2026-10-19-scheduler/mem0-selection.json \
+  --key-file /absolute/private/step-plan.key --cache /absolute/cache/models \
+  --workspace /tmp/new-mem0-run --output /tmp/new-mem0-ingestion.jsonl --workers 2
+```
+
+以生成的 `.retrieval.jsonl` 再调用同一个 live_eval reader/judge。Mem0 为 OSS 基础安装，未安装
+可选 spaCy NLP extra；不代表 hosted Platform 或所有部署组合。每个来源会话一次 add(infer=True)，
+问题与答案不进入提取；原始日期作为上下文和 metadata。返回最多 10 条提取事实，而图检索返回原文对，
+这属于系统间差异，不能把 Mem0 事实的 pair recall 当零分。只在预先固定的同题子集比较回答和用量，
+并报告初始化、批量学习和检索开销。失败输入与失败模型调用必须保留。

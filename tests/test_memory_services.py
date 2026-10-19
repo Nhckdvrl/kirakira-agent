@@ -7,18 +7,21 @@ runtime 的 _engine_can_retrieve 据此决定检索走引擎还是旧路径。
 
 from __future__ import annotations
 
+import pytest
+
+pytestmark = pytest.mark.usefixtures("isolated_cwd")
+
 import tempfile
 import unittest
 from pathlib import Path
 
-from infra.providers.model_client_adapter import ModelClientProvider
-from plugins.default_memory.engine import DefaultMemoryEngine
-from core.memory.plugin import DisabledMemoryEngine
-from plugins.default_memory.contract import MemoryServices
-from bootstrap.memory import build_memory_engine
-from bootstrap.memory import memory_engine_enabled
 from agent.config_models import build_config
 from agent.core.pipeline import _engine_can_retrieve
+from bootstrap.memory import build_memory_engine, memory_engine_enabled
+from core.memory.plugin import DisabledMemoryEngine
+from infra.providers.model_client_adapter import ModelClientProvider
+from plugins.default_memory.contract import MemoryServices
+from plugins.default_memory.engine import DefaultMemoryEngine
 
 
 class _StubClient:
@@ -44,7 +47,13 @@ class MemoryFactoryGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             engine = build_memory_engine(
                 app_config={
-                    "llm": {"main": {"model": "m", "base_url": "http://x/v1", "api_key": "k"}},
+                    "llm": {
+                        "main": {
+                            "model": "m",
+                            "base_url": "http://x/v1",
+                            "api_key": "k",
+                        }
+                    },
                     "memory": {
                         "enabled": True,
                         "embedding": {

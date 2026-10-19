@@ -8,7 +8,6 @@ import json
 import subprocess
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 IMPACT_RULES: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
     (("bootstrap/runtime.py", "bootstrap/app.py", "bootstrap/channels.py", "bootstrap/proactive.py", "bootstrap/tools.py", "bootstrap/restart.py"), (
@@ -36,7 +35,7 @@ IMPACT_RULES: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
         "tests/test_tools.py",
         "tests/test_runtime.py",
     )),
-    (("agent/scheduler.py",), ("tests/test_scheduler.py",)),
+    (("plugins/scheduler/",), ("tests/test_scheduler.py", "tests/test_scheduler_migration.py", "tests/test_memory_source_policy.py", "tests/test_runtime.py", "tests/test_memory_recovery.py")),
     (("proactive_v2/", "plugins/proactive_flow/", "plugins/wake_proactive/"), (
         "tests/test_proactive.py",
         "tests/test_proactive_lifecycle.py",
@@ -55,6 +54,7 @@ IMPACT_RULES: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
     )),
     (("agent/migrations/", "migrations/", "bootstrap/workspace_lock.py"), (
         "tests/test_migration_runner.py",
+        "tests/test_scheduler_migration.py",
         "tests/test_yoyo_migration_append_only.py",
     )),
     (("agent/plugins/", "agent/mcp/"), (

@@ -9,6 +9,10 @@
 
 from __future__ import annotations
 
+import pytest
+
+pytestmark = pytest.mark.usefixtures("isolated_cwd")
+
 import asyncio
 import tempfile
 import threading
@@ -23,7 +27,9 @@ class _FakeAdminEngine:
     """只实现 admin 协议的假引擎;有 list_items_for_dashboard 才算承重。"""
 
     DESCRIPTOR = SimpleNamespace(
-        name="fake", profile=SimpleNamespace(value="rich"), capabilities=frozenset({"retrieve.semantic"})
+        name="fake",
+        profile=SimpleNamespace(value="rich"),
+        capabilities=frozenset({"retrieve.semantic"}),
     )
 
     def __init__(self) -> None:
@@ -87,7 +93,9 @@ class MemoryGoesThroughEngineTests(unittest.TestCase):
 
     def test_filters_and_paging_reach_engine(self) -> None:
         engine = _FakeAdminEngine()
-        board = DashboardService(workspace=Path("."), memory_services=SimpleNamespace(engine=engine))
+        board = DashboardService(
+            workspace=Path("."), memory_services=SimpleNamespace(engine=engine)
+        )
         board.memories(
             {
                 "q": ["部署"],
@@ -106,13 +114,16 @@ class MemoryGoesThroughEngineTests(unittest.TestCase):
 
     def test_absent_has_embedding_does_not_filter(self) -> None:
         engine = _FakeAdminEngine()
-        board = DashboardService(workspace=Path("."), memory_services=SimpleNamespace(engine=engine))
+        board = DashboardService(
+            workspace=Path("."), memory_services=SimpleNamespace(engine=engine)
+        )
         board.memories({})
         self.assertIsNone(engine.seen["has_embedding"])
 
     def test_hard_delete_requires_confirmation(self) -> None:
         board = DashboardService(
-            workspace=Path("."), memory_services=SimpleNamespace(engine=_FakeAdminEngine())
+            workspace=Path("."),
+            memory_services=SimpleNamespace(engine=_FakeAdminEngine()),
         )
         with self.assertRaises(ValueError):
             board.delete_memories(["m1"], confirm="")
@@ -130,7 +141,8 @@ class MemoryGoesThroughEngineTests(unittest.TestCase):
 
     def test_engine_info_reports_load_bearing(self) -> None:
         live = DashboardService(
-            workspace=Path("."), memory_services=SimpleNamespace(engine=_FakeAdminEngine())
+            workspace=Path("."),
+            memory_services=SimpleNamespace(engine=_FakeAdminEngine()),
         )
         self.assertTrue(live.engine_info()["load_bearing"])
         self.assertEqual(live.engine_info()["capabilities"], ["retrieve.semantic"])
@@ -234,24 +246,40 @@ class SessionPanelTests(unittest.TestCase):
 class PluginPanelTests(unittest.TestCase):
     def test_generation_lease_counts_are_surfaced(self) -> None:
         manager = SimpleNamespace(
-            active=[SimpleNamespace(plugin_id="p1", version="1.0", desc="d", root="/r", instance=object())],
+            active=[
+                SimpleNamespace(
+                    plugin_id="p1",
+                    version="1.0",
+                    desc="d",
+                    root="/r",
+                    instance=object(),
+                )
+            ],
             errors={"bad": "boom"},
             generations=SimpleNamespace(
                 active=(
                     SimpleNamespace(
-                        plugin_id="p1", generation_id="g1", revision="r",
-                        state="active", lease_count=2,
+                        plugin_id="p1",
+                        generation_id="g1",
+                        revision="r",
+                        state="active",
+                        lease_count=2,
                     ),
                 ),
                 retired=(
                     SimpleNamespace(
-                        plugin_id="p1", generation_id="g0", state="retired",
-                        lease_count=1, can_quiesce=False,
+                        plugin_id="p1",
+                        generation_id="g0",
+                        state="retired",
+                        lease_count=1,
+                        can_quiesce=False,
                     ),
                 ),
             ),
         )
-        payload = DashboardService(workspace=Path("."), plugin_manager=manager).plugins()
+        payload = DashboardService(
+            workspace=Path("."), plugin_manager=manager
+        ).plugins()
         self.assertEqual(payload["generations"][0]["lease_count"], 2)
         # 仍有在途租约的退休代际不可销毁——这正是热重载不抽走能力的运行时证据
         self.assertFalse(payload["retired"][0]["can_quiesce"])
@@ -312,7 +340,11 @@ class RecallInspectorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             insp = self._inspector(tmp)
             record = SimpleNamespace(
-                id="m1", kind="identity", summary="我是月火", score=0.515, injected=False
+                id="m1",
+                kind="identity",
+                summary="我是月火",
+                score=0.515,
+                injected=False,
             )
             turn = insp.record_context_prepare(
                 session_key="web:u1",
@@ -366,8 +398,13 @@ class RecallInspectorTests(unittest.TestCase):
 
             insp = RecallInspector(Path(tmp), enabled=False)
             turn = insp.record_context_prepare(
-                session_key="s", channel="c", chat_id="i", user_text="x",
-                timestamp="t", records=[], text_block="",
+                session_key="s",
+                channel="c",
+                chat_id="i",
+                user_text="x",
+                timestamp="t",
+                records=[],
+                text_block="",
             )
             self.assertTrue(turn)
             self.assertFalse(insp.path.exists())
@@ -377,8 +414,13 @@ class RecallInspectorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             insp = self._inspector(tmp)
             insp.record_context_prepare(
-                session_key="s", channel="c", chat_id="i", user_text="ok",
-                timestamp="t", records=[], text_block="",
+                session_key="s",
+                channel="c",
+                chat_id="i",
+                user_text="ok",
+                timestamp="t",
+                records=[],
+                text_block="",
             )
             with insp.path.open("a", encoding="utf-8") as handle:
                 handle.write("{ 这行坏了\n")
@@ -392,7 +434,10 @@ class RecallInspectorTests(unittest.TestCase):
                 hook = insp.tool_hook()
                 self.assertEqual(hook.event, "post_tool_use")
                 request = SimpleNamespace(
-                    tool_name="recall_memory", session_key="web:u1", channel="web", chat_id="u1"
+                    tool_name="recall_memory",
+                    session_key="web:u1",
+                    channel="web",
+                    chat_id="u1",
                 )
                 other = SimpleNamespace(tool_name="bash", session_key="web:u1")
                 self.assertTrue(hook.matches(SimpleNamespace(request=request)))
@@ -434,8 +479,13 @@ class DashboardRecallAndMessagesTests(unittest.TestCase):
 
             insp = RecallInspector(Path(tmp))
             turn = insp.record_context_prepare(
-                session_key="web:u1", channel="web", chat_id="u1", user_text="hi",
-                timestamp="2026-07-27T06:00:00+00:00", records=[], text_block="b",
+                session_key="web:u1",
+                channel="web",
+                chat_id="u1",
+                user_text="hi",
+                timestamp="2026-07-27T06:00:00+00:00",
+                records=[],
+                text_block="b",
             )
             board = DashboardService(workspace=Path(tmp), recall_inspector=insp)
             self.assertEqual(board.recall_turns()["total"], 1)
@@ -447,8 +497,13 @@ class DashboardRecallAndMessagesTests(unittest.TestCase):
             workspace=Path("."),
             session_manager=SimpleNamespace(
                 search_messages=lambda q, limit=10: [
-                    {"source_ref": "web:u1:3", "session_key": "web:u1", "role": "user",
-                     "content": "部署脚本", "timestamp": "t"}
+                    {
+                        "source_ref": "web:u1:3",
+                        "session_key": "web:u1",
+                        "role": "user",
+                        "content": "部署脚本",
+                        "timestamp": "t",
+                    }
                 ],
                 list_sessions=lambda: [],
             ),

@@ -129,7 +129,12 @@ class PassiveTurnPipeline:
             yield leased
 
     async def run(
-        self, msg: InboundMessage, key: str, *, dispatch_outbound: bool = True
+        self,
+        msg: InboundMessage,
+        key: str,
+        *,
+        dispatch_outbound: bool = True,
+        admitted=None,
     ) -> OutboundMessage:
         async with self.admission.hold(key), AsyncExitStack() as resources:
             memory_token = None
@@ -139,6 +144,8 @@ class PassiveTurnPipeline:
                 )
                 memory_token = self._turn_memory.set(bound)
             try:
+                if admitted is not None:
+                    admitted()
                 return await self._run_admitted(
                     msg, key, dispatch_outbound=dispatch_outbound
                 )
@@ -251,7 +258,9 @@ class PassiveTurnPipeline:
             )
         )
         before_turn: BeforeTurnCtx | None = None
-        if msg.content.lstrip().startswith("/"):
+        if msg.content.lstrip().startswith("/") and not str(
+            msg.metadata.get("source") or ""
+        ).startswith("scheduler:"):
             before_turn = BeforeTurnCtx(
                 session_key=key,
                 channel=msg.channel,
@@ -273,16 +282,21 @@ class PassiveTurnPipeline:
             if core_reply is not None:
                 return await self._dispatch_if_needed(state, core_reply)
 
-        # 等上一轮归档收口再读历史:归档会推进 last_consolidated,没等会读到错位窗口。
-        maintenance = self._markdown_maintenance()
-        if maintenance is not None:
-            await maintenance.wait_for_session(key)
-        guard_reply = await self._guard_memory_context(session, key)
-        if guard_reply:
-            return await self._dispatch_if_needed(state, guard_reply)
-        # SessionDB is the source of truth. The model-facing projection is built
-        # later from complete logical units; no message-count tail slicing here.
-        history = session.get_history(max_messages=max(1, len(session.messages)))
+        own_history = msg.metadata.get("history_scope") == "none"
+        # A task's private request must not wait for or compact the whole chat.
+        # Real persistence and admission continue to use the complete session.
+        if not own_history:
+            maintenance = self._markdown_maintenance()
+            if maintenance is not None:
+                await maintenance.wait_for_session(key)
+            guard_reply = await self._guard_memory_context(session, key)
+            if guard_reply:
+                return await self._dispatch_if_needed(state, guard_reply)
+        history = (
+            []
+            if own_history
+            else session.get_history(max_messages=max(1, len(session.messages)))
+        )
         retrieved = ""
         if not msg.metadata.get("skip_memory_retrieval"):
             engine = (
@@ -389,6 +403,11 @@ class PassiveTurnPipeline:
             channel=msg.channel,
             chat_id=msg.chat_id,
             current_timestamp=msg.timestamp.isoformat(),
+            timezone=str(
+                msg.metadata.get("timezone")
+                or session.metadata.get("timezone")
+                or "UTC"
+            ),
         )
         try:
             before_reasoning = BeforeReasoningCtx(
@@ -418,10 +437,13 @@ class PassiveTurnPipeline:
                 skill_names=before_reasoning.skill_names,
                 extra_hints=before_reasoning.extra_hints,
                 disabled_tools=self._disabled_tools(msg),
-                session=session,
-                compaction_runtime=SessionCompactionRuntime(self.session_manager),
+                session=None if own_history else session,
+                compaction_runtime=None
+                if own_history
+                else SessionCompactionRuntime(self.session_manager),
             )
             state.extra_metadata["context_trace"] = dict(turn.context_trace)
+            state.extra_metadata["execution_status"] = turn.stop_reason
         finally:
             self.tools.reset_context(context_token)
         # 入站 metadata 里的 mobile_attention 一律丢弃,只认本轮工具自己声明的
@@ -443,6 +465,7 @@ class PassiveTurnPipeline:
                 **inbound_metadata,
                 "tools_used": list(turn.tools_used),
                 "tool_chain": list(turn.tool_chain),
+                "execution_status": turn.stop_reason,
                 **(
                     {"mobile_attention": turn.mobile_attention}
                     if turn.mobile_attention is not None
@@ -522,6 +545,11 @@ class PassiveTurnPipeline:
         msg = state.msg
         if msg.metadata.get("skip_post_memory") or msg.metadata.get("omit_user_turn"):
             state.extra_metadata["skip_post_memory"] = True
+        provenance = {
+            "source": str(msg.metadata.get("source") or "conversation"),
+            "skip_post_memory": bool(state.extra_metadata.get("skip_post_memory")),
+        }
+        state.extra_metadata.update(provenance)
         committed_user = None
         if not msg.metadata.get("omit_user_turn"):
             committed_user = session.add_message(
@@ -529,6 +557,12 @@ class PassiveTurnPipeline:
                 msg.content,
                 media=msg.media,
                 inbound_timestamp=msg.timestamp.isoformat(),
+                **provenance,
+                **(
+                    {"id": str(msg.metadata["input_message_id"])}
+                    if msg.metadata.get("input_message_id")
+                    else {}
+                ),
             )
         committed_assistant = session.add_message(
             "assistant",
@@ -539,6 +573,7 @@ class PassiveTurnPipeline:
             tool_chain=list(result.ctx.tool_chain),
             **state.extra_metadata,
         )
+        result.outbound.session_message_id = committed_assistant["id"]
         session.metadata.update(
             {
                 "channel": msg.channel,
@@ -702,6 +737,13 @@ class PassiveTurnPipeline:
             item.content,
             media=item.media,
             inbound_timestamp=inbound_timestamp,
+            source=str(item.metadata.get("source") or "conversation"),
+            skip_post_memory=bool(item.metadata.get("skip_post_memory")),
+            **(
+                {"id": str(item.metadata["input_message_id"])}
+                if item.metadata.get("input_message_id")
+                else {}
+            ),
         )
         snapshot = self._turn_snapshots.get(session_key)
         session.add_message(
@@ -712,5 +754,7 @@ class PassiveTurnPipeline:
             reasoning_content=snapshot.partial_thinking if snapshot else "",
             partial_reply=snapshot.partial_reply if snapshot else "",
             interrupted=True,
+            source=str(item.metadata.get("source") or "conversation"),
+            skip_post_memory=bool(item.metadata.get("skip_post_memory")),
         )
         self.session_manager.save(session)

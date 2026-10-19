@@ -1,0 +1,10 @@
+{
+  "upstream_host": "d85b00c233686b68b082052b1b20123905aeab13",
+  "same_input_sha256": true,
+  "learned_state_sha256": "f38c5de5af9da045de9e3bef06ca772befbee99b4ba8d6ec4bc4d94253fd42e2",
+  "upstream_learned_state_sha256": "f38c5de5af9da045de9e3bef06ca772befbee99b4ba8d6ec4bc4d94253fd42e2",
+  "nine_query_sha256": "575f6dd9f5b49c2f9cf4ca9ef5ed7a2128b454ba3d799102e5f104912002f2c6",
+  "upstream_nine_query_sha256": "575f6dd9f5b49c2f9cf4ca9ef5ed7a2128b454ba3d799102e5f104912002f2c6",
+  "consumption_note": "Compared learned-state hash excludes explicit skip receipts: the upstream driver adds an extra skip. Full-table incremental/full-writer equality is separately verified within each driver.",
+  "scope": "pure cycle and persistence; not host-level runtime equality"
+}

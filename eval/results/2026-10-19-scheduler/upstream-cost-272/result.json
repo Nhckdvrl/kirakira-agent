@@ -1,0 +1,39 @@
+{
+  "turns": 272,
+  "logical_state_sha256": "126103b8b9be60b10c1ec0225cf4d9d119a1c26b206a0e40442d71cb958a6e77",
+  "recalls_sha256": "575f6dd9f5b49c2f9cf4ca9ef5ed7a2128b454ba3d799102e5f104912002f2c6",
+  "incremental_seconds": [
+    0.03514000214636326,
+    0.050119299441576004,
+    0.03717418201267719,
+    0.02824149653315544,
+    0.05056683346629143,
+    0.04724072478711605,
+    0.03050372004508972,
+    0.03190673887729645,
+    0.03479846753180027,
+    0.03623524308204651,
+    0.03428232483565807,
+    0.037630025297403336,
+    0.03434090502560139,
+    0.04399188235402107,
+    0.04746483638882637,
+    0.048011306673288345
+  ],
+  "all_tables_equal": true,
+  "query_unchanged": true,
+  "faults": [
+    {
+      "boundary": "file-sync",
+      "published_new": false
+    },
+    {
+      "boundary": "replace",
+      "published_new": false
+    },
+    {
+      "boundary": "directory-sync",
+      "published_new": true
+    }
+  ]
+}

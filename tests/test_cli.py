@@ -13,6 +13,7 @@ from unittest import mock
 class CliTests(unittest.TestCase):
     def test_setup_rejects_telegram_display_name(self):
         import click
+
         from bootstrap.setup_wizard import _normalize_telegram_identity
 
         self.assertEqual(_normalize_telegram_identity("@jackdjjiwo"), "jackdjjiwo")
@@ -96,7 +97,7 @@ class CliTests(unittest.TestCase):
             root = Path(tmp)
             config = root / "config.toml"
             config.write_text(
-                '[runtime]\nworkspace = "workspace"\n', encoding="utf-8"
+                '[runtime]\nworkspace = "%s"\n' % (root / "workspace"), encoding="utf-8"
             )
             with mock.patch("bootstrap.app.main") as runtime_main:
                 main(["gateway", "--config", str(config)])
@@ -160,6 +161,7 @@ class CliTests(unittest.TestCase):
 
     def test_reference_style_setup_renders_supported_chains(self):
         from click.testing import CliRunner
+
         from bootstrap.setup_wizard import run_setup_wizard
 
         with tempfile.TemporaryDirectory() as tmp:

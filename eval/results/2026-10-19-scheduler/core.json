@@ -1,0 +1,453 @@
+{
+  "endpoint": "https://api.stepfun.com/step_plan/v1",
+  "model": "step-5-preview",
+  "billing_surface": "step_plan",
+  "reasoning_effort": "medium",
+  "cases": [
+    {
+      "name": "tool_chain_and_recovery_0",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "lookup",
+          "save"
+        ],
+        "reply": "Done. The code `7977a58ffc4d` has a value of 100, and multiplying by three gives **300**, which has been saved successfully.",
+        "writes": 1,
+        "injected_failures": 1,
+        "requests": [
+          {
+            "usage": {
+              "prompt_tokens": 315,
+              "completion_tokens": 80,
+              "total_tokens": 395,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "tool_use"
+          },
+          {
+            "usage": {
+              "prompt_tokens": 428,
+              "completion_tokens": 72,
+              "total_tokens": 500,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "tool_use"
+          },
+          {
+            "usage": {
+              "prompt_tokens": 517,
+              "completion_tokens": 49,
+              "total_tokens": 566,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "end_turn"
+          }
+        ],
+        "execution_status": "completed"
+      },
+      "seconds": 5.515867955982685
+    },
+    {
+      "name": "tool_chain_and_recovery_1",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "lookup",
+          "save"
+        ],
+        "reply": "The result is **303**.\n\n- Code `a48b19222506` had value **101**\n- 101 × 3 = **303**\n- The result was saved successfully.",
+        "writes": 1,
+        "injected_failures": 0,
+        "requests": [
+          {
+            "usage": {
+              "prompt_tokens": 312,
+              "completion_tokens": 40,
+              "total_tokens": 352,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "tool_use"
+          },
+          {
+            "usage": {
+              "prompt_tokens": 383,
+              "completion_tokens": 59,
+              "total_tokens": 442,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "tool_use"
+          },
+          {
+            "usage": {
+              "prompt_tokens": 459,
+              "completion_tokens": 40,
+              "total_tokens": 499,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "end_turn"
+          }
+        ],
+        "execution_status": "completed"
+      },
+      "seconds": 6.721137188374996
+    },
+    {
+      "name": "tool_chain_and_recovery_2",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "lookup",
+          "save"
+        ],
+        "reply": "The value for code 89546b248f33 was **102**. Multiplying by three gives **306**, which has been saved successfully.\n\nResult: **306**",
+        "writes": 1,
+        "injected_failures": 1,
+        "requests": [
+          {
+            "usage": {
+              "prompt_tokens": 313,
+              "completion_tokens": 57,
+              "total_tokens": 370,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "tool_use"
+          },
+          {
+            "usage": {
+              "prompt_tokens": 401,
+              "completion_tokens": 42,
+              "total_tokens": 443,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "tool_use"
+          },
+          {
+            "usage": {
+              "prompt_tokens": 460,
+              "completion_tokens": 35,
+              "total_tokens": 495,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "end_turn"
+          }
+        ],
+        "execution_status": "completed"
+      },
+      "seconds": 5.057098528370261
+    },
+    {
+      "name": "tool_chain_and_recovery_3",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "lookup",
+          "save"
+        ],
+        "reply": "Done! Here's a summary:\n\n- **Code:** `5a364f794c1f`\n- **Value:** 103\n- **Multiplied by 3:** 103 × 3 = **309**\n- **Saved:** 309 (saved exactly once)\n\nThe result is **309**.",
+        "writes": 1,
+        "injected_failures": 0,
+        "requests": [
+          {
+            "usage": {
+              "prompt_tokens": 315,
+              "completion_tokens": 83,
+              "total_tokens": 398,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "tool_use"
+          },
+          {
+            "usage": {
+              "prompt_tokens": 431,
+              "completion_tokens": 82,
+              "total_tokens": 513,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "tool_use"
+          },
+          {
+            "usage": {
+              "prompt_tokens": 530,
+              "completion_tokens": 79,
+              "total_tokens": 609,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "end_turn"
+          }
+        ],
+        "execution_status": "completed"
+      },
+      "seconds": 10.943813862279058
+    },
+    {
+      "name": "tool_chain_and_recovery_4",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "lookup",
+          "save"
+        ],
+        "reply": "The value for code `810c4f767c36` is **104**. Multiplying by three gives **312**, which I've saved successfully.\n\n**Result: 312**",
+        "writes": 1,
+        "injected_failures": 1,
+        "requests": [
+          {
+            "usage": {
+              "prompt_tokens": 314,
+              "completion_tokens": 38,
+              "total_tokens": 352,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "tool_use"
+          },
+          {
+            "usage": {
+              "prompt_tokens": 384,
+              "completion_tokens": 23,
+              "total_tokens": 407,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "tool_use"
+          },
+          {
+            "usage": {
+              "prompt_tokens": 424,
+              "completion_tokens": 38,
+              "total_tokens": 462,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "end_turn"
+          }
+        ],
+        "execution_status": "completed"
+      },
+      "seconds": 30.759434655308723
+    },
+    {
+      "name": "tool_chain_and_recovery_5",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "lookup",
+          "save"
+        ],
+        "reply": "Done! Code 52c4509df14b has a value of 105. After multiplying by three, I saved the result **315**.",
+        "writes": 1,
+        "injected_failures": 0,
+        "requests": [
+          {
+            "usage": {
+              "prompt_tokens": 314,
+              "completion_tokens": 38,
+              "total_tokens": 352,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "tool_use"
+          },
+          {
+            "usage": {
+              "prompt_tokens": 384,
+              "completion_tokens": 57,
+              "total_tokens": 441,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "tool_use"
+          },
+          {
+            "usage": {
+              "prompt_tokens": 458,
+              "completion_tokens": 32,
+              "total_tokens": 490,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "end_turn"
+          }
+        ],
+        "execution_status": "completed"
+      },
+      "seconds": 13.835877608507872
+    },
+    {
+      "name": "wake_grounded_decision_0",
+      "status": "passed",
+      "evidence": {
+        "send": true,
+        "cited_ids": [
+          "feed:0"
+        ],
+        "message": "Akasha2 的消费与恢复设计更新了，正好覆盖你在做的消费游标和崩溃恢复部分，值得看一眼。",
+        "reason": ""
+      },
+      "seconds": 3.785548496991396
+    },
+    {
+      "name": "wake_grounded_decision_1",
+      "status": "passed",
+      "evidence": {
+        "send": false,
+        "cited_ids": [],
+        "message": "",
+        "reason": "候选内容属于娱乐明星穿搭热榜，与长期记忆和主动推送规则中“不要分享娱乐明星或穿搭新闻”冲突，因此不值得打扰用户。"
+      },
+      "seconds": 3.0186737962067127
+    },
+    {
+      "name": "wake_grounded_decision_2",
+      "status": "passed",
+      "evidence": {
+        "send": false,
+        "cited_ids": [],
+        "message": "",
+        "reason": "候选内容为电商平台促销，属于广告/电商促销类，与用户关注的 Agent Runtime 无关，依据规则不分享。"
+      },
+      "seconds": 3.5833211429417133
+    },
+    {
+      "name": "wake_grounded_decision_3",
+      "status": "passed",
+      "evidence": {
+        "send": true,
+        "cited_ids": [
+          "feed:3"
+        ],
+        "message": "有篇《Agent 工具重复执行故障的修复方案》，正好对上你急需解决的问题，建议看看。",
+        "reason": ""
+      },
+      "seconds": 2.236604854464531
+    },
+    {
+      "name": "wake_interest_estimates",
+      "status": "passed",
+      "evidence": {
+        "feed:relevant": {
+          "interest": 0.95,
+          "confidence": 0.95,
+          "eligible": true,
+          "reason": "Explicitly requested Akasha2 recovery updates; direct match to the user's stated interest."
+        },
+        "feed:excluded": {
+          "interest": 0,
+          "confidence": 0.95,
+          "eligible": false,
+          "reason": "User explicitly excludes celebrity and advertising news; this candidate is celebrity clothing advertising."
+        }
+      },
+      "seconds": 5.084990652278066
+    },
+    {
+      "name": "production_pipeline_files_and_restart",
+      "status": "passed",
+      "evidence": {
+        "first_reply": "已完成。\n\n1. **写入**：使用 `write_file` 工具将字符串 `KIRA_2097142c9966` 写入 `probe.txt`（17 字节）。\n2. **核实**：使用 `read_file` 工具读取该文件，返回内容为 `KIRA_2097142c9966`，与要求写入的内容一致。\n\n任务完成。",
+        "restart_reply": "KIRA_2097142c9966",
+        "persisted_messages": 4,
+        "capabilities": [
+          {
+            "key": "memory.retrieval.v1",
+            "owner": "bootstrap:memory",
+            "generation": null
+          },
+          {
+            "key": "memory.services.v1",
+            "owner": "bootstrap:memory",
+            "generation": null
+          }
+        ]
+      },
+      "seconds": 11.70411523245275
+    }
+  ],
+  "passed": 12,
+  "total": 12
+}

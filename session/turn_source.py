@@ -1,11 +1,22 @@
 """Canonical eligible turns resolved from original committed message IDs."""
 
+import json
+import sqlite3
+from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
-from contextlib import closing
-import sqlite3
-import json
+
 from bus.events_lifecycle import TurnCommitted
+
+
+def is_memory_source(message: dict) -> bool:
+    """Only human conversation sources may teach memory or drive presence."""
+    source = str(message.get("source") or "legacy-unattributed")
+    return (
+        source in {"conversation", "programmatic", "legacy-unattributed"}
+        and not message.get("skip_post_memory")
+        and not message.get("proactive")
+    )
 
 
 @dataclass(frozen=True)
@@ -60,11 +71,7 @@ def load_committed_turn_messages(
             "SELECT * FROM messages WHERE id IN (?, ?) ORDER BY seq",
             (pairs[0]["uid"], pairs[0]["aid"]),
         ).fetchall()
-    if any(
-        json.loads(row["extra_json"] or "{}").get("skip_post_memory")
-        or json.loads(row["extra_json"] or "{}").get("proactive")
-        for row in rows
-    ):
+    if any(not is_memory_source(json.loads(row["extra_json"] or "{}")) for row in rows):
         return []
     if rows[1]["content"] == "[interrupted]" or any(
         not row["content"].strip() for row in rows

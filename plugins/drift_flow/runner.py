@@ -40,6 +40,7 @@ from plugins.drift_flow.tools import DriftRunContext, register_drift_tools
 from plugins.memory_tools.tools import register_memory_tools
 from proactive_v2.config import DriftConfig
 from session.manager import SessionManager
+from session.turn_source import is_memory_source
 
 logger = logging.getLogger(__name__)
 
@@ -273,7 +274,7 @@ class DriftRunner:
         except Exception:
             return None
         for message in reversed(session.messages):
-            if message.get("role") != "user":
+            if message.get("role") != "user" or not is_memory_source(message):
                 continue
             raw = str(message.get("timestamp") or "")
             if not raw:

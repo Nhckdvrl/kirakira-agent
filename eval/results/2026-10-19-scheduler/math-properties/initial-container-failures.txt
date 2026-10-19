@@ -1,0 +1,63 @@
+.....F..............F                                                    [100%]
+=================================== FAILURES ===================================
+__________ test_graph_has_one_relation_state_without_fast_slow_or_tag __________
+
+    def test_graph_has_one_relation_state_without_fast_slow_or_tag() -> None:
+        graph = DynamicMemoryGraph(2, MemoryConfig())
+    
+>       assert graph.weight == []
+E       AssertionError: assert array('d') == []
+E         
+E         Use -v to get more diff
+
+/tmp/kirakira-math-properties/test_engine.py:122: AssertionError
+________ test_retrieved_coactivation_partially_reconsolidates_relation _________
+
+    def test_retrieved_coactivation_partially_reconsolidates_relation() -> None:
+        graph = DynamicMemoryGraph(3, MemoryConfig(learning_rate=0.5))
+        for _ in range(4):
+            for gap in (10.0, 30.0, 100.0, 300.0):
+                graph._observe_recurrence(gap, 1.0)  # noqa: SLF001
+        graph.prepare_retrieval(
+            0,
+            None,
+            SeedEvidence((), {}, 0.5, 0.5, 1.0),
+        )
+        edges = [
+            graph._add_edge(  # noqa: SLF001 - reconsolidation fixture
+                source=node,
+                target=3,
+                kind=MEMBERSHIP,
+                bidirectional=True,
+                event=0,
+                initial_weight=0.5,
+                observed_credit=0.5,
+                recurrent_credit=0.0,
+            )
+            for node in (0, 1)
+        ]
+        graph.hub_members[3] = edges
+    
+        graph.prepare_retrieval(
+            1,
+            99.0,
+            SeedEvidence(
+                ((0, 1.0),),
+                {"query_dense": frozenset({0})},
+                0.5,
+                0.5,
+                1.0,
+            ),
+        )
+        observed = np.asarray([True, True, False, False, False, False])
+        activity = np.asarray([1.0, 1.0, 0.0, 0.0, 0.0, 0.0])
+        graph._adapt_exposed_hubs(1, observed, activity)  # noqa: SLF001
+>       supported_at = graph.last_support_seconds.copy()
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'array.array' object has no attribute 'copy'
+
+/tmp/kirakira-math-properties/test_engine.py:516: AttributeError
+=========================== short test summary info ============================
+FAILED ../../../../tmp/kirakira-math-properties/test_engine.py::test_graph_has_one_relation_state_without_fast_slow_or_tag
+FAILED ../../../../tmp/kirakira-math-properties/test_engine.py::test_retrieved_coactivation_partially_reconsolidates_relation
+2 failed, 19 passed, 1 deselected in 0.25s

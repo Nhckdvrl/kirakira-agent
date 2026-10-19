@@ -15,7 +15,6 @@ from pathlib import Path
 
 import click
 
-
 DEFAULT_WORKSPACE = "~/.kirakira/workspace"
 
 
@@ -483,14 +482,14 @@ def initialize_workspace(
         path.mkdir(parents=True, exist_ok=True)
         (summary.skipped if existed else summary.created).append(path)
 
-    from proactive_v2.loop import _PROACTIVE_CONTEXT_TEMPLATE
-    from plugins.wake_proactive.sources import _INBOX_README
     from plugins.drift_flow.skills import ensure_example_skill
+    from plugins.wake_proactive.sources import _INBOX_README
+    from proactive_v2.loop import _PROACTIVE_CONTEXT_TEMPLATE
 
     files = {
         workspace / "PROACTIVE_CONTEXT.md": _PROACTIVE_CONTEXT_TEMPLATE,
         workspace / "proactive/inbox/README.md": _INBOX_README,
-        workspace / ".kirakira/schedules.json": "[]\n",
+        workspace / ".kirakira/schedules.json": '{"version": 2, "jobs": {}, "fires": {}}\n',
     }
     for path, content in files.items():
         if path.exists() and not force:

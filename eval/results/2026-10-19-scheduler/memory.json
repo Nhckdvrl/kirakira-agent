@@ -1,0 +1,86 @@
+{
+  "endpoint": "https://api.stepfun.com/step_plan/v1",
+  "model": "step-5-preview",
+  "reasoning_effort": "medium",
+  "billing_surface": "step_plan",
+  "embedding": "offline-hash-v1 (integration only)",
+  "cases": [
+    {
+      "name": "lexical_memorize",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "memorize"
+        ],
+        "reply": "Memory written successfully.\n\n- **Stored content:** \"For the verification fixture, my preferred deployment codename is KIRA_3aba49bb39b3.\"\n- **Memory ID:** `mem_0001`\n\nThe preference has been recorded exactly as you specified."
+      },
+      "seconds": 8.483055239543319
+    },
+    {
+      "name": "lexical_recall_and_forget",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "recall_memory",
+          "forget_memory"
+        ],
+        "reply": "Confirmed deletion: the memory item `mem_0001` (regarding the deployment codename \"KIRA_3aba49bb39b3\") was found via the recall query and has been forgotten. No new memory was created."
+      },
+      "seconds": 7.108494151383638
+    },
+    {
+      "name": "akasha_recall_fetch_live",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "recall_memory",
+          "fetch_messages"
+        ],
+        "reply": "FINAL_e5197c0a78be",
+        "messages": 6
+      },
+      "seconds": 7.836453685536981
+    },
+    {
+      "name": "akasha_recall_fetch_restart",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "recall_memory",
+          "fetch_messages"
+        ],
+        "reply": "FINAL_e5197c0a78be",
+        "messages": 6
+      },
+      "seconds": 5.4844843447208405
+    },
+    {
+      "name": "akasha2_recall_fetch_live",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "recall_memory",
+          "fetch_messages"
+        ],
+        "reply": "FINAL_9dc4bc2bf382\n\n§cited:[689a619927ae4beeb0a997b2f71bbdf2]§",
+        "messages": 6
+      },
+      "seconds": 12.064464781433344
+    },
+    {
+      "name": "akasha2_recall_fetch_restart",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "recall_memory",
+          "fetch_messages"
+        ],
+        "reply": "FINAL_9dc4bc2bf382\n\n§cited:[689a619927ae4beeb0a997b2f71bbdf2]§",
+        "messages": 6
+      },
+      "seconds": 7.959405301138759
+    }
+  ],
+  "passed": 6,
+  "total": 6
+}

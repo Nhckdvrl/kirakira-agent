@@ -12,9 +12,20 @@ from eval.longmemeval.dataset import (
     load_longmemeval,
 )
 from eval.longmemeval.offline_ab import run_offline_ab
+from eval.longmemeval.protocol import select_fixed
 
 
 class LongMemEvalLoaderTests(unittest.TestCase):
+    def test_fixed_selection_preserves_frozen_order_and_rejects_duplicate_ids(self):
+        cases = builtin_smoke_instances()
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "selection.json"
+            path.write_text(json.dumps({"case_ids": [cases[2].question_id, cases[0].question_id]}))
+            self.assertEqual(select_fixed(cases, selection=path), [cases[2], cases[0]])
+            path.write_text(json.dumps({"case_ids": [cases[0].question_id] * 2}))
+            with self.assertRaises(ValueError):
+                select_fixed(cases, selection=path)
+
     def test_loader_preserves_reference_evidence_fields(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "data.json"

@@ -23,7 +23,6 @@ from agent.plugins.snapshot import RuntimeSnapshotStore
 from agent.plugins.watcher import PluginWatcher
 from agent.prompting.context_builder import ContextBuilder
 from agent.restart import RestartCoordinator, SupervisorCommitChannel
-from agent.scheduler import SchedulerService
 from agent.subagent import SubagentManager
 from bootstrap.channels import build_channel_host
 from bootstrap.control import build_control_plane
@@ -42,6 +41,7 @@ from infra.providers.model_client_adapter import ModelClientProvider
 from infra.providers.step_plan import create_model_client
 from plugins.default_memory.contract import MEMORY_READER, MEMORY_SERVICES, MemoryReader
 from plugins.default_memory.inspector import RecallInspector
+from plugins.scheduler.service import SchedulerService
 from session.manager import SessionManager
 
 
@@ -362,11 +362,6 @@ async def _compose_runtime(
     )
     rollback.push_async_callback(subagents.shutdown)
     subagents.register_tool()
-    scheduler = SchedulerService(
-        workdir / ".kirakira" / "schedules.json",
-        bus=bus,
-        tools=registry,
-    )
     # 检索回放:记录每轮召回了什么、注入了没有;引擎未承重时这条路本来就不走。
     recall_inspector = RecallInspector(workdir)
     reasoner.add_tool_hooks([recall_inspector.tool_hook()])
@@ -383,6 +378,15 @@ async def _compose_runtime(
         recall_inspector=recall_inspector,
         service_registry=capabilities,
     )
+    scheduler = SchedulerService(
+        workdir / ".kirakira" / "schedules.json",
+        bus=bus,
+        tools=registry,
+        pipeline=pipeline,
+        sessions=session_manager,
+        executions=execution_store,
+    )
+    rollback.push_async_callback(scheduler.shutdown)
     loop = AgentLoop(bus=bus, pipeline=pipeline)
     bundled_plugin_root = (
         Path(__file__).resolve().parents[1] / "plugin_packages" / "curated_feeds"

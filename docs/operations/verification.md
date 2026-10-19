@@ -2,7 +2,20 @@
 
 本文只记录已经实际执行过的验证。功能现状见[当前状态](../status/current.md)，不要从测试数量反推能力范围。
 
-## 2026-10-19：统一 Python 环境（最新）
+## 2026-10-19：来源会话 Scheduler 与记忆复测（最新）
+
+同一项目 `.venv` / Python 3.14.6 全量 **691 passed、4 subtests**（50.90 秒），22 条既有 Telegram 警告。
+新 Runtime 场景首轮 48/48、统一 admission 后 52/52；Core/Wake/Drift/记忆工具另有 23/23。
+全部真实生成使用 Step5 Token Plan。最终 Scheduler 批次观察到 238 次尝试、144 次成功响应；
+失败尝试经有界重试恢复，未删除失败记录。
+
+公开 272-turn 状态轨迹与上游完整学习状态及九个查询逐项一致，1,024-turn 成本实验、三处发布故障、
+两种哈希种子和 21 项数学性质通过。旧固定 36 题的重复与新增检索基线另行保存；新问题保留集与
+真实 Mem0 OSS 对照独立记录，不与旧题重复混算。构建、CLI、迁移不可变、算法 pin、文档本地链接与密钥扫描通过。
+
+详见 [Runtime 报告](./evaluations/2026-10-19-scheduler.md)、[记忆报告](./evaluations/2026-10-19-memory-followup.md)。
+
+## 2026-10-19：统一 Python 环境（历史）
 
 项目固定 Python 3.14.6，使用根目录 `.venv`。`.python-version` 与 CI 的
 `python-version-file` 共用同一版本来源，删除 3.11/3.14 矩阵；支持范围收敛为 3.14 系列。

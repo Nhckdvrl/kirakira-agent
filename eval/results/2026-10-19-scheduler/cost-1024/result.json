@@ -1,0 +1,61 @@
+{
+  "logical_state_sha256": "5380eb1d1b13af92e0c2eab91913b7c9389600c0365619b1a1c4fbc636b5ac3d",
+  "recalls_sha256": "7fd5e43eee7d6d81a560c186c9f3fdf8b7642bfa4fb41e06e6947dd1769ab818",
+  "turns": 1024,
+  "dimensions": 384,
+  "full_rebuild_seconds": 56.21228240802884,
+  "learning_seconds": {
+    "n": 1024,
+    "p50": 0.03786128759384155,
+    "p95": 0.15148013643920422,
+    "min": 0.0012812260538339615,
+    "max": 0.40705534256994724
+  },
+  "query_seconds": {
+    "n": 45,
+    "p50": 0.03933773376047611,
+    "p95": 0.03976788744330406,
+    "min": 0.038688333705067635,
+    "max": 0.06001195125281811
+  },
+  "publication_seconds": {
+    "n": 16,
+    "p50": 0.05722004733979702,
+    "p95": 0.08136037364602089,
+    "min": 0.0558908935636282,
+    "max": 0.08136037364602089
+  },
+  "recovery_seconds": {
+    "n": 16,
+    "p50": 0.1482888199388981,
+    "p95": 0.17409292049705982,
+    "min": 0.14438911154866219,
+    "max": 0.17409292049705982
+  },
+  "ready_rss": {
+    "current_mib": 80.22265625,
+    "peak_mib": 90.9140625
+  },
+  "final_rss": {
+    "current_mib": 112.64453125,
+    "peak_mib": 112.89453125
+  },
+  "database_mib": 2.9921875,
+  "recovery_count": 19,
+  "all_tables_equal": true,
+  "query_unchanged": true,
+  "faults": [
+    {
+      "boundary": "file-sync",
+      "published_new": false
+    },
+    {
+      "boundary": "replace",
+      "published_new": false
+    },
+    {
+      "boundary": "directory-sync",
+      "published_new": true
+    }
+  ]
+}

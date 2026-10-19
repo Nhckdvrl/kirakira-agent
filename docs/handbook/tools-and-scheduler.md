@@ -36,23 +36,35 @@
 
 ## Scheduler
 
-`schedule` 支持：
+`schedule(text, trigger, when, action="notify", context="none", timezone="", name="")`：
 
-- `at`：指定时间；
-- `after`：相对时长；
-- `every`：interval 或 5/6 段 cron；
-- IANA timezone；
-- `instant` 与 `soft` tier。
+- `action=notify`：原样发送 text，不调用模型。
+- `action=run`：在创建任务的会话中执行 Agent 工具链，自动投递最终回复。
+- `context=none`：只使用任务自身输入，不加载或压缩整个聊天历史；默认值。
+- `context=session`：允许读取创建会话的历史。
+- `trigger=at/after/every`：ISO/HH:MM、30s/5m/2h、interval 或 5/6 段 cron；时区使用 IANA 名称，默认创建会话时区或 UTC。
 
-`instant` 直接执行任务；`soft` 通过隔离 `scheduler:<job-id>` Session 发起 turn。soft turn 默认跳过
-普通记忆检索、回复后记忆写入和消息推送工具，避免污染用户对话。
+例如在当前会话建立提醒：
 
-管理工具：`list_schedules`、`cancel_schedule`。持久任务有容量上限；cron/interval 会计算下一次
-运行时间，离线错过 one-shot 超过 grace period 时标记 `missed`。
+```json
+{"text":"检查训练结果","action":"notify","trigger":"after","when":"30m"}
+```
+
+工具不接受 channel/chat_id/session 覆盖。`list_schedules`、`cancel_schedule` 只能管理当前会话的任务。
+最多同时保留 10 个 pending 任务。离线期间的 recurring 任务保持相位、跳过积压；one-shot 超过
+300 秒宽限期后标为 missed。已有 pending fire 在尚未进入会话时可以恢复执行。
+
+每次触发有稳定 fire key；原消息保存在原会话并标记 `scheduler:<fire-key>`。原文可查，任务文本与
+回复不进入用户记忆学习，也不算作用户活跃。通知与 run 的完成都等待本地渠道回调的成功回执。
+回调可能已发送后报错，或者进程在 running/delivering 时退出，会留下 needs_reconciliation，重启
+不会自动重跑或重发；本地成功回执不等于收件人已读或外部渠道 exactly-once。
+
+任务等待同一个 admission。当前还没有工具边界的自动让出与持久程序续跑；中断后记录已知结果，
+未知副作用保留待核对。旧 instant/soft 文件由 Yoyo 一次迁移，迁移前保存原始字节备份；运行期只认 v2。
 
 ## 常见问题
 
 - 后台命令找不到：使用同一个 `execution_id`，不要把 shell PID 当 execution id。
 - PTY 没响应：通过 `write_stdin` 发送换行或控制字符，并检查 `process_status`。
 - child 结束后进程还在：这是 owner cleanup 回归，应检查统一执行管理器，而不是再加一套 kill 逻辑。
-- 定时任务污染聊天：确认 tier 是 `soft` 且 Session key 为 `scheduler:<job-id>`。
+- 任务待核对：查看 include_finished 列表、原会话消息与 execution 日志，确认外部结果后再决定是否新建任务。

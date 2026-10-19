@@ -8,23 +8,19 @@ import time
 import unittest
 from pathlib import Path
 
-from bus.queue import MessageBus
-from agent.prompting.context_builder import ContextBuilder
-from bus.event_bus import EventBus
-from bus.events import InboundMessage, OutboundMessage
-from core.memory.legacy import MemoryRuntime
-from agent.model_runtime.types import ContextLengthError
-from agent.core.loop import AgentLoop
-from agent.core.reasoner import DefaultReasoner
-from agent.core.pipeline import PassiveTurnPipeline
 from agent.core.contracts import RuntimeConfig
-from core.schema import ModelResponse, ToolCall, ToolSpec
-from session.manager import SessionManager
+from agent.core.loop import AgentLoop
+from agent.core.pipeline import PassiveTurnPipeline
+from agent.core.reasoner import DefaultReasoner
+from agent.model_runtime.types import ContextLengthError
 from agent.plugins.snapshot import RuntimeSnapshotStore, compile_snapshot
+from agent.prompting.context_builder import ContextBuilder
 from agent.subagent import SubagentManager
 from agent.tool_hooks import HookOutcome
-from bootstrap.tools import build_tool_registry
 from agent.tools.registry import Tool
+from bootstrap.tools import build_tool_registry
+from bus.event_bus import EventBus
+from bus.events import InboundMessage, OutboundMessage
 from bus.events_lifecycle import (
     ContextBudgetUpdated,
     ContextPrepared,
@@ -34,6 +30,10 @@ from bus.events_lifecycle import (
     TurnFinished,
     TurnStarted,
 )
+from bus.queue import MessageBus
+from core.memory.legacy import MemoryRuntime
+from core.schema import ModelResponse, ToolCall, ToolSpec
+from session.manager import SessionManager
 
 
 class FakeModel:
@@ -100,11 +100,17 @@ def build_test_runtime(workdir, model, *, snapshot_store=None):
 class RuntimeTests(unittest.TestCase):
     def test_agent_loop_parallelizes_sessions_but_serializes_same_session(self):
         class RecordingPipeline:
-            def __init__(self, bus):
+            def __init__(self, bus, sessions):
+                from agent.core.admission import TurnAdmission
                 self.bus = bus
+                self.admission = TurnAdmission(sessions)
                 self.events = []
 
             async def run(self, message, key):
+                async with self.admission.hold(key):
+                    await self._run(message, key)
+
+            async def _run(self, message, key):
                 self.events.append(("start", key, message.content))
                 if message.content == "first":
                     await asyncio.sleep(0.05)
@@ -117,7 +123,9 @@ class RuntimeTests(unittest.TestCase):
 
         async def scenario():
             bus = MessageBus()
-            pipeline = RecordingPipeline(bus)
+            temporary = tempfile.TemporaryDirectory()
+            sessions = SessionManager(Path(temporary.name))
+            pipeline = RecordingPipeline(bus, sessions)
             loop = AgentLoop(bus=bus, pipeline=pipeline)
             received = []
 
@@ -136,6 +144,9 @@ class RuntimeTests(unittest.TestCase):
             await bus.publish_inbound(InboundMessage("cli", "u", "same", "second"))
             await bus.publish_inbound(InboundMessage("cli", "u", "other", "other"))
             await asyncio.wait_for(asyncio.gather(*tasks), timeout=3)
+            await loop.shutdown()
+            sessions.close()
+            temporary.cleanup()
 
             self.assertLess(
                 pipeline.events.index(("end", "cli:other", "other")),

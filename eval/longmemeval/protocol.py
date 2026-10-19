@@ -1,7 +1,9 @@
 """Fixed, label-independent selection and chronological LongMemEval inputs."""
 
-from datetime import datetime, timezone
 import hashlib
+import json
+from datetime import datetime, timezone
+from pathlib import Path
 
 TYPES = (
     "single-session-user",
@@ -25,6 +27,21 @@ def select(instances, per_type=6, seed="kirakira-20261019"):
         # Keep natural abstention frequency: selection never uses answers or answer IDs.
         selected.extend(rows[:per_type])
     return selected
+
+
+def select_fixed(instances, per_type=6, selection=None):
+    if selection is None:
+        return select(instances, per_type)
+    identities = json.loads(Path(selection).read_text())["case_ids"]
+    if (
+        not isinstance(identities, list)
+        or not identities
+        or any(not isinstance(identity, str) or not identity for identity in identities)
+        or len(set(identities)) != len(identities)
+    ):
+        raise ValueError("selection requires unique nonempty case IDs")
+    indexed = {instance.question_id: instance for instance in instances}
+    return [indexed[identity] for identity in identities]
 
 
 def timestamp(value):

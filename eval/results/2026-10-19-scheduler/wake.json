@@ -1,0 +1,441 @@
+{
+  "endpoint": "https://api.stepfun.com/step_plan/v1",
+  "model": "step-5-preview",
+  "billing_surface": "step_plan",
+  "reasoning_effort": "medium",
+  "status": "passed",
+  "received": [
+    "你项目的关键进展来了：Akasha2 的消费游标与崩溃恢复实现已经发布。这正好对应你当前在推进的崩溃恢复部分，建议抽空看一下具体设计，看游标策略和恢复流程是否与你的方案有出入。链接：https://example.org/recovery"
+  ],
+  "feedback": [
+    {
+      "ids": [
+        "excluded",
+        "relevant"
+      ],
+      "feedback": null
+    },
+    {
+      "ids": [
+        "relevant"
+      ],
+      "feedback": "interesting"
+    }
+  ],
+  "requests": [
+    {
+      "usage": {
+        "prompt_tokens": 667,
+        "completion_tokens": 271,
+        "total_tokens": 938,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        }
+      },
+      "stop_reason": "tool_use"
+    },
+    {
+      "usage": {
+        "prompt_tokens": 567,
+        "completion_tokens": 174,
+        "total_tokens": 741,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        }
+      },
+      "stop_reason": "tool_use"
+    }
+  ],
+  "checks": [
+    {
+      "id": 3,
+      "session_key": "verify:wake",
+      "decided_at": "2026-10-19T08:40:17.988481+00:00",
+      "candidates": [
+        {
+          "_source": "fixture",
+          "event_id": "relevant",
+          "item_id": "fixture:relevant",
+          "kind": "content",
+          "published_at": "2026-10-19T08:40:17.973595+00:00",
+          "title": "Akasha2 消费游标与崩溃恢复实现发布",
+          "url": "https://example.org/recovery",
+          "first_seen_at": "2026-10-19T08:40:17.988481+00:00",
+          "_revision": 1,
+          "_pool_mass": 14.999375907498576
+        }
+      ],
+      "decision": {
+        "send": true,
+        "message": "你项目的关键进展来了：Akasha2 的消费游标与崩溃恢复实现已经发布。这正好对应你当前在推进的崩溃恢复部分，建议抽空看一下具体设计，看游标策略和恢复流程是否与你的方案有出入。链接：https://example.org/recovery",
+        "cited_ids": [
+          "fixture:relevant"
+        ],
+        "status": "delivered",
+        "reason": "",
+        "trace": {
+          "tool_chain": [
+            {
+              "text": "",
+              "reasoning_content": "The user wants me to judge whether the candidate content is worth proactively sharing. The rules say to immediately proactively share substantive updates on Agent Runtime and Akasha2 crash recovery — this is the user's current project. The candidate event is exactly about Akasha2 crash recovery implementation release. This is highly relevant.\n\nI should call share_content with a natural message and the item id.",
+              "calls": [
+                {
+                  "call_id": "chatcmpl-tool-8055777fafcb64df",
+                  "name": "share_content",
+                  "arguments": {
+                    "message": "你项目的关键进展来了：Akasha2 的消费游标与崩溃恢复实现已经发布。这正好对应你当前在推进的崩溃恢复部分，建议抽空看一下具体设计，看游标策略和恢复流程是否与你的方案有出入。链接：https://example.org/recovery",
+                    "items": [
+                      "fixture:relevant"
+                    ]
+                  },
+                  "result": "decision accepted; delivery is pending",
+                  "status": "success"
+                }
+              ]
+            }
+          ],
+          "context": {
+            "react_stats": {
+              "iteration_count": 1,
+              "input_token_estimates": [
+                377
+              ],
+              "max_input_tokens_estimate": 377,
+              "model_usage": {
+                "input_tokens": 567,
+                "cached_input_tokens": 0,
+                "output_tokens": 174,
+                "reasoning_output_tokens": 0,
+                "request_count": 1,
+                "covered_request_count": 1,
+                "coverage": "exact"
+              },
+              "request_count": 1
+            },
+            "execution_id": "822f154ae71e4ae0952466d877895e0e"
+          },
+          "execution_id": "822f154ae71e4ae0952466d877895e0e",
+          "prompt": "【通道】content\n\n【长期记忆】\n（空）\n\n【近期对话】\n（无）\n\n【最近已推送的主动消息（避免重复）】\n（无）\n\n【主动推送规则】\n请立刻主动分享 Agent Runtime、Akasha2 崩溃恢复的实质更新；这是我的当前项目。禁止分享娱乐、服装或促销新闻。当前没有免打扰限制。\n\n【当前背景 context】\n（无）\n\n【候选事件】\n[0] id=fixture:relevant\n       title=Akasha2 消费游标与崩溃恢复实现发布\n       source=fixture\n       url=https://example.org/recovery\n\n【任务】\n判断这些内容里有没有值得此刻主动打扰用户去分享的。宁缺毋滥：不确定就 skip。如果值得分享，选一到两条，写一条自然的推送消息，并列出引用的 id。\n分享时调用 share_content(message, items)，否则调用 skip_content(reason)。",
+          "model": "step-5-preview"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "session_key": "verify:wake",
+      "decided_at": "2026-10-19T08:40:17.988481+00:00",
+      "candidates": [
+        {
+          "_source": "fixture",
+          "event_id": "relevant",
+          "item_id": "fixture:relevant",
+          "kind": "content",
+          "published_at": "2026-10-19T08:40:17.973595+00:00",
+          "title": "Akasha2 消费游标与崩溃恢复实现发布",
+          "url": "https://example.org/recovery",
+          "first_seen_at": "2026-10-19T08:40:17.988481+00:00",
+          "_revision": 1,
+          "_pool_mass": 14.999375907498576
+        }
+      ],
+      "decision": {
+        "send": true,
+        "message": "你项目的关键进展来了：Akasha2 的消费游标与崩溃恢复实现已经发布。这正好对应你当前在推进的崩溃恢复部分，建议抽空看一下具体设计，看游标策略和恢复流程是否与你的方案有出入。链接：https://example.org/recovery",
+        "cited_ids": [
+          "fixture:relevant"
+        ],
+        "status": "delivery_pending",
+        "reason": "",
+        "trace": {
+          "tool_chain": [
+            {
+              "text": "",
+              "reasoning_content": "The user wants me to judge whether the candidate content is worth proactively sharing. The rules say to immediately proactively share substantive updates on Agent Runtime and Akasha2 crash recovery — this is the user's current project. The candidate event is exactly about Akasha2 crash recovery implementation release. This is highly relevant.\n\nI should call share_content with a natural message and the item id.",
+              "calls": [
+                {
+                  "call_id": "chatcmpl-tool-8055777fafcb64df",
+                  "name": "share_content",
+                  "arguments": {
+                    "message": "你项目的关键进展来了：Akasha2 的消费游标与崩溃恢复实现已经发布。这正好对应你当前在推进的崩溃恢复部分，建议抽空看一下具体设计，看游标策略和恢复流程是否与你的方案有出入。链接：https://example.org/recovery",
+                    "items": [
+                      "fixture:relevant"
+                    ]
+                  },
+                  "result": "decision accepted; delivery is pending",
+                  "status": "success"
+                }
+              ]
+            }
+          ],
+          "context": {
+            "react_stats": {
+              "iteration_count": 1,
+              "input_token_estimates": [
+                377
+              ],
+              "max_input_tokens_estimate": 377,
+              "model_usage": {
+                "input_tokens": 567,
+                "cached_input_tokens": 0,
+                "output_tokens": 174,
+                "reasoning_output_tokens": 0,
+                "request_count": 1,
+                "covered_request_count": 1,
+                "coverage": "exact"
+              },
+              "request_count": 1
+            },
+            "execution_id": "822f154ae71e4ae0952466d877895e0e"
+          },
+          "execution_id": "822f154ae71e4ae0952466d877895e0e",
+          "prompt": "【通道】content\n\n【长期记忆】\n（空）\n\n【近期对话】\n（无）\n\n【最近已推送的主动消息（避免重复）】\n（无）\n\n【主动推送规则】\n请立刻主动分享 Agent Runtime、Akasha2 崩溃恢复的实质更新；这是我的当前项目。禁止分享娱乐、服装或促销新闻。当前没有免打扰限制。\n\n【当前背景 context】\n（无）\n\n【候选事件】\n[0] id=fixture:relevant\n       title=Akasha2 消费游标与崩溃恢复实现发布\n       source=fixture\n       url=https://example.org/recovery\n\n【任务】\n判断这些内容里有没有值得此刻主动打扰用户去分享的。宁缺毋滥：不确定就 skip。如果值得分享，选一到两条，写一条自然的推送消息，并列出引用的 id。\n分享时调用 share_content(message, items)，否则调用 skip_content(reason)。",
+          "model": "step-5-preview"
+        }
+      }
+    },
+    {
+      "id": 1,
+      "session_key": "verify:wake",
+      "decided_at": "2026-10-19T08:40:17.988481+00:00",
+      "candidates": [
+        {
+          "_source": "fixture",
+          "event_id": "relevant",
+          "item_id": "fixture:relevant",
+          "kind": "content",
+          "published_at": "2026-10-19T08:40:17.973595+00:00",
+          "title": "Akasha2 消费游标与崩溃恢复实现发布",
+          "url": "https://example.org/recovery",
+          "first_seen_at": "2026-10-19T08:40:17.988481+00:00",
+          "_revision": 1
+        },
+        {
+          "_source": "fixture",
+          "event_id": "excluded",
+          "item_id": "fixture:excluded",
+          "kind": "content",
+          "published_at": "2026-10-19T08:40:17.973595+00:00",
+          "title": "明星服装广告促销",
+          "first_seen_at": "2026-10-19T08:40:17.988481+00:00",
+          "_revision": 1
+        }
+      ],
+      "decision": {
+        "status": "pool_reviewed",
+        "mass": 14.999375907498576
+      }
+    }
+  ],
+  "ticks": [
+    {
+      "tick_id": "tick_818e3d09ba0149ee",
+      "session_key": "verify:wake",
+      "started_at": "2026-10-19T08:40:30.719541+00:00",
+      "finished_at": "2026-10-19T08:40:30.724804+00:00",
+      "terminal": "idle",
+      "status": "completed",
+      "step_count": 7,
+      "error": "",
+      "steps": [
+        {
+          "step_index": 0,
+          "slot": "proactive.gate",
+          "status": "completed",
+          "terminal": null,
+          "duration_ms": 0,
+          "error": ""
+        },
+        {
+          "step_index": 1,
+          "slot": "proactive.fetch",
+          "status": "completed",
+          "terminal": null,
+          "duration_ms": 0,
+          "error": ""
+        },
+        {
+          "step_index": 2,
+          "slot": "proactive.ingest",
+          "status": "completed",
+          "terminal": null,
+          "duration_ms": 0,
+          "error": ""
+        },
+        {
+          "step_index": 3,
+          "slot": "proactive.judge_context",
+          "status": "completed",
+          "terminal": null,
+          "duration_ms": 0,
+          "error": ""
+        },
+        {
+          "step_index": 4,
+          "slot": "proactive.alert",
+          "status": "completed",
+          "terminal": null,
+          "duration_ms": 0,
+          "error": ""
+        },
+        {
+          "step_index": 5,
+          "slot": "proactive.content",
+          "status": "completed",
+          "terminal": null,
+          "duration_ms": 0,
+          "error": ""
+        },
+        {
+          "step_index": 6,
+          "slot": "proactive.drift",
+          "status": "completed",
+          "terminal": "idle",
+          "duration_ms": 0,
+          "error": ""
+        }
+      ]
+    },
+    {
+      "tick_id": "tick_251a682ad8e74a39",
+      "session_key": "verify:wake",
+      "started_at": "2026-10-19T08:40:30.713288+00:00",
+      "finished_at": "2026-10-19T08:40:30.718443+00:00",
+      "terminal": "idle",
+      "status": "completed",
+      "step_count": 7,
+      "error": "",
+      "steps": [
+        {
+          "step_index": 0,
+          "slot": "proactive.gate",
+          "status": "completed",
+          "terminal": null,
+          "duration_ms": 0,
+          "error": ""
+        },
+        {
+          "step_index": 1,
+          "slot": "proactive.fetch",
+          "status": "completed",
+          "terminal": null,
+          "duration_ms": 0,
+          "error": ""
+        },
+        {
+          "step_index": 2,
+          "slot": "proactive.ingest",
+          "status": "completed",
+          "terminal": null,
+          "duration_ms": 0,
+          "error": ""
+        },
+        {
+          "step_index": 3,
+          "slot": "proactive.judge_context",
+          "status": "completed",
+          "terminal": null,
+          "duration_ms": 0,
+          "error": ""
+        },
+        {
+          "step_index": 4,
+          "slot": "proactive.alert",
+          "status": "completed",
+          "terminal": null,
+          "duration_ms": 0,
+          "error": ""
+        },
+        {
+          "step_index": 5,
+          "slot": "proactive.content",
+          "status": "completed",
+          "terminal": null,
+          "duration_ms": 0,
+          "error": ""
+        },
+        {
+          "step_index": 6,
+          "slot": "proactive.drift",
+          "status": "completed",
+          "terminal": "idle",
+          "duration_ms": 0,
+          "error": ""
+        }
+      ]
+    },
+    {
+      "tick_id": "tick_8660c8397fd54b53",
+      "session_key": "verify:wake",
+      "started_at": "2026-10-19T08:40:17.988481+00:00",
+      "finished_at": "2026-10-19T08:40:30.712732+00:00",
+      "terminal": "content_pushed",
+      "status": "completed",
+      "step_count": 7,
+      "error": "",
+      "steps": [
+        {
+          "step_index": 0,
+          "slot": "proactive.gate",
+          "status": "completed",
+          "terminal": null,
+          "duration_ms": 0,
+          "error": ""
+        },
+        {
+          "step_index": 1,
+          "slot": "proactive.fetch",
+          "status": "completed",
+          "terminal": null,
+          "duration_ms": 0,
+          "error": ""
+        },
+        {
+          "step_index": 2,
+          "slot": "proactive.ingest",
+          "status": "completed",
+          "terminal": null,
+          "duration_ms": 1,
+          "error": ""
+        },
+        {
+          "step_index": 3,
+          "slot": "proactive.judge_context",
+          "status": "completed",
+          "terminal": null,
+          "duration_ms": 0,
+          "error": ""
+        },
+        {
+          "step_index": 4,
+          "slot": "proactive.alert",
+          "status": "completed",
+          "terminal": null,
+          "duration_ms": 0,
+          "error": ""
+        },
+        {
+          "step_index": 5,
+          "slot": "proactive.content",
+          "status": "completed",
+          "terminal": "content_pushed",
+          "duration_ms": 12717,
+          "error": ""
+        },
+        {
+          "step_index": 6,
+          "slot": "proactive.drift",
+          "status": "skipped",
+          "terminal": "content_pushed",
+          "duration_ms": 0,
+          "error": ""
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "case_ids": [
+    "f8c5f88b",
+    "75499fd8",
+    "6222b6eb",
+    "ac031881",
+    "1da05512",
+    "d6233ab6",
+    "2311e44b_abs",
+    "7024f17c",
+    "2698e78f_abs",
+    "dad224aa",
+    "gpt4_468eb063",
+    "gpt4_93159ced_abs"
+  ],
+  "rule": "first two preordered IDs per type of the frozen 24-question selection; no answer selection",
+  "parent_selection": "holdout-selection.json",
+  "frozen_before_mem0_ingestion": true
+}

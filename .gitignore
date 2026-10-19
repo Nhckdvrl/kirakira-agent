@@ -14,6 +14,9 @@ Reference/
 # None of it belongs in the repository.
 /workspace/
 /sessions/
+/sessions.db
+/sessions.db-shm
+/sessions.db-wal
 /memory/
 /uploads/
 /mcp/

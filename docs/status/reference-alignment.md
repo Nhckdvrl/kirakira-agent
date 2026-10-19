@@ -13,7 +13,7 @@ Kirakira 按职责、运行合同和证据对齐，不按目录数量或功能�
 | Akasha2 | 固定上游 MemoryCycle/domain/persistence，Kirakira 自有消费 adapter 与快照合同；显式 opt-in |
 | Memory evidence | 原始消息回源、提交后学习、恢复/重放回归与公开样本实验；不继承上游质量结论 |
 | Session/Context | append-only 消息、compaction ledger、预算投影；未全面迁移最新上游 Ledger |
-| Scheduler | 尚未迁移 ADR0125 的来源会话与触发结算合同 |
+| Scheduler | 来源会话、notify/run、none/session 历史、持久 fire 与回执结算；排队共享 admission，尚无工具边界让出并恢复同一程序 |
 | 产品面 | TUI/Web、渠道、MCP、Scheduler 保留；不宣称移动端或完整部署能力对齐 |
 
 来源、实现与合同见 [ADR0009](../decisions/0009-components-recovery-and-akasha2.md)。

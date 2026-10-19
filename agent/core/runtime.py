@@ -198,6 +198,7 @@ class CoreRuntime:
             (self.control_service, "shutdown"),
             (self.control_runtime, "shutdown"),
             (self.subagents, "shutdown"),
+            (self.scheduler, "shutdown"),
             (self.loop, "shutdown"),
         ):
             await attempt(method, getattr(owner, method) if owner is not None else None)

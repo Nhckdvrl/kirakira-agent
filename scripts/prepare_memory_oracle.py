@@ -8,21 +8,23 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+
 from eval.longmemeval.dataset import load_longmemeval
 from eval.longmemeval.offline_ab import _turn_groups
-from eval.longmemeval.protocol import select, chronological
 from eval.longmemeval.prepare_retrieval import bounded
+from eval.longmemeval.protocol import chronological, select_fixed
 
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--dataset", type=Path, required=True)
     p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--selection", type=Path)
     a = p.parse_args()
     if a.output.exists():
         raise FileExistsError("oracle output must be new")
     rows = []
-    for case in select(load_longmemeval(a.dataset)):
+    for case in select_fixed(load_longmemeval(a.dataset), selection=a.selection):
         records = []
         for date, sid, messages in chronological(case):
             for group in _turn_groups(messages):

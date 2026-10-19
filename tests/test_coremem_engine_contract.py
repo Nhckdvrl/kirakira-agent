@@ -7,6 +7,10 @@
 
 from __future__ import annotations
 
+import pytest
+
+pytestmark = pytest.mark.usefixtures("isolated_cwd")
+
 import asyncio
 import unittest
 from pathlib import Path
@@ -14,8 +18,6 @@ from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock
 
-from plugins.default_memory.engine import DefaultMemoryEngine
-from plugins.default_memory.config import DefaultMemoryConfig
 from core.memory.engine import (
     EngineProfile,
     MemoryCapability,
@@ -25,6 +27,8 @@ from core.memory.engine import (
     MemoryQueryFilters,
     MemoryScope,
 )
+from plugins.default_memory.config import DefaultMemoryConfig
+from plugins.default_memory.engine import DefaultMemoryEngine
 
 
 def _make_default_engine(

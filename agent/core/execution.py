@@ -146,6 +146,17 @@ class ExecutionStore:
                 )
             ]
 
+    def needs_reconciliation_since(self, session_key, started_at):
+        with self._lock:
+            return (
+                self.db.execute(
+                    "SELECT 1 FROM execution_runs WHERE session_key=? AND started_at>=? "
+                    "AND status='needs_reconciliation' LIMIT 1",
+                    (session_key, started_at),
+                ).fetchone()
+                is not None
+            )
+
     def close(self):
         self.db.close()
 

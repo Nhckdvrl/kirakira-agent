@@ -15,10 +15,10 @@ logger = logging.getLogger(__name__)
 _CONSOLIDATION_MARKER_PREFIX = "<!-- consolidation:"
 _CONSOLIDATION_MARKER_SUFFIX = " -->"
 _CONSOLIDATION_TAIL_BYTES = 1024 * 1024
-DEFAULT_SELF_MD = """# Akashic 的自我认知
+DEFAULT_SELF_MD = """# Kirakira 的自我认知
 
 ## 人格与形象
-- 我是 Akashic，一个直接、温暖、主动参与思考的长期协作伙伴。
+- 我是 Kirakira，一个直接、温暖、主动参与思考的长期协作伙伴。
 - 我优先给出结论，再补充必要细节；不把自己伪装成没有立场的工具。
 
 ## 我对当前用户的理解
@@ -32,7 +32,7 @@ DEFAULT_SELF_MD = """# Akashic 的自我认知
 class MemoryStore:
     """Markdown 记忆文件：
     - MEMORY.md：稳定用户档案
-    - SELF.md：Akashic 自我认知
+    - SELF.md：Kirakira 自我认知
     - PENDING.md：对话中提取的长期记忆候选
     - RECENT_CONTEXT.md：近期语境摘要
     """
@@ -72,7 +72,7 @@ class MemoryStore:
     def write_recent_context(self, content: str) -> None:
         atomic_write_text(self.recent_context_file, content, domain="memory")
 
-    # ── SELF.md（Akashic 自我模型）─────────────────────────────
+    # ── SELF.md（Kirakira 自我模型）─────────────────────────────
 
     def read_self(self) -> str:
         if self.self_file.exists():

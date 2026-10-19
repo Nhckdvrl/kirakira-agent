@@ -1,4 +1,4 @@
-"""Optional CPU embedding preparation. Requires fastembed in a separate env.
+"""Optional CPU embeddings in the project's single environment (group eval).
 
 python -m eval.longmemeval.embed_local --dataset ... --output ...
 No API credentials or hosted embedding service are used.
@@ -7,12 +7,14 @@ No API credentials or hosted embedding service are used.
 import argparse
 import hashlib
 import json
-from pathlib import Path
 import time
+from pathlib import Path
+
 import numpy as np
 from fastembed import TextEmbedding
+
 from .dataset import load_longmemeval
-from .protocol import select
+from .protocol import select_fixed
 
 
 def main():
@@ -21,8 +23,9 @@ def main():
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--per-type", type=int, default=6)
     p.add_argument("--cache", type=Path, required=True)
+    p.add_argument("--selection", type=Path)
     a = p.parse_args()
-    cases = select(load_longmemeval(a.dataset), a.per_type)
+    cases = select_fixed(load_longmemeval(a.dataset), a.per_type, a.selection)
     texts = {
         turn.content
         for case in cases
