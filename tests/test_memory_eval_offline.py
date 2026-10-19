@@ -13,14 +13,27 @@ from eval.longmemeval.dataset import (
 )
 from eval.longmemeval.offline_ab import run_offline_ab
 from eval.longmemeval.protocol import select_fixed
+from scripts.compare_mem0_step_plan import conversation_inputs
 
 
 class LongMemEvalLoaderTests(unittest.TestCase):
+    def test_mem0_model_projection_does_not_expose_fixture_source_labels(self):
+        case = builtin_smoke_instances()[0]
+        result = conversation_inputs(
+            [("2026-10-19", "answer_hidden_gold_source", case.haystack_sessions[0])]
+        )
+        rendered = json.dumps(result)
+        self.assertNotIn("answer_hidden_gold_source", rendered)
+        self.assertIn("2026-10-19", rendered)
+        self.assertIn(case.haystack_sessions[0][0].content, result[0]["content"])
+
     def test_fixed_selection_preserves_frozen_order_and_rejects_duplicate_ids(self):
         cases = builtin_smoke_instances()
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "selection.json"
-            path.write_text(json.dumps({"case_ids": [cases[2].question_id, cases[0].question_id]}))
+            path.write_text(
+                json.dumps({"case_ids": [cases[2].question_id, cases[0].question_id]})
+            )
             self.assertEqual(select_fixed(cases, selection=path), [cases[2], cases[0]])
             path.write_text(json.dumps({"case_ids": [cases[0].question_id] * 2}))
             with self.assertRaises(ValueError):

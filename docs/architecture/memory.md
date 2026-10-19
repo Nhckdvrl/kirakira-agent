@@ -95,3 +95,15 @@ SessionDB 的 `message_publications` 由 assistant INSERT 的同事务 trigger �
 后台 Runtime 的维护任务启动即扫描并每 30 秒重试，每次最多 64 条，关闭时先取消任务再关 store。
 重建库保留源快照 head，以便切换后消费新到达。升级前无 publication 的历史不自动补学。
 完整故障语义见[ADR0007](../decisions/0007-durable-consumption-and-proactive-supersession.md)。
+
+
+## Akasha2 的宿主读出
+
+学习算法与展示选择分开：`MemoryCycle` 生成图补全 ticket，`plugins/akasha2/selection.py`
+同时选择最多五个精确 dense 命中，按稳定节点身份排除重复，再用联想结果填充剩余记录预算。
+显式抑制、时间过滤与 strong floor 应用于读出；每条 lane 内按时间倒序呈现，原文绑定仍逐条核对。
+Kirakira 的 limit 是总记录上限；上游 completion limit 与精确通道分别计数，因此不能宣称参数完全相同。
+
+最初 Kirakira adapter 只输出图 completion。历史评测中的该版本应称 graph-only adapter，
+其分数不能代表上游完整双通道。修复不重建、不迁移、不修改既有图；同图诊断与新问题验证分别保存。
+实现与证据见 [ADR0012](../decisions/0012-akasha2-dual-lane-readout.md)。

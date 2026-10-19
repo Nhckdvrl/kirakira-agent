@@ -1,0 +1,1765 @@
+[
+  {
+    "question_id": "c19f7a0b",
+    "question_type": "single-session-user",
+    "abstention": false,
+    "arms": {
+      "no_memory": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 0,
+        "gold_found": 0,
+        "exact_pair_recall": 0.0,
+        "all_gold_pairs": false,
+        "reciprocal_rank": 0.0,
+        "evidence_session_recall": null,
+        "retrieval_seconds": null,
+        "source_ids": []
+      },
+      "dense": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "c19ff9bc70f64b38d6d02777f549356af63c3f35b55a502b5929a59a68fad531",
+          "0985aa627fc3b51559ed72a0923801c9c2778505e63cea759b638c874ee1319a",
+          "148a69cdb10a657fc5ff261bfd12422fc3c3ae364e5d3101bb8278693296c8a4",
+          "6795f0724164713eb402852afae53cc391614279bc7b2aad652fc3b44c91a469",
+          "a8c6606a96cde948be6c5c8b29effef73ee2212976f31d72c43e317385021db9",
+          "aac60b3ba50134597d2a8367da8dbaaee54d758a8b662543e92ccdfdf6413666",
+          "a5522f8799833256f59e78cbf1dd2d6395abc88e1918d87f504a239c19758c91",
+          "7f9ed133d3f9094daf9741a605c0053e9974c3f22978728a769511248d3fa535",
+          "2bd943ad5820951d57afbcbaea94cde289894b224765e34d0dc0448f4df6e1a3",
+          "b49a63d2d9b0b76d0d35682c0a773854bf8e21ba16fe0c8de403885faa027a5a"
+        ]
+      },
+      "akasha2": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "c19ff9bc70f64b38d6d02777f549356af63c3f35b55a502b5929a59a68fad531",
+          "a8c6606a96cde948be6c5c8b29effef73ee2212976f31d72c43e317385021db9",
+          "0985aa627fc3b51559ed72a0923801c9c2778505e63cea759b638c874ee1319a",
+          "6795f0724164713eb402852afae53cc391614279bc7b2aad652fc3b44c91a469",
+          "148a69cdb10a657fc5ff261bfd12422fc3c3ae364e5d3101bb8278693296c8a4",
+          "8a711115ca804ac664a591e73733b4ab1d29216ce36a83519d39a698a71389d9",
+          "5e773b97efacf70bfeca826f7642b2d521c7dd6842c8136b759d4a32203e89f3",
+          "b560ee95bcce19f076323554a954c5ab3124ace3e3bedb3eaed089e947786757",
+          "a5522f8799833256f59e78cbf1dd2d6395abc88e1918d87f504a239c19758c91",
+          "93c14045358eef4107987fea5a72d744225e6d2186f65317eea649ce1bf8801e"
+        ]
+      },
+      "akasha2_graph_only": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 9,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "c19ff9bc70f64b38d6d02777f549356af63c3f35b55a502b5929a59a68fad531",
+          "0985aa627fc3b51559ed72a0923801c9c2778505e63cea759b638c874ee1319a",
+          "a5522f8799833256f59e78cbf1dd2d6395abc88e1918d87f504a239c19758c91",
+          "a8c6606a96cde948be6c5c8b29effef73ee2212976f31d72c43e317385021db9",
+          "93c14045358eef4107987fea5a72d744225e6d2186f65317eea649ce1bf8801e",
+          "8a711115ca804ac664a591e73733b4ab1d29216ce36a83519d39a698a71389d9",
+          "b560ee95bcce19f076323554a954c5ab3124ace3e3bedb3eaed089e947786757",
+          "5e773b97efacf70bfeca826f7642b2d521c7dd6842c8136b759d4a32203e89f3",
+          "30c3a2193e5e423337dccc5809a33584e1467fb61f72cf3a166f9d1ae0a0899a"
+        ]
+      },
+      "bm25": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": 0.0006257165223360062,
+        "source_ids": [
+          "c19ff9bc70f64b38d6d02777f549356af63c3f35b55a502b5929a59a68fad531",
+          "90fbefa82e5ccc69de2af56dbaa3c0a976857ad6e7b65880fddfd9940ffbcfd7",
+          "58de8341a393dea76b1ebfe8a5674743ee80c16bb4b5c79a838e7aca60df25e5",
+          "2c31b2b36d8e3d5131cc296a7af1d574f838f595e07880bd1e7b017ecca545dc",
+          "baec49b4e0f48a05554325193f0a1adffb6c62a58a775a54df1059565ed96106",
+          "d16a0662fa831cc55c3f2b295b241b68fd1268a5dd297ead75762e043cc95445",
+          "68235aad61c75ce374a559264464ce42ee885e30717a8b1ba27bc7caf8ed120a",
+          "e478e79fd10e8bed474d3487217948439556969aa5bcfa51fadc7fa273207036",
+          "38c0f0eebc8834c1f4e3e7256138cf7c3955e638d9e73cc87410113fd00e6011",
+          "b833e0f6c7965524e303ddb49614a40e7ef057477ca7a0049bc58b60934548ad"
+        ]
+      },
+      "rrf": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": 0.002355828881263733,
+        "source_ids": [
+          "c19ff9bc70f64b38d6d02777f549356af63c3f35b55a502b5929a59a68fad531",
+          "90fbefa82e5ccc69de2af56dbaa3c0a976857ad6e7b65880fddfd9940ffbcfd7",
+          "0985aa627fc3b51559ed72a0923801c9c2778505e63cea759b638c874ee1319a",
+          "148a69cdb10a657fc5ff261bfd12422fc3c3ae364e5d3101bb8278693296c8a4",
+          "b49a63d2d9b0b76d0d35682c0a773854bf8e21ba16fe0c8de403885faa027a5a",
+          "b560ee95bcce19f076323554a954c5ab3124ace3e3bedb3eaed089e947786757",
+          "7f9ed133d3f9094daf9741a605c0053e9974c3f22978728a769511248d3fa535",
+          "d16a0662fa831cc55c3f2b295b241b68fd1268a5dd297ead75762e043cc95445",
+          "b833e0f6c7965524e303ddb49614a40e7ef057477ca7a0049bc58b60934548ad",
+          "a5522f8799833256f59e78cbf1dd2d6395abc88e1918d87f504a239c19758c91"
+        ]
+      },
+      "recency": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 0,
+        "exact_pair_recall": 0.0,
+        "all_gold_pairs": false,
+        "reciprocal_rank": 0.0,
+        "evidence_session_recall": 0.0,
+        "retrieval_seconds": 0.0,
+        "source_ids": [
+          "94f7a87c5f102fb052828b9233603a6dbb147d1d913ba384dbd84b2517db6845",
+          "c90e2ef1359970e09e9d1787c51c0d871641ee78faa3c7ad53d33cfb975f2622",
+          "2525f8d8fc1f00add0a56b1e77b91426c1da2c4f34a7f7913a6ada3ff003e479",
+          "8e1d56f56c25b96a57944f96eb2204b2212c8131e3961a2986e6d698273bca35",
+          "e4bd7b48775c690178ce431063ec0440f4147256c181be0ffce9df5f7535e9cc",
+          "8a711115ca804ac664a591e73733b4ab1d29216ce36a83519d39a698a71389d9",
+          "30c3a2193e5e423337dccc5809a33584e1467fb61f72cf3a166f9d1ae0a0899a",
+          "87d788a0e436df120c1a9c61c107a30ff8329aec0709b8778a9304be555e02b7",
+          "79b37f9cb8bf0c647ba0f33b4bed8ca4d3fc96af23126e0fb353ce8f8e8a5468",
+          "902a672ff963d35e0a70a3330d942eba4cae3ec2e02fe3aa4003e0ee08718f64"
+        ]
+      }
+    }
+  },
+  {
+    "question_id": "e8a79c70",
+    "question_type": "single-session-assistant",
+    "abstention": false,
+    "arms": {
+      "no_memory": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 0,
+        "gold_found": 0,
+        "exact_pair_recall": 0.0,
+        "all_gold_pairs": false,
+        "reciprocal_rank": 0.0,
+        "evidence_session_recall": null,
+        "retrieval_seconds": null,
+        "source_ids": []
+      },
+      "dense": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 0.3333333333333333,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "a48baf6547776e06caf51827a9df149b10ce0773ef82925bca000292d8f7d2fc",
+          "9161e06a62b2e0354cf0e11dab779ed950ec6177096517d8c103a9660efe155a",
+          "842c5b52984e124bfb79bb831c58438a591052b12279599e23c9afa3ca1594f7",
+          "842c029503193ea6916836790ed17dfb5c90603ad1f02e910c42f21bda909488",
+          "e4111335f6d082aaa3e73145c08ab52fe7135d738b9a70b4c2283994073d32a2",
+          "d8511b3d509f948691ceebbab878dddddb4ed24b9da4a8a93d1554b3e2627cd8",
+          "cf413bf6eb52e2a0feb94ae6f36c2f66045198c5cc930f4f61380cc011a59339",
+          "8d4346ff4862344ef781e83b29a58c0ba2b5aad72fa527e6c46f0878467f868e",
+          "854632e694036a8b85cd005e7c71e04f03a4c8d33e207ac74cc1ce9b36aef98d",
+          "fd21f44ec2e1e277e87f3da5b54156d8141af1c0cfad18136dd5c1806abeced6"
+        ]
+      },
+      "akasha2": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 0.25,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "a48baf6547776e06caf51827a9df149b10ce0773ef82925bca000292d8f7d2fc",
+          "e4111335f6d082aaa3e73145c08ab52fe7135d738b9a70b4c2283994073d32a2",
+          "9161e06a62b2e0354cf0e11dab779ed950ec6177096517d8c103a9660efe155a",
+          "842c5b52984e124bfb79bb831c58438a591052b12279599e23c9afa3ca1594f7",
+          "842c029503193ea6916836790ed17dfb5c90603ad1f02e910c42f21bda909488",
+          "f9d33a75fd6826af440545f256fb1a80f6bd2ef5f0fbb228b70ab9370f291d7f",
+          "6669a8e9dc3e115e747450d29c33a0fbda6086f6351a70f024ffa461a089f355",
+          "eb7f75d4876fe2dfe83916f581901bb1e0ce6c7584f6f3826315341e05f59ca3",
+          "cc5821f54d714a2a81ab360ce60dc8972258a9c3459931bb9b62eb7df8a1dcd5",
+          "0f7e9f0258eadfff1fa2ad012e1972aea6e743e459c73deaed404d138ddb7a20"
+        ]
+      },
+      "akasha2_graph_only": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "842c5b52984e124bfb79bb831c58438a591052b12279599e23c9afa3ca1594f7",
+          "f9d33a75fd6826af440545f256fb1a80f6bd2ef5f0fbb228b70ab9370f291d7f",
+          "842c029503193ea6916836790ed17dfb5c90603ad1f02e910c42f21bda909488",
+          "a48baf6547776e06caf51827a9df149b10ce0773ef82925bca000292d8f7d2fc",
+          "eb7f75d4876fe2dfe83916f581901bb1e0ce6c7584f6f3826315341e05f59ca3",
+          "0f7e9f0258eadfff1fa2ad012e1972aea6e743e459c73deaed404d138ddb7a20",
+          "cc5821f54d714a2a81ab360ce60dc8972258a9c3459931bb9b62eb7df8a1dcd5",
+          "6669a8e9dc3e115e747450d29c33a0fbda6086f6351a70f024ffa461a089f355",
+          "7a93c0d916caa4a08ba46b06ccb89803a4aa081bb2585f06d2f6b42d92f7f79a",
+          "ebf93ab5987edfb48efcd233f5db0d2e29eceaa0d874e3b01c9df4a108313ac0"
+        ]
+      },
+      "bm25": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 0.5,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": 0.0015348605811595917,
+        "source_ids": [
+          "842c029503193ea6916836790ed17dfb5c90603ad1f02e910c42f21bda909488",
+          "842c5b52984e124bfb79bb831c58438a591052b12279599e23c9afa3ca1594f7",
+          "9161e06a62b2e0354cf0e11dab779ed950ec6177096517d8c103a9660efe155a",
+          "a48baf6547776e06caf51827a9df149b10ce0773ef82925bca000292d8f7d2fc",
+          "6b722640cb6500c484ae8d95555768840f4638ccc39f85bebbeb5605c74b2e68",
+          "bee216f377c64e446bac4be9f0883c654e53db11b665d84490633a52bd6c09d5",
+          "34531f749b7c6cd088b70166b34885110f118ebfbdb627785ff662536b5f05cc",
+          "83bb1338fc4b75539ee0b89db3e98802841779b19aaa70e5b59107421046e2b1",
+          "df5194f131a764fdbe800cf6e54ef4eb8d7a8c8c49d5eaac453e316d2336e4d8",
+          "e000ba057375c6bb0abb75baebe3d5f9931b067ab5f4dbbbf2f37190ceaa8f2c"
+        ]
+      },
+      "rrf": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 0.3333333333333333,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": 0.0029986705631017685,
+        "source_ids": [
+          "842c029503193ea6916836790ed17dfb5c90603ad1f02e910c42f21bda909488",
+          "a48baf6547776e06caf51827a9df149b10ce0773ef82925bca000292d8f7d2fc",
+          "842c5b52984e124bfb79bb831c58438a591052b12279599e23c9afa3ca1594f7",
+          "9161e06a62b2e0354cf0e11dab779ed950ec6177096517d8c103a9660efe155a",
+          "d8511b3d509f948691ceebbab878dddddb4ed24b9da4a8a93d1554b3e2627cd8",
+          "e000ba057375c6bb0abb75baebe3d5f9931b067ab5f4dbbbf2f37190ceaa8f2c",
+          "34531f749b7c6cd088b70166b34885110f118ebfbdb627785ff662536b5f05cc",
+          "e4111335f6d082aaa3e73145c08ab52fe7135d738b9a70b4c2283994073d32a2",
+          "cf413bf6eb52e2a0feb94ae6f36c2f66045198c5cc930f4f61380cc011a59339",
+          "8d4346ff4862344ef781e83b29a58c0ba2b5aad72fa527e6c46f0878467f868e"
+        ]
+      },
+      "recency": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 0,
+        "exact_pair_recall": 0.0,
+        "all_gold_pairs": false,
+        "reciprocal_rank": 0.0,
+        "evidence_session_recall": 0.0,
+        "retrieval_seconds": 0.0,
+        "source_ids": [
+          "a445eb388f7e3be74d7cec338d3b9f553c2cc4e0548dd69cbfb5b342a87f6dff",
+          "f8a9a23288dba24a82102f4bf1f712d24755cfd1a7c07945a7357745d34227a1",
+          "36b3dd5d30e442bbc66e15f56a92b87642796cf5e9079a0e2cc344c0f2b0e56f",
+          "129564aa574011a558ebe23569d66d9d459de6f1265bdc38ade5aec166303358",
+          "d95bdfac5969abea7c7f471fddec1f83bec40526e3f2974ae0f2dde813de79d7",
+          "3efbf314f6bc599f522a1fbf22e774cd5398fdb09beb482625d16d3e2de63639",
+          "76ee5bc32609567779d919ee4f7eaf0f96018bd286a99b02f3f8d60042bd74f6",
+          "e3bebd226a1f259ee08f1b3da7e7a2f10c3ae4fda477a2f223bc441d1378384a",
+          "ff991fa8878ae6d07bca9f95b159388f44f5776f6f29204747a242c77db92051",
+          "0a9723c88aaafbd40470a3595a6e70b51898b831dc327577035d411ce90df669"
+        ]
+      }
+    }
+  },
+  {
+    "question_id": "85fa3a3f",
+    "question_type": "multi-session",
+    "abstention": false,
+    "arms": {
+      "no_memory": {
+        "gold_pairs": 3,
+        "retrieved_pairs": 0,
+        "gold_found": 0,
+        "exact_pair_recall": 0.0,
+        "all_gold_pairs": false,
+        "reciprocal_rank": 0.0,
+        "evidence_session_recall": null,
+        "retrieval_seconds": null,
+        "source_ids": []
+      },
+      "dense": {
+        "gold_pairs": 3,
+        "retrieved_pairs": 10,
+        "gold_found": 3,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 0.5,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "9f9a1a26bdd2564f6b9e51f53bf0e73ffa26c20650927ced248958ed6ce9920d",
+          "dc6840b0c435763d1457008d55898596acd091e13364223631b55cd652074ed2",
+          "44961696200c34ffaf1f0928286ac7c67913807da8cb1193ac162d69343dd024",
+          "1851f5f6e2ea0c6e3951e4889549fd0cb36fa96abf0641ffbf7404ca1ae49e1b",
+          "f9b9b2bd64bf3129cef48a2859266f990c519ec08fd3c03dedb0f4e90a6b29ee",
+          "76e908d6e15cefcb8047510f48af8e903ace73d15803453d689c8f6b9762a2bd",
+          "c16a3ff30538a4cf1f4a04db34115b50596b2cb0e1346729b49b1680f8753af1",
+          "cc47594f7e1a83b6571453e5b10d92f0ec1ac7a282e23dd04a0c58352189b7fd",
+          "8cf3d3e01268262ebb157eb235aa0c51aea6662fd07b614a942f3abcd31f028c",
+          "c7bfc4bb1c7dcc617c4458ee40bce6db8a9ba4e3a74c1f9de8e4298e5a182a97"
+        ]
+      },
+      "akasha2": {
+        "gold_pairs": 3,
+        "retrieved_pairs": 10,
+        "gold_found": 3,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "44961696200c34ffaf1f0928286ac7c67913807da8cb1193ac162d69343dd024",
+          "f9b9b2bd64bf3129cef48a2859266f990c519ec08fd3c03dedb0f4e90a6b29ee",
+          "dc6840b0c435763d1457008d55898596acd091e13364223631b55cd652074ed2",
+          "9f9a1a26bdd2564f6b9e51f53bf0e73ffa26c20650927ced248958ed6ce9920d",
+          "1851f5f6e2ea0c6e3951e4889549fd0cb36fa96abf0641ffbf7404ca1ae49e1b",
+          "8cf3d3e01268262ebb157eb235aa0c51aea6662fd07b614a942f3abcd31f028c",
+          "10a7ee709105685c0b276c8aa0d1fd670494d26f4c9dad23239a1993ffc06b7b",
+          "2fb2418d10674f5ef2ed15491efdfa0d5a77e7e59899d1490e116a25052c7aca",
+          "7f14d138ed0a31e3016d09bf543087790f4d67272f7a612c0dfde5cac709de87",
+          "76e908d6e15cefcb8047510f48af8e903ace73d15803453d689c8f6b9762a2bd"
+        ]
+      },
+      "akasha2_graph_only": {
+        "gold_pairs": 3,
+        "retrieved_pairs": 10,
+        "gold_found": 3,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 0.3333333333333333,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "9f9a1a26bdd2564f6b9e51f53bf0e73ffa26c20650927ced248958ed6ce9920d",
+          "7f14d138ed0a31e3016d09bf543087790f4d67272f7a612c0dfde5cac709de87",
+          "44961696200c34ffaf1f0928286ac7c67913807da8cb1193ac162d69343dd024",
+          "dc6840b0c435763d1457008d55898596acd091e13364223631b55cd652074ed2",
+          "10a7ee709105685c0b276c8aa0d1fd670494d26f4c9dad23239a1993ffc06b7b",
+          "76e908d6e15cefcb8047510f48af8e903ace73d15803453d689c8f6b9762a2bd",
+          "2fb2418d10674f5ef2ed15491efdfa0d5a77e7e59899d1490e116a25052c7aca",
+          "1851f5f6e2ea0c6e3951e4889549fd0cb36fa96abf0641ffbf7404ca1ae49e1b",
+          "f9b9b2bd64bf3129cef48a2859266f990c519ec08fd3c03dedb0f4e90a6b29ee",
+          "8cf3d3e01268262ebb157eb235aa0c51aea6662fd07b614a942f3abcd31f028c"
+        ]
+      },
+      "bm25": {
+        "gold_pairs": 3,
+        "retrieved_pairs": 10,
+        "gold_found": 3,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 0.5,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": 0.0010922793298959732,
+        "source_ids": [
+          "9f9a1a26bdd2564f6b9e51f53bf0e73ffa26c20650927ced248958ed6ce9920d",
+          "44961696200c34ffaf1f0928286ac7c67913807da8cb1193ac162d69343dd024",
+          "dc6840b0c435763d1457008d55898596acd091e13364223631b55cd652074ed2",
+          "1851f5f6e2ea0c6e3951e4889549fd0cb36fa96abf0641ffbf7404ca1ae49e1b",
+          "76e908d6e15cefcb8047510f48af8e903ace73d15803453d689c8f6b9762a2bd",
+          "c78bad6d01bb7a5eb3dc236313be08dd10722d9a9c23d2e935b254e4283d7ab9",
+          "10a7ee709105685c0b276c8aa0d1fd670494d26f4c9dad23239a1993ffc06b7b",
+          "f9b9b2bd64bf3129cef48a2859266f990c519ec08fd3c03dedb0f4e90a6b29ee",
+          "cc47594f7e1a83b6571453e5b10d92f0ec1ac7a282e23dd04a0c58352189b7fd",
+          "c16a3ff30538a4cf1f4a04db34115b50596b2cb0e1346729b49b1680f8753af1"
+        ]
+      },
+      "rrf": {
+        "gold_pairs": 3,
+        "retrieved_pairs": 10,
+        "gold_found": 3,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 0.5,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": 0.002566300332546234,
+        "source_ids": [
+          "9f9a1a26bdd2564f6b9e51f53bf0e73ffa26c20650927ced248958ed6ce9920d",
+          "44961696200c34ffaf1f0928286ac7c67913807da8cb1193ac162d69343dd024",
+          "dc6840b0c435763d1457008d55898596acd091e13364223631b55cd652074ed2",
+          "1851f5f6e2ea0c6e3951e4889549fd0cb36fa96abf0641ffbf7404ca1ae49e1b",
+          "76e908d6e15cefcb8047510f48af8e903ace73d15803453d689c8f6b9762a2bd",
+          "f9b9b2bd64bf3129cef48a2859266f990c519ec08fd3c03dedb0f4e90a6b29ee",
+          "c16a3ff30538a4cf1f4a04db34115b50596b2cb0e1346729b49b1680f8753af1",
+          "cc47594f7e1a83b6571453e5b10d92f0ec1ac7a282e23dd04a0c58352189b7fd",
+          "10a7ee709105685c0b276c8aa0d1fd670494d26f4c9dad23239a1993ffc06b7b",
+          "8cf3d3e01268262ebb157eb235aa0c51aea6662fd07b614a942f3abcd31f028c"
+        ]
+      },
+      "recency": {
+        "gold_pairs": 3,
+        "retrieved_pairs": 8,
+        "gold_found": 0,
+        "exact_pair_recall": 0.0,
+        "all_gold_pairs": false,
+        "reciprocal_rank": 0.0,
+        "evidence_session_recall": 0.0,
+        "retrieval_seconds": 0.0,
+        "source_ids": [
+          "ec1ab41621afab7412366628061655097ef67d036be87d4ad11dff1ec7733e32",
+          "74401fb6384013988cfcb468b3f5eb4203910dced9e9350a360de69711be6cde",
+          "a648a219ddb30660937446eb31e24913a2e180260b5cdb6152a30d05ab2866fd",
+          "d5ff7b165ba3917e83dce977a050a23793b90e04ab5c83f5b41bd58ecaf6aedf",
+          "df5f28e58e86e2ebbe3cce91c59300205395bb6b399b150f6dfde08c2a3e2c3f",
+          "d46a73274d6494b0dbc02647d36ca65e888591f7442a4ea364099527a23ce20c",
+          "7605985860f0d2b6eab954f16ee9fa7de1ad703ba8640658080aa9a6ffbab271",
+          "d03fa6eaf6e13f10c59c24ea4ee35fc2cdd945e1213a7316fc5626eece9506aa"
+        ]
+      }
+    }
+  },
+  {
+    "question_id": "0e4e4c46",
+    "question_type": "knowledge-update",
+    "abstention": false,
+    "arms": {
+      "no_memory": {
+        "gold_pairs": 2,
+        "retrieved_pairs": 0,
+        "gold_found": 0,
+        "exact_pair_recall": 0.0,
+        "all_gold_pairs": false,
+        "reciprocal_rank": 0.0,
+        "evidence_session_recall": null,
+        "retrieval_seconds": null,
+        "source_ids": []
+      },
+      "dense": {
+        "gold_pairs": 2,
+        "retrieved_pairs": 10,
+        "gold_found": 2,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 0.3333333333333333,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "f66b130c6a008d09071c6b2ec25f9ab7cfbe940d6e7783c60251b5e20fe7ca34",
+          "6106922468e32e31c86f3c713a841bf44b56db02a010440aef3bd6ef32221fb7",
+          "1fb96531ccef1644974876468c87b705906d77b7ea3288c09720f75677e57af5",
+          "3ed5bc74be25acd5fc1f8eb9ba948f1effc4ff00e644fbce87365af5a5d47cd7",
+          "a0c569ebe6a3be3d097aba6a06e1c5ac99d2a48fef0e2bf7816fb9e9c21c591f",
+          "48a0c0d7ac449282e4c87741e4acbf665a4e289c69038ad6d52845568b8a743a",
+          "de8d479691b1352ba2f7cffda903b01e589a9dab62f946111aee6973a04f69c0",
+          "fd445e04ca35d45617e7358259fd4084e95dfa9a80d01f8a2a42091f6a67d9cb",
+          "a3644fec7ea381f4292193646e8462b35dd6f8483e1961611d381f563d42a316",
+          "9f79245964a1eb01637a8287143fbc3fc079bfa2bc8e3fba20f3359e138cf476"
+        ]
+      },
+      "akasha2": {
+        "gold_pairs": 2,
+        "retrieved_pairs": 8,
+        "gold_found": 2,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 0.5,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "6106922468e32e31c86f3c713a841bf44b56db02a010440aef3bd6ef32221fb7",
+          "3ed5bc74be25acd5fc1f8eb9ba948f1effc4ff00e644fbce87365af5a5d47cd7",
+          "a0c569ebe6a3be3d097aba6a06e1c5ac99d2a48fef0e2bf7816fb9e9c21c591f",
+          "f66b130c6a008d09071c6b2ec25f9ab7cfbe940d6e7783c60251b5e20fe7ca34",
+          "1fb96531ccef1644974876468c87b705906d77b7ea3288c09720f75677e57af5",
+          "da92b55775499ae419c4d803f520d9b6ba4b1154137fd15ef5c204f8e0beccf6",
+          "b612df56edb8bba413ce826cb52bae2eb7d9e29136b6c4420a0f90cc16920f98",
+          "07bc759ee7bb6f4f25bc8b296428c45cf5d5e015e16f179bdcaeed4359fc47dc"
+        ]
+      },
+      "akasha2_graph_only": {
+        "gold_pairs": 2,
+        "retrieved_pairs": 6,
+        "gold_found": 1,
+        "exact_pair_recall": 0.5,
+        "all_gold_pairs": false,
+        "reciprocal_rank": 0.5,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "f66b130c6a008d09071c6b2ec25f9ab7cfbe940d6e7783c60251b5e20fe7ca34",
+          "1fb96531ccef1644974876468c87b705906d77b7ea3288c09720f75677e57af5",
+          "6106922468e32e31c86f3c713a841bf44b56db02a010440aef3bd6ef32221fb7",
+          "07bc759ee7bb6f4f25bc8b296428c45cf5d5e015e16f179bdcaeed4359fc47dc",
+          "b612df56edb8bba413ce826cb52bae2eb7d9e29136b6c4420a0f90cc16920f98",
+          "da92b55775499ae419c4d803f520d9b6ba4b1154137fd15ef5c204f8e0beccf6"
+        ]
+      },
+      "bm25": {
+        "gold_pairs": 2,
+        "retrieved_pairs": 10,
+        "gold_found": 2,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": 0.0006437059491872787,
+        "source_ids": [
+          "1fb96531ccef1644974876468c87b705906d77b7ea3288c09720f75677e57af5",
+          "3ed5bc74be25acd5fc1f8eb9ba948f1effc4ff00e644fbce87365af5a5d47cd7",
+          "f66b130c6a008d09071c6b2ec25f9ab7cfbe940d6e7783c60251b5e20fe7ca34",
+          "6106922468e32e31c86f3c713a841bf44b56db02a010440aef3bd6ef32221fb7",
+          "140733b80e422a49425b2951c833f391fb147a4abdfec0993d00d82d9c17ea33",
+          "c2166620a582d2fd706181dde3b35e5b1ded505fad5a80acb76a38c17d7eded2",
+          "4024b7fb0ab50bbc292c2fe47f5c6cb9c0b8f7827038b477f332e2d8c3b5b02e",
+          "6a60fc1f4d431d1d8c25808658719b28d8558f3b35e90af64b78f2ed5a2b0168",
+          "e8d52a511e9b70c1ef635980704f04a89870785f51b22a8ec48f6b3f53daf150",
+          "783f9c9dabfe804444c5b61a8ff3467573b122da65ff5d47ef1077b11e523a64"
+        ]
+      },
+      "rrf": {
+        "gold_pairs": 2,
+        "retrieved_pairs": 10,
+        "gold_found": 2,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": 0.0020970143377780914,
+        "source_ids": [
+          "1fb96531ccef1644974876468c87b705906d77b7ea3288c09720f75677e57af5",
+          "f66b130c6a008d09071c6b2ec25f9ab7cfbe940d6e7783c60251b5e20fe7ca34",
+          "3ed5bc74be25acd5fc1f8eb9ba948f1effc4ff00e644fbce87365af5a5d47cd7",
+          "6106922468e32e31c86f3c713a841bf44b56db02a010440aef3bd6ef32221fb7",
+          "140733b80e422a49425b2951c833f391fb147a4abdfec0993d00d82d9c17ea33",
+          "4024b7fb0ab50bbc292c2fe47f5c6cb9c0b8f7827038b477f332e2d8c3b5b02e",
+          "a0c569ebe6a3be3d097aba6a06e1c5ac99d2a48fef0e2bf7816fb9e9c21c591f",
+          "fd445e04ca35d45617e7358259fd4084e95dfa9a80d01f8a2a42091f6a67d9cb",
+          "90c8aabb854c7d7e4f6f75f7b2ae0323c70c2f304590c910cd08340ec05f58f0",
+          "90d7cffef3d3eb0d27b399d818e9447cccaa698987b1ebbac080a9d7e0c832e4"
+        ]
+      },
+      "recency": {
+        "gold_pairs": 2,
+        "retrieved_pairs": 10,
+        "gold_found": 1,
+        "exact_pair_recall": 0.5,
+        "all_gold_pairs": false,
+        "reciprocal_rank": 0.1111111111111111,
+        "evidence_session_recall": 0.5,
+        "retrieval_seconds": 0.0,
+        "source_ids": [
+          "e7e6a0336da5698a11a2930adf53d4c48e51cd1999c45c507defc8e3483aafc5",
+          "9f79245964a1eb01637a8287143fbc3fc079bfa2bc8e3fba20f3359e138cf476",
+          "9e9b587a2a00bf04f8571511c782b3c9670f428198fa49008994eccfc0d0f1e2",
+          "50986f8c229154f1f047855a1ca41c6c945111009d7070fa2ced3454eabc4dc8",
+          "e8d52a511e9b70c1ef635980704f04a89870785f51b22a8ec48f6b3f53daf150",
+          "a692ed16b4c5869b7397889d84825a7202cff297220c98863763f739f802b640",
+          "d7473ddb8e97e1ec537623eb368a5037e8d81aeddbda9ba14f7b88a1ae907d15",
+          "8f37d12d95da3f0f798f1217b4ad3154df00555626edce045f6c8789559b55b5",
+          "3ed5bc74be25acd5fc1f8eb9ba948f1effc4ff00e644fbce87365af5a5d47cd7",
+          "dd598da964926c08d99c8b64389237d3d0556f848c3bfab39bba5ea7769bc7d4"
+        ]
+      }
+    }
+  },
+  {
+    "question_id": "60d45044",
+    "question_type": "single-session-user",
+    "abstention": false,
+    "arms": {
+      "no_memory": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 0,
+        "gold_found": 0,
+        "exact_pair_recall": 0.0,
+        "all_gold_pairs": false,
+        "reciprocal_rank": 0.0,
+        "evidence_session_recall": null,
+        "retrieval_seconds": null,
+        "source_ids": []
+      },
+      "dense": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "60d3b39deb0cb713e24e75956bbedbbcaf4be6a2d78645bcf19217102cda778a",
+          "29c1b8947e1b8cff31f7a4f8854ee20f5c2a91cb06b84c8e92047c24436efaff",
+          "2d3896058a620f2b4e31316b029fab3ac07b4a8851f635b85df4bd5b1b705c16",
+          "a8dcb26dcdc3455cc90f038740360ca0dbe85d88b2eaf79bc412e523ed3d861b",
+          "98394967ec41cffcea90ceaaf0eac9ff85a247f4b623c10b3009fbd13f478357",
+          "bd55cdf1885ed5d0d5fca1d4614d7008614e67299e2338842d51f94a1103d45f",
+          "1e7e68beaa8018cbfabf99651e077a11ab1ad6bed80df5f588508b503cb412c2",
+          "fe28423378460288679cda12a22924133ec6cdb686d4d802cb8ef7dd3d0848bd",
+          "f623011e5a1f859652155fab527abc00148df87ba9f50187554d6c282d54c755",
+          "cba6d7079b2b411ac327e0e04d1dc8b782a2ba809c2f418b8ba31de435b5c6a8"
+        ]
+      },
+      "akasha2": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "60d3b39deb0cb713e24e75956bbedbbcaf4be6a2d78645bcf19217102cda778a",
+          "2d3896058a620f2b4e31316b029fab3ac07b4a8851f635b85df4bd5b1b705c16",
+          "a8dcb26dcdc3455cc90f038740360ca0dbe85d88b2eaf79bc412e523ed3d861b",
+          "98394967ec41cffcea90ceaaf0eac9ff85a247f4b623c10b3009fbd13f478357",
+          "29c1b8947e1b8cff31f7a4f8854ee20f5c2a91cb06b84c8e92047c24436efaff",
+          "e48063bb6d0c24dba563b798ec4c23c1ebf3ce6d97a4fa2176672240381dc74a",
+          "751596c106c52608641b3e5775155b568617c985e6c4d26d92a3613d16248235",
+          "bd55cdf1885ed5d0d5fca1d4614d7008614e67299e2338842d51f94a1103d45f",
+          "b3efcf416d5d5beb45a44974e3d631d19e50e646082ed48273e08df5357ce0d1",
+          "237b5cf7ade39cec0056f58f9f2d4b7833f2fd06f4da32eef5b9413a78711132"
+        ]
+      },
+      "akasha2_graph_only": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 8,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "60d3b39deb0cb713e24e75956bbedbbcaf4be6a2d78645bcf19217102cda778a",
+          "b3efcf416d5d5beb45a44974e3d631d19e50e646082ed48273e08df5357ce0d1",
+          "bd55cdf1885ed5d0d5fca1d4614d7008614e67299e2338842d51f94a1103d45f",
+          "2d3896058a620f2b4e31316b029fab3ac07b4a8851f635b85df4bd5b1b705c16",
+          "237b5cf7ade39cec0056f58f9f2d4b7833f2fd06f4da32eef5b9413a78711132",
+          "e48063bb6d0c24dba563b798ec4c23c1ebf3ce6d97a4fa2176672240381dc74a",
+          "751596c106c52608641b3e5775155b568617c985e6c4d26d92a3613d16248235",
+          "bc3d9db7b2dd45d8f91ed743a4f297cb3479228450bc5782357de9e4517d5b19"
+        ]
+      },
+      "bm25": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": 0.0005460940301418304,
+        "source_ids": [
+          "60d3b39deb0cb713e24e75956bbedbbcaf4be6a2d78645bcf19217102cda778a",
+          "834cfb159f53e05cc46ef9746829a180df8fffe361151cdd556a01d537ceecb0",
+          "2d3896058a620f2b4e31316b029fab3ac07b4a8851f635b85df4bd5b1b705c16",
+          "4e5dd0d76e38d898891afe48e03b2b39930b8a11c10a22298448c4f06a55472c",
+          "fe28423378460288679cda12a22924133ec6cdb686d4d802cb8ef7dd3d0848bd",
+          "446364cc48265a343662ce1a20542c141e410e3c513ae26d722584f8a7ecb166",
+          "2f3051a069527ce4cfda0c63a5bd24f2ecdcf9497c92213b321c4de039c767e3",
+          "bc3d9db7b2dd45d8f91ed743a4f297cb3479228450bc5782357de9e4517d5b19",
+          "751596c106c52608641b3e5775155b568617c985e6c4d26d92a3613d16248235",
+          "550777b590ad6116e856c69508e3be78d78d34d9c3d3290b1f1b90dda95d3ef2"
+        ]
+      },
+      "rrf": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 9,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": 0.0021229665726423264,
+        "source_ids": [
+          "60d3b39deb0cb713e24e75956bbedbbcaf4be6a2d78645bcf19217102cda778a",
+          "2d3896058a620f2b4e31316b029fab3ac07b4a8851f635b85df4bd5b1b705c16",
+          "fe28423378460288679cda12a22924133ec6cdb686d4d802cb8ef7dd3d0848bd",
+          "446364cc48265a343662ce1a20542c141e410e3c513ae26d722584f8a7ecb166",
+          "29c1b8947e1b8cff31f7a4f8854ee20f5c2a91cb06b84c8e92047c24436efaff",
+          "751596c106c52608641b3e5775155b568617c985e6c4d26d92a3613d16248235",
+          "bc3d9db7b2dd45d8f91ed743a4f297cb3479228450bc5782357de9e4517d5b19",
+          "bd55cdf1885ed5d0d5fca1d4614d7008614e67299e2338842d51f94a1103d45f",
+          "e0df634b630403a4ec2d3018d23eee8fa871ba86694462cf68d4ef423ca5df5b"
+        ]
+      },
+      "recency": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 0,
+        "exact_pair_recall": 0.0,
+        "all_gold_pairs": false,
+        "reciprocal_rank": 0.0,
+        "evidence_session_recall": 0.0,
+        "retrieval_seconds": 0.0,
+        "source_ids": [
+          "9ed20b0f79681641e5022a56d8a948304d844a1bd63630683926d5cdcbddff2f",
+          "179d5e6f5f671968e9df576eb9d89d965a7a583f61a002da2fa19859b9eab70a",
+          "e490d335fc278c4d55de76a6a74dd82b1b512b023ed57951f29845672b13ff10",
+          "833aaea4eadc4c329ba1ca34cf6a955876234e6c6c9ee577cd99bfda495a198e",
+          "e8389ed9e744b9514a9db1ac12f00e55e4cdc4d6c49278a76608f5641857fcb7",
+          "b7a6170ccb596555ce3e63181d344780ea2fd7b02bbe703f6ed7a30bce48caa7",
+          "668580dc6e93c639066eb07a615bb5e810c9c396fe286e6ed296f5d2c503440c",
+          "0caba082f5736da42d520ce85a5a139f152343ecf91a4021c5438ae59ea24788",
+          "993b2ab95eff246683416fec23a90b992b9052bacea4b1db549efcaaaeab8031",
+          "9411faf97be4bcec0196882910efe4cce8c73758e99fee61bfdebc8d893e0374"
+        ]
+      }
+    }
+  },
+  {
+    "question_id": "75f70248",
+    "question_type": "single-session-preference",
+    "abstention": false,
+    "arms": {
+      "no_memory": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 0,
+        "gold_found": 0,
+        "exact_pair_recall": 0.0,
+        "all_gold_pairs": false,
+        "reciprocal_rank": 0.0,
+        "evidence_session_recall": null,
+        "retrieval_seconds": null,
+        "source_ids": []
+      },
+      "dense": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 0.25,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "38688cd279d5518dfc1ef8a9ae9d18a7593c1e492df723febf9a342dd125e999",
+          "f805adb560b564e0abfa0577684153a2a4cefe5e57ab10909cfe7fdf137a2fbe",
+          "d6701f99808d8680a95e2d5b4d19f804ddd708d6f57fae49b04a806173f62e7f",
+          "1acdbfd07c5a77d2b52d5b697591a8eb9f6f18a166b9155b3ba75769c573bc4d",
+          "fba1f74d7b2344834317de4930fe3fb41a3200e1f675c5f990f21befb0143280",
+          "3331257bbd25be23a2220d0d60cf015721ec41f687cd871ec12f2edbc1f0148a",
+          "1398efd9faaa7fe840e78db4772584add4a4d43b241876420cbe86d946931b9d",
+          "9c4f45740d17735ef239132f34632e45d3af69a67d35031795deba211416e568",
+          "992570790215f905113b25d1056515e6cd576c774a213a924b66979fe533e65f",
+          "8fb96518665af858b12545376cbdb7c0c5ce99c0ea4c0f4e6652b8b0c2d856f0"
+        ]
+      },
+      "akasha2": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "1acdbfd07c5a77d2b52d5b697591a8eb9f6f18a166b9155b3ba75769c573bc4d",
+          "fba1f74d7b2344834317de4930fe3fb41a3200e1f675c5f990f21befb0143280",
+          "f805adb560b564e0abfa0577684153a2a4cefe5e57ab10909cfe7fdf137a2fbe",
+          "38688cd279d5518dfc1ef8a9ae9d18a7593c1e492df723febf9a342dd125e999",
+          "d6701f99808d8680a95e2d5b4d19f804ddd708d6f57fae49b04a806173f62e7f",
+          "9c4f45740d17735ef239132f34632e45d3af69a67d35031795deba211416e568",
+          "cdcd53be6c66dfc00d52e0779bc2c76ca4935bd5902513ba92a8d8af3e4bec1b",
+          "6279b97cd376992fcc2a9a55b36cdde7658683cebf3b9c1f1752a47ef6435080",
+          "53640269db341e12b32c9fad12d902755e172a304de826b4063fd408af7dd6b0",
+          "49868168b6c968e3f5db6032e05c6170beb18ea5b3067d720eda3bca95655f51"
+        ]
+      },
+      "akasha2_graph_only": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 9,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "1acdbfd07c5a77d2b52d5b697591a8eb9f6f18a166b9155b3ba75769c573bc4d",
+          "6279b97cd376992fcc2a9a55b36cdde7658683cebf3b9c1f1752a47ef6435080",
+          "9c4f45740d17735ef239132f34632e45d3af69a67d35031795deba211416e568",
+          "cdcd53be6c66dfc00d52e0779bc2c76ca4935bd5902513ba92a8d8af3e4bec1b",
+          "53640269db341e12b32c9fad12d902755e172a304de826b4063fd408af7dd6b0",
+          "49868168b6c968e3f5db6032e05c6170beb18ea5b3067d720eda3bca95655f51",
+          "00d633159bd9fe0582442e3147552ee1f5f596cc2c329b79184ec9cc81811d45",
+          "139cbba5252536ce15139285058b5d0f9474794c77db42b90b0f9c56c32c42cf",
+          "dd792bd56959d4979309c4271e9b2e1bd8b85b237a77f19deb180f6376e2ac15"
+        ]
+      },
+      "bm25": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 9,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": 0.0008581839501857758,
+        "source_ids": [
+          "1acdbfd07c5a77d2b52d5b697591a8eb9f6f18a166b9155b3ba75769c573bc4d",
+          "6279b97cd376992fcc2a9a55b36cdde7658683cebf3b9c1f1752a47ef6435080",
+          "207d59e5a003886bc7f0d1d82bd1a813140939225dcb7499d9d1c780c1ba93f4",
+          "8a1f1b19996fb2d5002f12499344dde97099a5a39811be6354da2c9dcb0e9d0c",
+          "54bdbf652447c56a1b73f4c0cc0f90e0788eb2aafbbb343c64f78a1b3b4aad76",
+          "2670849e42a5f92f5cb20f2a73637149ad1bd46b1da1e42d349fcdda387db667",
+          "1e7ac909d746475e049409fa48c11ad75fd19f802c348aa10b880d161b645bce",
+          "9c4f45740d17735ef239132f34632e45d3af69a67d35031795deba211416e568",
+          "bf44f4e1ab98807754adc743200334e4256c3dc032d8f70e9d729cadd3268516"
+        ]
+      },
+      "rrf": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": 0.0022791046649217606,
+        "source_ids": [
+          "1acdbfd07c5a77d2b52d5b697591a8eb9f6f18a166b9155b3ba75769c573bc4d",
+          "9c4f45740d17735ef239132f34632e45d3af69a67d35031795deba211416e568",
+          "992570790215f905113b25d1056515e6cd576c774a213a924b66979fe533e65f",
+          "4d0989ff23814e77a7c23b4a280623b89682f80575301b32d16bbfa9f6ba388b",
+          "d6701f99808d8680a95e2d5b4d19f804ddd708d6f57fae49b04a806173f62e7f",
+          "54bdbf652447c56a1b73f4c0cc0f90e0788eb2aafbbb343c64f78a1b3b4aad76",
+          "53640269db341e12b32c9fad12d902755e172a304de826b4063fd408af7dd6b0",
+          "f805adb560b564e0abfa0577684153a2a4cefe5e57ab10909cfe7fdf137a2fbe",
+          "24f59891ca735bcd0ccdae362bd4c755ad35bc293c22b1af21ca6ebc18ebf629",
+          "87f5469f7b10148b0465fd74533a69b9cb889e888b94182bf634577ea7bb1acf"
+        ]
+      },
+      "recency": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 0,
+        "exact_pair_recall": 0.0,
+        "all_gold_pairs": false,
+        "reciprocal_rank": 0.0,
+        "evidence_session_recall": 0.0,
+        "retrieval_seconds": 0.0,
+        "source_ids": [
+          "af7dc7b88be91e703c21ab6d9271c71e502c306e43da60e662f64190c388f1f3",
+          "a2783135b4b1a613ae0934973ec796312387c84c61f7b0895958f23c28eb582c",
+          "f7b5976c9c26b106c14904cfe619f1acd8ef4468e5c1d2674746cd6031ee50d5",
+          "e0eb137fb2f081786860317c4076008a565683d8a49b9678f80494601d322db0",
+          "d811ae1e09a2ce9f1db4bb4c2d02ade409de24f9b11c2655c5555e056d9cc196",
+          "2f971f88f6af7b1f5ed7e9f2714a75de2565b94cfa0fa6312780235543678b6b",
+          "37a52e00711472278de3d6f27d5300388568082c175d7414407104ceb9a7c9be",
+          "f2c7a341c2e5598802c1c4adc0e6d18d79371b4b676fa80572dedbc0f76cbaab",
+          "a71ec964fa4ee508800e1bf8b2c188bdcd7b0fa012770305437c70e5cf1b69fc",
+          "44fa7aa4ba2e80036f7261c3827d0fe62e9960ae431ee690f9de94d5adce86d5"
+        ]
+      }
+    }
+  },
+  {
+    "question_id": "0100672e",
+    "question_type": "multi-session",
+    "abstention": false,
+    "arms": {
+      "no_memory": {
+        "gold_pairs": 2,
+        "retrieved_pairs": 0,
+        "gold_found": 0,
+        "exact_pair_recall": 0.0,
+        "all_gold_pairs": false,
+        "reciprocal_rank": 0.0,
+        "evidence_session_recall": null,
+        "retrieval_seconds": null,
+        "source_ids": []
+      },
+      "dense": {
+        "gold_pairs": 2,
+        "retrieved_pairs": 10,
+        "gold_found": 2,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 0.5,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "baf8fa30eac34d02bf09bcc983dd39c44706380ef53be664dc75c7b6a57e2ca4",
+          "85c4d3492e3496b6c4b30ef19183a03c3880702b472478f1c251e6cfd8354b67",
+          "bb02376b60ee11be63a4688d3f7bb74cd9dab18eccbfc6d46240f15f6b96a4c9",
+          "934594bb763fddb8502b0a900fe00acd639586386a14ed7b8ccbc93f41609741",
+          "ad4910f73c44bb4505e355cd8097c09e609f89dcca21ca1c872fbcb731f00f08",
+          "9077051660e98ed7ba084a2bb110cc263586e0734209f3b1aa70f6a5d6b6b136",
+          "3e14220cdbaedf12f4d1cc63997bd771f736e33d4e0bb07f9b07cbc908caeefc",
+          "456310990bd7287cda63a52bab7aec8504a9a2bc6396dd66d7017f68badeeedb",
+          "fef327196dbc823261a87aa24f826396ae0c924b00bf3f93bdce1cd8d9cf5602",
+          "642b4e262782f6c24f42ff7866659dca616eb926e4125d0dd0072579490d66ac"
+        ]
+      },
+      "akasha2": {
+        "gold_pairs": 2,
+        "retrieved_pairs": 9,
+        "gold_found": 2,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "85c4d3492e3496b6c4b30ef19183a03c3880702b472478f1c251e6cfd8354b67",
+          "bb02376b60ee11be63a4688d3f7bb74cd9dab18eccbfc6d46240f15f6b96a4c9",
+          "baf8fa30eac34d02bf09bcc983dd39c44706380ef53be664dc75c7b6a57e2ca4",
+          "ad4910f73c44bb4505e355cd8097c09e609f89dcca21ca1c872fbcb731f00f08",
+          "934594bb763fddb8502b0a900fe00acd639586386a14ed7b8ccbc93f41609741",
+          "7c3d67c7d11fbba62e268d35ca598ff5604b0568b0c816a7f18b43511438a91d",
+          "25b795c490579bccaf9b6d8bd873add2beaec05a60154799d913415382a44c29",
+          "18af8372830e5362a92b51ba92d96d5d1c16a82c790384eb13f4fc3c6b102edf",
+          "c2252caa58c94bce61e93cff355f4a2cb4f59bcb2df5c62eb3f030728a2456d2"
+        ]
+      },
+      "akasha2_graph_only": {
+        "gold_pairs": 2,
+        "retrieved_pairs": 9,
+        "gold_found": 2,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "bb02376b60ee11be63a4688d3f7bb74cd9dab18eccbfc6d46240f15f6b96a4c9",
+          "7c3d67c7d11fbba62e268d35ca598ff5604b0568b0c816a7f18b43511438a91d",
+          "85c4d3492e3496b6c4b30ef19183a03c3880702b472478f1c251e6cfd8354b67",
+          "18af8372830e5362a92b51ba92d96d5d1c16a82c790384eb13f4fc3c6b102edf",
+          "baf8fa30eac34d02bf09bcc983dd39c44706380ef53be664dc75c7b6a57e2ca4",
+          "c2252caa58c94bce61e93cff355f4a2cb4f59bcb2df5c62eb3f030728a2456d2",
+          "25b795c490579bccaf9b6d8bd873add2beaec05a60154799d913415382a44c29",
+          "642b4e262782f6c24f42ff7866659dca616eb926e4125d0dd0072579490d66ac",
+          "ad4910f73c44bb4505e355cd8097c09e609f89dcca21ca1c872fbcb731f00f08"
+        ]
+      },
+      "bm25": {
+        "gold_pairs": 2,
+        "retrieved_pairs": 10,
+        "gold_found": 2,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": 0.0006305966526269913,
+        "source_ids": [
+          "bb02376b60ee11be63a4688d3f7bb74cd9dab18eccbfc6d46240f15f6b96a4c9",
+          "85c4d3492e3496b6c4b30ef19183a03c3880702b472478f1c251e6cfd8354b67",
+          "934594bb763fddb8502b0a900fe00acd639586386a14ed7b8ccbc93f41609741",
+          "baf8fa30eac34d02bf09bcc983dd39c44706380ef53be664dc75c7b6a57e2ca4",
+          "b85a02bb2e9d2f1a848d4ba544dbe43aa27403a5413d413885f07eb5a851a6f5",
+          "3d478828227c050d22090b3a6cb23729ce4daea07f818614f9260c317c7df6e6",
+          "c2252caa58c94bce61e93cff355f4a2cb4f59bcb2df5c62eb3f030728a2456d2",
+          "66bfc1eb2e27e7fefb91fe593dbf7e93cc9e938a7c874f4f68e9a4541b6a8fe6",
+          "18af8372830e5362a92b51ba92d96d5d1c16a82c790384eb13f4fc3c6b102edf",
+          "fef327196dbc823261a87aa24f826396ae0c924b00bf3f93bdce1cd8d9cf5602"
+        ]
+      },
+      "rrf": {
+        "gold_pairs": 2,
+        "retrieved_pairs": 10,
+        "gold_found": 2,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": 0.0020917318761348724,
+        "source_ids": [
+          "bb02376b60ee11be63a4688d3f7bb74cd9dab18eccbfc6d46240f15f6b96a4c9",
+          "85c4d3492e3496b6c4b30ef19183a03c3880702b472478f1c251e6cfd8354b67",
+          "baf8fa30eac34d02bf09bcc983dd39c44706380ef53be664dc75c7b6a57e2ca4",
+          "934594bb763fddb8502b0a900fe00acd639586386a14ed7b8ccbc93f41609741",
+          "9077051660e98ed7ba084a2bb110cc263586e0734209f3b1aa70f6a5d6b6b136",
+          "c2252caa58c94bce61e93cff355f4a2cb4f59bcb2df5c62eb3f030728a2456d2",
+          "fef327196dbc823261a87aa24f826396ae0c924b00bf3f93bdce1cd8d9cf5602",
+          "3e14220cdbaedf12f4d1cc63997bd771f736e33d4e0bb07f9b07cbc908caeefc",
+          "456310990bd7287cda63a52bab7aec8504a9a2bc6396dd66d7017f68badeeedb",
+          "506ded866724fbf1b31e997d1ade06206a83ad9952cf2c1b1115f790ce746e6d"
+        ]
+      },
+      "recency": {
+        "gold_pairs": 2,
+        "retrieved_pairs": 10,
+        "gold_found": 0,
+        "exact_pair_recall": 0.0,
+        "all_gold_pairs": false,
+        "reciprocal_rank": 0.0,
+        "evidence_session_recall": 0.0,
+        "retrieval_seconds": 0.0,
+        "source_ids": [
+          "9fd13d00fcbae7d9e0d7b1146224adbd63fbe16e754bd20fc236a9a1b826b43d",
+          "41caca66b0e5a8472e6c28f8b78fb4c929a0244c346894e1538e7680031e05f7",
+          "dd3a309b16c3a34bd93e3b9997046cfecf0068178ba080826dd857fda53b04be",
+          "bdc5cacc6e58c6fff183374fc8c1b867b458d24648249633b8c79ba8ce5b2903",
+          "a87fde98cb5d5922ba428f214229d89d942b8722153ed05fb9f7675c2fea211d",
+          "891b3a7c3b5fddf74c4f855af5308459c5f8e327352908ec2d2a1c593ea7dd53",
+          "f9d736c4c57072f0829c6f5c48cecfbc7035829f4a61db2cdebf075f823167b5",
+          "aee496f212ea3e597582f2a03317a315c5603e13a33759863744e22bdc1e32f2",
+          "682e1a7e17bcff10ddda317028d59174a14fd4cdb34fa0a6abbb71aeb46e71f2",
+          "ff4decf529197d27ffb95a10f13d2328a81566bfcf7d39c8ca268fa12caa951e"
+        ]
+      }
+    }
+  },
+  {
+    "question_id": "gpt4_59149c77",
+    "question_type": "temporal-reasoning",
+    "abstention": false,
+    "arms": {
+      "no_memory": {
+        "gold_pairs": 2,
+        "retrieved_pairs": 0,
+        "gold_found": 0,
+        "exact_pair_recall": 0.0,
+        "all_gold_pairs": false,
+        "reciprocal_rank": 0.0,
+        "evidence_session_recall": null,
+        "retrieval_seconds": null,
+        "source_ids": []
+      },
+      "dense": {
+        "gold_pairs": 2,
+        "retrieved_pairs": 7,
+        "gold_found": 2,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "3be893c1598e7a5be4c7b747040ed4d22d87447807f90bea39d8adb1fb19eec6",
+          "d2ffe13136b90171cca9dc6bf8e8ec81dd7b31723356722b9a8d85b8c430ebc3",
+          "0f77efef26ba836d2e25b1be1234b2991023697b3d4a1a7b9fd7e1216d597c56",
+          "01f7c1c2d4ad373c5f6d836c60014ad5eb41961110672d8ed87e44401be80ec2",
+          "09feb29fb3dfc2ad1c0a4475665b9974e2e3c25d758f1c5cd3c54d8ff4031eff",
+          "ef8e2127e2a6baa5fe42ce90ccba6682cb8096cac66e5a55efe8a3d901e76d9b",
+          "9530fcf30193202ada952db600a0c7d7197ec6d412a938c5a0c7dd9582849d31"
+        ]
+      },
+      "akasha2": {
+        "gold_pairs": 2,
+        "retrieved_pairs": 7,
+        "gold_found": 2,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 0.3333333333333333,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "d2ffe13136b90171cca9dc6bf8e8ec81dd7b31723356722b9a8d85b8c430ebc3",
+          "09feb29fb3dfc2ad1c0a4475665b9974e2e3c25d758f1c5cd3c54d8ff4031eff",
+          "3be893c1598e7a5be4c7b747040ed4d22d87447807f90bea39d8adb1fb19eec6",
+          "0f77efef26ba836d2e25b1be1234b2991023697b3d4a1a7b9fd7e1216d597c56",
+          "01f7c1c2d4ad373c5f6d836c60014ad5eb41961110672d8ed87e44401be80ec2",
+          "f679f2d7a74d8203e87c6f0dad36b62b7ee90b9982725beb7a3dd0717097043a",
+          "c1682eacef5c18f983bdd6136bafdd33e5b048d499220af088cc7a5f738fb9ab"
+        ]
+      },
+      "akasha2_graph_only": {
+        "gold_pairs": 2,
+        "retrieved_pairs": 6,
+        "gold_found": 1,
+        "exact_pair_recall": 0.5,
+        "all_gold_pairs": false,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 0.5,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "3be893c1598e7a5be4c7b747040ed4d22d87447807f90bea39d8adb1fb19eec6",
+          "65d70c380eda39b16a34f6bc674bcaf5693a94703dda8da026a358e5c080cfec",
+          "f679f2d7a74d8203e87c6f0dad36b62b7ee90b9982725beb7a3dd0717097043a",
+          "7c21cf0b954d445c0fba8e0d5b6563b3b5dedcefbaaabc3a2602fa3d14aba583",
+          "c1682eacef5c18f983bdd6136bafdd33e5b048d499220af088cc7a5f738fb9ab",
+          "7b3d6928c51b87bc7bf3a236a4ec747bd97567f0d54247d57222151fd60ca914"
+        ]
+      },
+      "bm25": {
+        "gold_pairs": 2,
+        "retrieved_pairs": 7,
+        "gold_found": 2,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": 0.0010767169296741486,
+        "source_ids": [
+          "3be893c1598e7a5be4c7b747040ed4d22d87447807f90bea39d8adb1fb19eec6",
+          "d2ffe13136b90171cca9dc6bf8e8ec81dd7b31723356722b9a8d85b8c430ebc3",
+          "01f7c1c2d4ad373c5f6d836c60014ad5eb41961110672d8ed87e44401be80ec2",
+          "09feb29fb3dfc2ad1c0a4475665b9974e2e3c25d758f1c5cd3c54d8ff4031eff",
+          "131405d9a69133d690f86b67757b5f8a1b8b85f9c86c1f34112b23a5d41c4f33",
+          "ee3b5e37ff608a8fe8e3b1448d5dd3266c6a8c8f0b2c6193ccd5f2c62fad4a76",
+          "9530fcf30193202ada952db600a0c7d7197ec6d412a938c5a0c7dd9582849d31"
+        ]
+      },
+      "rrf": {
+        "gold_pairs": 2,
+        "retrieved_pairs": 7,
+        "gold_found": 2,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": 0.002542499452829361,
+        "source_ids": [
+          "3be893c1598e7a5be4c7b747040ed4d22d87447807f90bea39d8adb1fb19eec6",
+          "d2ffe13136b90171cca9dc6bf8e8ec81dd7b31723356722b9a8d85b8c430ebc3",
+          "01f7c1c2d4ad373c5f6d836c60014ad5eb41961110672d8ed87e44401be80ec2",
+          "09feb29fb3dfc2ad1c0a4475665b9974e2e3c25d758f1c5cd3c54d8ff4031eff",
+          "9530fcf30193202ada952db600a0c7d7197ec6d412a938c5a0c7dd9582849d31",
+          "131405d9a69133d690f86b67757b5f8a1b8b85f9c86c1f34112b23a5d41c4f33",
+          "0f77efef26ba836d2e25b1be1234b2991023697b3d4a1a7b9fd7e1216d597c56"
+        ]
+      },
+      "recency": {
+        "gold_pairs": 2,
+        "retrieved_pairs": 10,
+        "gold_found": 0,
+        "exact_pair_recall": 0.0,
+        "all_gold_pairs": false,
+        "reciprocal_rank": 0.0,
+        "evidence_session_recall": 0.0,
+        "retrieval_seconds": 0.0,
+        "source_ids": [
+          "efe6d77ddff2da191f8c8999e0602967758d0c2f77e52f50c3d585d2e7e7c57a",
+          "055777789c79523c4ce2033c0845a26d457ec0589d6af239bcf2173935b69202",
+          "b042c6a48a412e1cbdb44789f9ca11797e4ee792a7007956d48398615d6f49ab",
+          "bda0023e54c174ee6f3d80abbdcb5298707db27344172c271051a84917b3e33b",
+          "4666a9bf440521f2eb339bad9b81a6a1243f3d1b240a37bb26698bbc3a492b1e",
+          "0c3933c4ea68cc3babb929d2abad8c227abeb0364d05f9a36af24252dce79254",
+          "be60463c45d142e9829fb4633431ace8ef35716ca91831102a4b88b740834743",
+          "c9fe0fa9bd594a9eddb1f2f82230f58e803ca9d062c1fb43ef9567b70416f3cf",
+          "6186333e2ac29de34eb0cb7f0ee1e84fc6d528ff7d9eba53cae0aef45944cbcd",
+          "c8c754c9dd54759848da79acbf2bdeaf6d2cb091472fcf073092489836d1216c"
+        ]
+      }
+    }
+  },
+  {
+    "question_id": "f523d9fe",
+    "question_type": "single-session-assistant",
+    "abstention": false,
+    "arms": {
+      "no_memory": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 0,
+        "gold_found": 0,
+        "exact_pair_recall": 0.0,
+        "all_gold_pairs": false,
+        "reciprocal_rank": 0.0,
+        "evidence_session_recall": null,
+        "retrieval_seconds": null,
+        "source_ids": []
+      },
+      "dense": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "f33cdd98e18681b31f93b4a4692d3eb11558423e9d6978823d07dc83af7f629d",
+          "d0ba6403bb8b4f014101150f00f4f84a927e4231d60000a8f28ad4785f797af4",
+          "9bd44d2d0d9c237d45e394950193f8b32f77906751faad8a79cd938024d93862",
+          "4e8fb0f7671975af5a3050b97929af4bd8f3bea3d8d5596c5d352c2303bd8ff9",
+          "6438142429e5c399b0a555b95ee72b218e98bd07543777590a3413700ff35b0c",
+          "605ddfe0d33e51bc573ed70c55ea3ebf599822e91ceb7516ef8b3f27203cdcb8",
+          "8a7d2c169af45b582b7144fed7685bc342396126a6e2a58f14651561bd416aed",
+          "83ca5bddc969ee25e74f8daca9c70c521fee6e44a78882d296de7244d092205f",
+          "fdde465f1179e0954836ee6407cb39fa7e000ac722c68f936ede224fda2c19c9",
+          "475263c90877d8610bf3ff75fd8027ac019cce1662d45907441e7c01c6f36e01"
+        ]
+      },
+      "akasha2": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "f33cdd98e18681b31f93b4a4692d3eb11558423e9d6978823d07dc83af7f629d",
+          "d0ba6403bb8b4f014101150f00f4f84a927e4231d60000a8f28ad4785f797af4",
+          "9bd44d2d0d9c237d45e394950193f8b32f77906751faad8a79cd938024d93862",
+          "6438142429e5c399b0a555b95ee72b218e98bd07543777590a3413700ff35b0c",
+          "4e8fb0f7671975af5a3050b97929af4bd8f3bea3d8d5596c5d352c2303bd8ff9",
+          "fdde465f1179e0954836ee6407cb39fa7e000ac722c68f936ede224fda2c19c9",
+          "e1f3f8fc87a4b2b8c116cc4a401c9b379d11b10e50c53faf51dd015dba63526e",
+          "8a7d2c169af45b582b7144fed7685bc342396126a6e2a58f14651561bd416aed",
+          "605ddfe0d33e51bc573ed70c55ea3ebf599822e91ceb7516ef8b3f27203cdcb8",
+          "49e3c107dea0f6f3bb1634d46e17e9b3d72b70ff03975a733ab3d51e56b584d3"
+        ]
+      },
+      "akasha2_graph_only": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "f33cdd98e18681b31f93b4a4692d3eb11558423e9d6978823d07dc83af7f629d",
+          "4e8fb0f7671975af5a3050b97929af4bd8f3bea3d8d5596c5d352c2303bd8ff9",
+          "fdde465f1179e0954836ee6407cb39fa7e000ac722c68f936ede224fda2c19c9",
+          "605ddfe0d33e51bc573ed70c55ea3ebf599822e91ceb7516ef8b3f27203cdcb8",
+          "d0ba6403bb8b4f014101150f00f4f84a927e4231d60000a8f28ad4785f797af4",
+          "8a7d2c169af45b582b7144fed7685bc342396126a6e2a58f14651561bd416aed",
+          "9bd44d2d0d9c237d45e394950193f8b32f77906751faad8a79cd938024d93862",
+          "e1f3f8fc87a4b2b8c116cc4a401c9b379d11b10e50c53faf51dd015dba63526e",
+          "49e3c107dea0f6f3bb1634d46e17e9b3d72b70ff03975a733ab3d51e56b584d3",
+          "9092ea6ce103dee83c0c3b43d89a8acf4ecf629207e32ab7c981d2ea5c3a283c"
+        ]
+      },
+      "bm25": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": 0.0018827114254236221,
+        "source_ids": [
+          "f33cdd98e18681b31f93b4a4692d3eb11558423e9d6978823d07dc83af7f629d",
+          "605ddfe0d33e51bc573ed70c55ea3ebf599822e91ceb7516ef8b3f27203cdcb8",
+          "1c5239c4e03c86d020b2af02605d3059565bf18ac6c309e7fab707bfd89b14cb",
+          "4e8fb0f7671975af5a3050b97929af4bd8f3bea3d8d5596c5d352c2303bd8ff9",
+          "8a7d2c169af45b582b7144fed7685bc342396126a6e2a58f14651561bd416aed",
+          "3f2a32e377dc0fe00d3b7dc9315748689fe57b6666203540023202505286a1c8",
+          "49e3c107dea0f6f3bb1634d46e17e9b3d72b70ff03975a733ab3d51e56b584d3",
+          "a20b6eec542772db9c0c2f5d9df73f3faa2d5ff6267446d2aebca76e194529cf",
+          "c4402ae212dcf015fe123398b648cce5ab40b650ed7c4417e70d2a4242728b39",
+          "3eaeda37c5bae1175ac2dfea1528c855b95aa64ed0453f280747df5c02220618"
+        ]
+      },
+      "rrf": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": 0.0033479034900665283,
+        "source_ids": [
+          "f33cdd98e18681b31f93b4a4692d3eb11558423e9d6978823d07dc83af7f629d",
+          "605ddfe0d33e51bc573ed70c55ea3ebf599822e91ceb7516ef8b3f27203cdcb8",
+          "4e8fb0f7671975af5a3050b97929af4bd8f3bea3d8d5596c5d352c2303bd8ff9",
+          "8a7d2c169af45b582b7144fed7685bc342396126a6e2a58f14651561bd416aed",
+          "1c5239c4e03c86d020b2af02605d3059565bf18ac6c309e7fab707bfd89b14cb",
+          "6438142429e5c399b0a555b95ee72b218e98bd07543777590a3413700ff35b0c",
+          "a20b6eec542772db9c0c2f5d9df73f3faa2d5ff6267446d2aebca76e194529cf",
+          "9bd44d2d0d9c237d45e394950193f8b32f77906751faad8a79cd938024d93862",
+          "d0ba6403bb8b4f014101150f00f4f84a927e4231d60000a8f28ad4785f797af4",
+          "3f2a32e377dc0fe00d3b7dc9315748689fe57b6666203540023202505286a1c8"
+        ]
+      },
+      "recency": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 0,
+        "exact_pair_recall": 0.0,
+        "all_gold_pairs": false,
+        "reciprocal_rank": 0.0,
+        "evidence_session_recall": 0.0,
+        "retrieval_seconds": 0.0,
+        "source_ids": [
+          "e51e90a75ae39e2d7d29ee3b728d73b0b01bb267068b24fd7fa892d9acf01723",
+          "d88b81e2e7ff178ca8d69b0be80dd1e667aa9ec7c1a2afb11b4c6c41b44a4d89",
+          "306f29ba2062509fe9562704985957afcdcc1e19d991b8bf73f88dbd1a148839",
+          "10dbf38f89cd7ba7119ec4614ec07fd144b3aeeaa91e87417075f7cd1cd91846",
+          "a14d13900808de8a7242a0af85d8e0388e7fc815bd96b01cd2eb34f49058b690",
+          "41d588bd168a701694d0cccb8e695cd80c21265febc1b6e9e47b6687e5c99e50",
+          "ac6a414329f4b5b7d0cbf0628f825daaff2ca40009b1ddf8b4e6c04bcd895108",
+          "d024a7e1aa4b2186f92e93298856aa85128842bd9195e9d18a385b7b636dd71f",
+          "d67c09acbc5c54049ccda78e448fce1daedf3236ec3827cfe63fffd1032a21e5",
+          "a4846200cc96408d4beeb3b5ba6c2dacc323e57a6a77cce1676cf53353a4c112"
+        ]
+      }
+    }
+  },
+  {
+    "question_id": "54026fce",
+    "question_type": "single-session-preference",
+    "abstention": false,
+    "arms": {
+      "no_memory": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 0,
+        "gold_found": 0,
+        "exact_pair_recall": 0.0,
+        "all_gold_pairs": false,
+        "reciprocal_rank": 0.0,
+        "evidence_session_recall": null,
+        "retrieval_seconds": null,
+        "source_ids": []
+      },
+      "dense": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 9,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "6a8995a7e8fe5b8408ae48e7bb8e2e0e962e23968b6e49725aa9690346de9630",
+          "7e7851e396d7e90b7dd831a9424b0ad572197e75874844c40e691cbf3906c946",
+          "0b25f6d89e274f97c5a2fbca5d04a6cd460974ad6d4b7100aeb34e4fe5ed6461",
+          "4c545edfbecc72f03a13739683e5f9f31785ef783faece0d6fd7b3cc70f9dcd1",
+          "26a4b87b59d8647b6be37ecbf5b0b7d1a24aa78c1a0466c10992deb1f6c17de3",
+          "fd1101f14645c24afb11607c0b892579904c4af5b4952aa7bb5a55b06bb7a2f9",
+          "38cb959f9815758b4c1a3f3e4eee3ac516a7c97864e8c775c4ef10b6d2b4fd68",
+          "7a88327cec9267d1cfd341602985f991ac0ef5ff179225ff7414df10cabf1ad8",
+          "0dc14631d023bd36e5bd73f0483c87ec1d09b82ebb8acfa1dc64c3fb6cc9ae94"
+        ]
+      },
+      "akasha2": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 0.5,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "7e7851e396d7e90b7dd831a9424b0ad572197e75874844c40e691cbf3906c946",
+          "6a8995a7e8fe5b8408ae48e7bb8e2e0e962e23968b6e49725aa9690346de9630",
+          "4c545edfbecc72f03a13739683e5f9f31785ef783faece0d6fd7b3cc70f9dcd1",
+          "26a4b87b59d8647b6be37ecbf5b0b7d1a24aa78c1a0466c10992deb1f6c17de3",
+          "0b25f6d89e274f97c5a2fbca5d04a6cd460974ad6d4b7100aeb34e4fe5ed6461",
+          "cd665afa3384e73e098b196efc40fa9aad5c9c3ca24d1de953141434a1f72d81",
+          "ac7da23e6ba8512cdb853134477f385eacc3e149e4de79a189836776a0f9977c",
+          "38cb959f9815758b4c1a3f3e4eee3ac516a7c97864e8c775c4ef10b6d2b4fd68",
+          "f899f7bcb4dc1b5e3dc38713b5dcb716ebfc8e9ea5e4aa54cecd5a0dbe8769a9",
+          "d0f1c44fc80afab0c1cccfb903cfa3c720abe3215363d721349edeb2cd54e12f"
+        ]
+      },
+      "akasha2_graph_only": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "6a8995a7e8fe5b8408ae48e7bb8e2e0e962e23968b6e49725aa9690346de9630",
+          "0b25f6d89e274f97c5a2fbca5d04a6cd460974ad6d4b7100aeb34e4fe5ed6461",
+          "7e7851e396d7e90b7dd831a9424b0ad572197e75874844c40e691cbf3906c946",
+          "38cb959f9815758b4c1a3f3e4eee3ac516a7c97864e8c775c4ef10b6d2b4fd68",
+          "f899f7bcb4dc1b5e3dc38713b5dcb716ebfc8e9ea5e4aa54cecd5a0dbe8769a9",
+          "cd665afa3384e73e098b196efc40fa9aad5c9c3ca24d1de953141434a1f72d81",
+          "26a4b87b59d8647b6be37ecbf5b0b7d1a24aa78c1a0466c10992deb1f6c17de3",
+          "d0f1c44fc80afab0c1cccfb903cfa3c720abe3215363d721349edeb2cd54e12f",
+          "ac7da23e6ba8512cdb853134477f385eacc3e149e4de79a189836776a0f9977c",
+          "4c545edfbecc72f03a13739683e5f9f31785ef783faece0d6fd7b3cc70f9dcd1"
+        ]
+      },
+      "bm25": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 0.5,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": 0.000789223238825798,
+        "source_ids": [
+          "0b25f6d89e274f97c5a2fbca5d04a6cd460974ad6d4b7100aeb34e4fe5ed6461",
+          "6a8995a7e8fe5b8408ae48e7bb8e2e0e962e23968b6e49725aa9690346de9630",
+          "2aed1301609d92f6706ca80396e64804e09c505362b35ed69de28af2a94e6185",
+          "67439bf2700244b5afd5f58b2133ef7259653c6f900a97175b0d594f339ebdea",
+          "74663a6e1d7a5ec9907013dc7a78e7b52f0e5014b684926428d478870f1756bb",
+          "09e015d9fb67e698d83a6b4bd545b45d7e205ada21fe70e907927e79e4f67d10",
+          "26a4b87b59d8647b6be37ecbf5b0b7d1a24aa78c1a0466c10992deb1f6c17de3",
+          "8e7810d330b5f5d54332c415524711ad10082db4b0f007f70251cb19975a58a4",
+          "ac7da23e6ba8512cdb853134477f385eacc3e149e4de79a189836776a0f9977c",
+          "ec4b8d3f9171ec0f5425580e2d5eeaadd61dcc828771cba83c3d24de05205312"
+        ]
+      },
+      "rrf": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": 0.0022622179239988327,
+        "source_ids": [
+          "6a8995a7e8fe5b8408ae48e7bb8e2e0e962e23968b6e49725aa9690346de9630",
+          "0b25f6d89e274f97c5a2fbca5d04a6cd460974ad6d4b7100aeb34e4fe5ed6461",
+          "26a4b87b59d8647b6be37ecbf5b0b7d1a24aa78c1a0466c10992deb1f6c17de3",
+          "236b7ef51b50158e73228edcc9ac4532d8d5c9fe094d0e93d194421d8a4c412b",
+          "4c545edfbecc72f03a13739683e5f9f31785ef783faece0d6fd7b3cc70f9dcd1",
+          "ac7da23e6ba8512cdb853134477f385eacc3e149e4de79a189836776a0f9977c",
+          "fd1101f14645c24afb11607c0b892579904c4af5b4952aa7bb5a55b06bb7a2f9",
+          "ec4b8d3f9171ec0f5425580e2d5eeaadd61dcc828771cba83c3d24de05205312",
+          "67439bf2700244b5afd5f58b2133ef7259653c6f900a97175b0d594f339ebdea",
+          "d821a7a9a8ccd28198eb7b3efaf1111ce683580f27797bd39c03bfc4bb40d8fe"
+        ]
+      },
+      "recency": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 0,
+        "exact_pair_recall": 0.0,
+        "all_gold_pairs": false,
+        "reciprocal_rank": 0.0,
+        "evidence_session_recall": 0.0,
+        "retrieval_seconds": 0.0,
+        "source_ids": [
+          "10969e025edcfbd3b280acf821461297137bf10900295097cb31e3e5181b2966",
+          "1a9dc45b4994ad63f54852fb5ead7c3fbef174dfda2a44ba7d784cbf97954863",
+          "d5c86dd4345d6f1e249079016a3a7c90e4efb5a5ae50c853fdd42db2d5fa9e41",
+          "280cf58b67ad2f2a07a2f4a3efd1a21e0cbe6279d5dc89d7b7bddfdadb54b803",
+          "c31318e47ce56e92b4c8573a2234876e7e72e82757205a36d6f677443657b9f2",
+          "d36bc75755ce86bcad9f3660f462f8b8aba4a67c98c5f651c55e70ec32fe18d7",
+          "d0ce52e1b39ec06a0812d9d5fcee13c19754fd662c1bf4ab80258280392e749f",
+          "03c93a89b0bb40e8de34e354358c0d1eace8e3776473ebb404de42c44947e65a",
+          "25b9407423cf43d6c5f05d2dd68975e74871433e77a686d662ba838d3d83a588",
+          "e28b7b3825f602825ae1b094f7d66bfc19d218525746d2903dc41a2f87fb2549"
+        ]
+      }
+    }
+  },
+  {
+    "question_id": "6071bd76",
+    "question_type": "knowledge-update",
+    "abstention": false,
+    "arms": {
+      "no_memory": {
+        "gold_pairs": 2,
+        "retrieved_pairs": 0,
+        "gold_found": 0,
+        "exact_pair_recall": 0.0,
+        "all_gold_pairs": false,
+        "reciprocal_rank": 0.0,
+        "evidence_session_recall": null,
+        "retrieval_seconds": null,
+        "source_ids": []
+      },
+      "dense": {
+        "gold_pairs": 2,
+        "retrieved_pairs": 10,
+        "gold_found": 2,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "7f584e0b90838f1f52bd51722b838bdd481a6e0e5eccbbd783e4706ec52cec56",
+          "88768403625e8bcf0efd2c35f23b89019aeffb386dd67e3de4f55f9034f0435f",
+          "88fe164f1a2a2960cbd875f007016b23dbde3cb43b3630d86ae6df7b218a0606",
+          "fa61ba47365dd7d42d821cb310f3c837bfc74bf6ec3cd311cce268d2c3975d05",
+          "b89b43deede638b7f0506a11c55be95a6fde0375bb39d1d34c10aa391a6ddf34",
+          "78a99174ee5fe0cdfd8eab646f46a8308370eeced0a55d951a42a78652d4b2a4",
+          "ac3521ae10736460255c2e6e786b9eb8504a2d965f8accaabfe46081c93f1bfb",
+          "329e42d567b7db6fd7d218bb4b336a8d4351ff96f8e0c9d7c417ca727cbce790",
+          "649ac2fc0c47e986a95338718ef2dd37fd1658e64e2de724037dc0f503b36613",
+          "6919ec17f68ee7c8d62cc4cbca130622ce67ab8c402ff133f7d09226a50fb013"
+        ]
+      },
+      "akasha2": {
+        "gold_pairs": 2,
+        "retrieved_pairs": 10,
+        "gold_found": 2,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 0.5,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "b89b43deede638b7f0506a11c55be95a6fde0375bb39d1d34c10aa391a6ddf34",
+          "88768403625e8bcf0efd2c35f23b89019aeffb386dd67e3de4f55f9034f0435f",
+          "fa61ba47365dd7d42d821cb310f3c837bfc74bf6ec3cd311cce268d2c3975d05",
+          "88fe164f1a2a2960cbd875f007016b23dbde3cb43b3630d86ae6df7b218a0606",
+          "7f584e0b90838f1f52bd51722b838bdd481a6e0e5eccbbd783e4706ec52cec56",
+          "1a3a14360deb9ddcfe53585df6a476977cd471f0e2a0a8311e43b2490bcf8c27",
+          "18c7e9c89f37f2b9279b6eccc9973ac47faa3e480bb01975cc7f8295cbd6b6cb",
+          "b447e2f970c9cdd0bbc4a43f1a75075b6d5ff88acba9d17534e6fc75e518682b",
+          "649ac2fc0c47e986a95338718ef2dd37fd1658e64e2de724037dc0f503b36613",
+          "e03f97e4d5be6b4fd4e41da023fc07426de2c929275aa5bf5dbb322b06f8f405"
+        ]
+      },
+      "akasha2_graph_only": {
+        "gold_pairs": 2,
+        "retrieved_pairs": 10,
+        "gold_found": 2,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "7f584e0b90838f1f52bd51722b838bdd481a6e0e5eccbbd783e4706ec52cec56",
+          "88768403625e8bcf0efd2c35f23b89019aeffb386dd67e3de4f55f9034f0435f",
+          "b447e2f970c9cdd0bbc4a43f1a75075b6d5ff88acba9d17534e6fc75e518682b",
+          "1a3a14360deb9ddcfe53585df6a476977cd471f0e2a0a8311e43b2490bcf8c27",
+          "e03f97e4d5be6b4fd4e41da023fc07426de2c929275aa5bf5dbb322b06f8f405",
+          "b89b43deede638b7f0506a11c55be95a6fde0375bb39d1d34c10aa391a6ddf34",
+          "18c7e9c89f37f2b9279b6eccc9973ac47faa3e480bb01975cc7f8295cbd6b6cb",
+          "649ac2fc0c47e986a95338718ef2dd37fd1658e64e2de724037dc0f503b36613",
+          "d9d17736c8b632feb67d844f7f2b3d95396f258c27332048a5aff7eead961de7",
+          "78a99174ee5fe0cdfd8eab646f46a8308370eeced0a55d951a42a78652d4b2a4"
+        ]
+      },
+      "bm25": {
+        "gold_pairs": 2,
+        "retrieved_pairs": 10,
+        "gold_found": 2,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 0.5,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": 0.001207323744893074,
+        "source_ids": [
+          "b89b43deede638b7f0506a11c55be95a6fde0375bb39d1d34c10aa391a6ddf34",
+          "88768403625e8bcf0efd2c35f23b89019aeffb386dd67e3de4f55f9034f0435f",
+          "7f584e0b90838f1f52bd51722b838bdd481a6e0e5eccbbd783e4706ec52cec56",
+          "fa61ba47365dd7d42d821cb310f3c837bfc74bf6ec3cd311cce268d2c3975d05",
+          "88fe164f1a2a2960cbd875f007016b23dbde3cb43b3630d86ae6df7b218a0606",
+          "719777334565ad69aaac273da577dce62994e92519fa0d55f3cc64bb0752a414",
+          "cfc0b14eb3f4217c0abf732ece927b3e43db2d316c29e8483e628278493117f4",
+          "76375d033b3dab30017ae82c3ca8f7d08b6580e56c92e14a98c018eef46e9c3f",
+          "329e42d567b7db6fd7d218bb4b336a8d4351ff96f8e0c9d7c417ca727cbce790",
+          "f1956d485a45e610c031384971e2fe2d0c8bdad6861b29856cca08ce1f6e2f53"
+        ]
+      },
+      "rrf": {
+        "gold_pairs": 2,
+        "retrieved_pairs": 10,
+        "gold_found": 2,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": 0.00272267684340477,
+        "source_ids": [
+          "7f584e0b90838f1f52bd51722b838bdd481a6e0e5eccbbd783e4706ec52cec56",
+          "88768403625e8bcf0efd2c35f23b89019aeffb386dd67e3de4f55f9034f0435f",
+          "b89b43deede638b7f0506a11c55be95a6fde0375bb39d1d34c10aa391a6ddf34",
+          "88fe164f1a2a2960cbd875f007016b23dbde3cb43b3630d86ae6df7b218a0606",
+          "fa61ba47365dd7d42d821cb310f3c837bfc74bf6ec3cd311cce268d2c3975d05",
+          "329e42d567b7db6fd7d218bb4b336a8d4351ff96f8e0c9d7c417ca727cbce790",
+          "78a99174ee5fe0cdfd8eab646f46a8308370eeced0a55d951a42a78652d4b2a4",
+          "ac3521ae10736460255c2e6e786b9eb8504a2d965f8accaabfe46081c93f1bfb",
+          "719777334565ad69aaac273da577dce62994e92519fa0d55f3cc64bb0752a414",
+          "649ac2fc0c47e986a95338718ef2dd37fd1658e64e2de724037dc0f503b36613"
+        ]
+      },
+      "recency": {
+        "gold_pairs": 2,
+        "retrieved_pairs": 10,
+        "gold_found": 0,
+        "exact_pair_recall": 0.0,
+        "all_gold_pairs": false,
+        "reciprocal_rank": 0.0,
+        "evidence_session_recall": 0.0,
+        "retrieval_seconds": 0.0,
+        "source_ids": [
+          "6921eaeb770bc5abac07fd004b2b6341a4bb8f9f52d2c7cf538209e4119a4ee9",
+          "f1e04f6b1230f305b8e4e9d7cd1750d13f0dd08cfd5d4e17a056a0388db8dac3",
+          "6a2149628ac5652aff47641dbf58349cf802b397adf055ee5fadaa307405c78a",
+          "1ec26bb991d60cfb6eb377754be65200b1cf0237fc6e4573b4c1b3c13241dea8",
+          "f746bf00ab6c094cf3e14588b612e0acfadd071a2a84e30784d0366dd3715969",
+          "7b19c95d9dcdd36b684eb86bd90607f9b1f0c755f4045142b67ab97ae5189dea",
+          "420729df079732ca6b1b5b63b4a7a7af6fd28ce451d6a3ea75736a6f1c1fece5",
+          "e0756adf0de52a4c0b754f61ca9c71026047627718c0b011835093fddd93872b",
+          "f7fdd9b9533ada83a3255a99c747bb6b09ed23f6eeccc2db839a4814373af472",
+          "19b85c7f88af020847571a4d77292ad43a067ce9520cca4151d65d8b3104c855"
+        ]
+      }
+    }
+  },
+  {
+    "question_id": "8077ef71",
+    "question_type": "temporal-reasoning",
+    "abstention": false,
+    "arms": {
+      "no_memory": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 0,
+        "gold_found": 0,
+        "exact_pair_recall": 0.0,
+        "all_gold_pairs": false,
+        "reciprocal_rank": 0.0,
+        "evidence_session_recall": null,
+        "retrieval_seconds": null,
+        "source_ids": []
+      },
+      "dense": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "645bbb8778499e32a5b3bb126ff89f84d66b3d756df282d884fc3c69d45177d8",
+          "e8a03b8932d7f18a421ea0ee9540b2bd736023d834341a24ee7e5c5f45ff891c",
+          "a3c4108ebd4fa41f3929c49fe8394284d1bb61e729e8d4e2a4f5279ac2f82b51",
+          "8598d37eadac99a299dd614bc924a6bb68f5aa7c4674d5b438aba25fb7d455e2",
+          "eebe1321b19f6699bf4c27fdef95a2ecd1e423d5fffb4c5312f8f2236dc290ea",
+          "f8aecd41d25281dad5bda4a2dc500c0e28028a12b64747a61c771471765fb53d",
+          "04cab9c19e97238bfd11f62d9e6ef080743d56d90ac25f72d34ced89b4f8d960",
+          "05568e4f1195a416a583aa62102d0a728e61f80028b17e2415d26c9c66b388fd",
+          "8ae49bfb2d76c87a73dc5714779351a3fdcd02d48bd6207fbbb557e4b570b713",
+          "7314e88d885dad42cca4dcbf05fd8ade096d4205d2476c31415187fd409ebf5a"
+        ]
+      },
+      "akasha2": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 9,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 0.3333333333333333,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "a3c4108ebd4fa41f3929c49fe8394284d1bb61e729e8d4e2a4f5279ac2f82b51",
+          "eebe1321b19f6699bf4c27fdef95a2ecd1e423d5fffb4c5312f8f2236dc290ea",
+          "645bbb8778499e32a5b3bb126ff89f84d66b3d756df282d884fc3c69d45177d8",
+          "e8a03b8932d7f18a421ea0ee9540b2bd736023d834341a24ee7e5c5f45ff891c",
+          "8598d37eadac99a299dd614bc924a6bb68f5aa7c4674d5b438aba25fb7d455e2",
+          "3af548639f33149631de11903f98011d8f0cfcbdda74912d74bdea4074885ad4",
+          "d5a3ee7d504fda260b8ebb6ea3232cdefae15e66c839160076984987118beffb",
+          "6a8d4df7984986bbb9f7053d5a0fba91870139843b6de3485360bf851da3f762",
+          "387b81d2f6f8b09150b20b5c97b70fe1075c6835124dce7913ed5dbed3cab411"
+        ]
+      },
+      "akasha2_graph_only": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 7,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": null,
+        "source_ids": [
+          "645bbb8778499e32a5b3bb126ff89f84d66b3d756df282d884fc3c69d45177d8",
+          "e8a03b8932d7f18a421ea0ee9540b2bd736023d834341a24ee7e5c5f45ff891c",
+          "6a8d4df7984986bbb9f7053d5a0fba91870139843b6de3485360bf851da3f762",
+          "8598d37eadac99a299dd614bc924a6bb68f5aa7c4674d5b438aba25fb7d455e2",
+          "d5a3ee7d504fda260b8ebb6ea3232cdefae15e66c839160076984987118beffb",
+          "387b81d2f6f8b09150b20b5c97b70fe1075c6835124dce7913ed5dbed3cab411",
+          "3af548639f33149631de11903f98011d8f0cfcbdda74912d74bdea4074885ad4"
+        ]
+      },
+      "bm25": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": 0.0005914829671382904,
+        "source_ids": [
+          "645bbb8778499e32a5b3bb126ff89f84d66b3d756df282d884fc3c69d45177d8",
+          "e8a03b8932d7f18a421ea0ee9540b2bd736023d834341a24ee7e5c5f45ff891c",
+          "3af548639f33149631de11903f98011d8f0cfcbdda74912d74bdea4074885ad4",
+          "387b81d2f6f8b09150b20b5c97b70fe1075c6835124dce7913ed5dbed3cab411",
+          "4d1088dfb05cab83ec2d3a9a301c4be257d601dee6c963fad25f6d22f2c0e1a7",
+          "8598d37eadac99a299dd614bc924a6bb68f5aa7c4674d5b438aba25fb7d455e2",
+          "e6e1d2bc199885704dc29540a466754598e5694fe8325a5e8c6f1841a7409d8a",
+          "67c8d43356eb9abdc867a3b5b6b360367297fa139949d301e0c94a028bdaaadb",
+          "7b1b21d665b12db09d4f0b7f3ace2a85bd796fe95ae2687aafcb8ea8d5398f95",
+          "ffa418064a37d4dfe2731cde847ea1f8583da6c53b4bafa0411680098c6d472a"
+        ]
+      },
+      "rrf": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 1,
+        "exact_pair_recall": 1.0,
+        "all_gold_pairs": true,
+        "reciprocal_rank": 1.0,
+        "evidence_session_recall": 1.0,
+        "retrieval_seconds": 0.002217888832092285,
+        "source_ids": [
+          "645bbb8778499e32a5b3bb126ff89f84d66b3d756df282d884fc3c69d45177d8",
+          "e8a03b8932d7f18a421ea0ee9540b2bd736023d834341a24ee7e5c5f45ff891c",
+          "8598d37eadac99a299dd614bc924a6bb68f5aa7c4674d5b438aba25fb7d455e2",
+          "3af548639f33149631de11903f98011d8f0cfcbdda74912d74bdea4074885ad4",
+          "04cab9c19e97238bfd11f62d9e6ef080743d56d90ac25f72d34ced89b4f8d960",
+          "7b1b21d665b12db09d4f0b7f3ace2a85bd796fe95ae2687aafcb8ea8d5398f95",
+          "f8aecd41d25281dad5bda4a2dc500c0e28028a12b64747a61c771471765fb53d",
+          "05568e4f1195a416a583aa62102d0a728e61f80028b17e2415d26c9c66b388fd",
+          "cebd2d2b6421a15d42acb0bfee90e379817c01c300bdafcafe19b054c0625d42",
+          "7314e88d885dad42cca4dcbf05fd8ade096d4205d2476c31415187fd409ebf5a"
+        ]
+      },
+      "recency": {
+        "gold_pairs": 1,
+        "retrieved_pairs": 10,
+        "gold_found": 0,
+        "exact_pair_recall": 0.0,
+        "all_gold_pairs": false,
+        "reciprocal_rank": 0.0,
+        "evidence_session_recall": 0.0,
+        "retrieval_seconds": 0.0,
+        "source_ids": [
+          "a088044026730f9efe785da59805111497c381ac998bf6b53ffaf5804799e027",
+          "1e7223f4ec770c30cf2ac9e50c3f165bba6c7f6f2ba8bdb459da01d6acfb2a17",
+          "144511d01b3281993a4413df58250d3abb7446649f2e46e348d96ab3fe51918e",
+          "909aecb032cbc182d7ffd9a9983d126808785053635ad0360f9c9517c8755570",
+          "cf964c2d7d410f4909158ffeca651acd9b958ea8b8c130560a4fb099711a4f0b",
+          "d90f17ad1b29758f7767eeb7e3e9657e4095d260ebf3d201f5b8055b48a86c31",
+          "ffa418064a37d4dfe2731cde847ea1f8583da6c53b4bafa0411680098c6d472a",
+          "98ef9563e72f9d4f556a6133831d47a1f03b73912c347cc7482bacac4630c1ac",
+          "eb8c2a7084b69b06e24082f68b729beb2766153070c86c75d97abc28688da9a9",
+          "d2de7e5493e7962d5d50ece5c33adc6a9a077ad4c92c3ec6f5e0559f151f0a0c"
+        ]
+      }
+    }
+  }
+]

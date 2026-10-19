@@ -1,0 +1,76 @@
+{
+  "endpoint": "https://api.stepfun.com/step_plan/v1",
+  "billing_surface": "step_plan",
+  "model": "step-5-preview",
+  "judge_model": "step-5-preview",
+  "judge_prompt": "xiaowu0162/LongMemEval/src/evaluation/evaluate_qa.py",
+  "judge_upstream_revision": "9e0b455f4ef0e2ab8f2e582289761153549043fc",
+  "judge_prompt_sha256": "d1b5076571e9cdaa30375539610282fd44dd4a7cd8087aafd949f676c49d9f49",
+  "retrieval_sha256": "82b7bb7636ff724c167436a40ead661a3ad113f038931dbfe8297ebb30308af0",
+  "cases": 24,
+  "arms": [
+    "akasha2_dual_lane"
+  ],
+  "max_tokens": 8192,
+  "reasoning_effort": "medium",
+  "client_sha256": "52eccf47a2026d2b48ec720a816b63fbb055e14699aa5682c7f756b2397ceae5",
+  "reader_code_sha256": "a12fc7ffe9877d8ddeb5ddaad3f8fabaa78eadd3a812ab482b172fe7e6312ede",
+  "concurrency": 4,
+  "metrics": {
+    "akasha2_dual_lane": {
+      "n": 24,
+      "correct": 18,
+      "errors": 0,
+      "input_tokens": 114604,
+      "output_tokens": 18486
+    },
+    "akasha2_dual_lane/single-session-assistant": {
+      "n": 4,
+      "correct": 4,
+      "errors": 0,
+      "input_tokens": 15205,
+      "output_tokens": 1174
+    },
+    "akasha2_dual_lane/single-session-user": {
+      "n": 4,
+      "correct": 3,
+      "errors": 0,
+      "input_tokens": 18835,
+      "output_tokens": 603
+    },
+    "akasha2_dual_lane/multi-session": {
+      "n": 4,
+      "correct": 3,
+      "errors": 0,
+      "input_tokens": 20583,
+      "output_tokens": 6452
+    },
+    "akasha2_dual_lane/knowledge-update": {
+      "n": 4,
+      "correct": 3,
+      "errors": 0,
+      "input_tokens": 19844,
+      "output_tokens": 1442
+    },
+    "akasha2_dual_lane/single-session-preference": {
+      "n": 4,
+      "correct": 3,
+      "errors": 0,
+      "input_tokens": 21150,
+      "output_tokens": 4538
+    },
+    "akasha2_dual_lane/temporal-reasoning": {
+      "n": 4,
+      "correct": 2,
+      "errors": 0,
+      "input_tokens": 18987,
+      "output_tokens": 4277
+    }
+  },
+  "limitations": [
+    "fixed stratified subset, not full 500",
+    "Step5 judges Step5 answers",
+    "session recall measures evidence sessions, not exact answer span",
+    "one run, no confidence claim"
+  ]
+}

@@ -6,8 +6,10 @@ import hashlib
 import json
 import os
 import time
+from contextlib import nullcontext
 from dataclasses import asdict
 from pathlib import Path
+from unittest.mock import patch
 
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 import numpy as np
@@ -20,6 +22,8 @@ from plugins.akasha.config import AkashaConfig
 from plugins.akasha.engine import AkashaMemoryEngine
 from plugins.akasha2.domain.model import MemoryConfig as CycleConfig
 from plugins.akasha2.engine import Akasha2MemoryEngine
+from plugins.akasha2.infrastructure.persistence import logical_state_sha256
+from plugins.akasha2.selection import SelectedHit
 from session.manager import SessionManager
 from session.turn_source import load_committed_turn_messages
 
@@ -62,6 +66,20 @@ def bounded(records, max_chars=24000, limit=10):
     return text, kept
 
 
+def graph_only_control(turns, ticket, cue, *, inhibited, limit, **filters):
+    """Diagnostic of the retired adapter readout, never a production mode."""
+    if ticket.state_version != len(turns):
+        raise ValueError("ablation ticket is stale")
+    if any(filters.values()):
+        raise ValueError("graph-only control requires default query filters")
+    return tuple(
+        SelectedHit(
+            item.node_id, item.score, "completion", item.sources, item.basin_ids
+        )
+        for item in ticket.completion.items[:limit]
+    )
+
+
 async def prepare(a):
     cases = select_fixed(load_longmemeval(a.dataset), a.per_type, a.selection)
     embedder = CachedEmbedder(a.embeddings)
@@ -96,14 +114,16 @@ async def prepare(a):
                 )
             ),
         )
-        v1 = AkashaMemoryEngine(
-            config=config,
-            akasha_config=AkashaConfig(),
-            workspace=path,
-            http_resources=http,
-        )
-        await v1._embedder.aclose()
-        v1._embedder = embedder
+        v1 = None
+        if not a.akasha2_only:
+            v1 = AkashaMemoryEngine(
+                config=config,
+                akasha_config=AkashaConfig(),
+                workspace=path,
+                http_resources=http,
+            )
+            await v1._embedder.aclose()
+            v1._embedder = embedder
         v2 = Akasha2MemoryEngine(
             config=config, workspace=path, http_resources=http, embedder=embedder
         )
@@ -160,12 +180,16 @@ async def prepare(a):
                         "texts": [t.content for t in group],
                     }
                 )
-        for name, engine in (("akasha", v1), ("akasha2", v2)):
+        engines = {"akasha2": v2} if v1 is None else {"akasha": v1, "akasha2": v2}
+        for name, engine in engines.items():
             phase_started = time.perf_counter()
             while await engine.catch_up():
                 pass
             timings["ingest_seconds"][name] = time.perf_counter() - phase_started
-        v1._ensure_idf_table()
+        if v1 is not None:
+            v1._ensure_idf_table()
+        v2._publish()
+        query_state_hash = logical_state_sha256(path / "memory/akasha2.db")
         query = await embedder.embed(case.question)
         dense = sorted(
             [
@@ -185,7 +209,10 @@ async def prepare(a):
         )
         turn_by_id = {t["id"]: t for t in turns}
         arms = {"no_memory": {"context": "", "records": []}}
-        for name in ("dense", "akasha", "akasha2"):
+        names = ["dense", *engines]
+        if a.graph_only_control:
+            names.append("akasha2_graph_only")
+        for name in names:
             trace = {}
             if name == "dense":
                 records = dense
@@ -195,14 +222,20 @@ async def prepare(a):
                 first_records = None
                 for _ in range(5):
                     phase_started = time.perf_counter()
-                    result = await e.query(
-                        MemoryQuery(
-                            case.question,
-                            limit=10,
-                            effect="read_only",
-                            timestamp=index_time,
-                        )
+                    scope = (
+                        patch("plugins.akasha2.engine.select_hits", graph_only_control)
+                        if name == "akasha2_graph_only"
+                        else nullcontext()
                     )
+                    with scope:
+                        result = await e.query(
+                            MemoryQuery(
+                                case.question,
+                                limit=10,
+                                effect="read_only",
+                                timestamp=index_time,
+                            )
+                        )
                     samples.append(time.perf_counter() - phase_started)
                     if first_records is None:
                         first_records = result.records
@@ -222,6 +255,8 @@ async def prepare(a):
                     for r in result.records
                 ]
                 trace = result.trace
+                if name == "akasha2_graph_only":
+                    trace = {**trace, "readout": "graph-only diagnostic ablation"}
             context, kept = bounded(records)
             gold = set(case.answer_session_ids)
             found = {r["source_session"] for r in kept}
@@ -235,7 +270,10 @@ async def prepare(a):
                 "all_evidence_sessions": gold <= found if gold else None,
             }
         await v2.aclose()
-        for closer in reversed(v1.closeables):
+        assert logical_state_sha256(path / "memory/akasha2.db") == query_state_hash, (
+            "queries changed learned state"
+        )
+        for closer in reversed(v1.closeables if v1 is not None else []):
             if hasattr(closer, "aclose"):
                 await closer.aclose()
             elif hasattr(closer, "close"):
@@ -255,6 +293,7 @@ async def prepare(a):
             "index_time": index_time.isoformat(),
             "seconds": time.monotonic() - start,
             "adapter_timings": timings,
+            "query_purity_sha256": query_state_hash,
             "arms": arms,
         }
         with a.output.open("a") as out:
@@ -325,6 +364,8 @@ def main():
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--per-type", type=int, default=6)
     p.add_argument("--selection", type=Path)
+    p.add_argument("--akasha2-only", action="store_true")
+    p.add_argument("--graph-only-control", action="store_true")
     p.add_argument("--shards", type=int, default=1)
     p.add_argument("--shard-index", type=int, default=0)
     asyncio.run(prepare(p.parse_args()))

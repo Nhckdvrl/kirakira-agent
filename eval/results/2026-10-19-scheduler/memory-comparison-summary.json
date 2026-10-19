@@ -1,0 +1,2596 @@
+{
+  "method": {
+    "accuracy": "correct / all selected cases, errors count as incorrect",
+    "coverage": "macro mean over non-abstention cases with gold_pairs > 0",
+    "latency": "NumPy linear percentiles; response wall time includes invoker retry waits; not system speed ratio",
+    "usage": "completed recorded responses only; not a total account bill",
+    "cohort_scope": "question-ID disjoint 36+24+12, histories may overlap; diagnostic and Mem0 reuse cases"
+  },
+  "inputs": {
+    "memory-repeat.jsonl": "83e894e4dc8eb3f27cd5e3713d290dc0fe9e52c922b8fcab72be43152ff09a92",
+    "memory-baselines.jsonl": "49c7b557bd7d962626f20314988c087683f8ee46e83e0b8d165d24d6a09de7e6",
+    "memory-oracle-repeat.jsonl": "27a925f7b370c7c3b68ab42f404f574c8d0cd31849b7a2999b66fbec471f7682",
+    "holdout-results.jsonl": "28cdd3877f18e71bd4987f36b64c9a995e02fc1fa5220b03b1cafafea0142430",
+    "holdout-oracle.jsonl": "c406551e34b4076f4b85c782f55d2fa9b0c3293b6c9629c7de5cf23f2e453bfc",
+    "readout-dual24.jsonl": "090fade15fc3c03758fd7987fbe0ac06355073d5701c0977bdc9e9031de513c2",
+    "readout-fresh12.jsonl": "e0cb1c56effdf01877c7bc5be19130642329184a67fb614eeb5178117b428945",
+    "readout-oracle12.jsonl": "a7ecbf3360c9d487c6a2b5548415d7816cb429f8b9580b9db38fde841080db72",
+    "baseline-coverage.json": "f4b97c4103a3b61a084fe498f4c8c74c6fb3ced161c141cc0efd1a5645012db1",
+    "holdout-coverage.json": "791c73e7eb68d400fdb0b09a2f58379ae8b57e64a8851e57526143593e069ad7",
+    "readout-diagnostic24-coverage.json": "6199515315dd57bdaebd87620967f4f1a346ea7ba97c55e00e8633679b9d4312",
+    "readout-fresh-coverage.json": "2eb20f1be0dfeea07d8d68566bb2acfaee00dcc69e6bfe9a5d82331d540d5637",
+    "mem0-answers.jsonl": "942718c96a54e3ec1793734c084d23ff587310eb3035804de869c3c999195318"
+  },
+  "cohorts": {
+    "repeat36": {
+      "unique_question_ids": [
+        "01493427",
+        "031748ae",
+        "07741c44",
+        "0862e8bf_abs",
+        "0edc2aef",
+        "1192316e",
+        "18dcd5a5",
+        "19b5f2b3_abs",
+        "2bf43736",
+        "32260d93",
+        "352ab8bd",
+        "36b9f61e",
+        "37d43f65",
+        "38146c39",
+        "4baee567",
+        "545bd2b5",
+        "57f827a0",
+        "853b0a1d",
+        "89527b6b",
+        "a11281a2",
+        "a82c026e",
+        "b29f3365",
+        "b5ef892d",
+        "b6025781",
+        "c4ea545c",
+        "c4f10528",
+        "c8090214",
+        "c9f37c46",
+        "e56a43b9",
+        "e831120c",
+        "f685340e_abs",
+        "f9e8c073",
+        "fca70973",
+        "gpt4_45189cb4",
+        "gpt4_4929293b",
+        "gpt4_d9af6064"
+      ],
+      "arms": {
+        "akasha": {
+          "n": 36,
+          "correct": 30,
+          "errors": 0,
+          "accuracy": 0.8333333333333334,
+          "non_abstention": {
+            "n": 33,
+            "correct": 27
+          },
+          "abstention": {
+            "n": 3,
+            "correct": 3
+          },
+          "types": {
+            "knowledge-update": {
+              "n": 6,
+              "correct": 6
+            },
+            "multi-session": {
+              "n": 6,
+              "correct": 6
+            },
+            "single-session-assistant": {
+              "n": 6,
+              "correct": 5
+            },
+            "single-session-preference": {
+              "n": 6,
+              "correct": 4
+            },
+            "single-session-user": {
+              "n": 6,
+              "correct": 5
+            },
+            "temporal-reasoning": {
+              "n": 6,
+              "correct": 4
+            }
+          },
+          "reader": {
+            "input_tokens": 164689,
+            "output_tokens": 15476,
+            "completed_responses": 36,
+            "seconds": {
+              "p50": 5.707749342545867,
+              "p95": 23.677261350676417
+            }
+          },
+          "judge": {
+            "input_tokens": 8973,
+            "output_tokens": 6077,
+            "completed_responses": 36,
+            "seconds": {
+              "p50": 2.9684582576155663,
+              "p95": 8.893713603261858
+            }
+          }
+        },
+        "akasha2": {
+          "n": 36,
+          "correct": 26,
+          "errors": 0,
+          "accuracy": 0.7222222222222222,
+          "non_abstention": {
+            "n": 33,
+            "correct": 23
+          },
+          "abstention": {
+            "n": 3,
+            "correct": 3
+          },
+          "types": {
+            "knowledge-update": {
+              "n": 6,
+              "correct": 4
+            },
+            "multi-session": {
+              "n": 6,
+              "correct": 4
+            },
+            "single-session-assistant": {
+              "n": 6,
+              "correct": 5
+            },
+            "single-session-preference": {
+              "n": 6,
+              "correct": 4
+            },
+            "single-session-user": {
+              "n": 6,
+              "correct": 6
+            },
+            "temporal-reasoning": {
+              "n": 6,
+              "correct": 3
+            }
+          },
+          "reader": {
+            "input_tokens": 144214,
+            "output_tokens": 11495,
+            "completed_responses": 36,
+            "seconds": {
+              "p50": 6.017303098924458,
+              "p95": 14.541375842876732
+            }
+          },
+          "judge": {
+            "input_tokens": 8876,
+            "output_tokens": 5483,
+            "completed_responses": 36,
+            "seconds": {
+              "p50": 2.638098081573844,
+              "p95": 9.373017438687384
+            }
+          }
+        },
+        "bm25": {
+          "n": 36,
+          "correct": 28,
+          "errors": 0,
+          "accuracy": 0.7777777777777778,
+          "non_abstention": {
+            "n": 33,
+            "correct": 25
+          },
+          "abstention": {
+            "n": 3,
+            "correct": 3
+          },
+          "types": {
+            "knowledge-update": {
+              "n": 6,
+              "correct": 5
+            },
+            "multi-session": {
+              "n": 6,
+              "correct": 4
+            },
+            "single-session-assistant": {
+              "n": 6,
+              "correct": 5
+            },
+            "single-session-preference": {
+              "n": 6,
+              "correct": 4
+            },
+            "single-session-user": {
+              "n": 6,
+              "correct": 6
+            },
+            "temporal-reasoning": {
+              "n": 6,
+              "correct": 4
+            }
+          },
+          "reader": {
+            "input_tokens": 167659,
+            "output_tokens": 12374,
+            "completed_responses": 36,
+            "seconds": {
+              "p50": 6.085131946951151,
+              "p95": 13.674823905806988
+            }
+          },
+          "judge": {
+            "input_tokens": 9171,
+            "output_tokens": 4888,
+            "completed_responses": 36,
+            "seconds": {
+              "p50": 2.3980625309050083,
+              "p95": 9.5130190490745
+            }
+          }
+        },
+        "dense": {
+          "n": 36,
+          "correct": 30,
+          "errors": 0,
+          "accuracy": 0.8333333333333334,
+          "non_abstention": {
+            "n": 33,
+            "correct": 27
+          },
+          "abstention": {
+            "n": 3,
+            "correct": 3
+          },
+          "types": {
+            "knowledge-update": {
+              "n": 6,
+              "correct": 5
+            },
+            "multi-session": {
+              "n": 6,
+              "correct": 6
+            },
+            "single-session-assistant": {
+              "n": 6,
+              "correct": 5
+            },
+            "single-session-preference": {
+              "n": 6,
+              "correct": 4
+            },
+            "single-session-user": {
+              "n": 6,
+              "correct": 5
+            },
+            "temporal-reasoning": {
+              "n": 6,
+              "correct": 5
+            }
+          },
+          "reader": {
+            "input_tokens": 165351,
+            "output_tokens": 19531,
+            "completed_responses": 36,
+            "seconds": {
+              "p50": 5.772331300191581,
+              "p95": 30.037573227658868
+            }
+          },
+          "judge": {
+            "input_tokens": 8465,
+            "output_tokens": 3978,
+            "completed_responses": 36,
+            "seconds": {
+              "p50": 2.5627941135317087,
+              "p95": 7.282534976489842
+            }
+          }
+        },
+        "no_memory": {
+          "n": 36,
+          "correct": 3,
+          "errors": 0,
+          "accuracy": 0.08333333333333333,
+          "non_abstention": {
+            "n": 33,
+            "correct": 0
+          },
+          "abstention": {
+            "n": 3,
+            "correct": 3
+          },
+          "types": {
+            "knowledge-update": {
+              "n": 6,
+              "correct": 1
+            },
+            "multi-session": {
+              "n": 6,
+              "correct": 0
+            },
+            "single-session-assistant": {
+              "n": 6,
+              "correct": 0
+            },
+            "single-session-preference": {
+              "n": 6,
+              "correct": 0
+            },
+            "single-session-user": {
+              "n": 6,
+              "correct": 2
+            },
+            "temporal-reasoning": {
+              "n": 6,
+              "correct": 0
+            }
+          },
+          "reader": {
+            "input_tokens": 3771,
+            "output_tokens": 4897,
+            "completed_responses": 36,
+            "seconds": {
+              "p50": 3.409852280281484,
+              "p95": 12.594485203269869
+            }
+          },
+          "judge": {
+            "input_tokens": 7747,
+            "output_tokens": 3145,
+            "completed_responses": 36,
+            "seconds": {
+              "p50": 3.249812197871506,
+              "p95": 7.695874186232686
+            }
+          }
+        },
+        "oracle": {
+          "n": 36,
+          "correct": 32,
+          "errors": 0,
+          "accuracy": 0.8888888888888888,
+          "non_abstention": {
+            "n": 33,
+            "correct": 29
+          },
+          "abstention": {
+            "n": 3,
+            "correct": 3
+          },
+          "types": {
+            "knowledge-update": {
+              "n": 6,
+              "correct": 5
+            },
+            "multi-session": {
+              "n": 6,
+              "correct": 6
+            },
+            "single-session-assistant": {
+              "n": 6,
+              "correct": 5
+            },
+            "single-session-preference": {
+              "n": 6,
+              "correct": 4
+            },
+            "single-session-user": {
+              "n": 6,
+              "correct": 6
+            },
+            "temporal-reasoning": {
+              "n": 6,
+              "correct": 6
+            }
+          },
+          "reader": {
+            "input_tokens": 28893,
+            "output_tokens": 10722,
+            "completed_responses": 36,
+            "seconds": {
+              "p50": 4.693745543248951,
+              "p95": 12.286753107327968
+            }
+          },
+          "judge": {
+            "input_tokens": 8314,
+            "output_tokens": 4367,
+            "completed_responses": 36,
+            "seconds": {
+              "p50": 3.149233446456492,
+              "p95": 6.835029671434313
+            }
+          }
+        },
+        "recency": {
+          "n": 36,
+          "correct": 4,
+          "errors": 0,
+          "accuracy": 0.1111111111111111,
+          "non_abstention": {
+            "n": 33,
+            "correct": 1
+          },
+          "abstention": {
+            "n": 3,
+            "correct": 3
+          },
+          "types": {
+            "knowledge-update": {
+              "n": 6,
+              "correct": 1
+            },
+            "multi-session": {
+              "n": 6,
+              "correct": 0
+            },
+            "single-session-assistant": {
+              "n": 6,
+              "correct": 0
+            },
+            "single-session-preference": {
+              "n": 6,
+              "correct": 1
+            },
+            "single-session-user": {
+              "n": 6,
+              "correct": 2
+            },
+            "temporal-reasoning": {
+              "n": 6,
+              "correct": 0
+            }
+          },
+          "reader": {
+            "input_tokens": 142685,
+            "output_tokens": 7570,
+            "completed_responses": 36,
+            "seconds": {
+              "p50": 4.6483089523389935,
+              "p95": 9.389775314368308
+            }
+          },
+          "judge": {
+            "input_tokens": 8524,
+            "output_tokens": 5019,
+            "completed_responses": 36,
+            "seconds": {
+              "p50": 3.177820042707026,
+              "p95": 8.780969347339123
+            }
+          }
+        },
+        "rrf": {
+          "n": 36,
+          "correct": 30,
+          "errors": 0,
+          "accuracy": 0.8333333333333334,
+          "non_abstention": {
+            "n": 33,
+            "correct": 27
+          },
+          "abstention": {
+            "n": 3,
+            "correct": 3
+          },
+          "types": {
+            "knowledge-update": {
+              "n": 6,
+              "correct": 5
+            },
+            "multi-session": {
+              "n": 6,
+              "correct": 6
+            },
+            "single-session-assistant": {
+              "n": 6,
+              "correct": 5
+            },
+            "single-session-preference": {
+              "n": 6,
+              "correct": 3
+            },
+            "single-session-user": {
+              "n": 6,
+              "correct": 6
+            },
+            "temporal-reasoning": {
+              "n": 6,
+              "correct": 5
+            }
+          },
+          "reader": {
+            "input_tokens": 165038,
+            "output_tokens": 14345,
+            "completed_responses": 36,
+            "seconds": {
+              "p50": 6.15234564896673,
+              "p95": 16.823242635000497
+            }
+          },
+          "judge": {
+            "input_tokens": 8586,
+            "output_tokens": 4735,
+            "completed_responses": 36,
+            "seconds": {
+              "p50": 2.5351923732087016,
+              "p95": 7.660848829895258
+            }
+          }
+        }
+      },
+      "coverage": {
+        "akasha": {
+          "n": 32,
+          "exact_pair_recall": 0.9270833333333333,
+          "all_gold_pair_rate": 0.90625,
+          "mrr": 0.7263764880952381
+        },
+        "akasha2": {
+          "n": 32,
+          "exact_pair_recall": 0.8072916666666667,
+          "all_gold_pair_rate": 0.6875,
+          "mrr": 0.7151041666666667
+        },
+        "bm25": {
+          "n": 32,
+          "exact_pair_recall": 0.8854166666666666,
+          "all_gold_pair_rate": 0.8125,
+          "mrr": 0.7206101190476191
+        },
+        "dense": {
+          "n": 32,
+          "exact_pair_recall": 0.9270833333333333,
+          "all_gold_pair_rate": 0.90625,
+          "mrr": 0.7263764880952381
+        },
+        "no_memory": {
+          "n": 32,
+          "exact_pair_recall": 0.0,
+          "all_gold_pair_rate": 0.0,
+          "mrr": 0.0
+        },
+        "recency": {
+          "n": 32,
+          "exact_pair_recall": 0.03125,
+          "all_gold_pair_rate": 0.03125,
+          "mrr": 0.005208333333333333
+        },
+        "rrf": {
+          "n": 32,
+          "exact_pair_recall": 0.9583333333333333,
+          "all_gold_pair_rate": 0.9375,
+          "mrr": 0.7909226190476191
+        }
+      }
+    },
+    "holdout24": {
+      "unique_question_ids": [
+        "07b6f563",
+        "0ddfec37",
+        "1c0ddc50",
+        "1da05512",
+        "2311e44b_abs",
+        "2698e78f_abs",
+        "2ce6a0f2",
+        "6222b6eb",
+        "7024f17c",
+        "75499fd8",
+        "ac031881",
+        "b759caee",
+        "c7dc5443",
+        "caf9ead2",
+        "cc539528",
+        "d52b4f67",
+        "d6233ab6",
+        "dad224aa",
+        "eeda8a6d",
+        "f8c5f88b",
+        "gpt4_1e4a8aec",
+        "gpt4_468eb063",
+        "gpt4_61e13b3c",
+        "gpt4_93159ced_abs"
+      ],
+      "arms": {
+        "akasha": {
+          "n": 24,
+          "correct": 17,
+          "errors": 0,
+          "accuracy": 0.7083333333333334,
+          "non_abstention": {
+            "n": 21,
+            "correct": 14
+          },
+          "abstention": {
+            "n": 3,
+            "correct": 3
+          },
+          "types": {
+            "knowledge-update": {
+              "n": 4,
+              "correct": 4
+            },
+            "multi-session": {
+              "n": 4,
+              "correct": 2
+            },
+            "single-session-assistant": {
+              "n": 4,
+              "correct": 4
+            },
+            "single-session-preference": {
+              "n": 4,
+              "correct": 1
+            },
+            "single-session-user": {
+              "n": 4,
+              "correct": 3
+            },
+            "temporal-reasoning": {
+              "n": 4,
+              "correct": 3
+            }
+          },
+          "reader": {
+            "input_tokens": 108653,
+            "output_tokens": 11029,
+            "completed_responses": 24,
+            "seconds": {
+              "p50": 5.282131473533809,
+              "p95": 22.807125648856154
+            }
+          },
+          "judge": {
+            "input_tokens": 5976,
+            "output_tokens": 5406,
+            "completed_responses": 24,
+            "seconds": {
+              "p50": 3.6646196888759732,
+              "p95": 8.27986657982692
+            }
+          }
+        },
+        "akasha2": {
+          "n": 24,
+          "correct": 13,
+          "errors": 0,
+          "accuracy": 0.5416666666666666,
+          "non_abstention": {
+            "n": 21,
+            "correct": 11
+          },
+          "abstention": {
+            "n": 3,
+            "correct": 2
+          },
+          "types": {
+            "knowledge-update": {
+              "n": 4,
+              "correct": 2
+            },
+            "multi-session": {
+              "n": 4,
+              "correct": 1
+            },
+            "single-session-assistant": {
+              "n": 4,
+              "correct": 4
+            },
+            "single-session-preference": {
+              "n": 4,
+              "correct": 3
+            },
+            "single-session-user": {
+              "n": 4,
+              "correct": 3
+            },
+            "temporal-reasoning": {
+              "n": 4,
+              "correct": 0
+            }
+          },
+          "reader": {
+            "input_tokens": 103195,
+            "output_tokens": 10941,
+            "completed_responses": 24,
+            "seconds": {
+              "p50": 6.11697908397764,
+              "p95": 16.01759509360417
+            }
+          },
+          "judge": {
+            "input_tokens": 6233,
+            "output_tokens": 6757,
+            "completed_responses": 24,
+            "seconds": {
+              "p50": 3.1159211825579405,
+              "p95": 18.4155999987386
+            }
+          }
+        },
+        "bm25": {
+          "n": 24,
+          "correct": 18,
+          "errors": 0,
+          "accuracy": 0.75,
+          "non_abstention": {
+            "n": 21,
+            "correct": 15
+          },
+          "abstention": {
+            "n": 3,
+            "correct": 3
+          },
+          "types": {
+            "knowledge-update": {
+              "n": 4,
+              "correct": 4
+            },
+            "multi-session": {
+              "n": 4,
+              "correct": 1
+            },
+            "single-session-assistant": {
+              "n": 4,
+              "correct": 4
+            },
+            "single-session-preference": {
+              "n": 4,
+              "correct": 2
+            },
+            "single-session-user": {
+              "n": 4,
+              "correct": 4
+            },
+            "temporal-reasoning": {
+              "n": 4,
+              "correct": 3
+            }
+          },
+          "reader": {
+            "input_tokens": 110346,
+            "output_tokens": 14518,
+            "completed_responses": 24,
+            "seconds": {
+              "p50": 7.180626919493079,
+              "p95": 23.64882556712254
+            }
+          },
+          "judge": {
+            "input_tokens": 5892,
+            "output_tokens": 3411,
+            "completed_responses": 24,
+            "seconds": {
+              "p50": 2.872318939305842,
+              "p95": 9.598189247213297
+            }
+          }
+        },
+        "dense": {
+          "n": 24,
+          "correct": 17,
+          "errors": 0,
+          "accuracy": 0.7083333333333334,
+          "non_abstention": {
+            "n": 21,
+            "correct": 14
+          },
+          "abstention": {
+            "n": 3,
+            "correct": 3
+          },
+          "types": {
+            "knowledge-update": {
+              "n": 4,
+              "correct": 3
+            },
+            "multi-session": {
+              "n": 4,
+              "correct": 2
+            },
+            "single-session-assistant": {
+              "n": 4,
+              "correct": 4
+            },
+            "single-session-preference": {
+              "n": 4,
+              "correct": 2
+            },
+            "single-session-user": {
+              "n": 4,
+              "correct": 3
+            },
+            "temporal-reasoning": {
+              "n": 4,
+              "correct": 3
+            }
+          },
+          "reader": {
+            "input_tokens": 108691,
+            "output_tokens": 10999,
+            "completed_responses": 24,
+            "seconds": {
+              "p50": 7.713633512146771,
+              "p95": 15.467697185464203
+            }
+          },
+          "judge": {
+            "input_tokens": 5993,
+            "output_tokens": 3663,
+            "completed_responses": 24,
+            "seconds": {
+              "p50": 3.7146125845611095,
+              "p95": 8.324978282954543
+            }
+          }
+        },
+        "no_memory": {
+          "n": 24,
+          "correct": 3,
+          "errors": 0,
+          "accuracy": 0.125,
+          "non_abstention": {
+            "n": 21,
+            "correct": 0
+          },
+          "abstention": {
+            "n": 3,
+            "correct": 3
+          },
+          "types": {
+            "knowledge-update": {
+              "n": 4,
+              "correct": 1
+            },
+            "multi-session": {
+              "n": 4,
+              "correct": 1
+            },
+            "single-session-assistant": {
+              "n": 4,
+              "correct": 0
+            },
+            "single-session-preference": {
+              "n": 4,
+              "correct": 0
+            },
+            "single-session-user": {
+              "n": 4,
+              "correct": 0
+            },
+            "temporal-reasoning": {
+              "n": 4,
+              "correct": 1
+            }
+          },
+          "reader": {
+            "input_tokens": 2499,
+            "output_tokens": 3899,
+            "completed_responses": 24,
+            "seconds": {
+              "p50": 3.944694778881967,
+              "p95": 7.626932709664106
+            }
+          },
+          "judge": {
+            "input_tokens": 5364,
+            "output_tokens": 2522,
+            "completed_responses": 24,
+            "seconds": {
+              "p50": 2.961394957266748,
+              "p95": 5.068665455281734
+            }
+          }
+        },
+        "oracle": {
+          "n": 24,
+          "correct": 24,
+          "errors": 0,
+          "accuracy": 1.0,
+          "non_abstention": {
+            "n": 21,
+            "correct": 21
+          },
+          "abstention": {
+            "n": 3,
+            "correct": 3
+          },
+          "types": {
+            "knowledge-update": {
+              "n": 4,
+              "correct": 4
+            },
+            "multi-session": {
+              "n": 4,
+              "correct": 4
+            },
+            "single-session-assistant": {
+              "n": 4,
+              "correct": 4
+            },
+            "single-session-preference": {
+              "n": 4,
+              "correct": 4
+            },
+            "single-session-user": {
+              "n": 4,
+              "correct": 4
+            },
+            "temporal-reasoning": {
+              "n": 4,
+              "correct": 4
+            }
+          },
+          "reader": {
+            "input_tokens": 19535,
+            "output_tokens": 11747,
+            "completed_responses": 24,
+            "seconds": {
+              "p50": 5.047672382555902,
+              "p95": 31.07761933896687
+            }
+          },
+          "judge": {
+            "input_tokens": 5574,
+            "output_tokens": 3020,
+            "completed_responses": 24,
+            "seconds": {
+              "p50": 2.7633667550981045,
+              "p95": 7.5377744384109935
+            }
+          }
+        },
+        "recency": {
+          "n": 24,
+          "correct": 3,
+          "errors": 0,
+          "accuracy": 0.125,
+          "non_abstention": {
+            "n": 21,
+            "correct": 0
+          },
+          "abstention": {
+            "n": 3,
+            "correct": 3
+          },
+          "types": {
+            "knowledge-update": {
+              "n": 4,
+              "correct": 1
+            },
+            "multi-session": {
+              "n": 4,
+              "correct": 1
+            },
+            "single-session-assistant": {
+              "n": 4,
+              "correct": 0
+            },
+            "single-session-preference": {
+              "n": 4,
+              "correct": 0
+            },
+            "single-session-user": {
+              "n": 4,
+              "correct": 0
+            },
+            "temporal-reasoning": {
+              "n": 4,
+              "correct": 1
+            }
+          },
+          "reader": {
+            "input_tokens": 99600,
+            "output_tokens": 4554,
+            "completed_responses": 24,
+            "seconds": {
+              "p50": 4.538980117067695,
+              "p95": 6.812361063156277
+            }
+          },
+          "judge": {
+            "input_tokens": 5350,
+            "output_tokens": 3448,
+            "completed_responses": 24,
+            "seconds": {
+              "p50": 3.498990459367633,
+              "p95": 8.544708990771317
+            }
+          }
+        },
+        "rrf": {
+          "n": 24,
+          "correct": 17,
+          "errors": 0,
+          "accuracy": 0.7083333333333334,
+          "non_abstention": {
+            "n": 21,
+            "correct": 14
+          },
+          "abstention": {
+            "n": 3,
+            "correct": 3
+          },
+          "types": {
+            "knowledge-update": {
+              "n": 4,
+              "correct": 3
+            },
+            "multi-session": {
+              "n": 4,
+              "correct": 1
+            },
+            "single-session-assistant": {
+              "n": 4,
+              "correct": 4
+            },
+            "single-session-preference": {
+              "n": 4,
+              "correct": 3
+            },
+            "single-session-user": {
+              "n": 4,
+              "correct": 4
+            },
+            "temporal-reasoning": {
+              "n": 4,
+              "correct": 2
+            }
+          },
+          "reader": {
+            "input_tokens": 111186,
+            "output_tokens": 12787,
+            "completed_responses": 24,
+            "seconds": {
+              "p50": 8.828700615093112,
+              "p95": 18.324844320584084
+            }
+          },
+          "judge": {
+            "input_tokens": 5945,
+            "output_tokens": 4079,
+            "completed_responses": 24,
+            "seconds": {
+              "p50": 2.7369047915562987,
+              "p95": 11.78296360000968
+            }
+          }
+        }
+      },
+      "coverage": {
+        "akasha": {
+          "n": 21,
+          "exact_pair_recall": 0.7619047619047619,
+          "all_gold_pair_rate": 0.6666666666666666,
+          "mrr": 0.4715608465608466
+        },
+        "akasha2": {
+          "n": 21,
+          "exact_pair_recall": 0.5476190476190477,
+          "all_gold_pair_rate": 0.42857142857142855,
+          "mrr": 0.4107142857142857
+        },
+        "bm25": {
+          "n": 21,
+          "exact_pair_recall": 0.7619047619047619,
+          "all_gold_pair_rate": 0.6190476190476191,
+          "mrr": 0.49145880574452
+        },
+        "dense": {
+          "n": 21,
+          "exact_pair_recall": 0.7857142857142857,
+          "all_gold_pair_rate": 0.7142857142857143,
+          "mrr": 0.4715608465608466
+        },
+        "no_memory": {
+          "n": 21,
+          "exact_pair_recall": 0.0,
+          "all_gold_pair_rate": 0.0,
+          "mrr": 0.0
+        },
+        "recency": {
+          "n": 21,
+          "exact_pair_recall": 0.0,
+          "all_gold_pair_rate": 0.0,
+          "mrr": 0.0
+        },
+        "rrf": {
+          "n": 21,
+          "exact_pair_recall": 0.7976190476190477,
+          "all_gold_pair_rate": 0.6666666666666666,
+          "mrr": 0.5315381708238851
+        }
+      }
+    },
+    "same_state_diagnostic24": {
+      "unique_question_ids": [
+        "07b6f563",
+        "0ddfec37",
+        "1c0ddc50",
+        "1da05512",
+        "2311e44b_abs",
+        "2698e78f_abs",
+        "2ce6a0f2",
+        "6222b6eb",
+        "7024f17c",
+        "75499fd8",
+        "ac031881",
+        "b759caee",
+        "c7dc5443",
+        "caf9ead2",
+        "cc539528",
+        "d52b4f67",
+        "d6233ab6",
+        "dad224aa",
+        "eeda8a6d",
+        "f8c5f88b",
+        "gpt4_1e4a8aec",
+        "gpt4_468eb063",
+        "gpt4_61e13b3c",
+        "gpt4_93159ced_abs"
+      ],
+      "arms": {
+        "akasha2_dual_lane": {
+          "n": 24,
+          "correct": 18,
+          "errors": 0,
+          "accuracy": 0.75,
+          "non_abstention": {
+            "n": 21,
+            "correct": 15
+          },
+          "abstention": {
+            "n": 3,
+            "correct": 3
+          },
+          "types": {
+            "knowledge-update": {
+              "n": 4,
+              "correct": 3
+            },
+            "multi-session": {
+              "n": 4,
+              "correct": 3
+            },
+            "single-session-assistant": {
+              "n": 4,
+              "correct": 4
+            },
+            "single-session-preference": {
+              "n": 4,
+              "correct": 3
+            },
+            "single-session-user": {
+              "n": 4,
+              "correct": 3
+            },
+            "temporal-reasoning": {
+              "n": 4,
+              "correct": 2
+            }
+          },
+          "reader": {
+            "input_tokens": 108604,
+            "output_tokens": 13845,
+            "completed_responses": 24,
+            "seconds": {
+              "p50": 6.77649930678308,
+              "p95": 22.438541650120158
+            }
+          },
+          "judge": {
+            "input_tokens": 6000,
+            "output_tokens": 4641,
+            "completed_responses": 24,
+            "seconds": {
+              "p50": 2.8645943384617567,
+              "p95": 10.844456824474035
+            }
+          }
+        }
+      },
+      "coverage": {
+        "akasha": {
+          "n": 21,
+          "exact_pair_recall": 0.7619047619047619,
+          "all_gold_pair_rate": 0.6666666666666666,
+          "mrr": 0.4715608465608466
+        },
+        "akasha2": {
+          "n": 21,
+          "exact_pair_recall": 0.5476190476190477,
+          "all_gold_pair_rate": 0.42857142857142855,
+          "mrr": 0.4107142857142857
+        },
+        "akasha2_dual_lane": {
+          "n": 21,
+          "exact_pair_recall": 0.6666666666666666,
+          "all_gold_pair_rate": 0.6190476190476191,
+          "mrr": 0.48730158730158735
+        },
+        "bm25": {
+          "n": 21,
+          "exact_pair_recall": 0.7619047619047619,
+          "all_gold_pair_rate": 0.6190476190476191,
+          "mrr": 0.49145880574452
+        },
+        "dense": {
+          "n": 21,
+          "exact_pair_recall": 0.7857142857142857,
+          "all_gold_pair_rate": 0.7142857142857143,
+          "mrr": 0.4715608465608466
+        },
+        "no_memory": {
+          "n": 21,
+          "exact_pair_recall": 0.0,
+          "all_gold_pair_rate": 0.0,
+          "mrr": 0.0
+        },
+        "recency": {
+          "n": 21,
+          "exact_pair_recall": 0.0,
+          "all_gold_pair_rate": 0.0,
+          "mrr": 0.0
+        },
+        "rrf": {
+          "n": 21,
+          "exact_pair_recall": 0.7976190476190477,
+          "all_gold_pair_rate": 0.6666666666666666,
+          "mrr": 0.5315381708238851
+        }
+      }
+    },
+    "fresh12": {
+      "unique_question_ids": [
+        "0100672e",
+        "0e4e4c46",
+        "54026fce",
+        "6071bd76",
+        "60d45044",
+        "75f70248",
+        "8077ef71",
+        "85fa3a3f",
+        "c19f7a0b",
+        "e8a79c70",
+        "f523d9fe",
+        "gpt4_59149c77"
+      ],
+      "arms": {
+        "akasha2": {
+          "n": 12,
+          "correct": 11,
+          "errors": 0,
+          "accuracy": 0.9166666666666666,
+          "non_abstention": {
+            "n": 12,
+            "correct": 11
+          },
+          "abstention": {
+            "n": 0,
+            "correct": 0
+          },
+          "types": {
+            "knowledge-update": {
+              "n": 2,
+              "correct": 2
+            },
+            "multi-session": {
+              "n": 2,
+              "correct": 2
+            },
+            "single-session-assistant": {
+              "n": 2,
+              "correct": 2
+            },
+            "single-session-preference": {
+              "n": 2,
+              "correct": 1
+            },
+            "single-session-user": {
+              "n": 2,
+              "correct": 2
+            },
+            "temporal-reasoning": {
+              "n": 2,
+              "correct": 2
+            }
+          },
+          "reader": {
+            "input_tokens": 49692,
+            "output_tokens": 4400,
+            "completed_responses": 12,
+            "seconds": {
+              "p50": 4.892047254368663,
+              "p95": 14.81365719437599
+            }
+          },
+          "judge": {
+            "input_tokens": 2848,
+            "output_tokens": 1339,
+            "completed_responses": 12,
+            "seconds": {
+              "p50": 2.9540211223065853,
+              "p95": 8.114095198269933
+            }
+          }
+        },
+        "akasha2_graph_only": {
+          "n": 12,
+          "correct": 9,
+          "errors": 0,
+          "accuracy": 0.75,
+          "non_abstention": {
+            "n": 12,
+            "correct": 9
+          },
+          "abstention": {
+            "n": 0,
+            "correct": 0
+          },
+          "types": {
+            "knowledge-update": {
+              "n": 2,
+              "correct": 1
+            },
+            "multi-session": {
+              "n": 2,
+              "correct": 2
+            },
+            "single-session-assistant": {
+              "n": 2,
+              "correct": 2
+            },
+            "single-session-preference": {
+              "n": 2,
+              "correct": 1
+            },
+            "single-session-user": {
+              "n": 2,
+              "correct": 2
+            },
+            "temporal-reasoning": {
+              "n": 2,
+              "correct": 1
+            }
+          },
+          "reader": {
+            "input_tokens": 48450,
+            "output_tokens": 3534,
+            "completed_responses": 12,
+            "seconds": {
+              "p50": 5.782777932472527,
+              "p95": 12.646078473050144
+            }
+          },
+          "judge": {
+            "input_tokens": 2949,
+            "output_tokens": 2749,
+            "completed_responses": 12,
+            "seconds": {
+              "p50": 2.28149130102247,
+              "p95": 13.768797801993781
+            }
+          }
+        },
+        "bm25": {
+          "n": 12,
+          "correct": 11,
+          "errors": 0,
+          "accuracy": 0.9166666666666666,
+          "non_abstention": {
+            "n": 12,
+            "correct": 11
+          },
+          "abstention": {
+            "n": 0,
+            "correct": 0
+          },
+          "types": {
+            "knowledge-update": {
+              "n": 2,
+              "correct": 2
+            },
+            "multi-session": {
+              "n": 2,
+              "correct": 2
+            },
+            "single-session-assistant": {
+              "n": 2,
+              "correct": 2
+            },
+            "single-session-preference": {
+              "n": 2,
+              "correct": 1
+            },
+            "single-session-user": {
+              "n": 2,
+              "correct": 2
+            },
+            "temporal-reasoning": {
+              "n": 2,
+              "correct": 2
+            }
+          },
+          "reader": {
+            "input_tokens": 53501,
+            "output_tokens": 3405,
+            "completed_responses": 12,
+            "seconds": {
+              "p50": 6.081523516215384,
+              "p95": 9.554133809637278
+            }
+          },
+          "judge": {
+            "input_tokens": 2932,
+            "output_tokens": 1505,
+            "completed_responses": 12,
+            "seconds": {
+              "p50": 2.680504312738776,
+              "p95": 10.350187357887624
+            }
+          }
+        },
+        "dense": {
+          "n": 12,
+          "correct": 10,
+          "errors": 0,
+          "accuracy": 0.8333333333333334,
+          "non_abstention": {
+            "n": 12,
+            "correct": 10
+          },
+          "abstention": {
+            "n": 0,
+            "correct": 0
+          },
+          "types": {
+            "knowledge-update": {
+              "n": 2,
+              "correct": 2
+            },
+            "multi-session": {
+              "n": 2,
+              "correct": 2
+            },
+            "single-session-assistant": {
+              "n": 2,
+              "correct": 2
+            },
+            "single-session-preference": {
+              "n": 2,
+              "correct": 0
+            },
+            "single-session-user": {
+              "n": 2,
+              "correct": 2
+            },
+            "temporal-reasoning": {
+              "n": 2,
+              "correct": 2
+            }
+          },
+          "reader": {
+            "input_tokens": 49428,
+            "output_tokens": 2708,
+            "completed_responses": 12,
+            "seconds": {
+              "p50": 4.299605232663453,
+              "p95": 7.194055040180682
+            }
+          },
+          "judge": {
+            "input_tokens": 3013,
+            "output_tokens": 2260,
+            "completed_responses": 12,
+            "seconds": {
+              "p50": 3.2821620646864176,
+              "p95": 12.289644449017935
+            }
+          }
+        },
+        "no_memory": {
+          "n": 12,
+          "correct": 0,
+          "errors": 0,
+          "accuracy": 0.0,
+          "non_abstention": {
+            "n": 12,
+            "correct": 0
+          },
+          "abstention": {
+            "n": 0,
+            "correct": 0
+          },
+          "types": {
+            "knowledge-update": {
+              "n": 2,
+              "correct": 0
+            },
+            "multi-session": {
+              "n": 2,
+              "correct": 0
+            },
+            "single-session-assistant": {
+              "n": 2,
+              "correct": 0
+            },
+            "single-session-preference": {
+              "n": 2,
+              "correct": 0
+            },
+            "single-session-user": {
+              "n": 2,
+              "correct": 0
+            },
+            "temporal-reasoning": {
+              "n": 2,
+              "correct": 0
+            }
+          },
+          "reader": {
+            "input_tokens": 1291,
+            "output_tokens": 1907,
+            "completed_responses": 12,
+            "seconds": {
+              "p50": 3.0111403670161963,
+              "p95": 7.37895216392353
+            }
+          },
+          "judge": {
+            "input_tokens": 2690,
+            "output_tokens": 1907,
+            "completed_responses": 12,
+            "seconds": {
+              "p50": 2.576037739403546,
+              "p95": 8.647197666391728
+            }
+          }
+        },
+        "oracle": {
+          "n": 12,
+          "correct": 9,
+          "errors": 0,
+          "accuracy": 0.75,
+          "non_abstention": {
+            "n": 12,
+            "correct": 9
+          },
+          "abstention": {
+            "n": 0,
+            "correct": 0
+          },
+          "types": {
+            "knowledge-update": {
+              "n": 2,
+              "correct": 2
+            },
+            "multi-session": {
+              "n": 2,
+              "correct": 1
+            },
+            "single-session-assistant": {
+              "n": 2,
+              "correct": 2
+            },
+            "single-session-preference": {
+              "n": 2,
+              "correct": 0
+            },
+            "single-session-user": {
+              "n": 2,
+              "correct": 2
+            },
+            "temporal-reasoning": {
+              "n": 2,
+              "correct": 2
+            }
+          },
+          "reader": {
+            "input_tokens": 9199,
+            "output_tokens": 3115,
+            "completed_responses": 12,
+            "seconds": {
+              "p50": 4.1187006598338485,
+              "p95": 11.766995431017126
+            }
+          },
+          "judge": {
+            "input_tokens": 2861,
+            "output_tokens": 1808,
+            "completed_responses": 12,
+            "seconds": {
+              "p50": 3.228877814486623,
+              "p95": 8.166279665101316
+            }
+          }
+        },
+        "recency": {
+          "n": 12,
+          "correct": 1,
+          "errors": 0,
+          "accuracy": 0.08333333333333333,
+          "non_abstention": {
+            "n": 12,
+            "correct": 1
+          },
+          "abstention": {
+            "n": 0,
+            "correct": 0
+          },
+          "types": {
+            "knowledge-update": {
+              "n": 2,
+              "correct": 1
+            },
+            "multi-session": {
+              "n": 2,
+              "correct": 0
+            },
+            "single-session-assistant": {
+              "n": 2,
+              "correct": 0
+            },
+            "single-session-preference": {
+              "n": 2,
+              "correct": 0
+            },
+            "single-session-user": {
+              "n": 2,
+              "correct": 0
+            },
+            "temporal-reasoning": {
+              "n": 2,
+              "correct": 0
+            }
+          },
+          "reader": {
+            "input_tokens": 43618,
+            "output_tokens": 2394,
+            "completed_responses": 12,
+            "seconds": {
+              "p50": 4.940223244018853,
+              "p95": 6.758547844644635
+            }
+          },
+          "judge": {
+            "input_tokens": 2690,
+            "output_tokens": 1466,
+            "completed_responses": 12,
+            "seconds": {
+              "p50": 2.449033685028553,
+              "p95": 4.854300451744348
+            }
+          }
+        },
+        "rrf": {
+          "n": 12,
+          "correct": 10,
+          "errors": 0,
+          "accuracy": 0.8333333333333334,
+          "non_abstention": {
+            "n": 12,
+            "correct": 10
+          },
+          "abstention": {
+            "n": 0,
+            "correct": 0
+          },
+          "types": {
+            "knowledge-update": {
+              "n": 2,
+              "correct": 2
+            },
+            "multi-session": {
+              "n": 2,
+              "correct": 2
+            },
+            "single-session-assistant": {
+              "n": 2,
+              "correct": 2
+            },
+            "single-session-preference": {
+              "n": 2,
+              "correct": 0
+            },
+            "single-session-user": {
+              "n": 2,
+              "correct": 2
+            },
+            "temporal-reasoning": {
+              "n": 2,
+              "correct": 2
+            }
+          },
+          "reader": {
+            "input_tokens": 52889,
+            "output_tokens": 2917,
+            "completed_responses": 12,
+            "seconds": {
+              "p50": 3.8537293588742614,
+              "p95": 8.394062458630648
+            }
+          },
+          "judge": {
+            "input_tokens": 3073,
+            "output_tokens": 2493,
+            "completed_responses": 12,
+            "seconds": {
+              "p50": 3.2345964116975665,
+              "p95": 12.861518153082573
+            }
+          }
+        }
+      },
+      "coverage": {
+        "akasha2": {
+          "n": 12,
+          "exact_pair_recall": 1.0,
+          "all_gold_pair_rate": 1.0,
+          "mrr": 0.7013888888888888
+        },
+        "akasha2_graph_only": {
+          "n": 12,
+          "exact_pair_recall": 0.9166666666666666,
+          "all_gold_pair_rate": 0.8333333333333334,
+          "mrr": 0.9027777777777777
+        },
+        "bm25": {
+          "n": 12,
+          "exact_pair_recall": 1.0,
+          "all_gold_pair_rate": 1.0,
+          "mrr": 0.8333333333333334
+        },
+        "dense": {
+          "n": 12,
+          "exact_pair_recall": 1.0,
+          "all_gold_pair_rate": 1.0,
+          "mrr": 0.7430555555555555
+        },
+        "no_memory": {
+          "n": 12,
+          "exact_pair_recall": 0.0,
+          "all_gold_pair_rate": 0.0,
+          "mrr": 0.0
+        },
+        "recency": {
+          "n": 12,
+          "exact_pair_recall": 0.041666666666666664,
+          "all_gold_pair_rate": 0.0,
+          "mrr": 0.009259259259259259
+        },
+        "rrf": {
+          "n": 12,
+          "exact_pair_recall": 1.0,
+          "all_gold_pair_rate": 1.0,
+          "mrr": 0.9027777777777777
+        }
+      }
+    }
+  },
+  "unique_question_count": 72,
+  "matched_mem0_12": {
+    "selection": [
+      "f8c5f88b",
+      "75499fd8",
+      "6222b6eb",
+      "ac031881",
+      "1da05512",
+      "d6233ab6",
+      "2311e44b_abs",
+      "7024f17c",
+      "2698e78f_abs",
+      "dad224aa",
+      "gpt4_468eb063",
+      "gpt4_93159ced_abs"
+    ],
+    "note": "same 12 question IDs, 9 non-abstention, 3 abstention; extracted facts vs complete pairs",
+    "arms": {
+      "akasha": {
+        "n": 12,
+        "correct": 8,
+        "errors": 0,
+        "accuracy": 0.6666666666666666,
+        "non_abstention": {
+          "n": 9,
+          "correct": 5
+        },
+        "abstention": {
+          "n": 3,
+          "correct": 3
+        },
+        "types": {
+          "knowledge-update": {
+            "n": 2,
+            "correct": 2
+          },
+          "multi-session": {
+            "n": 2,
+            "correct": 1
+          },
+          "single-session-assistant": {
+            "n": 2,
+            "correct": 2
+          },
+          "single-session-preference": {
+            "n": 2,
+            "correct": 0
+          },
+          "single-session-user": {
+            "n": 2,
+            "correct": 2
+          },
+          "temporal-reasoning": {
+            "n": 2,
+            "correct": 1
+          }
+        },
+        "reader": {
+          "input_tokens": 53376,
+          "output_tokens": 5035,
+          "completed_responses": 12,
+          "seconds": {
+            "p50": 6.041425592266023,
+            "p95": 18.14317642999812
+          }
+        },
+        "judge": {
+          "input_tokens": 2838,
+          "output_tokens": 2272,
+          "completed_responses": 12,
+          "seconds": {
+            "p50": 3.6646196888759732,
+            "p95": 7.697976359259337
+          }
+        }
+      },
+      "akasha2": {
+        "n": 12,
+        "correct": 7,
+        "errors": 0,
+        "accuracy": 0.5833333333333334,
+        "non_abstention": {
+          "n": 9,
+          "correct": 5
+        },
+        "abstention": {
+          "n": 3,
+          "correct": 2
+        },
+        "types": {
+          "knowledge-update": {
+            "n": 2,
+            "correct": 1
+          },
+          "multi-session": {
+            "n": 2,
+            "correct": 1
+          },
+          "single-session-assistant": {
+            "n": 2,
+            "correct": 2
+          },
+          "single-session-preference": {
+            "n": 2,
+            "correct": 1
+          },
+          "single-session-user": {
+            "n": 2,
+            "correct": 2
+          },
+          "temporal-reasoning": {
+            "n": 2,
+            "correct": 0
+          }
+        },
+        "reader": {
+          "input_tokens": 52059,
+          "output_tokens": 6041,
+          "completed_responses": 12,
+          "seconds": {
+            "p50": 5.84299560636282,
+            "p95": 26.124319361150246
+          }
+        },
+        "judge": {
+          "input_tokens": 3069,
+          "output_tokens": 4616,
+          "completed_responses": 12,
+          "seconds": {
+            "p50": 4.43568239826709,
+            "p95": 24.13835390424355
+          }
+        }
+      },
+      "akasha2_dual_lane": {
+        "n": 12,
+        "correct": 9,
+        "errors": 0,
+        "accuracy": 0.75,
+        "non_abstention": {
+          "n": 9,
+          "correct": 6
+        },
+        "abstention": {
+          "n": 3,
+          "correct": 3
+        },
+        "types": {
+          "knowledge-update": {
+            "n": 2,
+            "correct": 1
+          },
+          "multi-session": {
+            "n": 2,
+            "correct": 2
+          },
+          "single-session-assistant": {
+            "n": 2,
+            "correct": 2
+          },
+          "single-session-preference": {
+            "n": 2,
+            "correct": 1
+          },
+          "single-session-user": {
+            "n": 2,
+            "correct": 2
+          },
+          "temporal-reasoning": {
+            "n": 2,
+            "correct": 1
+          }
+        },
+        "reader": {
+          "input_tokens": 53753,
+          "output_tokens": 4581,
+          "completed_responses": 12,
+          "seconds": {
+            "p50": 5.9648712277412415,
+            "p95": 17.32137393159792
+          }
+        },
+        "judge": {
+          "input_tokens": 2965,
+          "output_tokens": 3033,
+          "completed_responses": 12,
+          "seconds": {
+            "p50": 3.1335179768502712,
+            "p95": 17.838144942838685
+          }
+        }
+      },
+      "bm25": {
+        "n": 12,
+        "correct": 9,
+        "errors": 0,
+        "accuracy": 0.75,
+        "non_abstention": {
+          "n": 9,
+          "correct": 6
+        },
+        "abstention": {
+          "n": 3,
+          "correct": 3
+        },
+        "types": {
+          "knowledge-update": {
+            "n": 2,
+            "correct": 2
+          },
+          "multi-session": {
+            "n": 2,
+            "correct": 1
+          },
+          "single-session-assistant": {
+            "n": 2,
+            "correct": 2
+          },
+          "single-session-preference": {
+            "n": 2,
+            "correct": 0
+          },
+          "single-session-user": {
+            "n": 2,
+            "correct": 2
+          },
+          "temporal-reasoning": {
+            "n": 2,
+            "correct": 2
+          }
+        },
+        "reader": {
+          "input_tokens": 54472,
+          "output_tokens": 4610,
+          "completed_responses": 12,
+          "seconds": {
+            "p50": 6.620593694970012,
+            "p95": 14.103197370097035
+          }
+        },
+        "judge": {
+          "input_tokens": 2934,
+          "output_tokens": 2212,
+          "completed_responses": 12,
+          "seconds": {
+            "p50": 2.999199611134827,
+            "p95": 10.839125114772468
+          }
+        }
+      },
+      "dense": {
+        "n": 12,
+        "correct": 7,
+        "errors": 0,
+        "accuracy": 0.5833333333333334,
+        "non_abstention": {
+          "n": 9,
+          "correct": 4
+        },
+        "abstention": {
+          "n": 3,
+          "correct": 3
+        },
+        "types": {
+          "knowledge-update": {
+            "n": 2,
+            "correct": 1
+          },
+          "multi-session": {
+            "n": 2,
+            "correct": 1
+          },
+          "single-session-assistant": {
+            "n": 2,
+            "correct": 2
+          },
+          "single-session-preference": {
+            "n": 2,
+            "correct": 0
+          },
+          "single-session-user": {
+            "n": 2,
+            "correct": 2
+          },
+          "temporal-reasoning": {
+            "n": 2,
+            "correct": 1
+          }
+        },
+        "reader": {
+          "input_tokens": 53611,
+          "output_tokens": 5381,
+          "completed_responses": 12,
+          "seconds": {
+            "p50": 8.598363101482391,
+            "p95": 15.34250466991216
+          }
+        },
+        "judge": {
+          "input_tokens": 2848,
+          "output_tokens": 1758,
+          "completed_responses": 12,
+          "seconds": {
+            "p50": 3.7123376466333866,
+            "p95": 8.196098423656077
+          }
+        }
+      },
+      "mem0_oss": {
+        "n": 12,
+        "correct": 9,
+        "errors": 0,
+        "accuracy": 0.75,
+        "non_abstention": {
+          "n": 9,
+          "correct": 6
+        },
+        "abstention": {
+          "n": 3,
+          "correct": 3
+        },
+        "types": {
+          "knowledge-update": {
+            "n": 2,
+            "correct": 2
+          },
+          "multi-session": {
+            "n": 2,
+            "correct": 1
+          },
+          "single-session-assistant": {
+            "n": 2,
+            "correct": 0
+          },
+          "single-session-preference": {
+            "n": 2,
+            "correct": 2
+          },
+          "single-session-user": {
+            "n": 2,
+            "correct": 2
+          },
+          "temporal-reasoning": {
+            "n": 2,
+            "correct": 2
+          }
+        },
+        "reader": {
+          "input_tokens": 9564,
+          "output_tokens": 4398,
+          "completed_responses": 12,
+          "seconds": {
+            "p50": 6.758308133110404,
+            "p95": 10.621166560519486
+          }
+        },
+        "judge": {
+          "input_tokens": 3013,
+          "output_tokens": 2093,
+          "completed_responses": 12,
+          "seconds": {
+            "p50": 2.322843510657549,
+            "p95": 8.485376051161431
+          }
+        }
+      },
+      "no_memory": {
+        "n": 12,
+        "correct": 3,
+        "errors": 0,
+        "accuracy": 0.25,
+        "non_abstention": {
+          "n": 9,
+          "correct": 0
+        },
+        "abstention": {
+          "n": 3,
+          "correct": 3
+        },
+        "types": {
+          "knowledge-update": {
+            "n": 2,
+            "correct": 1
+          },
+          "multi-session": {
+            "n": 2,
+            "correct": 1
+          },
+          "single-session-assistant": {
+            "n": 2,
+            "correct": 0
+          },
+          "single-session-preference": {
+            "n": 2,
+            "correct": 0
+          },
+          "single-session-user": {
+            "n": 2,
+            "correct": 0
+          },
+          "temporal-reasoning": {
+            "n": 2,
+            "correct": 1
+          }
+        },
+        "reader": {
+          "input_tokens": 1248,
+          "output_tokens": 2094,
+          "completed_responses": 12,
+          "seconds": {
+            "p50": 3.6703263660892844,
+            "p95": 8.003106992412357
+          }
+        },
+        "judge": {
+          "input_tokens": 2669,
+          "output_tokens": 1624,
+          "completed_responses": 12,
+          "seconds": {
+            "p50": 2.961394957266748,
+            "p95": 4.554946911148726
+          }
+        }
+      },
+      "recency": {
+        "n": 12,
+        "correct": 3,
+        "errors": 0,
+        "accuracy": 0.25,
+        "non_abstention": {
+          "n": 9,
+          "correct": 0
+        },
+        "abstention": {
+          "n": 3,
+          "correct": 3
+        },
+        "types": {
+          "knowledge-update": {
+            "n": 2,
+            "correct": 1
+          },
+          "multi-session": {
+            "n": 2,
+            "correct": 1
+          },
+          "single-session-assistant": {
+            "n": 2,
+            "correct": 0
+          },
+          "single-session-preference": {
+            "n": 2,
+            "correct": 0
+          },
+          "single-session-user": {
+            "n": 2,
+            "correct": 0
+          },
+          "temporal-reasoning": {
+            "n": 2,
+            "correct": 1
+          }
+        },
+        "reader": {
+          "input_tokens": 52291,
+          "output_tokens": 2589,
+          "completed_responses": 12,
+          "seconds": {
+            "p50": 4.7140850173309445,
+            "p95": 7.483207219559697
+          }
+        },
+        "judge": {
+          "input_tokens": 2679,
+          "output_tokens": 1915,
+          "completed_responses": 12,
+          "seconds": {
+            "p50": 3.161690829321742,
+            "p95": 7.560120167303829
+          }
+        }
+      },
+      "rrf": {
+        "n": 12,
+        "correct": 8,
+        "errors": 0,
+        "accuracy": 0.6666666666666666,
+        "non_abstention": {
+          "n": 9,
+          "correct": 5
+        },
+        "abstention": {
+          "n": 3,
+          "correct": 3
+        },
+        "types": {
+          "knowledge-update": {
+            "n": 2,
+            "correct": 1
+          },
+          "multi-session": {
+            "n": 2,
+            "correct": 1
+          },
+          "single-session-assistant": {
+            "n": 2,
+            "correct": 2
+          },
+          "single-session-preference": {
+            "n": 2,
+            "correct": 1
+          },
+          "single-session-user": {
+            "n": 2,
+            "correct": 2
+          },
+          "temporal-reasoning": {
+            "n": 2,
+            "correct": 1
+          }
+        },
+        "reader": {
+          "input_tokens": 54695,
+          "output_tokens": 7086,
+          "completed_responses": 12,
+          "seconds": {
+            "p50": 7.079337919130921,
+            "p95": 25.29521632846443
+          }
+        },
+        "judge": {
+          "input_tokens": 2946,
+          "output_tokens": 2487,
+          "completed_responses": 12,
+          "seconds": {
+            "p50": 3.8633988220244646,
+            "p95": 11.717979203909636
+          }
+        }
+      }
+    }
+  },
+  "adapter_timings": {
+    "holdout24": {
+      "retrieval_input_sha256": "2b0dbbf8038cff6671b43a7842837bbd290e690b70081bc129628e5289c2c8bc",
+      "counts": {
+        "f8c5f88b": {
+          "sessions": 46,
+          "turns": 241,
+          "unpaired_messages": 5
+        },
+        "6222b6eb": {
+          "sessions": 46,
+          "turns": 247,
+          "unpaired_messages": 3
+        },
+        "1da05512": {
+          "sessions": 47,
+          "turns": 230,
+          "unpaired_messages": 2
+        },
+        "2311e44b_abs": {
+          "sessions": 49,
+          "turns": 247,
+          "unpaired_messages": 0
+        },
+        "2698e78f_abs": {
+          "sessions": 46,
+          "turns": 230,
+          "unpaired_messages": 2
+        },
+        "gpt4_468eb063": {
+          "sessions": 44,
+          "turns": 247,
+          "unpaired_messages": 4
+        },
+        "75499fd8": {
+          "sessions": 52,
+          "turns": 242,
+          "unpaired_messages": 7
+        },
+        "ac031881": {
+          "sessions": 47,
+          "turns": 264,
+          "unpaired_messages": 1
+        },
+        "d6233ab6": {
+          "sessions": 44,
+          "turns": 216,
+          "unpaired_messages": 5
+        },
+        "7024f17c": {
+          "sessions": 47,
+          "turns": 239,
+          "unpaired_messages": 5
+        },
+        "dad224aa": {
+          "sessions": 48,
+          "turns": 259,
+          "unpaired_messages": 3
+        },
+        "gpt4_93159ced_abs": {
+          "sessions": 44,
+          "turns": 301,
+          "unpaired_messages": 6
+        },
+        "caf9ead2": {
+          "sessions": 43,
+          "turns": 232,
+          "unpaired_messages": 2
+        },
+        "b759caee": {
+          "sessions": 53,
+          "turns": 256,
+          "unpaired_messages": 4
+        },
+        "07b6f563": {
+          "sessions": 52,
+          "turns": 260,
+          "unpaired_messages": 4
+        },
+        "2ce6a0f2": {
+          "sessions": 47,
+          "turns": 239,
+          "unpaired_messages": 2
+        },
+        "c7dc5443": {
+          "sessions": 46,
+          "turns": 238,
+          "unpaired_messages": 2
+        },
+        "gpt4_61e13b3c": {
+          "sessions": 48,
+          "turns": 231,
+          "unpaired_messages": 5
+        },
+        "d52b4f67": {
+          "sessions": 52,
+          "turns": 235,
+          "unpaired_messages": 9
+        },
+        "cc539528": {
+          "sessions": 48,
+          "turns": 245,
+          "unpaired_messages": 6
+        },
+        "1c0ddc50": {
+          "sessions": 51,
+          "turns": 270,
+          "unpaired_messages": 8
+        },
+        "eeda8a6d": {
+          "sessions": 49,
+          "turns": 256,
+          "unpaired_messages": 1
+        },
+        "0ddfec37": {
+          "sessions": 50,
+          "turns": 239,
+          "unpaired_messages": 5
+        },
+        "gpt4_1e4a8aec": {
+          "sessions": 50,
+          "turns": 246,
+          "unpaired_messages": 6
+        }
+      },
+      "scope": "4 case workers, cached vectors, query repeat=5, ingest excludes common source preparation",
+      "arms": {
+        "akasha": {
+          "ingest_cases": 24,
+          "ingest_seconds": {
+            "p50": 131.36124722566456,
+            "p95": 149.67615803666413
+          },
+          "query_samples": 120,
+          "query_seconds": {
+            "p50": 0.038427322171628475,
+            "p95": 0.045065414439886806
+          }
+        },
+        "akasha2": {
+          "ingest_cases": 24,
+          "ingest_seconds": {
+            "p50": 9.628800814040005,
+            "p95": 11.765695588383823
+          },
+          "query_samples": 120,
+          "query_seconds": {
+            "p50": 0.02837145607918501,
+            "p95": 0.04791911141946912
+          }
+        }
+      }
+    },
+    "fresh12": {
+      "retrieval_input_sha256": "a682e384f11a4d50c98d98abf8ea6b33826c6154a873cbaaf7edd0eec1208056",
+      "counts": {
+        "c19f7a0b": {
+          "sessions": 46,
+          "turns": 237,
+          "unpaired_messages": 4
+        },
+        "e8a79c70": {
+          "sessions": 44,
+          "turns": 240,
+          "unpaired_messages": 3
+        },
+        "85fa3a3f": {
+          "sessions": 47,
+          "turns": 245,
+          "unpaired_messages": 3
+        },
+        "0e4e4c46": {
+          "sessions": 49,
+          "turns": 239,
+          "unpaired_messages": 3
+        },
+        "60d45044": {
+          "sessions": 51,
+          "turns": 268,
+          "unpaired_messages": 5
+        },
+        "75f70248": {
+          "sessions": 42,
+          "turns": 232,
+          "unpaired_messages": 2
+        },
+        "0100672e": {
+          "sessions": 49,
+          "turns": 241,
+          "unpaired_messages": 4
+        },
+        "gpt4_59149c77": {
+          "sessions": 48,
+          "turns": 240,
+          "unpaired_messages": 4
+        },
+        "f523d9fe": {
+          "sessions": 50,
+          "turns": 240,
+          "unpaired_messages": 4
+        },
+        "54026fce": {
+          "sessions": 49,
+          "turns": 236,
+          "unpaired_messages": 0
+        },
+        "6071bd76": {
+          "sessions": 46,
+          "turns": 241,
+          "unpaired_messages": 0
+        },
+        "8077ef71": {
+          "sessions": 47,
+          "turns": 273,
+          "unpaired_messages": 8
+        }
+      },
+      "scope": "4 case workers, cached vectors, query repeat=5, ingest excludes common source preparation",
+      "arms": {
+        "akasha2": {
+          "ingest_cases": 12,
+          "ingest_seconds": {
+            "p50": 9.663640750572085,
+            "p95": 13.455666569992896
+          },
+          "query_samples": 60,
+          "query_seconds": {
+            "p50": 0.03134703915566206,
+            "p95": 0.04862048272043466
+          }
+        },
+        "akasha2_graph_only": {
+          "ingest_cases": 0,
+          "ingest_seconds": null,
+          "query_samples": 60,
+          "query_seconds": {
+            "p50": 0.030803105793893337,
+            "p95": 0.05256325723603368
+          }
+        }
+      }
+    }
+  },
+  "mem0_index": {
+    "raw_sha256": "d1128ed0ee233dbf8d5ecb69a60c5e1f73c9d543fe7e787e36bba9fd918edafe",
+    "status": {
+      "ok": 12
+    },
+    "recorded_http_attempts": 74,
+    "request_status": {
+      "completed": 74
+    },
+    "response_usage": {
+      "prompt_tokens": 1905844,
+      "completion_tokens": 677774,
+      "total_tokens": 2583618
+    },
+    "ingest_seconds": {
+      "p50": 611.7869407227263,
+      "p95": 783.8161022055893
+    },
+    "query_seconds": {
+      "p50": 0.02426606137305498,
+      "p95": 0.039710521511733515
+    },
+    "total_source_sessions": 560,
+    "scope": "Mem0 init+LLM additive extraction+local embedding+dedup/storage in ingest; query includes local BGE inference; up to 4 workers"
+  },
+  "qa_totals": {
+    "case_arm_runs": 612,
+    "errors": 0,
+    "reader_completed": 612,
+    "judge_completed": 612,
+    "returned_input_tokens": 2219293,
+    "returned_output_tokens": 311766
+  }
+}

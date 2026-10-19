@@ -1,7 +1,8 @@
 # 记忆评测
 
 合同回归与回答质量分别验证。确定性 hash 向量只用于消费、重放、幂等与持久化测试，不能支持记忆质量结论。
-本轮实测结果、逐题文件与限制见 [2026-10-19 实验报告](./evaluations/2026-10-19-memory.md)。
+本轮实测结果、逐题文件与限制见 [最新实验报告](./evaluations/2026-10-19-memory-followup.md)。
+早期 graph-only 读出与配置修正保留在[历史报告](./evaluations/2026-10-19-memory.md)，不作当前 adapter 成绩。
 
 ## 三层证据
 
@@ -141,6 +142,7 @@ Kirakira 同时保留公开任务质量和机制验证，不把上游私人语�
 PYTHONHASHSEED=0 uv run --frozen python -m eval.memory_cost --output /tmp/cost-seed0
 PYTHONHASHSEED=42 uv run --frozen python -m eval.memory_cost --output /tmp/cost-seed42
 uv run --frozen python -m scripts.check_akasha2_properties --output /tmp/upstream-properties
+uv run --frozen python -m scripts.check_akasha2_matvec --output /tmp/matvec-shapes.json
 
 uv run --frozen python -m eval.longmemeval.baselines \
   --dataset /absolute/cache/longmemeval_s_cleaned.json \
@@ -164,11 +166,39 @@ directory fsync 故障。报告同时保存完整状态与召回摘要、学习/
 新增题集须先冻结 selection JSON，以 `--selection` 同时传给 embedding 与 prepare_retrieval；
 原来的固定 36 题默认协议保持。题目保留集与历史语料完全独立是不同要求，报告必须标明分割单位。
 
+## 双通道与旧读出消融
+
+当前 Akasha2 的精确 dense 与 completion 共用 `MemoryQuery.limit` 总预算；旧结果中的 `akasha2`
+可能指退役 graph-only adapter，必须以当轮源码摘要和报告说明区分。生产引擎不提供旧模式开关。
+对新题只准备 v2，并在同一学习图加入旧读出控制：
+
+```bash
+uv run --frozen python -m eval.longmemeval.prepare_retrieval \
+  --dataset /absolute/cache/longmemeval_s_cleaned.json \
+  --embeddings /absolute/cache/bge-new.npz \
+  --selection /absolute/cache/frozen-selection.json \
+  --workspace /tmp/readout-new-run --output /tmp/readout-new.jsonl \
+  --akasha2-only --graph-only-control
+```
+
+命令保存五次只读查询计时和完整学习状态摘要；不包含 embedding 推理，因为向量已缓存。
+需在相同旧图上诊断当前读出时，`requery_readout` 读取旧检索列表及其 `cases` 目录：
+
+```bash
+uv run --frozen python -m eval.longmemeval.requery_readout \
+  --dataset /absolute/cache/longmemeval_s_cleaned.json \
+  --embeddings /absolute/cache/bge-old.npz --retrieval /tmp/old-graph.jsonl \
+  --cases /tmp/old-run/cases --output /tmp/readout-diagnostic.jsonl
+```
+
+它要求查询、恢复与关闭前后学习状态相同；这类已观察题目仅是诊断，不计为新的保留集。
+
 
 ## Mem0 OSS 实际对照
 
 在同一个项目环境安装可选对比组：`uv sync --frozen --group dev --group eval --group comparison`。
-`compare_mem0_step_plan` 固定本地 Qdrant 与 BGE、关闭 telemetry，真实 Mem0 执行提取/更新/搜索，
+`compare_mem0_step_plan` 固定本地 Qdrant 与 BGE、关闭 telemetry，真实 Mem0 执行原生 additive 提取、
+去重、存储与搜索，
 只有模型 HTTP 传输改接受校验的 Step Token Plan。没有访问默认 OpenAI 计费端点。
 
 ```bash
@@ -176,11 +206,26 @@ uv run --frozen --group eval --group comparison python -m scripts.compare_mem0_s
   --dataset /absolute/cache/longmemeval_s_cleaned.json \
   --selection eval/results/2026-10-19-scheduler/mem0-selection.json \
   --key-file /absolute/private/step-plan.key --cache /absolute/cache/models \
-  --workspace /tmp/new-mem0-run --output /tmp/new-mem0-ingestion.jsonl --workers 2
+  --workspace /tmp/new-mem0-run --output /tmp/new-mem0-ingestion.jsonl \
+  --workers 4 --sessions-per-add 8 --ingest-max-tokens 32768
+
+uv run --frozen --group eval --group comparison python -m eval.longmemeval.live_eval \
+  --retrieval /tmp/new-mem0-ingestion.retrieval.jsonl \
+  --output /tmp/new-mem0-answers.jsonl --key-file /absolute/private/step-plan.key \
+  --concurrency 4 --max-tokens 8192 --reasoning-effort medium
 ```
 
 以生成的 `.retrieval.jsonl` 再调用同一个 live_eval reader/judge。Mem0 为 OSS 基础安装，未安装
-可选 spaCy NLP extra；不代表 hosted Platform 或所有部署组合。每个来源会话一次 add(infer=True)，
-问题与答案不进入提取；原始日期作为上下文和 metadata。返回最多 10 条提取事实，而图检索返回原文对，
+可选 spaCy NLP extra；不代表 hosted Platform 或所有部署组合。固定每八个完整来源会话一次
+add(infer=True)，末批保留剩余会话，按给定日期排序。原始消息角色和正文全量保留，图实验则仅学习
+完整 user/assistant 对；这项输入投影差异也须报告。
+
+问题与答案不进入提取；原始日期作为上下文和 metadata。数据集来源 ID 可能编码答案位置，
+所以提取 prompt 只含原文与日期；模型传输前另检查题目/来源 ID 没有泄漏。ID 只留在 bookkeeping。
+Mem0 的原始系统 prompt 保留，只有受校验的 HTTP 传输和 BGE query 前缀做适配。
+返回最多 10 条提取事实，而图检索返回原文对，
 这属于系统间差异，不能把 Mem0 事实的 pair recall 当零分。只在预先固定的同题子集比较回答和用量，
-并报告初始化、批量学习和检索开销。失败输入与失败模型调用必须保留。
+并报告初始化、批量学习和检索开销。Mem0 搜索计时含本地 query embedding，图搜索计时使用缓存，
+不能直接计算系统速度比。提取上限 32,768 与 reader/judge 8,192 分开记录。
+失败输入与失败模型调用必须保留；失败写入不进入 reader 猜答案，而是按 ingestion 错误计入分母。
+未完成、截断和发现 fixture ID 泄漏后中止的预检单独归档，不能挑其中成功案例并入最终成绩。

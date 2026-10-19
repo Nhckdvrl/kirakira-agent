@@ -132,14 +132,14 @@ governance and Akasha v1 ingest/retrieval. It never prints credentials.
 ## Layout
 
 ```text
-agent/            reasoning, lifecycle, tools, MCP, plugins, scheduling, subagents
+agent/            reasoning, lifecycle, tools, MCP, plugins, subagents
 bootstrap/        composition root, setup, supervisor, control and dashboard wiring
 bus/              message queue and logical event contracts
 core/             shared schema, network and memory contracts/runtime
 infra/            provider, channel, control and persistence adapters
 session/          authoritative session and message-embedding stores
 memory2/          default structured-memory algorithms and storage
-plugins/          first-party memory, proactive and Drift implementations
+plugins/          first-party memory, Wake, Drift and Scheduler implementations
 plugin_packages/  distributable plugins
 proactive_v2/     proactive kernel, frame and tick orchestration
 frontend/         terminal and local Web presentation surfaces
@@ -157,8 +157,10 @@ Runtime state lives under the selected workspace. Resolution order is
 Start with the [documentation index](docs/INDEX.md). Current capabilities and
 deferrals are in [current status](docs/status/current.md), the main design is in the
 [architecture overview](docs/architecture/overview.md), and real-provider evidence
-is in the [verification record](docs/operations/verification.md). Task-oriented
-guides live under `docs/handbook/`.
+is in the [verification record](docs/operations/verification.md). The
+[memory experiments](docs/operations/evaluations/2026-10-19-memory-followup.md) include
+public QA controls, held-out questions, source integrity and measured recovery
+costs. Task guides live under `docs/handbook/`.
 
 [中文说明](README-cn.md)
 

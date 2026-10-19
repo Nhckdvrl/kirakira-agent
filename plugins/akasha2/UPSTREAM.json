@@ -13,5 +13,5 @@
     "infrastructure/consumption.py": "caad8024d60944b8ba2b97976561d2eb62ee62f97049db3919f77878751d8155",
     "infrastructure/lexical.py": "7489144ad5c3fc7fe5287377eed753d704769a74ec9c822e2eb9da2d5affa8e2"
   },
-  "integration": "Kirakira adapter and consumption format are maintained separately in engine.py."
+  "integration": "Kirakira adapter and checkpoint format live in engine.py; host dense/completion readout lives in selection.py. The pinned algorithm files above remain byte-identical."
 }

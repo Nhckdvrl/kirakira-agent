@@ -1,0 +1,87 @@
+{
+  "checked_at_utc": "2026-10-19T10:21:54.532927+00:00",
+  "experiment_pin": "d85b00c233686b68b082052b1b20123905aeab13",
+  "observed_upstream_main": "21b38f0e102d9e1bdc5576725635dce29f135c0c",
+  "new_commits": 41,
+  "checks": [
+    {
+      "path": "plugins/akasha/application/cycle.py",
+      "sha256": "da334a3befb1152ad8f3675ed36e165a992fd121bd7efacfef0699e8c8cf934e",
+      "byte_identical": true
+    },
+    {
+      "path": "plugins/akasha/domain/__init__.py",
+      "sha256": "31704fdd527e81239c8aca67643849f6b92ab07355041eb58a73aae07e97a4ca",
+      "byte_identical": true
+    },
+    {
+      "path": "plugins/akasha/domain/model.py",
+      "sha256": "545b408562d8be227232be831eb28f1ca2ac42a2fc56b25d212707ef9c7ae81d",
+      "byte_identical": true
+    },
+    {
+      "path": "plugins/akasha/domain/features.py",
+      "sha256": "4bd29c33e52673a6b8a0db8f1b5e1dac43ab6c8dff362dd462792394a96b995e",
+      "byte_identical": true
+    },
+    {
+      "path": "plugins/akasha/domain/graph.py",
+      "sha256": "c735b64b2a442e69894b19a29b818c0866d3dc110f26b377ae161f7d439ed800",
+      "byte_identical": true
+    },
+    {
+      "path": "plugins/akasha/domain/diffusion.py",
+      "sha256": "07476a613e856d9547e56d61b5ff100d3b8a753449e9b27a6bca3798f98cfda6",
+      "byte_identical": true
+    },
+    {
+      "path": "plugins/akasha/domain/readout.py",
+      "sha256": "eff13a88b1aa10b4b1a0ffdb180a580057a05e4c0a78f3ecc4a79e80f2927f5f",
+      "byte_identical": true
+    },
+    {
+      "path": "plugins/akasha/infrastructure/persistence.py",
+      "sha256": "413de783cfb61a87a157302133b460d0784d1a9a8f45b71c5c6cd0cfe137aa90",
+      "byte_identical": true
+    },
+    {
+      "path": "plugins/akasha/infrastructure/consumption.py",
+      "sha256": "caad8024d60944b8ba2b97976561d2eb62ee62f97049db3919f77878751d8155",
+      "byte_identical": true
+    },
+    {
+      "path": "plugins/akasha/infrastructure/lexical.py",
+      "sha256": "7489144ad5c3fc7fe5287377eed753d704769a74ec9c822e2eb9da2d5affa8e2",
+      "byte_identical": true
+    },
+    {
+      "path": "plugins/akasha/recalls.py",
+      "sha256": "c47ddc22f635a1dc99236e01c985d396d7cb0d1158861540e2000db525e78b90",
+      "byte_identical": true
+    },
+    {
+      "path": "scripts/akasha_cost_scenario.py",
+      "sha256": "f84892eec7c0972488fe2b8359f04bddc14abef314356a8f3057d46d67faa6ef",
+      "byte_identical": true
+    },
+    {
+      "path": "docs/design/akasha-memory-cost.md",
+      "sha256": "3fc503bfa3b0e1ebea6424e9101f7096d9b84c925f4007f488109e0000590628",
+      "byte_identical": true
+    }
+  ],
+  "memory_changes_outside_these_files": [
+    "plugins/akasha/dashboard.py",
+    "plugins/akasha/inspector.py",
+    "plugins/akasha/ledger.py",
+    "plugins/akasha/message_ui.css",
+    "plugins/akasha/message_ui.js",
+    "plugins/akasha/plugin.py",
+    "plugins/akasha/plugin_ui.css",
+    "plugins/akasha/web_module.js",
+    "scripts/akasha_derived_recovery_scenario.py",
+    "scripts/akasha_recall_read_scenario.py",
+    "scripts/akasha_recall_ui_scenario.mjs"
+  ],
+  "scope": "algorithm, host readout and public cost protocol unchanged; other host/UI commits are not claimed as ported"
+}

@@ -1,0 +1,18 @@
+{
+  "dataset_sha256": "d6f21ea9d60a0d56f34a05b609c79c88a451d2ae03597821ea3d5a9678c3a442",
+  "embedding_sha256": "8a0eeca7a89c021debda5c169241221b83cb7bbe5b003d9fc692788d91dd35f4",
+  "graph_retrieval_sha256": "2b0dbbf8038cff6671b43a7842837bbd290e690b70081bc129628e5289c2c8bc",
+  "retrieval_sha256": "6336e1cced0dc8906d13992cf212e626251d83b26776bda73afaa7f43f93e0e8",
+  "script_sha256": "90264e96aa6c9e6687d3c4f205d375025abf13d1a11918b58bc1c9295db7a398",
+  "cases": 24,
+  "context_chars": 24000,
+  "max_pairs": 10,
+  "rrf_k": 60,
+  "bm25": "SQLite FTS5 BM25 defaults, OR of unique query tokens; rowid tie-break",
+  "recency": "last ten complete chronological original pairs",
+  "limitations": [
+    "retrieval baselines, not Mem0/Zep product evaluations",
+    "same fixed 36 cases; no tuning on results",
+    "cached embedding lookup excluded from timing"
+  ]
+}

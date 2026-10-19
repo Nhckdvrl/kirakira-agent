@@ -47,6 +47,8 @@
 | --- | --- |
 | [验证记录](./operations/verification.md) | 当前离线、在线和 Reference 独立性结果 |
 | [记忆评测](./operations/memory-evaluation.md) | 离线合同、Step5 实测和固定质量协议 |
+| [记忆机制与系统对照](./operations/evaluations/2026-10-19-memory-followup.md) | 72 个公开问题、双通道读出、真实 Mem0 对照及上游机制复测 |
+| [来源会话 Scheduler 实测](./operations/evaluations/2026-10-19-scheduler.md) | 运行入口、触发恢复、真实 Step5 与本地回执 |
 | [组件收敛与实测](./operations/evaluations/2026-10-19-ownership.md) | 提供者归属、失败回收与 Step5 记忆工具链 |
 | [2026-10-19 实验结果](./operations/evaluations/2026-10-19-memory.md) | 两轮四组与 oracle 的逐题结果和限制 |
 | [Workspace 迁移](./operations/workspace-migrations.md) | Yoyo、单实例锁和 append-only 规则 |
@@ -54,6 +56,8 @@
 
 ## 工程记录
 
+- [Akasha2 双通道读出](./decisions/0012-akasha2-dual-lane-readout.md)：精确召回、联想召回与统一上下文预算。
+- [来源会话 Scheduler](./decisions/0011-source-session-scheduler.md)：持久 fire、历史范围与回执结算。
 - [组件、恢复与 Akasha2](./decisions/0009-components-recovery-and-akasha2.md)：2026-10-19 的实现合同、来源与验证边界。
 
 - [Akashic Vibe Coding 工作流](./engineering/akashic-vibe-coding-workflow.md)：截至 2026-10-07 的完整工作流与可复制任务说明。

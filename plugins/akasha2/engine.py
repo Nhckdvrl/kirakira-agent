@@ -40,6 +40,7 @@ from .domain.model import ContextState, MemoryConfig, Turn
 from .infrastructure.lexical import tokenize
 from .infrastructure.persistence import load_memory_state, write_memory_database
 from .lease import CheckpointLease
+from .selection import select_hits
 
 
 class Binding(BaseModel):
@@ -459,40 +460,30 @@ class Akasha2MemoryEngine:
             vec = await self._embedder.embed(request.text)
             if _vector(vec).shape != self._cycle.turns[0].user_dense.shape:
                 raise ValueError("query embedding space changed")
-            ticket = await self._worker(
-                self._cycle.retrieve,
-                self._turn(
-                    [],
-                    [vec],
-                    query=True,
-                    text=request.text,
-                    timestamp=request.timestamp,
-                ),
+            cue = self._turn(
+                [],
+                [vec],
+                query=True,
+                text=request.text,
+                timestamp=request.timestamp,
             )
+            ticket = await self._worker(self._cycle.retrieve, cue)
             records = []
             limit = max(0, min(20, int(request.limit)))
-            for item in ticket.completion.items:
-                if len(records) >= limit:
-                    break
-                if request.filters.kinds and "turn" not in request.filters.kinds:
-                    continue
-                if (
-                    request.filters.relevance_floor == "strong"
-                    and "basin_direct" not in item.sources
-                ):
-                    continue
+            hits = select_hits(
+                self._cycle.turns,
+                ticket,
+                cue,
+                inhibited=self._cycle.inhibited_nodes,
+                limit=0
+                if request.filters.kinds and "turn" not in request.filters.kinds
+                else limit,
+                strong=request.filters.relevance_floor == "strong",
+                time_start=request.filters.time_start,
+                time_end=request.filters.time_end,
+            )
+            for item in hits:
                 turn = self._cycle.turns[item.node_id]
-                when = _timestamp(turn.started_at)
-                if (
-                    request.filters.time_start is not None
-                    and when < request.filters.time_start
-                ):
-                    continue
-                if (
-                    request.filters.time_end is not None
-                    and when > request.filters.time_end
-                ):
-                    continue
                 messages = self._messages(turn.assistant_message_id)
                 if (
                     _digest(messages)
@@ -517,6 +508,7 @@ class Akasha2MemoryEngine:
                             )
                         ],
                         signals={
+                            "lane": item.lane,
                             "sources": list(item.sources),
                             "basin_ids": list(item.basin_ids),
                         },
@@ -530,6 +522,7 @@ class Akasha2MemoryEngine:
                 ),
                 trace={
                     "engine": "akasha2",
+                    "readout": "dense5+completion, total record limit",
                     "state_version": self._cycle.state_version,
                     "cursor": self._checkpoint.cursor,
                     "checkpoint_pending": self._dirty,

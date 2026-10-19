@@ -85,6 +85,10 @@ async def run(a):
                 ),
             }
             try:
+                preparation = row["arms"][arm].get("ingestion_status")
+                if preparation is not None and preparation != "ok":
+                    result["error_phase"] = "ingestion"
+                    raise ValueError("memory ingestion failed before reader evaluation")
                 # Answer and gold evidence IDs are never included in the reader request.
                 prompt = f"Current date: {row['question_date']}\nRetrieved conversation evidence:\n{row['arms'][arm]['context']}\n\nQuestion: {row['question']}"
                 response = await complete(
@@ -116,7 +120,8 @@ async def run(a):
                 result.update(
                     error=type(exc).__name__,
                     correct=False,
-                    error_phase="judge" if "reader" in result else "reader",
+                    error_phase=result.get("error_phase")
+                    or ("judge" if "reader" in result else "reader"),
                 )
                 partial = getattr(exc, "response", None)
                 if partial is not None:

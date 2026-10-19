@@ -1,0 +1,376 @@
+{
+  "endpoint": "https://api.stepfun.com/step_plan/v1",
+  "billing_surface": "step_plan",
+  "model": "step-5-preview",
+  "judge_model": "step-5-preview",
+  "judge_prompt": "xiaowu0162/LongMemEval/src/evaluation/evaluate_qa.py",
+  "judge_upstream_revision": "9e0b455f4ef0e2ab8f2e582289761153549043fc",
+  "judge_prompt_sha256": "d1b5076571e9cdaa30375539610282fd44dd4a7cd8087aafd949f676c49d9f49",
+  "retrieval_sha256": "eee5deb74851811e3f00c5a6d1ec2761e2f9168a50c9e6baaa242aa462e3e2c5",
+  "cases": 24,
+  "arms": [
+    "no_memory",
+    "dense",
+    "akasha",
+    "akasha2",
+    "bm25",
+    "rrf",
+    "recency"
+  ],
+  "max_tokens": 8192,
+  "reasoning_effort": "medium",
+  "client_sha256": "52eccf47a2026d2b48ec720a816b63fbb055e14699aa5682c7f756b2397ceae5",
+  "reader_code_sha256": "a12fc7ffe9877d8ddeb5ddaad3f8fabaa78eadd3a812ab482b172fe7e6312ede",
+  "concurrency": 4,
+  "metrics": {
+    "no_memory": {
+      "n": 24,
+      "correct": 3,
+      "errors": 0,
+      "input_tokens": 7863,
+      "output_tokens": 6421
+    },
+    "no_memory/single-session-user": {
+      "n": 4,
+      "correct": 0,
+      "errors": 0,
+      "input_tokens": 1103,
+      "output_tokens": 562
+    },
+    "akasha": {
+      "n": 24,
+      "correct": 17,
+      "errors": 0,
+      "input_tokens": 114629,
+      "output_tokens": 16435
+    },
+    "akasha/single-session-user": {
+      "n": 4,
+      "correct": 3,
+      "errors": 0,
+      "input_tokens": 18432,
+      "output_tokens": 932
+    },
+    "akasha2": {
+      "n": 24,
+      "correct": 13,
+      "errors": 0,
+      "input_tokens": 109428,
+      "output_tokens": 17698
+    },
+    "akasha2/single-session-user": {
+      "n": 4,
+      "correct": 3,
+      "errors": 0,
+      "input_tokens": 17057,
+      "output_tokens": 782
+    },
+    "dense": {
+      "n": 24,
+      "correct": 17,
+      "errors": 0,
+      "input_tokens": 114684,
+      "output_tokens": 14662
+    },
+    "dense/single-session-user": {
+      "n": 4,
+      "correct": 3,
+      "errors": 0,
+      "input_tokens": 18329,
+      "output_tokens": 977
+    },
+    "rrf": {
+      "n": 24,
+      "correct": 17,
+      "errors": 0,
+      "input_tokens": 117131,
+      "output_tokens": 16866
+    },
+    "rrf/single-session-user": {
+      "n": 4,
+      "correct": 4,
+      "errors": 0,
+      "input_tokens": 18391,
+      "output_tokens": 782
+    },
+    "bm25": {
+      "n": 24,
+      "correct": 18,
+      "errors": 0,
+      "input_tokens": 116238,
+      "output_tokens": 17929
+    },
+    "bm25/single-session-user": {
+      "n": 4,
+      "correct": 4,
+      "errors": 0,
+      "input_tokens": 19296,
+      "output_tokens": 754
+    },
+    "recency": {
+      "n": 24,
+      "correct": 3,
+      "errors": 0,
+      "input_tokens": 104950,
+      "output_tokens": 8002
+    },
+    "recency/single-session-user": {
+      "n": 4,
+      "correct": 0,
+      "errors": 0,
+      "input_tokens": 18834,
+      "output_tokens": 1213
+    },
+    "no_memory/single-session-assistant": {
+      "n": 4,
+      "correct": 0,
+      "errors": 0,
+      "input_tokens": 1408,
+      "output_tokens": 965
+    },
+    "akasha/single-session-assistant": {
+      "n": 4,
+      "correct": 4,
+      "errors": 0,
+      "input_tokens": 15580,
+      "output_tokens": 1133
+    },
+    "bm25/single-session-assistant": {
+      "n": 4,
+      "correct": 4,
+      "errors": 0,
+      "input_tokens": 15896,
+      "output_tokens": 853
+    },
+    "dense/single-session-assistant": {
+      "n": 4,
+      "correct": 4,
+      "errors": 0,
+      "input_tokens": 15405,
+      "output_tokens": 1640
+    },
+    "akasha2/single-session-assistant": {
+      "n": 4,
+      "correct": 4,
+      "errors": 0,
+      "input_tokens": 15904,
+      "output_tokens": 1312
+    },
+    "rrf/single-session-assistant": {
+      "n": 4,
+      "correct": 4,
+      "errors": 0,
+      "input_tokens": 16219,
+      "output_tokens": 919
+    },
+    "recency/single-session-assistant": {
+      "n": 4,
+      "correct": 0,
+      "errors": 0,
+      "input_tokens": 17858,
+      "output_tokens": 1619
+    },
+    "no_memory/single-session-preference": {
+      "n": 4,
+      "correct": 0,
+      "errors": 0,
+      "input_tokens": 1655,
+      "output_tokens": 1915
+    },
+    "dense/single-session-preference": {
+      "n": 4,
+      "correct": 2,
+      "errors": 0,
+      "input_tokens": 20275,
+      "output_tokens": 3752
+    },
+    "akasha/single-session-preference": {
+      "n": 4,
+      "correct": 1,
+      "errors": 0,
+      "input_tokens": 19484,
+      "output_tokens": 4863
+    },
+    "bm25/single-session-preference": {
+      "n": 4,
+      "correct": 2,
+      "errors": 0,
+      "input_tokens": 20213,
+      "output_tokens": 2717
+    },
+    "rrf/single-session-preference": {
+      "n": 4,
+      "correct": 3,
+      "errors": 0,
+      "input_tokens": 20521,
+      "output_tokens": 4369
+    },
+    "no_memory/multi-session": {
+      "n": 4,
+      "correct": 1,
+      "errors": 0,
+      "input_tokens": 1196,
+      "output_tokens": 1177
+    },
+    "recency/single-session-preference": {
+      "n": 4,
+      "correct": 0,
+      "errors": 0,
+      "input_tokens": 15904,
+      "output_tokens": 1705
+    },
+    "akasha/multi-session": {
+      "n": 4,
+      "correct": 2,
+      "errors": 0,
+      "input_tokens": 20924,
+      "output_tokens": 4767
+    },
+    "akasha2/multi-session": {
+      "n": 4,
+      "correct": 1,
+      "errors": 0,
+      "input_tokens": 19196,
+      "output_tokens": 2575
+    },
+    "dense/multi-session": {
+      "n": 4,
+      "correct": 2,
+      "errors": 0,
+      "input_tokens": 20638,
+      "output_tokens": 2599
+    },
+    "bm25/multi-session": {
+      "n": 4,
+      "correct": 1,
+      "errors": 0,
+      "input_tokens": 20677,
+      "output_tokens": 3139
+    },
+    "rrf/multi-session": {
+      "n": 4,
+      "correct": 1,
+      "errors": 0,
+      "input_tokens": 21684,
+      "output_tokens": 2563
+    },
+    "recency/multi-session": {
+      "n": 4,
+      "correct": 1,
+      "errors": 0,
+      "input_tokens": 17085,
+      "output_tokens": 946
+    },
+    "no_memory/knowledge-update": {
+      "n": 4,
+      "correct": 1,
+      "errors": 0,
+      "input_tokens": 1073,
+      "output_tokens": 709
+    },
+    "akasha/knowledge-update": {
+      "n": 4,
+      "correct": 4,
+      "errors": 0,
+      "input_tokens": 18912,
+      "output_tokens": 2220
+    },
+    "dense/knowledge-update": {
+      "n": 4,
+      "correct": 3,
+      "errors": 0,
+      "input_tokens": 18674,
+      "output_tokens": 2445
+    },
+    "akasha2/knowledge-update": {
+      "n": 4,
+      "correct": 2,
+      "errors": 0,
+      "input_tokens": 18728,
+      "output_tokens": 1869
+    },
+    "rrf/knowledge-update": {
+      "n": 4,
+      "correct": 3,
+      "errors": 0,
+      "input_tokens": 19717,
+      "output_tokens": 2502
+    },
+    "recency/knowledge-update": {
+      "n": 4,
+      "correct": 1,
+      "errors": 0,
+      "input_tokens": 16258,
+      "output_tokens": 1266
+    },
+    "bm25/knowledge-update": {
+      "n": 4,
+      "correct": 4,
+      "errors": 0,
+      "input_tokens": 19596,
+      "output_tokens": 2262
+    },
+    "akasha2/single-session-preference": {
+      "n": 4,
+      "correct": 3,
+      "errors": 0,
+      "input_tokens": 21707,
+      "output_tokens": 5709
+    },
+    "no_memory/temporal-reasoning": {
+      "n": 4,
+      "correct": 1,
+      "errors": 0,
+      "input_tokens": 1428,
+      "output_tokens": 1093
+    },
+    "dense/temporal-reasoning": {
+      "n": 4,
+      "correct": 3,
+      "errors": 0,
+      "input_tokens": 21363,
+      "output_tokens": 3249
+    },
+    "akasha2/temporal-reasoning": {
+      "n": 4,
+      "correct": 0,
+      "errors": 0,
+      "input_tokens": 16836,
+      "output_tokens": 5451
+    },
+    "akasha/temporal-reasoning": {
+      "n": 4,
+      "correct": 3,
+      "errors": 0,
+      "input_tokens": 21297,
+      "output_tokens": 2520
+    },
+    "recency/temporal-reasoning": {
+      "n": 4,
+      "correct": 1,
+      "errors": 0,
+      "input_tokens": 19011,
+      "output_tokens": 1253
+    },
+    "bm25/temporal-reasoning": {
+      "n": 4,
+      "correct": 3,
+      "errors": 0,
+      "input_tokens": 20560,
+      "output_tokens": 8204
+    },
+    "rrf/temporal-reasoning": {
+      "n": 4,
+      "correct": 2,
+      "errors": 0,
+      "input_tokens": 20599,
+      "output_tokens": 5731
+    }
+  },
+  "limitations": [
+    "fixed stratified subset, not full 500",
+    "Step5 judges Step5 answers",
+    "session recall measures evidence sessions, not exact answer span",
+    "one run, no confidence claim"
+  ]
+}
