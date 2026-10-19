@@ -1,0 +1,452 @@
+{
+  "endpoint": "https://api.stepfun.com/step_plan/v1",
+  "model": "step-5-preview",
+  "billing_surface": "step_plan",
+  "cases": [
+    {
+      "name": "tool_chain_and_recovery_0",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "lookup",
+          "save"
+        ],
+        "reply": "Done! Here's what happened:\n\n- **Code `41bf69d0bd24`** → value: **100**\n- **100 × 3** = **300**\n- **Saved** exactly once ✅\n\n**Result: 300**",
+        "writes": 1,
+        "injected_failures": 1,
+        "requests": [
+          {
+            "usage": {
+              "prompt_tokens": 309,
+              "completion_tokens": 78,
+              "total_tokens": 387,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "tool_use"
+          },
+          {
+            "usage": {
+              "prompt_tokens": 419,
+              "completion_tokens": 71,
+              "total_tokens": 490,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "tool_use"
+          },
+          {
+            "usage": {
+              "prompt_tokens": 507,
+              "completion_tokens": 66,
+              "total_tokens": 573,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "end_turn"
+          }
+        ],
+        "execution_status": "completed"
+      },
+      "seconds": 19.81141628138721
+    },
+    {
+      "name": "tool_chain_and_recovery_1",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "lookup",
+          "save"
+        ],
+        "reply": "Done. Here's a summary:\n\n- **Code looked up:** `df3655a5bf99` → value **101**\n- **Multiplied by three:** 101 × 3 = **303**\n- **Saved:** 303 (saved exactly once, successfully)\n\n**Result: 303**",
+        "writes": 1,
+        "injected_failures": 0,
+        "requests": [
+          {
+            "usage": {
+              "prompt_tokens": 308,
+              "completion_tokens": 117,
+              "total_tokens": 425,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "tool_use"
+          },
+          {
+            "usage": {
+              "prompt_tokens": 457,
+              "completion_tokens": 79,
+              "total_tokens": 536,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "tool_use"
+          },
+          {
+            "usage": {
+              "prompt_tokens": 553,
+              "completion_tokens": 79,
+              "total_tokens": 632,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "end_turn"
+          }
+        ],
+        "execution_status": "completed"
+      },
+      "seconds": 7.85810106806457
+    },
+    {
+      "name": "tool_chain_and_recovery_2",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "lookup",
+          "save"
+        ],
+        "reply": "Done.\n\n- **Code looked up:** `4d751558cb37`\n- **Value:** 102\n- **Multiplied by 3:** 306\n- **Saved:** 306 (saved exactly once)\n\nThe result is **306**.",
+        "writes": 1,
+        "injected_failures": 1,
+        "requests": [
+          {
+            "usage": {
+              "prompt_tokens": 308,
+              "completion_tokens": 38,
+              "total_tokens": 346,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "tool_use"
+          },
+          {
+            "usage": {
+              "prompt_tokens": 377,
+              "completion_tokens": 60,
+              "total_tokens": 437,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "tool_use"
+          },
+          {
+            "usage": {
+              "prompt_tokens": 454,
+              "completion_tokens": 55,
+              "total_tokens": 509,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "end_turn"
+          }
+        ],
+        "execution_status": "completed"
+      },
+      "seconds": 10.604989981278777
+    },
+    {
+      "name": "tool_chain_and_recovery_3",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "lookup",
+          "save"
+        ],
+        "reply": "The value for code `74c2852ef750` is `103`. Multiplied by three, the result is `309`, and it has been saved.",
+        "writes": 1,
+        "injected_failures": 0,
+        "requests": [
+          {
+            "usage": {
+              "prompt_tokens": 308,
+              "completion_tokens": 57,
+              "total_tokens": 365,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "tool_use"
+          },
+          {
+            "usage": {
+              "prompt_tokens": 396,
+              "completion_tokens": 39,
+              "total_tokens": 435,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "tool_use"
+          },
+          {
+            "usage": {
+              "prompt_tokens": 452,
+              "completion_tokens": 39,
+              "total_tokens": 491,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "end_turn"
+          }
+        ],
+        "execution_status": "completed"
+      },
+      "seconds": 8.87950387597084
+    },
+    {
+      "name": "tool_chain_and_recovery_4",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "lookup",
+          "save"
+        ],
+        "reply": "Done!\n\n- Code `5e2b112d4f11` → value **104**\n- 104 × 3 = **312**\n\nI've saved **312** as the result, and the save completed successfully.",
+        "writes": 1,
+        "injected_failures": 1,
+        "requests": [
+          {
+            "usage": {
+              "prompt_tokens": 311,
+              "completion_tokens": 45,
+              "total_tokens": 356,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "tool_use"
+          },
+          {
+            "usage": {
+              "prompt_tokens": 390,
+              "completion_tokens": 41,
+              "total_tokens": 431,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "tool_use"
+          },
+          {
+            "usage": {
+              "prompt_tokens": 448,
+              "completion_tokens": 48,
+              "total_tokens": 496,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "end_turn"
+          }
+        ],
+        "execution_status": "completed"
+      },
+      "seconds": 5.893493650481105
+    },
+    {
+      "name": "tool_chain_and_recovery_5",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "lookup",
+          "save"
+        ],
+        "reply": "Done! Here's a summary:\n\n- **Code looked up:** 610826d2a5a0 → **value: 105**\n- **Multiplied by 3:** 105 × 3 = **315**\n- **Saved:** 315 (saved successfully, exactly once)\n\nThe result is **315**.",
+        "writes": 1,
+        "injected_failures": 0,
+        "requests": [
+          {
+            "usage": {
+              "prompt_tokens": 310,
+              "completion_tokens": 71,
+              "total_tokens": 381,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "tool_use"
+          },
+          {
+            "usage": {
+              "prompt_tokens": 414,
+              "completion_tokens": 74,
+              "total_tokens": 488,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "tool_use"
+          },
+          {
+            "usage": {
+              "prompt_tokens": 505,
+              "completion_tokens": 81,
+              "total_tokens": 586,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            },
+            "stop_reason": "end_turn"
+          }
+        ],
+        "execution_status": "completed"
+      },
+      "seconds": 6.34883620403707
+    },
+    {
+      "name": "wake_grounded_decision_0",
+      "status": "passed",
+      "evidence": {
+        "send": true,
+        "cited_ids": [
+          "feed:0"
+        ],
+        "message": "Akasha2 发布了新的消费与恢复设计，正好是你关注的消费游标和崩溃恢复方向。看起来是实质更新，方便的话可以看看对你手头的项目有没有直接参考价值。",
+        "reason": ""
+      },
+      "seconds": 6.942634152248502
+    },
+    {
+      "name": "wake_grounded_decision_1",
+      "status": "passed",
+      "evidence": {
+        "send": false,
+        "cited_ids": [],
+        "message": "",
+        "reason": "候选内容为影视明星穿搭热榜，属于长期记忆和主动推送规则中明确禁用的娱乐明星/穿搭类内容，因此不打扰用户。"
+      },
+      "seconds": 2.3423205632716417
+    },
+    {
+      "name": "wake_grounded_decision_2",
+      "status": "passed",
+      "evidence": {
+        "send": false,
+        "cited_ids": [],
+        "message": "",
+        "reason": "候选内容为电商平台促销，属于用户明确不感兴趣的广告/电商促销类信息，且与 Agent Runtime 无关，不值得主动打扰。"
+      },
+      "seconds": 4.314588785171509
+    },
+    {
+      "name": "wake_grounded_decision_3",
+      "status": "passed",
+      "evidence": {
+        "send": true,
+        "cited_ids": [
+          "feed:3"
+        ],
+        "message": "你之前急需解决的「Agent 工具重复执行」问题，这里有一条明确的修复方案，建议尽快看看。",
+        "reason": ""
+      },
+      "seconds": 4.8215603567659855
+    },
+    {
+      "name": "wake_interest_estimates",
+      "status": "passed",
+      "evidence": {
+        "feed:relevant": {
+          "interest": 0.95,
+          "confidence": 0.9,
+          "eligible": true,
+          "reason": "Directly matches the user's explicit request for Akasha2 recovery updates."
+        },
+        "feed:excluded": {
+          "interest": 0.05,
+          "confidence": 0.95,
+          "eligible": false,
+          "reason": "Matches explicitly excluded celebrity and advertising content."
+        }
+      },
+      "seconds": 4.345951940864325
+    },
+    {
+      "name": "production_pipeline_files_and_restart",
+      "status": "passed",
+      "evidence": {
+        "first_reply": "已完成：\n\n1. **写入**：通过 `write_file` 将 `KIRA_294960e872cb` 写入 `probe.txt`（17 字节，路径：`/tmp/kirakira-step5-functional-20261019/runtime/probe.txt`）。\n2. **核实**：通过 `read_file` 读回文件，内容为 `KIRA_294960e872cb`，与目标字符串一致。",
+        "restart_reply": "KIRA_294960e872cb",
+        "persisted_messages": 4,
+        "capabilities": [
+          {
+            "key": "memory.retrieval.v1",
+            "owner": "memory",
+            "generation": null
+          },
+          {
+            "key": "memory.services.v1",
+            "owner": "memory",
+            "generation": null
+          }
+        ]
+      },
+      "seconds": 14.191961089149117
+    }
+  ],
+  "passed": 12,
+  "total": 12
+}

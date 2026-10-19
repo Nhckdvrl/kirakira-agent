@@ -46,7 +46,8 @@
 | 文档 | 内容 |
 | --- | --- |
 | [验证记录](./operations/verification.md) | 当前离线、在线和 Reference 独立性结果 |
-| [记忆评测](./operations/memory-evaluation.md) | 免费确定性 Gate 与模型质量评测边界 |
+| [记忆评测](./operations/memory-evaluation.md) | 离线合同、Step5 实测和固定质量协议 |
+| [2026-10-19 实验结果](./operations/evaluations/2026-10-19-memory.md) | 两轮四组与 oracle 的逐题结果和限制 |
 | [Workspace 迁移](./operations/workspace-migrations.md) | Yoyo、单实例锁和 append-only 规则 |
 | [Curated Feeds](./operations/curated-feeds.md) | 内置订阅插件、配置与数据状态 |
 

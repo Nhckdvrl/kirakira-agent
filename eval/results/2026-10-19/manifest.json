@@ -1,0 +1,87 @@
+{
+  "date": "2026-10-19",
+  "software": {
+    "core_commit": "d506a4c2b4d6c377bc7718fc24df3709480e633a",
+    "python": "3.14.6",
+    "packages": {
+      "numpy": "2.5.1",
+      "pydantic": "2.14.1",
+      "httpx": "0.28.1",
+      "pytest": "9.1.1",
+      "pytest-asyncio": "1.4.0"
+    },
+    "native_code_commit": "29df7289786ab04ffdb57e3161bd160ba2987fdd",
+    "embedding_packages": {
+      "fastembed": "0.9.0",
+      "onnxruntime": "1.31.0",
+      "tokenizers": "0.23.3",
+      "numpy": "2.5.4"
+    }
+  },
+  "dataset_cases": 36,
+  "learned_turns": 8791,
+  "unpaired_messages": 141,
+  "quality_groups": 360,
+  "quality_logical_generations": 720,
+  "primary": {
+    "max_tokens": 8192,
+    "reasoning_effort": "medium",
+    "reader_concurrency": 8,
+    "oracle_concurrency": 4
+  },
+  "round1": {
+    "max_tokens": 4096,
+    "requested_thinking": false,
+    "actual_reasoning_effort": "unspecified; unsupported thinking control was removed for native repeat"
+  },
+  "omitted_material": "Full dataset, embeddings, raw retrieved text and private runtime databases remain outside git. Compact records retain source IDs; full reader/judge replies are included.",
+  "limitations": [
+    "36 fixed stratified cases, not full 500",
+    "English BGE small, single embedding",
+    "same-model judge",
+    "different model controls across rounds; not confidence replicates",
+    "strict evidence-only reader may underperform on personalized advice",
+    "one round1 judge truncation counted as incorrect; usage for that failed response unavailable",
+    "352ab8bd has no eligible annotated complete pair; kept in accuracy denominator, excluded from pair recall"
+  ],
+  "verification_fixture_corrections": [
+    "Initial adapter cleanup used a nonexistent synchronous close; corrected before evaluated retrieval output.",
+    "Real corpus exposed tied wall-clock v1 ordering; fixed and verified online/replay equality before evaluated outputs.",
+    "Wake verifier initially conflated receipt ACK with interest feedback and assumed ACK order; verifier corrected; pipeline retained receipt/feedback distinction."
+  ],
+  "files": {
+    "round1-results.jsonl": "8ba8b4d3854d8a3cff7ab534eb0218a9e1ba206ec79e2273475664145a1d3808",
+    "round1-summary.json": "baa93cb2c8ec585c643cebf8457596ca434a3f3401016a2628712dd7b81512c1",
+    "round1-oracle-results.jsonl": "def93609f4835f7b5afa479f1eb3588316778050873e1c143293c916b5e50162",
+    "round1-oracle-summary.json": "a4d6bb66e0ea3da48aaa32b5dac40cc5134804d0cc1400143910d8d72c3b1bbd",
+    "native-results.jsonl": "c2b1bdd6bfe72fd8b8e08ec69b3c3859227c294b802e51549f53f9fad2e7318b",
+    "native-summary.json": "3e7c366be7561be8aeacace8bb98c2efece6a95f5505da9b08ec9825c31afe3a",
+    "native-oracle-results.jsonl": "141bb77a1a4c741f3607415d8b770dae54d739aa0f91b3d5f9a45f03ce2d80c1",
+    "native-oracle-summary.json": "ba1bdbcdf2ab8371c4485da90ee61569cba8ebd8e7e7ab75ad94b4247eebbeeb",
+    "retrieval-manifest.json": "5f556ffc600f413d43db019d174f5075ee1b5f3b890e172a003f4a526d570e1a",
+    "oracle-manifest.json": "14a214c687237cc16fce1ec18739c52cf6a03cfbfd1e947c53fc5f0984831d6c",
+    "core-native.json": "d78867b03e3ef8df734010d3c77bea9ee09769d5a549e0449be75b642e588ef1",
+    "drift-native.json": "8c9ceabdb5ddff4a07ad4abfd92de73cd0a4755cb3d5ddd51c90a5cf81bc8b4e",
+    "wake-native.json": "708839ff1e0d9d0c166cd0c6db1ab32c26f098bcccb0aa803a2525710fc330e7",
+    "core-initial.json": "1e53f49c48b28fbd6c8a6b20149963be8c07068659a2ee145fa0f48554552595",
+    "core-repeat-before-native.json": "f4fb8e2b994616ba3cfa435afcc87f6029c9528761e400c9e7419070fda21c49",
+    "drift-initial.json": "2189ef41f4b336d72bb6dc347cb180890ebef9763c098100a4d8c2d6df4e96b5",
+    "wake-before-native.json": "2ec8d3ec3b33a5869aa946406278974e3de5e0f1c15cea3890946f66d9e4feda",
+    "retrieval-compact.jsonl": "5d3eac814c1f7736ff02307e1f590ef6897fcaa5c59a0381baf482336c4b20c0",
+    "analysis.json": "cf0f67cd8b0946c43858ba681433423782fd3b6efff90afc463b0ccf6a973117",
+    "case-matrix.csv": "2198d28ca1b4b389f94d178a5028531a4d144dd965fda63d58c8fc8b63a23ee9",
+    "README.md": "e092bd82a100726b58272744df7bdc36e2ba5a88486108e5a3b13f9fda361083",
+    "tests.txt": "536b1b0746786123bb7bf4c318ec0bb0fe0fc63ee9e2cc39f7ef045878004e41"
+  },
+  "verification": {
+    "tests": 661,
+    "subtests": 4,
+    "seconds": 49.82,
+    "legacy_warnings": 22,
+    "native_functional_cases": 17
+  },
+  "gold_pair_metric_cases": 32,
+  "projection_gap_cases": [
+    "352ab8bd"
+  ]
+}

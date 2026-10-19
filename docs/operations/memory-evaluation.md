@@ -1,86 +1,131 @@
 # 记忆评测
 
-记忆评测分两层：免费、确定性的链路 Gate，以及需要真实模型的质量评测。两者不能混报。
+合同回归与回答质量分别验证。确定性 hash 向量只用于消费、重放、幂等与持久化测试，不能支持记忆质量结论。
+本轮实测结果、逐题文件与限制见 [2026-10-19 实验报告](./evaluations/2026-10-19-memory.md)。
 
-## 确定性 Gate
+## 三层证据
 
-离线 runner 在隔离 workspace 中对 DefaultMemoryEngine 和 Akasha v1 执行同一批样本，检查：
+1. 离线合同：原始消息消费、发布位置、查询不学习、重复通知、故障回滚、快照恢复与固定向量重建。
+2. 在线功能：真实 Step5 驱动工具链、当前生成恢复、完整对话入口、Wake 与 Drift；测试渠道是本地回执，不向真实用户发送消息。
+3. 公开语料质量：固定 LongMemEval 样本，比较无记忆、纯向量、Akasha v1、Akasha2；另外记录标签辅助的 oracle 诊断。
 
-- 数据能摄入并持久化；
-- query 能返回证据；
-- source reference 可以回到原样本；
-- 不同引擎和 workspace 不串数据；
-- EM、F1、MRR 等基础指标计算稳定。
+每层保留自己的失败。通过前两层不等于第三层有提升；oracle 使用标注，不能当作有效检索成绩。
 
-```bash
-uv run pytest -q tests/test_memory_eval_offline.py
-```
-
-这层适合 CI，能拦住 wiring、持久化和证据链回归，但不能判断模型回答是否聪明。
-
-## 在线链路 Smoke
+## 运行离线合同与固定向量重建
 
 ```bash
-uv run kirakira-verify-online
-```
-
-该验证使用真实 provider，检查 embedding、Default 工具链、上下文投影和 Akasha 证据消费。最新结果见
-[验证记录](./verification.md)。
-
-## 模型质量评测
-
-完整 LongMemEval 还需要真实 AgentLoop 生成回答，并用官方口径或明确的 Judge 计算质量。运行时应把以下
-信息分别报告：
-
-- 数据集版本和样本范围；
-- engine 与配置；
-- retrieval 指标；
-- answer Judge/F1/EM；
-- token、请求数和费用；
-- 失败、跳过和解析异常。
-
-## 当前边界
-
-尚未完成的质量项只在[当前状态](../status/current.md)维护，包括完整 LongMemEval、knowledge update 的
-replacement oracle、Akasha 新版 parity 和 PersonaMem schema 漂移适配。离线 Gate 通过不等于这些质量项
-已经通过。
-
-相关实现位于 `eval/longmemeval/`，架构见[记忆架构](../architecture/memory.md)。
-
-## v1 事务学习与显式重建
-
-```bash
-uv run pytest -q tests/test_memory_commit_cycle.py tests/test_memory_recovery.py tests/test_proactive_decisions.py tests/test_proactive_admission.py tests/test_drift.py
+uv sync --frozen --group dev
+uv run pytest -q
 uv run python -m scripts.replay_akasha --help
-uv run python -m scripts.replay_akasha \
-  --source /absolute/workspace/sessions.db \
-  --output /absolute/workspace/memory/akasha-candidate.db \
-  --model exact-stored-embedding-model
+uv run python -m scripts.replay_akasha2 --help
 ```
 
-命令对原始 SQLite 做只读一致性备份，预检合格完整消息对的固定向量，再在同一文件系统暂存并原子发布新库。
-输出已存在、缺失/损坏向量、混合维度或非法消息时间都会失败；不请求 provider、不覆盖源库、不自动切换引擎。
-输出含 learned/skipped 数量及输入收据 digest；skip 指不属于学习的 assistant 消息，不把缺向量伪装成成功。
+重建命令读取原始 SQLite 的一致备份，只使用内容 hash、模型身份和维度匹配的固定向量。
+缺失、损坏或混杂的向量会失败，不访问网络，不覆盖来源，不自动激活候选。
+同时间戳的 v1 消费和重建遵循持久 publication 顺序，不按文本形式的序号排序。
+切换与恢复要求见[记忆手册](../handbook/memory.md)。
 
-默认使用 `AkashaConfig` 默认算法参数。若线上配置有改动，传
-`--config-dir /absolute/workspace/plugin-data/akasha-builtin`，该目录必须确实包含 `config.local.toml`；
-请按实际 workspace 配置目录填写。比较 online/replay 时必须匹配算法配置、模型身份、来源及强化标记。
-确认候选图后，停止 runtime，再修改 Akasha 的 workspace 内 `db_path` 指向候选库，保留原库以便回退。
-本轮未对真实用户历史执行重建或切换。候选保留快照的源 stream/head；切换后的后台维护继续消费快照之后到达的消息。
-首次启用补消费使用 cutover，不会自动补学升级前历史。
+## 在线功能验证
 
-旧 v1 图无消费收据，仅继续摄入新 turn 并不能证明全图 replay parity。
-手动删除 sidecar 节点也会改变状态，完整重建会按原始事实重新产生它；删除原始事实与删除索引是不同操作。
+Step5 使用官方 Token Plan 专用端点 `https://api.stepfun.com/step_plan/v1`，实际模型 ID 为
+`step-5-preview`。验证器强制该路由，不回退到现金 API；原始密钥只从外部文件读入内存。Step5 使用 reasoning_effort（low/medium/high），
+不能用 thinking=false 声称关闭推理。
+模型、工具、记忆客户端不能复用真实 workspace 的私有配置。
 
-## 下一阶段质量实验设计（尚未执行）
+```bash
+uv run python -m scripts.verify_step_plan \
+  --key-file /absolute/private/step-plan.key \
+  --workspace /tmp/kirakira-core-new-run \
+  --output /tmp/kirakira-core-result.json
 
-| 问题 | 对照 | 指标/控制变量 |
-| --- | --- | --- |
-| 联想是否带来收益 | dense-only / v1 dense+ripple / v2 | 相同 embedding、query、时间截点、输出预算；Recall@k、MRR、证据准确率 |
-| 能否处理长期变化 | 多会话、偏好变化、相似干扰、时间顺序题 | answer EM/F1 或固定 judge；旧事实误用与无证据回答单独计数 |
-| 主动是否有价值 | 无记忆 / dense / dense+ripple | 人工标注 share/skip、误打扰率、漏掉的高价值事件、依据引用正确率 |
-| 是否依赖轮询抽奖 | 固定同一事件流，变更 tick 频率与重启点 | 决策次数、重复投递、候选遗漏、每有效分享模型成本 |
-| 是否适合长期运行 | 不同历史长度、故障注入 | p50/p95 检索/学习时延、内存、恢复后图一致性 |
+uv run python -m scripts.verify_drift_step_plan \
+  --key-file /absolute/private/step-plan.key \
+  --workspace /tmp/kirakira-drift-new-run \
+  --output /tmp/kirakira-drift-result.json
 
-先固定小规模人工审阅集及来源，再扩展 LongMemEval；不得用相同模板生成题目和历史来证明泛化。
-每个样本保留首个有效 attempt、失败和解析异常，不只选最好的一次。算法质量与本轮事务正确性分别报告。
+uv run python -m scripts.verify_wake_step_plan \
+  --key-file /absolute/private/step-plan.key \
+  --workspace /tmp/kirakira-wake-new-run \
+  --output /tmp/kirakira-wake-result.json
+```
+
+每次使用新的 workspace。Wake 区分“本地已接收”的 receipt ACK 与“实际选中”的兴趣 feedback；
+ACK 身份集合不依赖数据库返回顺序。重复 tick 与重启不应重复评分或发送已处理到达。
+Drift 的静默、实际投递、来源失效与 paused 分别验证。
+
+## 固定质量协议
+
+- 数据：`xiaowu0162/longmemeval-cleaned` 的 LongMemEval-S，revision
+  `98d7416c24c778c2fee6e6f3006e7a073259d48f`，SHA-256
+  `d6f21ea9d60a0d56f34a05b609c79c88a451d2ae03597821ea3d5a9678c3a442`。
+- 选择：按 `sha256(kirakira-20261019:question_id)` 排序，六种 question type 各取 6 题；
+  不使用答案或 gold session 选择样本。共 36 题，其中 3 道自然抽中的 abstention。
+- 向量：本地 `BAAI/bge-small-en-v1.5`，FastEmbed/ONNX CPU，384 维、512 token 截断；
+  query 使用模型对应的检索前缀。缓存记录所有下载文件摘要，不请求托管 embedding API。
+- 输入：每题隔离来源和图，按提供的日期排序，消息 ID 从题目/来源/位置确定生成。
+  原始消息完整落库；四组比较使用相同的完整 user/assistant 消息对投影，不完整消息数量逐题报告。
+- 时间：数据集没有时区，统一解释为 UTC。部分历史日期晚于问题日期；保留所有给定 haystack，
+  消费查询时钟取二者最大值，reader 仍按原始问题日期推理。该实验不是生产历史快照查询测试。
+- 检索：Dense 取消息对内 user/assistant 相似度的最大值；图引擎使用生产 query 顺序。
+  各组都回源到完整原文再给 reader，最多 10 对、24,000 字符；不使用 v1 截断的 assistant 展示卡。
+- Reader：Step5，原生 reasoning_effort=medium，max_tokens=8192；只看问题、日期与检索原文，不看答案或 gold ID。
+- Judge：官方 LongMemEval 分类判分 prompt，固定来源 revision
+  `9e0b455f4ef0e2ab8f2e582289761153549043fc`；judge 也是 Step5，严格 yes/no，错误计入分母。
+- Oracle：只展示带 `has_answer` 标注的完整原文对。它有意使用答案位置标注，只诊断 reader/检索瓶颈。
+
+## 准备与执行
+
+先从上述固定 revision 下载 `longmemeval_s_cleaned.json`，核对 SHA-256。数据和缓存留在仓库外。
+为免费 CPU embedding 单独创建环境，不把 FastEmbed 加入生产依赖：
+
+```bash
+uv venv /tmp/kirakira-embedding-env
+uv pip install --python /tmp/kirakira-embedding-env/bin/python fastembed
+
+/tmp/kirakira-embedding-env/bin/python -m eval.longmemeval.embed_local \
+  --dataset /absolute/cache/longmemeval_s_cleaned.json \
+  --output /absolute/cache/bge-36.npz \
+  --cache /absolute/cache/models --per-type 6
+
+uv run python -m eval.longmemeval.prepare_retrieval \
+  --dataset /absolute/cache/longmemeval_s_cleaned.json \
+  --embeddings /absolute/cache/bge-36.npz \
+  --workspace /tmp/kirakira-lme-new-run \
+  --output /tmp/kirakira-retrieval.jsonl --per-type 6
+
+uv run python -m eval.longmemeval.live_eval \
+  --retrieval /tmp/kirakira-retrieval.jsonl \
+  --output /tmp/kirakira-answers.jsonl \
+  --key-file /absolute/private/step-plan.key --concurrency 4
+```
+
+独立样本可通过 `prepare_retrieval --shards N --shard-index I` 分进程运行，每个 shard 使用独立输出，
+共享一个 workspace 根但不共享题目。用 `merge_retrieval --inputs ... --output ... --expected-cases 36`
+合并；它会检查各 shard 的数据、代码和协议一致。reader 可添加 `--follow --expected-cases 36` 边准备边运行。
+模型请求内部按 core 的有界重试策略恢复；已落盘的逐题结果续跑时不会被覆盖，也不把失败重试到成功后隐藏。
+
+Oracle 单独运行：
+
+```bash
+uv run python -m scripts.prepare_memory_oracle \
+  --dataset /absolute/cache/longmemeval_s_cleaned.json --output /tmp/kirakira-oracle.jsonl
+uv run python -m eval.longmemeval.live_eval \
+  --retrieval /tmp/kirakira-oracle.jsonl --output /tmp/kirakira-oracle-answers.jsonl \
+  --key-file /absolute/private/step-plan.key --concurrency 4
+```
+
+将 embedding 和 retrieval 的 `--per-type` 一起改为至少 133 可覆盖完整 500 题；这是新的实验，
+不能把当前 36 题的分层比例直接称为官方总体成绩。运行前固定协议，运行后保存全部逐题输出与异常。
+
+## 覆盖指标
+
+session recall 只说明某个相关 session 被命中过，不能证明答案所在的消息对被取到。
+结果另外保存事后匹配的标注消息对索引，用于复算完整证据覆盖。没有可用标注完整消息对的题
+不进入这个覆盖指标，但仍保留在回答正确率分母中；每次明确报告该数量。
+
+## 必须报告
+
+数据/模型/代码摘要、选择范围、字符预算、每组正确数、分类结果、弃答、证据 session recall、
+错误与截断、reader/judge usage，以及 oracle 对错误的诊断。成功响应 usage 不等于包含所有失败尝试的计费账单。
+同模型 judge 存在偏差；小样本、单轮和单 embedding 不能支持显著性或整体领先结论。首轮曾发送未获文档支持的 thinking=false、上限 4096；
+该轮原样保留并标明实际推理强度未指定，统一原生配置的复跑另存为独立轮次。

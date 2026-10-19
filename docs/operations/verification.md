@@ -2,7 +2,29 @@
 
 本文只记录已经实际执行过的验证。功能现状见[当前状态](../status/current.md)，不要从测试数量反推能力范围。
 
-## 第三轮 core 与工作流修订（最新）
+## 2026-10-19：组件、恢复与真实记忆实验（最新）
+
+Python 3.14.6/Linux；上游 pin 为 `d85b00c233686b68b082052b1b20123905aeab13`。
+
+| 验证 | 结果 |
+| --- | --- |
+| 最终全量回归 | **661 passed，4 subtests passed**，49.82 秒 |
+| 警告 | 22 条既有 Telegram 弃用警告 |
+| 原生 Step5 功能 | Core 12/12、Drift 4/4、Wake 整链 1/1；重复 tick/重启和本地回执均验证 |
+| 模型路由 | 只使用 Token Plan `/step_plan/v1` 与 `step-5-preview`，原生 reasoning_effort；未用现金接口 |
+| 记忆质量 | 两轮固定 36 题、四组及 oracle，共 360 组回答/判分；初始失败完整保留 |
+| HTTP/SSE 与恢复 | 真实 loopback 503、断流、截断、限次、取消；完成工具不重放 |
+| 记忆状态 | 原始 SQLite 消费、同时间戳顺序、checkpoint 尾部重放、原文损坏拒绝、独占 writer、离线重建 |
+| 组件生命周期 | 显式依赖、代际借用、缺失依赖撤销、任务 finally 与取消 closer 的继续清理 |
+| 制品与独立性 | sdist/wheel、独立安装环境导入与 CLI、Akasha2 许可证/来源、无 Reference 依赖 |
+| 静态与文档 | 本轮主要新模块 Ruff 检查、diff、文档本地链接、来源 SHA 与密钥扫描通过；不声称全项目类型检查 |
+| 真实用户状态 | 未迁移历史库或修改私人配置；在线投递只使用测试本地回执 |
+
+结果、负面结论、协议修正与逐题文件见[实验报告](./evaluations/2026-10-19-memory.md)。
+原生配置 Dense 为 28/36，v1/Akasha2 均为 27/36，不把接入新算法等同于质量提升。
+所有收费模型验证使用用户授权的 Token Plan；免费 CPU embedding 单独缓存。
+
+## 第三轮 core 与工作流修订（历史）
 
 2026-10-03，Python 3.14.6/Linux；上游固定点仍为 `7cf10136932d5fe0205727c803c00861272db0b8`。
 从当前源码复制到不含真实 config、workspace、Reference 的临时目录执行全量回归。
