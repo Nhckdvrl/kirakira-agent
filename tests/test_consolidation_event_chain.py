@@ -14,10 +14,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from core.memory.events import ConsolidationCommitted
 from bus.event_bus import EventBus
+from core.memory.events import ConsolidationCommitted
 from core.memory.legacy import MemoryRuntime
-from session.manager import Session
+from plugins.ledger.manager import Session
 
 
 def _runtime(workspace: Path, bus: EventBus | None) -> MemoryRuntime:
@@ -99,6 +99,7 @@ class ConsolidationEventTests(unittest.TestCase):
     def test_publish_failure_does_not_propagate(self) -> None:
         async def scenario() -> None:
             with tempfile.TemporaryDirectory() as tmp:
+
                 class _BrokenBus:
                     def enqueue(self, event: object) -> None:
                         raise RuntimeError("bus down")

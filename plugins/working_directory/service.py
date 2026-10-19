@@ -4,7 +4,7 @@ from pathlib import Path
 
 from agent.composition import ServiceKey
 from core.schema import ToolSpec
-from session.owner_store import StateConflict
+from plugins.ledger.owner_store import StateConflict
 
 WORKING_DIRECTORY = ServiceKey("working_directory.v1")
 OWNER = "working_directory"

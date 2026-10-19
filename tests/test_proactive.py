@@ -8,8 +8,15 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from bus.queue import MessageBus
-from bus.events import OutboundMessage
+from core.schema import ModelResponse, ToolCall
+from plugins.ledger.manager import SessionManager
 from plugins.wake_proactive import energy
+from plugins.wake_proactive.sources import (
+    FileInboxSource,
+    SourceRegistry,
+    build_file_inbox_registry,
+)
+from plugins.wake_proactive.state import ProactiveStateStore
 from proactive_v2.config import ProactiveConfig
 from proactive_v2.contracts import (
     normalize_alert,
@@ -18,14 +25,6 @@ from proactive_v2.contracts import (
     rank_content,
 )
 from proactive_v2.loop import ProactiveLoop
-from plugins.wake_proactive.sources import (
-    FileInboxSource,
-    SourceRegistry,
-    build_file_inbox_registry,
-)
-from plugins.wake_proactive.state import ProactiveStateStore
-from core.schema import ModelResponse, ToolCall
-from session.manager import SessionManager
 
 NOW = datetime(2026, 7, 22, 12, 0, 0, tzinfo=timezone.utc)
 
@@ -54,7 +53,13 @@ class EnergyTests(unittest.TestCase):
 class ContractTests(unittest.TestCase):
     def test_normalize_alert_and_content(self):
         alert = normalize_alert(
-            {"_source": "s", "event_id": "a1", "title": "T", "content": "B", "severity": "high"}
+            {
+                "_source": "s",
+                "event_id": "a1",
+                "title": "T",
+                "content": "B",
+                "severity": "high",
+            }
         )
         self.assertEqual(alert.item_id, "s:a1")
         self.assertIn("severity=high", alert.to_prompt_line())
@@ -135,8 +140,10 @@ class SourceTests(unittest.TestCase):
             inbox = Path(tmp.name) / "inbox"
             inbox.mkdir(parents=True)
             (inbox / "demo.jsonl").write_text(
-                json.dumps({"kind": "alert", "event_id": "a1", "title": "T"}) + "\n"
-                + json.dumps({"kind": "content", "event_id": "c1", "title": "C"}) + "\n",
+                json.dumps({"kind": "alert", "event_id": "a1", "title": "T"})
+                + "\n"
+                + json.dumps({"kind": "content", "event_id": "c1", "title": "C"})
+                + "\n",
                 encoding="utf-8",
             )
             source = FileInboxSource("demo", inbox, ("alert", "content", "context"))
@@ -172,13 +179,32 @@ class _FakeClient:
     def complete(self, messages, tools, system, model, max_tokens, tool_choice=None):
         prompt = next(m["content"] for m in messages if m["role"] == "user")
         if "【通道】alert" in prompt:
-            return ModelResponse(tool_calls=[ToolCall("alert", "share_alert", {"message": self.alert_msg, "items": ["demo:a1"]})])
+            return ModelResponse(
+                tool_calls=[
+                    ToolCall(
+                        "alert",
+                        "share_alert",
+                        {"message": self.alert_msg, "items": ["demo:a1"]},
+                    )
+                ]
+            )
         data = self.content_decision
         if data.get("decision") == "send":
-            return ModelResponse(tool_calls=[ToolCall("share", "share_content", {
-                "message": data["message"], "items": data["cited_ids"],
-            })])
-        return ModelResponse(tool_calls=[ToolCall("skip", "skip_content", {"reason": "not relevant"})])
+            return ModelResponse(
+                tool_calls=[
+                    ToolCall(
+                        "share",
+                        "share_content",
+                        {
+                            "message": data["message"],
+                            "items": data["cited_ids"],
+                        },
+                    )
+                ]
+            )
+        return ModelResponse(
+            tool_calls=[ToolCall("skip", "skip_content", {"reason": "not relevant"})]
+        )
 
 
 class _FlakyAckSource:
@@ -253,7 +279,14 @@ class LoopTickTests(unittest.TestCase):
     def test_alert_is_pushed(self):
         drift_calls = []
         sent = self._run_loop_once(
-            [{"kind": "alert", "event_id": "a1", "title": "meeting", "content": "soon"}],
+            [
+                {
+                    "kind": "alert",
+                    "event_id": "a1",
+                    "title": "meeting",
+                    "content": "soon",
+                }
+            ],
             _FakeClient(alert_msg="会议快开始了"),
             drift_calls,
         )
@@ -298,9 +331,7 @@ class LoopTickTests(unittest.TestCase):
                 inbox = workdir / "proactive" / "inbox"
                 inbox.mkdir(parents=True)
                 (inbox / "demo.jsonl").write_text(
-                    json.dumps(
-                        {"kind": "content", "event_id": "c1", "title": "news"}
-                    )
+                    json.dumps({"kind": "content", "event_id": "c1", "title": "news"})
                     + "\n",
                     encoding="utf-8",
                 )
@@ -368,9 +399,7 @@ class LoopTickTests(unittest.TestCase):
             await loop._tick()
             self.assertEqual(state.unread_count("content"), 1)
             self.assertEqual(state.pending_acknowledgements(), {})
-            self.assertIn(
-                "c1", (inbox / "demo.acked").read_text(encoding="utf-8")
-            )
+            self.assertIn("c1", (inbox / "demo.acked").read_text(encoding="utf-8"))
             loop.close()
             sessions.close()
             tmp.cleanup()
@@ -385,9 +414,7 @@ class LoopTickTests(unittest.TestCase):
             inbox = workdir / "proactive" / "inbox"
             inbox.mkdir(parents=True)
             (inbox / "demo.jsonl").write_text(
-                json.dumps(
-                    {"kind": "alert", "event_id": "a1", "title": "meeting"}
-                )
+                json.dumps({"kind": "alert", "event_id": "a1", "title": "meeting"})
                 + "\n",
                 encoding="utf-8",
             )
@@ -418,10 +445,7 @@ class LoopTickTests(unittest.TestCase):
             self.assertFalse((inbox / "demo.acked").exists())
             self.assertEqual(sent, [])
             self.assertTrue(
-                any(
-                    d["action"] == "delivery_failed"
-                    for d in state.recent_decisions()
-                )
+                any(d["action"] == "delivery_failed" for d in state.recent_decisions())
             )
 
             fail_delivery = False
@@ -430,9 +454,7 @@ class LoopTickTests(unittest.TestCase):
             self.assertEqual(state.unread_count("alert"), 0)
             self.assertIn("a1", (inbox / "demo.acked").read_text(encoding="utf-8"))
             session = sessions.get_or_create("web:u1")
-            self.assertTrue(
-                any(m.get("proactive") for m in session.messages)
-            )
+            self.assertTrue(any(m.get("proactive") for m in session.messages))
 
             bus.stop()
             await dispatcher
@@ -467,9 +489,7 @@ class LoopTickTests(unittest.TestCase):
             await loop._tick()
             self.assertEqual(len(sent), 1)
             self.assertEqual(state.unread_count("alert"), 0)
-            self.assertEqual(
-                state.pending_acknowledgements(), {"flaky": ["a1"]}
-            )
+            self.assertEqual(state.pending_acknowledgements(), {"flaky": ["a1"]})
 
             source.fail_ack = False
             await loop._tick()
@@ -506,9 +526,16 @@ class StatusAndGateTests(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         loop, sessions = self._loop(Path(tmp.name))
         st = loop.status()
-        for key in ("target", "energy", "base_score", "estimated_next_interval_s",
-                    "unread_alert", "unread_content",
-                    "recent_decisions", "sources"):
+        for key in (
+            "target",
+            "energy",
+            "base_score",
+            "estimated_next_interval_s",
+            "unread_alert",
+            "unread_content",
+            "recent_decisions",
+            "sources",
+        ):
             self.assertIn(key, st)
         self.assertEqual(st["target"], "web:u1")
         loop.close()

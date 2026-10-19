@@ -13,7 +13,7 @@ import os
 import sys
 from pathlib import Path
 
-from agent.control.client import ControlClient, RemoteControlError
+from plugins.control.client import ControlClient, RemoteControlError
 
 USAGE = """用法: main.py control <子命令> [参数]
 
@@ -23,6 +23,9 @@ USAGE = """用法: main.py control <子命令> [参数]
   ask <threadId> <文本>      在指定 thread 上跑一轮,流式打印增量
   new [--ask 文本]           新建 programmatic thread,可选立即问一句
   interrupt <threadId> <turnId>
+  programs <threadId>        查看该会话的持久回复程序
+  program <threadId> <programId>  查看输入、工具事实与结果
+  resume <threadId> <programId>   继续已暂停的回复程序
   consolidate <threadId>     强制归档一个 thread 的记忆
   plugin-drain <pluginId>    停用插件并等待其代际排空
 
@@ -86,9 +89,24 @@ async def _dispatch(client: ControlClient, action: str, rest: list[str]) -> int:
 
     if action == "status":
         return show(await client.request("server/status", {}))
+    if action == "programs" and rest:
+        return show(await client.request("program/list", {"threadId": rest[0]}))
+    if action in {"program", "resume"}:
+        if len(rest) != 2:
+            print(action + " 需要 threadId 和 programId", file=sys.stderr)
+            return 2
+        if action == "program":
+            return show(
+                await client.request(
+                    "program/read", {"threadId": rest[0], "programId": rest[1]}
+                )
+            )
+        return await _follow(await client.resume_program(rest[0], rest[1]))
     if action == "threads":
         limit = int(_flag(rest, "--limit", "50"))
-        return show(await client.request("thread/list", {"cursor": None, "limit": limit}))
+        return show(
+            await client.request("thread/list", {"cursor": None, "limit": limit})
+        )
     if action == "read":
         if not rest:
             print("read 需要 threadId", file=sys.stderr)
@@ -102,19 +120,25 @@ async def _dispatch(client: ControlClient, action: str, rest: list[str]) -> int:
         if not rest:
             print("consolidate 需要 threadId", file=sys.stderr)
             return 2
-        return show(await client.request("thread/consolidate/start", {"threadId": rest[0]}))
+        return show(
+            await client.request("thread/consolidate/start", {"threadId": rest[0]})
+        )
     if action == "interrupt":
         if len(rest) < 2:
             print("interrupt 需要 threadId turnId", file=sys.stderr)
             return 2
         return show(
-            await client.request("turn/interrupt", {"threadId": rest[0], "turnId": rest[1]})
+            await client.request(
+                "turn/interrupt", {"threadId": rest[0], "turnId": rest[1]}
+            )
         )
     if action == "plugin-drain":
         if not rest:
             print("plugin-drain 需要 pluginId", file=sys.stderr)
             return 2
-        return show(await client.request("plugin/disable-and-drain", {"pluginId": rest[0]}))
+        return show(
+            await client.request("plugin/disable-and-drain", {"pluginId": rest[0]})
+        )
     if action == "new":
         thread = await client.start_thread({"source": "control-cli"})
         thread_id = str(thread["id"])
@@ -136,6 +160,10 @@ async def _dispatch(client: ControlClient, action: str, rest: list[str]) -> int:
 async def _ask(client: ControlClient, thread_id: str, text: str) -> int:
     """跑一轮并按事件流实时打印:工具调用可见,回复逐块吐出。"""
     handle = await client.start_turn(thread_id, text)
+    return await _follow(handle)
+
+
+async def _follow(handle) -> int:
     async for event in handle.events():
         method = event.get("method")
         params = event.get("params") or {}

@@ -15,9 +15,9 @@ from core.memory.markdown import (
     _format_conversation_for_consolidation,
     _select_consolidation_window,
 )
+from plugins.ledger.manager import SessionManager
+from plugins.ledger.turn_source import is_memory_source, load_committed_turn_messages
 from proactive_v2.loop import ProactiveLoop
-from session.manager import SessionManager
-from session.turn_source import is_memory_source, load_committed_turn_messages
 
 
 @pytest.mark.parametrize(

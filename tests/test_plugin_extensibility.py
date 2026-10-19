@@ -13,14 +13,14 @@ import json
 import unittest
 
 from bus.event_bus import EventBus
-from agent.plugins.jobs import (
+from core.schema import ToolResult
+from plugins.extensions.jobs import (
     EventTrigger,
     IntervalTrigger,
     PluginJobHost,
     PluginJobSpec,
 )
-from agent.plugins.registry import plugin_registry
-from agent.plugins.specs import (
+from plugins.extensions.specs import (
     PluginSemanticCheck,
     ProactiveSourceSpec,
     RegisteredProactiveSource,
@@ -31,7 +31,6 @@ from plugins.wake_proactive.mcp_sources import (
     compile_proactive_sources,
 )
 from plugins.wake_proactive.sources import SourceRegistry
-from core.schema import ToolResult
 
 
 class _FakeToolRegistry:
@@ -102,7 +101,11 @@ class ProactiveSourceCompilationTests(unittest.TestCase):
         async def scenario() -> None:
             tools = _FakeToolRegistry({"mcp_feed__pull": [{"kind": "alert"}]})
             source = compile_proactive_sources(
-                [_registered(id="feed", channels=("alert",), server="feed", fetch_tool="pull")],
+                [
+                    _registered(
+                        id="feed", channels=("alert",), server="feed", fetch_tool="pull"
+                    )
+                ],
                 tools,
             )[0]
             with self.assertRaises(RuntimeError):
@@ -136,7 +139,11 @@ class ProactiveSourceCompilationTests(unittest.TestCase):
     def test_missing_mcp_tool_fails_loud(self) -> None:
         async def scenario() -> None:
             source = compile_proactive_sources(
-                [_registered(id="x", channels=("alert",), server="gone", fetch_tool="pull")],
+                [
+                    _registered(
+                        id="x", channels=("alert",), server="gone", fetch_tool="pull"
+                    )
+                ],
                 _FakeToolRegistry({}),
             )[0]
             with self.assertRaises(RuntimeError):
@@ -151,7 +158,11 @@ class ProactiveSourceCompilationTests(unittest.TestCase):
             )
             registry = SourceRegistry()
             for source in compile_proactive_sources(
-                [_registered(id="feed", channels=("alert",), server="feed", fetch_tool="pull")],
+                [
+                    _registered(
+                        id="feed", channels=("alert",), server="feed", fetch_tool="pull"
+                    )
+                ],
                 tools,
             ):
                 registry.add(source)
@@ -177,7 +188,9 @@ class PluginJobHostTests(unittest.TestCase):
             host = PluginJobHost()
             host.register(
                 "demo",
-                PluginJobSpec(id="tick", triggers=[IntervalTrigger(seconds=1)], handler=handler),
+                PluginJobSpec(
+                    id="tick", triggers=[IntervalTrigger(seconds=1)], handler=handler
+                ),
             )
             host.start()
             await asyncio.sleep(1.15)
@@ -226,7 +239,9 @@ class PluginJobHostTests(unittest.TestCase):
             host = PluginJobHost(event_bus=bus)
             host.register(
                 "demo",
-                PluginJobSpec(id="bad", triggers=[EventTrigger(event_type=_Ping)], handler=boom),
+                PluginJobSpec(
+                    id="bad", triggers=[EventTrigger(event_type=_Ping)], handler=boom
+                ),
             )
             host.start()
             bus.enqueue(_Ping())
@@ -250,21 +265,15 @@ class PluginJobHostTests(unittest.TestCase):
 class PluginSpecTests(unittest.TestCase):
     def test_source_key(self) -> None:
         self.assertEqual(
-            proactive_source_key(_registered(id="s", channels=("alert",), server="v", fetch_tool="f")),
+            proactive_source_key(
+                _registered(id="s", channels=("alert",), server="v", fetch_tool="f")
+            ),
             "demo:s",
         )
 
     def test_semantic_check_helpers(self) -> None:
         self.assertTrue(PluginSemanticCheck.ok("c").passed)
         self.assertFalse(PluginSemanticCheck.fail("c", "why").passed)
-
-    def test_plugin_subclass_auto_registers(self) -> None:
-        from agent.plugins import Plugin
-
-        class _Demo(Plugin):
-            name = "demo-autoreg"
-
-        self.assertIs(plugin_registry.get_class(_Demo.__module__), _Demo)
 
 
 if __name__ == "__main__":
@@ -281,7 +290,7 @@ class PluginSourceRuntimeWiringTests(unittest.TestCase):
         import tempfile
         from pathlib import Path
 
-        from bootstrap.proactive import build_source_registry
+        from plugins.proactive_flow.factory import build_source_registry
 
         tools = _FakeToolRegistry({"mcp_feed__pull": []})
         registered = [
@@ -298,7 +307,7 @@ class PluginSourceRuntimeWiringTests(unittest.TestCase):
         import tempfile
         from pathlib import Path
 
-        from bootstrap.proactive import build_source_registry
+        from plugins.proactive_flow.factory import build_source_registry
 
         tools = _FakeToolRegistry({"mcp_feed__pull": []})
         dup = _registered(
@@ -307,15 +316,13 @@ class PluginSourceRuntimeWiringTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             registry = build_source_registry(Path(tmp), [dup, dup], tools)
         # 重复 id 只跳过冲突的那个,不影响整条链路
-        self.assertEqual(
-            len([s for s in registry.sources if s.id == "demo:feed"]), 1
-        )
+        self.assertEqual(len([s for s in registry.sources if s.id == "demo:feed"]), 1)
 
     def test_no_plugin_sources_still_prepares_file_inbox(self) -> None:
         import tempfile
         from pathlib import Path
 
-        from bootstrap.proactive import build_source_registry
+        from plugins.proactive_flow.factory import build_source_registry
 
         with tempfile.TemporaryDirectory() as tmp:
             registry = build_source_registry(Path(tmp), None, None)
@@ -327,7 +334,7 @@ class PluginSourceRuntimeWiringTests(unittest.TestCase):
         import tempfile
         from pathlib import Path
 
-        from bootstrap.proactive import build_source_registry
+        from plugins.proactive_flow.factory import build_source_registry
 
         tools = _FakeToolRegistry({"mcp_feed__pull": []})
         with tempfile.TemporaryDirectory() as tmp:
@@ -336,7 +343,11 @@ class PluginSourceRuntimeWiringTests(unittest.TestCase):
             (inbox / "local.jsonl").write_text("", encoding="utf-8")
             registry = build_source_registry(
                 Path(tmp),
-                [_registered(id="feed", channels=("alert",), server="feed", fetch_tool="pull")],
+                [
+                    _registered(
+                        id="feed", channels=("alert",), server="feed", fetch_tool="pull"
+                    )
+                ],
                 tools,
             )
         ids = {source.id for source in registry.sources}

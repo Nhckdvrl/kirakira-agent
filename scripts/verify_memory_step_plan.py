@@ -12,10 +12,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from agent.config_models import Config, MemoryConfig, MemoryEmbeddingConfig
-from agent.core.scoped import run_scoped
-from agent.tools.registry import ToolRegistry
-from agent.turns.policy import ReasoningPolicy
 from core.memory.legacy import MemoryRuntime
 from core.net.http import SharedHttpResources
 from eval.longmemeval.offline_ab import DeterministicEmbedder
@@ -23,9 +19,17 @@ from infra.providers.step_plan import STEP5_MODEL, STEP_PLAN_BASE_URL, StepPlanC
 from plugins.akasha.config import AkashaConfig
 from plugins.akasha.engine import AkashaMemoryEngine
 from plugins.akasha2.engine import Akasha2MemoryEngine
+from plugins.default_memory.config_models import (
+    Config,
+    MemoryConfig,
+    MemoryEmbeddingConfig,
+)
 from plugins.default_memory.contract import MemoryServices
+from plugins.ledger.manager import SessionManager
 from plugins.memory_tools.tools import register_memory_tools
-from session.manager import SessionManager
+from plugins.react.policy import ReasoningPolicy
+from plugins.reply_program.scoped import run_scoped
+from plugins.tools.registry import ToolRegistry
 
 
 async def make_engine(kind, path):

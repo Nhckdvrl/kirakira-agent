@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from session.manager import Session, SessionManager
+from plugins.ledger.manager import Session, SessionManager
 
 
 class SessionTests(unittest.TestCase):
@@ -19,8 +19,12 @@ class SessionTests(unittest.TestCase):
             manager.save(second)
 
             reloaded = SessionManager(Path(tmp))
-            self.assertEqual(reloaded.get_or_create("qq:a/b").messages[0]["content"], "first")
-            self.assertEqual(reloaded.get_or_create("qq:a:b").messages[0]["content"], "second")
+            self.assertEqual(
+                reloaded.get_or_create("qq:a/b").messages[0]["content"], "first"
+            )
+            self.assertEqual(
+                reloaded.get_or_create("qq:a:b").messages[0]["content"], "second"
+            )
             self.assertEqual(len(list((Path(tmp) / "sessions").glob("*.json"))), 2)
 
     def test_history_never_starts_from_orphan_assistant(self):
@@ -142,5 +146,25 @@ class SessionTests(unittest.TestCase):
             )
 
 
-if __name__ == "__main__":
-    unittest.main()
+import pytest
+
+
+def test_normal_save_rejects_historical_message_removal(tmp_path: Path) -> None:
+    manager = SessionManager(tmp_path)
+    session = manager.get_or_create("web:user")
+    session.add_message("user", "immutable user message")
+    session.add_message("assistant", "immutable assistant message")
+    manager.save(session)
+    durable = manager._index.execute(
+        "SELECT id, seq, role, content, ts, extra_json FROM messages ORDER BY seq"
+    ).fetchall()
+
+    session.messages.pop(0)
+    with pytest.raises(RuntimeError, match="不得删除"):
+        manager.save(session)
+
+    after = manager._index.execute(
+        "SELECT id, seq, role, content, ts, extra_json FROM messages ORDER BY seq"
+    ).fetchall()
+    assert after == durable
+    manager.close()

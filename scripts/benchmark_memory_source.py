@@ -15,12 +15,16 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from agent.config_models import Config, MemoryConfig, MemoryEmbeddingConfig
 from core.memory.engine import MemoryQuery
 from eval.longmemeval.prepare_retrieval import CachedEmbedder
 from eval.longmemeval.protocol import timestamp
 from plugins.akasha2.engine import Akasha2MemoryEngine
 from plugins.akasha2.infrastructure.persistence import logical_state_sha256
+from plugins.default_memory.config_models import (
+    Config,
+    MemoryConfig,
+    MemoryEmbeddingConfig,
+)
 
 
 def baseline(commit):

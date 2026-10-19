@@ -15,7 +15,10 @@ from pathlib import Path
 from typing import Any, Dict, List
 from uuid import uuid4
 
-from agent.retrieval.default_pipeline import (
+from core.memory.embeddings import EmbeddingClient
+from core.schema import JsonDict
+from plugins.ledger.manager import Session, SessionManager
+from plugins.retrieval.default_pipeline import (
     LEXICAL_RRF_WEIGHT,
     RetrievalRequest,
     RetrievalResult,
@@ -24,8 +27,6 @@ from agent.retrieval.default_pipeline import (
     plan_injection,
     rrf_fuse,
 )
-from session.manager import Session, SessionManager
-from core.memory.embeddings import EmbeddingClient
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +142,9 @@ class MarkdownMemoryStore:
         pattern = re.compile(re.escape(start) + r".*?" + re.escape(end), re.S)
         existing = pattern.sub("", existing).rstrip()
         # Migrate lines emitted by the early runtime before managed blocks existed.
-        existing = re.sub(r"(?m)^- \[mem_\d+\](?: source=\S+)? .*\n?", "", existing).rstrip()
+        existing = re.sub(
+            r"(?m)^- \[mem_\d+\](?: source=\S+)? .*\n?", "", existing
+        ).rstrip()
         lines = [start]
         for record in records:
             if record.status != "active":
@@ -256,9 +259,7 @@ class MemoryRuntime:
         for memory_type, content in forgotten:
             self._forget_in_store2(memory_type, content)
 
-    def configure_embeddings(
-        self, *, base_url: str, api_key: str, model: str
-    ) -> None:
+    def configure_embeddings(self, *, base_url: str, api_key: str, model: str) -> None:
         if base_url.strip() and model.strip():
             self.embedding_client = EmbeddingClient(
                 base_url=base_url,
@@ -306,7 +307,10 @@ class MemoryRuntime:
                 raise ValueError("memory content is empty")
             normalized = _normalize_content(content)
             for record in self._records:
-                if record.status == "active" and _normalize_content(record.content) == normalized:
+                if (
+                    record.status == "active"
+                    and _normalize_content(record.content) == normalized
+                ):
                     if source_ref and source_ref == record.source_ref:
                         return record
                     record.reinforcement += 1
@@ -523,7 +527,9 @@ class MemoryRuntime:
             self._forget_in_store2(memory_type, content)
         return forgotten
 
-    def list_records(self, *, include_forgotten: bool = False) -> List[Dict[str, object]]:
+    def list_records(
+        self, *, include_forgotten: bool = False
+    ) -> List[Dict[str, object]]:
         if self.engine == "coremem":
             self._load()
         with self._record_lock:
@@ -603,9 +609,6 @@ class MemoryRuntime:
         trace.truncated = truncated
         return RetrievalResult(block=block, records=records, trace=trace)
 
-
-
-
     async def shutdown(self, timeout: float = 30.0) -> None:
         tasks = [task for task in self._tasks.values() if not task.done()]
         if tasks:
@@ -617,7 +620,6 @@ class MemoryRuntime:
         # 共享连接由引擎负责关闭,这里只关自己开的那个,避免提前关掉引擎在用的库。
         if self.store2 is not None and self._owns_store2:
             self.store2.close()
-
 
     def _publish_consolidation(
         self,
@@ -637,7 +639,8 @@ class MemoryRuntime:
             from core.memory.events import ConsolidationCommitted
 
             conversation = "\n".join(
-                "%s: %s" % (item.get("role") or "", str(item.get("content") or "")[:500])
+                "%s: %s"
+                % (item.get("role") or "", str(item.get("content") or "")[:500])
                 for item in selected
             )
             self.event_bus.enqueue(
@@ -652,8 +655,6 @@ class MemoryRuntime:
         except Exception:  # noqa: BLE001 - 归档已提交,下游失败不回滚
             logger.warning("consolidation event publish failed", exc_info=True)
 
-
-
     def search_messages(self, query: str, limit: int = 10) -> List[Dict[str, str]]:
         if self.session_manager is None:
             return []
@@ -663,7 +664,6 @@ class MemoryRuntime:
         if self.session_manager is None:
             return []
         return self.session_manager.fetch_messages(source_ref, context=context)  # type: ignore[return-value]
-
 
     def _load(self) -> None:
         if self.engine == "coremem":
@@ -682,7 +682,9 @@ class MemoryRuntime:
                 status=str(item.get("status") or "active"),
                 memory_type=str(item.get("memory_type") or "requested_memory"),
                 reinforcement=max(1, int(item.get("reinforcement") or 1)),
-                updated_at=str(item.get("updated_at") or item.get("created_at") or _now()),
+                updated_at=str(
+                    item.get("updated_at") or item.get("created_at") or _now()
+                ),
                 embedding=[float(value) for value in item.get("embedding", [])]
                 if isinstance(item.get("embedding"), list) and item.get("embedding")
                 else None,
@@ -734,7 +736,9 @@ class MemoryRuntime:
             raise RuntimeError("Memory2 模式禁止写 items.json")
         _atomic_write(
             self.items_path,
-            json.dumps([r.to_json() for r in self._records], ensure_ascii=False, indent=2),
+            json.dumps(
+                [r.to_json() for r in self._records], ensure_ascii=False, indent=2
+            ),
         )
         self.store.sync_memory_records(self._records)
 
@@ -745,7 +749,6 @@ class MemoryRuntime:
             if match:
                 highest = max(highest, int(match.group(1)))
         return "mem_%04d" % (highest + 1)
-
 
     def _embed_for_query(self, text: str) -> List[float] | None:
         """检索侧可以降级：拿不到向量就退回词法召回，本轮仍然有答案。"""
@@ -773,9 +776,7 @@ class MemoryRuntime:
             ) from exc
 
     @staticmethod
-    def _cosine(
-        first: List[float] | None, second: List[float] | None
-    ) -> float | None:
+    def _cosine(first: List[float] | None, second: List[float] | None) -> float | None:
         if not first or not second or len(first) != len(second):
             return None
         dot = sum(a * b for a, b in zip(first, second))
@@ -794,7 +795,6 @@ class MemoryRuntime:
         except ValueError:
             return None
         return parsed if parsed.tzinfo is not None else parsed.astimezone()
-
 
     def _forget_session_memories(self, session_key: str) -> None:
         prefix = session_key + ":"

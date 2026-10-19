@@ -5,13 +5,17 @@ import json
 
 import pytest
 
-from agent.config_models import Config, MemoryConfig, MemoryEmbeddingConfig
 from eval.longmemeval.offline_ab import DeterministicEmbedder
 from plugins.akasha2.engine import Akasha2MemoryEngine
 from plugins.akasha2.infrastructure.persistence import logical_state_sha256
+from plugins.default_memory.config_models import (
+    Config,
+    MemoryConfig,
+    MemoryEmbeddingConfig,
+)
+from plugins.ledger.embedding_store import MessageEmbeddingStore
+from plugins.ledger.manager import SessionManager
 from scripts.replay_akasha2 import rebuild
-from session.embedding_store import MessageEmbeddingStore
-from session.manager import SessionManager
 from tests.test_akasha2_runtime import add
 
 

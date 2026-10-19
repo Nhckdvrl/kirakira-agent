@@ -10,16 +10,14 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from pathlib import Path
 import threading
+import urllib.parse
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any
-import urllib.parse
 from uuid import uuid4
 
-from infra.channels.contract import ChannelContext
-from frontend.web_ui import CHAT_HTML, DASHBOARD_HTML
 from bus.events import (
     ChannelMessage,
     DeliveryReceipt,
@@ -27,6 +25,9 @@ from bus.events import (
     InboundMessage,
     OutboundMessage,
 )
+from bus.events_lifecycle import ProgramSuperseded
+from frontend.web_ui import CHAT_HTML, DASHBOARD_HTML
+from infra.channels.contract import ChannelContext
 
 logger = logging.getLogger(__name__)
 
@@ -59,10 +60,14 @@ class WebChannel:
         self._event_queues: dict[str, asyncio.Queue[OutboundMessage]] = {}
         self._lock = threading.Lock()
         self._push_registration = None
+        self._program_subscription = None
 
     async def start(self, ctx: ChannelContext) -> None:
         self._ctx = ctx
         self._loop = asyncio.get_running_loop()
+        self._program_subscription = ctx.event_bus.on(
+            ProgramSuperseded, self._on_superseded
+        )
         if ctx.push_tool is not None:
             self._push_registration = ctx.push_tool.register_channel(
                 self.name, self._deliver_message
@@ -70,11 +75,16 @@ class WebChannel:
         ctx.bus.subscribe_outbound(self.name, self._on_response)
         handler = self._handler_factory()
         self._server = _DaemonThreadingHTTPServer((self.host, self.port), handler)
-        self._thread = threading.Thread(target=self._server.serve_forever, name="kirakira-web", daemon=True)
+        self._thread = threading.Thread(
+            target=self._server.serve_forever, name="kirakira-web", daemon=True
+        )
         self._thread.start()
         ctx.log.info("web channel listening on http://%s:%s", self.host, self.port)
 
     async def stop(self) -> None:
+        if self._program_subscription is not None:
+            self._program_subscription.close()
+            self._program_subscription = None
         if self._server is not None:
             self._server.shutdown()
             self._server.server_close()
@@ -95,6 +105,22 @@ class WebChannel:
                 future.cancel()
         self._ctx = None
         self._loop = None
+
+    def _on_superseded(self, event: ProgramSuperseded) -> None:
+        with self._lock:
+            future = self._pending.pop(event.request_id, None)
+        if future is not None and not future.done():
+            future.set_result(
+                OutboundMessage(
+                    self.name,
+                    event.session_key.removeprefix(self.name + ":"),
+                    "",
+                    metadata={
+                        "program_id": event.program_id,
+                        "program_status": "superseded",
+                    },
+                )
+            )
 
     async def _on_response(self, msg: OutboundMessage) -> None:
         request_id = str(msg.metadata.get("client_request_id") or "")
@@ -141,14 +167,21 @@ class WebChannel:
                 parsed = urllib.parse.urlparse(self.path)
                 if parsed.path == "/workspace":
                     from frontend.workspace_ui import WORKSPACE_HTML
-                    self._send_bytes(WORKSPACE_HTML.encode("utf-8"), "text/html; charset=utf-8")
+
+                    self._send_bytes(
+                        WORKSPACE_HTML.encode("utf-8"), "text/html; charset=utf-8"
+                    )
                     return
                 if parsed.path == "/":
-                    self._send_bytes(CHAT_HTML.encode("utf-8"), "text/html; charset=utf-8")
+                    self._send_bytes(
+                        CHAT_HTML.encode("utf-8"), "text/html; charset=utf-8"
+                    )
                     return
                 if parsed.path in ("/dashboard", "/memory"):
                     # /memory 是旧地址,保留为仪表盘的别名,老书签不至于 404。
-                    self._send_bytes(DASHBOARD_HTML.encode("utf-8"), "text/html; charset=utf-8")
+                    self._send_bytes(
+                        DASHBOARD_HTML.encode("utf-8"), "text/html; charset=utf-8"
+                    )
                     return
                 if parsed.path == "/favicon.ico":
                     self._send_bytes(b"", "image/x-icon")
@@ -168,10 +201,14 @@ class WebChannel:
                     return
                 if parsed.path == "/api/memory":
                     query = urllib.parse.parse_qs(parsed.query)
-                    item = channel._dashboard().memory_item(str((query.get("id") or [""])[0]))
+                    item = channel._dashboard().memory_item(
+                        str((query.get("id") or [""])[0])
+                    )
                     self._send_json(
                         {"memory": item},
-                        status=HTTPStatus.OK if item is not None else HTTPStatus.NOT_FOUND,
+                        status=HTTPStatus.OK
+                        if item is not None
+                        else HTTPStatus.NOT_FOUND,
                     )
                     return
                 if parsed.path == "/api/memory/similar":
@@ -183,7 +220,9 @@ class WebChannel:
                         )
                         self._send_json({"items": items})
                     except Exception as exc:
-                        self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                        self._send_json(
+                            {"error": str(exc)}, status=HTTPStatus.BAD_REQUEST
+                        )
                     return
                 if parsed.path == "/api/memory/health":
                     self._send_json(channel._dashboard().memory_health())
@@ -205,7 +244,9 @@ class WebChannel:
                     except TimeoutError:
                         self._send_json({"content": ""})
                     except Exception as exc:
-                        self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                        self._send_json(
+                            {"error": str(exc)}, status=HTTPStatus.BAD_REQUEST
+                        )
                     return
                 self._send_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
 
@@ -213,20 +254,32 @@ class WebChannel:
                 if self.path == "/api/workspace":
                     try:
                         origin = self.headers.get("Origin")
-                        if origin is not None and urllib.parse.urlsplit(origin).netloc != self.headers.get("Host"):
-                            raise ValueError("cross-origin workspace requests are not allowed")
+                        if origin is not None and urllib.parse.urlsplit(
+                            origin
+                        ).netloc != self.headers.get("Host"):
+                            raise ValueError(
+                                "cross-origin workspace requests are not allowed"
+                            )
                         payload = self._read_json()
                         service = channel._dashboard().extra.get("workspace_control")
                         if service is None or channel._loop is None:
                             raise ValueError("workspace controls are unavailable")
                         result = asyncio.run_coroutine_threadsafe(
-                            service.workspace_request(payload.get("method"), payload.get("params", {})), channel._loop
+                            service.workspace_request(
+                                payload.get("method"), payload.get("params", {})
+                            ),
+                            channel._loop,
                         ).result(timeout=channel.response_timeout)
                         self._send_json({"result": result})
                     except Exception as exc:
-                        self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                        self._send_json(
+                            {"error": str(exc)}, status=HTTPStatus.BAD_REQUEST
+                        )
                     return
-                if self.path in ("/api/memories/delete", "/api/dashboard/memories/batch-delete"):
+                if self.path in (
+                    "/api/memories/delete",
+                    "/api/dashboard/memories/batch-delete",
+                ):
                     try:
                         payload = self._read_json()
                         deleted = channel._dashboard().delete_memories(
@@ -235,20 +288,32 @@ class WebChannel:
                         )
                         self._send_json({"ok": True, "deleted": deleted})
                     except Exception as exc:
-                        self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                        self._send_json(
+                            {"error": str(exc)}, status=HTTPStatus.BAD_REQUEST
+                        )
                     return
                 if self.path == "/interrupt":
                     try:
                         payload = self._read_json()
-                        session_id = str(payload.get("session_id") or payload.get("chat_id") or "")
-                        if not session_id or channel._ctx is None or channel._ctx.interrupt is None:
-                            raise ValueError("session_id is required and interrupt must be enabled")
+                        session_id = str(
+                            payload.get("session_id") or payload.get("chat_id") or ""
+                        )
+                        if (
+                            not session_id
+                            or channel._ctx is None
+                            or channel._ctx.interrupt is None
+                        ):
+                            raise ValueError(
+                                "session_id is required and interrupt must be enabled"
+                            )
                         stopped = channel._ctx.interrupt(
                             "%s:%s" % (channel.name, channel._chat_id(session_id))
                         )
                         self._send_json({"ok": True, "interrupted": stopped})
                     except Exception as exc:
-                        self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                        self._send_json(
+                            {"error": str(exc)}, status=HTTPStatus.BAD_REQUEST
+                        )
                     return
                 if self.path != "/message":
                     self._send_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
@@ -259,7 +324,9 @@ class WebChannel:
                     self._send_json(result)
                 except Exception as exc:
                     logger.exception("[web] request failed")
-                    self._send_json({"error": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+                    self._send_json(
+                        {"error": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR
+                    )
 
             def do_PATCH(self) -> None:
                 if self.path not in ("/api/memory", "/api/dashboard/memory"):
@@ -268,7 +335,10 @@ class WebChannel:
                 try:
                     payload = self._read_json()
                     updated = channel._dashboard().update_memory(payload)
-                    self._send_json({"ok": updated}, status=HTTPStatus.OK if updated else HTTPStatus.NOT_FOUND)
+                    self._send_json(
+                        {"ok": updated},
+                        status=HTTPStatus.OK if updated else HTTPStatus.NOT_FOUND,
+                    )
                 except Exception as exc:
                     self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
 
@@ -278,8 +348,15 @@ class WebChannel:
                 board = channel._dashboard()
                 if parsed.path in ("/api/session", "/api/dashboard/session"):
                     key = str((query.get("key") or [""])[0])
-                    deleted = board.delete_session(key)
-                    self._send_json({"ok": deleted}, status=HTTPStatus.OK if deleted else HTTPStatus.NOT_FOUND)
+                    try:
+                        deleted = board.delete_session(key)
+                    except ValueError as exc:
+                        self._send_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
+                        return
+                    self._send_json(
+                        {"ok": deleted},
+                        status=HTTPStatus.OK if deleted else HTTPStatus.NOT_FOUND,
+                    )
                     return
                 if parsed.path in ("/api/memory", "/api/dashboard/memory"):
                     memory_id = str((query.get("id") or [""])[0])
@@ -293,11 +370,16 @@ class WebChannel:
                                 )
                             )
                         except Exception as exc:
-                            self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                            self._send_json(
+                                {"error": str(exc)}, status=HTTPStatus.BAD_REQUEST
+                            )
                             return
                     else:
                         deleted = board.forget_memory(memory_id)
-                    self._send_json({"ok": deleted}, status=HTTPStatus.OK if deleted else HTTPStatus.NOT_FOUND)
+                    self._send_json(
+                        {"ok": deleted},
+                        status=HTTPStatus.OK if deleted else HTTPStatus.NOT_FOUND,
+                    )
                     return
                 self._send_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
 
@@ -315,7 +397,9 @@ class WebChannel:
                         item = board.memory_item(str((query.get("id") or [""])[0]))
                         self._send_json(
                             {"memory": item},
-                            status=HTTPStatus.OK if item is not None else HTTPStatus.NOT_FOUND,
+                            status=HTTPStatus.OK
+                            if item is not None
+                            else HTTPStatus.NOT_FOUND,
                         )
                     elif suffix == "/memory/similar":
                         self._send_json(
@@ -336,7 +420,9 @@ class WebChannel:
                         item = board.session(str((query.get("key") or [""])[0]))
                         self._send_json(
                             {"session": item},
-                            status=HTTPStatus.OK if item is not None else HTTPStatus.NOT_FOUND,
+                            status=HTTPStatus.OK
+                            if item is not None
+                            else HTTPStatus.NOT_FOUND,
                         )
                     elif suffix == "/messages":
                         self._send_json(board.messages(query))
@@ -346,7 +432,9 @@ class WebChannel:
                         item = board.recall_turn(str((query.get("id") or [""])[0]))
                         self._send_json(
                             {"turn": item},
-                            status=HTTPStatus.OK if item is not None else HTTPStatus.NOT_FOUND,
+                            status=HTTPStatus.OK
+                            if item is not None
+                            else HTTPStatus.NOT_FOUND,
                         )
                     elif suffix == "/plugins":
                         self._send_json(board.plugins())
@@ -355,7 +443,9 @@ class WebChannel:
                     elif suffix == "/drift":
                         self._send_json(board.drift())
                     else:
-                        self._send_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
+                        self._send_json(
+                            {"error": "not found"}, status=HTTPStatus.NOT_FOUND
+                        )
                 except Exception as exc:  # noqa: BLE001 - 面板错误回给前端展示,不 500
                     logger.exception("[web] dashboard %s failed", suffix)
                     self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
@@ -370,7 +460,9 @@ class WebChannel:
                     raise ValueError("JSON body must be an object")
                 return data
 
-            def _send_json(self, payload: dict[str, Any], status: int = HTTPStatus.OK) -> None:
+            def _send_json(
+                self, payload: dict[str, Any], status: int = HTTPStatus.OK
+            ) -> None:
                 body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 self.send_response(int(status))
                 self.send_header("content-type", "application/json; charset=utf-8")
@@ -393,13 +485,16 @@ class WebChannel:
         text = str(payload.get("text") or payload.get("content") or "").strip()
         if not text:
             raise ValueError("text/content is required")
-        session_id = str(payload.get("session_id") or payload.get("chat_id") or uuid4().hex).strip()
+        session_id = str(
+            payload.get("session_id") or payload.get("chat_id") or uuid4().hex
+        ).strip()
         if not session_id or len(session_id) > 200:
             raise ValueError("session_id must contain 1-200 characters")
         chat_id = self._chat_id(session_id)
         project = payload.get("project_id")
         if project is not None:
             from plugins.projects.service import project_id
+
             project = project_id(project)
             if not chat_id.startswith(project + ":"):
                 chat_id = project + ":" + chat_id
@@ -412,7 +507,9 @@ class WebChannel:
                 "channel": self.name,
                 "chat_id": chat_id,
                 "session_id": "%s:%s" % (self.name, chat_id),
-                "content": "本轮已中断。" if interrupted else "当前没有正在执行的任务。",
+                "content": "本轮已中断。"
+                if interrupted
+                else "当前没有正在执行的任务。",
                 "thinking": "",
                 "media": [],
                 "metadata": {"interrupted": interrupted},
@@ -434,7 +531,9 @@ class WebChannel:
             "metadata": msg.metadata,
         }
 
-    async def _publish_and_wait(self, *, chat_id: str, text: str, payload: dict[str, Any]) -> OutboundMessage:
+    async def _publish_and_wait(
+        self, *, chat_id: str, text: str, payload: dict[str, Any]
+    ) -> OutboundMessage:
         if self._ctx is None:
             raise RuntimeError("web channel is not started")
         loop = asyncio.get_running_loop()
@@ -453,7 +552,14 @@ class WebChannel:
                     chat_id=chat_id,
                     content=text,
                     media=media,
-                    metadata={"client_request_id": request_id, **({"project_id": payload["project_id"]} if payload.get("project_id") is not None else {})},
+                    metadata={
+                        "client_request_id": request_id,
+                        **(
+                            {"project_id": payload["project_id"]}
+                            if payload.get("project_id") is not None
+                            else {}
+                        ),
+                    },
                 )
             )
             return await asyncio.wait_for(future, timeout=self.response_timeout)
@@ -465,7 +571,7 @@ class WebChannel:
     def _chat_id(self, session_id: str) -> str:
         prefix = "%s:" % self.name
         if session_id.startswith(prefix):
-            return session_id[len(prefix):]
+            return session_id[len(prefix) :]
         return session_id
 
     def _next_event_sync(self, chat_id: str) -> OutboundMessage:
@@ -511,7 +617,7 @@ class WebChannel:
         """
         if self._dashboard_service is not None:
             return self._dashboard_service
-        from bootstrap.dashboard_api import DashboardService
+        from plugins.dashboard.service import DashboardService
 
         ctx = self._ctx
         return DashboardService(

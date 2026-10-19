@@ -10,14 +10,18 @@ from dataclasses import asdict
 from pathlib import Path
 from types import SimpleNamespace
 
-from agent.config_models import Config, MemoryConfig, MemoryEmbeddingConfig
 from core.memory.engine import MemoryQuery
 from eval.longmemeval.prepare_retrieval import CachedEmbedder
 from eval.longmemeval.protocol import timestamp
 from plugins.akasha2.engine import Akasha2MemoryEngine
 from plugins.akasha2.infrastructure.persistence import logical_state_sha256
+from plugins.default_memory.config_models import (
+    Config,
+    MemoryConfig,
+    MemoryEmbeddingConfig,
+)
+from plugins.ledger.manager import SessionManager
 from scripts.replay_akasha2 import rebuild
-from session.manager import SessionManager
 
 
 def full_state(path):

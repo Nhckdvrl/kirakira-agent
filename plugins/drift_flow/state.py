@@ -7,10 +7,9 @@
 
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 import sqlite3
-from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -75,52 +74,117 @@ class DriftStateStore:
         self._db.executescript(_SCHEMA)
         # A crashed computation can be proposed anew; a delivery may already have
         # escaped the process and must never be automatically retried.
-        self._db.execute("UPDATE proposals SET status='interrupted' WHERE status='running'")
-        self._db.execute("UPDATE proposals SET status='needs_reconciliation' WHERE status='delivering'")
+        self._db.execute(
+            "UPDATE proposals SET status='interrupted' WHERE status='running'"
+        )
+        self._db.execute(
+            "UPDATE proposals SET status='needs_reconciliation' WHERE status='delivering'"
+        )
         self._db.commit()
 
-    def propose(self, *, session_key, source_head, skill, skill_digest, briefing, reason, now, priority=0.0):
+    def propose(
+        self,
+        *,
+        session_key,
+        source_head,
+        skill,
+        skill_digest,
+        briefing,
+        reason,
+        now,
+        priority=0.0,
+    ):
         import math
+
         if not reason.strip() or not math.isfinite(priority):
-            raise ValueError('a proposal requires a reason and finite priority')
-        identity = hashlib.sha256(json.dumps([session_key, source_head, skill, skill_digest, briefing],
-            ensure_ascii=False).encode()).hexdigest()
+            raise ValueError("a proposal requires a reason and finite priority")
+        identity = hashlib.sha256(
+            json.dumps(
+                [session_key, source_head, skill, skill_digest, briefing],
+                ensure_ascii=False,
+            ).encode()
+        ).hexdigest()
         with self._db:
-            self._db.execute('INSERT OR IGNORE INTO proposals '
-                '(proposal_id,session_key,source_head,skill,skill_digest,briefing,reason,priority,created_at,updated_at,status) '
+            self._db.execute(
+                "INSERT OR IGNORE INTO proposals "
+                "(proposal_id,session_key,source_head,skill,skill_digest,briefing,reason,priority,created_at,updated_at,status) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued')",
-                (identity,session_key,json.dumps(source_head),skill,skill_digest,briefing,reason,priority,now.isoformat(),now.isoformat()))
+                (
+                    identity,
+                    session_key,
+                    json.dumps(source_head),
+                    skill,
+                    skill_digest,
+                    briefing,
+                    reason,
+                    priority,
+                    now.isoformat(),
+                    now.isoformat(),
+                ),
+            )
         return identity
 
     def claim_proposal(self, session_key, source_head, skill_digests, now):
         with self._db:
-            self._db.execute("UPDATE proposals SET status='superseded',updated_at=? "
+            self._db.execute(
+                "UPDATE proposals SET status='superseded',updated_at=? "
                 "WHERE session_key=? AND status='queued' AND source_head<>?",
-                (now.isoformat(),session_key,json.dumps(source_head)))
-            rows = self._db.execute("SELECT * FROM proposals WHERE session_key=? AND status='queued' "
-                'ORDER BY priority DESC,created_at,proposal_id', (session_key,)).fetchall()
+                (now.isoformat(), session_key, json.dumps(source_head)),
+            )
+            rows = self._db.execute(
+                "SELECT * FROM proposals WHERE session_key=? AND status='queued' "
+                "ORDER BY priority DESC,created_at,proposal_id",
+                (session_key,),
+            ).fetchall()
             for row in rows:
-                if skill_digests.get(row['skill']) != row['skill_digest']:
-                    self._db.execute("UPDATE proposals SET status='superseded',updated_at=? WHERE proposal_id=?",
-                        (now.isoformat(),row['proposal_id']))
+                if skill_digests.get(row["skill"]) != row["skill_digest"]:
+                    self._db.execute(
+                        "UPDATE proposals SET status='superseded',updated_at=? WHERE proposal_id=?",
+                        (now.isoformat(), row["proposal_id"]),
+                    )
                     continue
-                self._db.execute("UPDATE proposals SET status='running',updated_at=? WHERE proposal_id=? AND status='queued'",
-                    (now.isoformat(),row['proposal_id']))
-                return {**dict(row), 'status': 'running'}
+                self._db.execute(
+                    "UPDATE proposals SET status='running',updated_at=? WHERE proposal_id=? AND status='queued'",
+                    (now.isoformat(), row["proposal_id"]),
+                )
+                return {**dict(row), "status": "running"}
         return None
 
     def settle_proposal(self, proposal_id, status, now, result=None):
-        allowed = {'running': {'delivering','completed','paused','failed','superseded','interrupted'},
-                   'delivering': {'completed','paused','failed','needs_reconciliation'}}
+        allowed = {
+            "running": {
+                "delivering",
+                "completed",
+                "paused",
+                "failed",
+                "superseded",
+                "interrupted",
+            },
+            "delivering": {"completed", "paused", "failed", "needs_reconciliation"},
+        }
         with self._db:
-            row = self._db.execute('SELECT status FROM proposals WHERE proposal_id=?', (proposal_id,)).fetchone()
-            if row is None or status not in allowed.get(row['status'], set()):
-                raise ValueError('invalid Drift proposal transition')
-            self._db.execute('UPDATE proposals SET status=?,updated_at=?,result_json=? WHERE proposal_id=?',
-                (status, now.isoformat(),json.dumps(result or {},ensure_ascii=False),proposal_id))
+            row = self._db.execute(
+                "SELECT status FROM proposals WHERE proposal_id=?", (proposal_id,)
+            ).fetchone()
+            if row is None or status not in allowed.get(row["status"], set()):
+                raise ValueError("invalid Drift proposal transition")
+            self._db.execute(
+                "UPDATE proposals SET status=?,updated_at=?,result_json=? WHERE proposal_id=?",
+                (
+                    status,
+                    now.isoformat(),
+                    json.dumps(result or {}, ensure_ascii=False),
+                    proposal_id,
+                ),
+            )
 
     def recent_proposals(self, limit=20):
-        return [dict(row) for row in self._db.execute('SELECT * FROM proposals ORDER BY created_at DESC LIMIT ?', (limit,))]
+        return [
+            dict(row)
+            for row in self._db.execute(
+                "SELECT * FROM proposals ORDER BY created_at DESC LIMIT ?", (limit,)
+            )
+        ]
 
     def close(self) -> None:
         self._db.close()
@@ -153,7 +217,7 @@ class DriftStateStore:
         for row in rows:
             try:
                 out[row["skill"]] = datetime.fromisoformat(row["last"])
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 continue
         return out
 
@@ -200,10 +264,17 @@ class DriftStateStore:
         except ValueError:
             # 到期时刻损坏 → 当作没有排程,下一轮重新采样
             return None
-        return {"timer_anchor": str(row["timer_anchor"] or ""), "next_attempt_at": next_at}
+        return {
+            "timer_anchor": str(row["timer_anchor"] or ""),
+            "next_attempt_at": next_at,
+        }
 
     def save_schedule(
-        self, session_key: str, timer_anchor: str, next_attempt_at: datetime, now: datetime
+        self,
+        session_key: str,
+        timer_anchor: str,
+        next_attempt_at: datetime,
+        now: datetime,
     ) -> None:
         self._db.execute(
             """
@@ -220,7 +291,9 @@ class DriftStateStore:
 
     def clear_schedule(self, session_key: str) -> None:
         """到期并真的跑了之后清掉,下一轮按新的空闲状态重新采样。"""
-        self._db.execute("DELETE FROM drift_schedule WHERE session_key = ?", (session_key,))
+        self._db.execute(
+            "DELETE FROM drift_schedule WHERE session_key = ?", (session_key,)
+        )
         self._db.commit()
 
     # ── skill journal(照 Reference plugins/drift_flow/state.py)──────────────
@@ -283,7 +356,8 @@ class DriftStateStore:
         params.append(max(1, int(limit)))
         rows = self._db.execute(
             "SELECT id, entry_type, key, payload_json, run_id, created_at "
-            "FROM skill_journal WHERE %s ORDER BY id DESC LIMIT ?" % " AND ".join(clauses),
+            "FROM skill_journal WHERE %s ORDER BY id DESC LIMIT ?"
+            % " AND ".join(clauses),
             tuple(params),
         ).fetchall()
         return [self._journal_row(row) for row in reversed(rows)]

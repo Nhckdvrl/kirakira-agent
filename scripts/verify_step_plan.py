@@ -8,20 +8,20 @@ import argparse
 import asyncio
 import json
 import os
-from pathlib import Path
 import time
+from pathlib import Path
 from uuid import uuid4
-from agent.core.contracts import RuntimeConfig
-from agent.core.execution import ExecutionStore
-from agent.core.reasoner import DefaultReasoner
-from agent.model_runtime.types import RetryableModelError
-from agent.tools.registry import ToolRegistry
-from agent.turns.policy import ReasoningPolicy
+
 from bootstrap.runtime import build_runtime
 from bus.event_bus import EventBus
 from core.schema import ToolSpec
-from infra.providers.step_plan import StepPlanClient, STEP5_MODEL, STEP_PLAN_BASE_URL
+from infra.providers.step_plan import STEP5_MODEL, STEP_PLAN_BASE_URL, StepPlanClient
+from plugins.execution.service import ExecutionStore
+from plugins.models.types import RetryableModelError
 from plugins.proactive_flow.judge import ProactiveJudge
+from plugins.react.contract import ReactConfig
+from plugins.react.reasoner import ReactProgram
+from plugins.tools.registry import ToolRegistry
 from proactive_v2.contracts import ContentContract
 
 
@@ -116,10 +116,10 @@ async def verify(a):
             )
             observed = ObservedClient(client, inject_failure=i % 2 == 0)
             store = ExecutionStore(a.workspace / f"tool-{i}.db")
-            reasoner = DefaultReasoner(
+            reasoner = ReactProgram(
                 model_client=observed,
                 tools=registry,
-                config=RuntimeConfig(model=STEP5_MODEL, stream=False, max_tokens=2048),
+                config=ReactConfig(model=STEP5_MODEL, stream=False, max_tokens=2048),
                 context=None,
                 event_bus=EventBus(),
                 execution_store=store,

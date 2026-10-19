@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from typing import List
 
 from core.schema import ToolSpec
-from agent.tools.registry import ToolRegistry, object_schema
+from plugins.tools.registry import ToolRegistry, object_schema
 
 
 @dataclass
@@ -44,7 +44,11 @@ def register_drift_tools(registry: ToolRegistry, ctx: DriftRunContext) -> None:
         if len(ctx.journal_entries) >= 20:
             return "Error: 本轮 journal 条目已达上限(20)"
         ctx.journal_entries.append(
-            {"entry_type": clean_type, "note": clean_note, "key": str(key or "").strip()}
+            {
+                "entry_type": clean_type,
+                "note": clean_note,
+                "key": str(key or "").strip(),
+            }
         )
         return "已记录 journal(%s)。" % clean_type
 

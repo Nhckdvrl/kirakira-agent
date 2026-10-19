@@ -10,26 +10,26 @@ from pathlib import Path
 
 import pytest
 
-from agent.control.errors import (
+from infra.control.socket import SocketAppServer
+from plugins.control.errors import (
     ThreadBusyError,
     TurnNotFoundError,
     TurnStateTransitionError,
 )
-from agent.control.ids import new_item_id, new_turn_id
-from agent.control.models import (
+from plugins.control.ids import new_item_id, new_turn_id
+from plugins.control.models import (
     TurnItem,
     TurnItemKind,
     TurnRecord,
     TurnRequest,
     TurnStatus,
 )
-from agent.control.ports import ControlExecutionResult
-from agent.control.protocol.models import METHOD_PARAMS, ParamValidationError
-from agent.control.runtime import ConversationRuntime
-from agent.control.service import ControlService
-from infra.control.socket import SocketAppServer
-from agent.control.store import ControlStore
-from session.manager import SessionManager
+from plugins.control.ports import ControlExecutionResult
+from plugins.control.protocol.models import METHOD_PARAMS, ParamValidationError
+from plugins.control.runtime import ConversationRuntime
+from plugins.control.service import ControlService
+from plugins.control.store import ControlStore
+from plugins.ledger.manager import SessionManager
 
 
 @pytest.fixture
@@ -51,7 +51,9 @@ def _queued(thread_id: str = "t1") -> TurnRecord:
         thread_id=thread_id,
         status=TurnStatus.QUEUED,
         input="hello",
-        items=[TurnItem(TurnItemKind.USER_MESSAGE, new_item_id(), {"content": "hello"})],
+        items=[
+            TurnItem(TurnItemKind.USER_MESSAGE, new_item_id(), {"content": "hello"})
+        ],
         created_at=datetime.now(UTC),
     )
 
@@ -285,7 +287,9 @@ async def _serve(workspace, store, executor=None):
 async def test_requests_before_initialize_are_rejected(workspace, store):
     client, server, runtime, sessions = await _serve(workspace, store)
     try:
-        await client.send({"jsonrpc": "2.0", "id": 1, "method": "server/status", "params": {}})
+        await client.send(
+            {"jsonrpc": "2.0", "id": 1, "method": "server/status", "params": {}}
+        )
         assert (await client.recv())["error"]["code"] == -32002  # NOT_INITIALIZED
     finally:
         client.writer.close()
@@ -325,7 +329,9 @@ async def test_full_thread_and_turn_roundtrip(workspace, store):
     try:
         assert (await client.handshake())["result"]["protocolVersion"] == "1.0"
 
-        await client.send({"jsonrpc": "2.0", "id": 1, "method": "thread/start", "params": {}})
+        await client.send(
+            {"jsonrpc": "2.0", "id": 1, "method": "thread/start", "params": {}}
+        )
         thread_id = (await client.recv())["result"]["id"]
         assert thread_id.startswith("programmatic:")
         assert (await client.recv())["method"] == "thread/started"
@@ -368,7 +374,9 @@ async def test_unknown_method_and_bad_params_map_to_standard_codes(workspace, st
     client, server, runtime, sessions = await _serve(workspace, store)
     try:
         await client.handshake()
-        await client.send({"jsonrpc": "2.0", "id": 1, "method": "does/not/exist", "params": {}})
+        await client.send(
+            {"jsonrpc": "2.0", "id": 1, "method": "does/not/exist", "params": {}}
+        )
         assert (await client.recv())["error"]["code"] == -32601
         await client.send(
             {

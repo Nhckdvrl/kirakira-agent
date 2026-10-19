@@ -14,7 +14,6 @@ from unittest.mock import patch
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 import numpy as np
 
-from agent.config_models import Config, MemoryConfig, MemoryEmbeddingConfig
 from bus.events_lifecycle import TurnCommitted
 from core.memory.engine import MemoryQuery
 from core.net.http import SharedHttpResources
@@ -24,8 +23,13 @@ from plugins.akasha2.domain.model import MemoryConfig as CycleConfig
 from plugins.akasha2.engine import Akasha2MemoryEngine
 from plugins.akasha2.infrastructure.persistence import logical_state_sha256
 from plugins.akasha2.selection import SelectedHit
-from session.manager import SessionManager
-from session.turn_source import load_committed_turn_messages
+from plugins.default_memory.config_models import (
+    Config,
+    MemoryConfig,
+    MemoryEmbeddingConfig,
+)
+from plugins.ledger.manager import SessionManager
+from plugins.ledger.turn_source import load_committed_turn_messages
 
 from .dataset import load_longmemeval
 from .offline_ab import _turn_groups

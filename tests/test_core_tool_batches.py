@@ -5,25 +5,18 @@ import threading
 
 import pytest
 
-from agent.core.admission import TurnAdmission
-from agent.core.contracts import RuntimeConfig
-from agent.core.execution import ExecutionStore
-from agent.core.model_io import ModelInvoker
-from agent.plugins.snapshot import (
-    RuntimeSnapshotStore,
-    bind_runtime_snapshot,
-    compile_snapshot,
-    get_current_runtime_snapshot,
-    reset_runtime_snapshot,
-)
-from agent.tool_hooks import HookOutcome
-from agent.tools.registry import ToolRegistry
-from agent.turns.policy import ReasoningPolicy
 from bus.event_bus import EventBus
 from bus.events import InboundMessage
 from bus.events_lifecycle import StreamDeltaReady
 from core.schema import ModelResponse, ToolCall, ToolSpec
-from session.manager import SessionManager
+from plugins.execution.service import ExecutionStore
+from plugins.ledger.manager import SessionManager
+from plugins.models.invoker import ModelInvoker
+from plugins.react.contract import ReactConfig
+from plugins.react.policy import ReasoningPolicy
+from plugins.sources.admission import TurnAdmission
+from plugins.tools.hooks import HookOutcome
+from plugins.tools.registry import ToolRegistry
 from tests.test_core_execution import Model, reasoner, run
 from tests.test_runtime import build_test_runtime
 
@@ -200,69 +193,6 @@ async def test_parallel_hook_grants_loop_guard_and_terminal_exclusivity(tmp_path
 
 
 @pytest.mark.asyncio
-async def test_parallel_children_keep_snapshot_and_retired_generation_until_drain(
-    tmp_path,
-):
-    entered, release = asyncio.Event(), asyncio.Event()
-    seen, drained = [], []
-    tools = ToolRegistry()
-    old = compile_snapshot(revision="old")
-    store = RuntimeSnapshotStore(on_drain=lambda snapshot: record_drain(snapshot))
-
-    async def record_drain(snapshot):
-        drained.append(snapshot.snapshot_id)
-
-    await store.commit(store.publish(old))
-
-    async def read(index):
-        seen.append(get_current_runtime_snapshot().snapshot_id)
-        if len(seen) == 2:
-            entered.set()
-        await release.wait()
-        assert get_current_runtime_snapshot() is old
-        return str(index)
-
-    register(tools, "read", read, parallel=True)
-    engine = reasoner(
-        tmp_path,
-        Model(
-            ModelResponse(
-                tool_calls=[ToolCall(str(i), "read", {"index": i}) for i in range(2)]
-            ),
-            ModelResponse(text="done"),
-        ),
-        tools,
-    )
-
-    async def turn():
-        lease = store.lease()
-        token = bind_runtime_snapshot(lease)
-        try:
-            return await run(engine)
-        finally:
-            reset_runtime_snapshot(token)
-            await lease.release()
-
-    task = asyncio.create_task(turn())
-    try:
-        await asyncio.wait_for(entered.wait(), 3)
-        new = compile_snapshot(revision="new")
-        await store.commit(store.publish(new))
-        assert drained == [] and old.lease_count == 3
-        release.set()
-        result = await task
-        assert seen == [old.snapshot_id, old.snapshot_id]
-        assert drained == [old.snapshot_id]
-        assert engine.execution_store.unresolved(result.execution_id) == []
-    finally:
-        release.set()
-        await asyncio.gather(task, return_exceptions=True)
-        engine.execution_store.close()
-        await tools.shutdown()
-        await store.close()
-
-
-@pytest.mark.asyncio
 async def test_repeated_cancel_keeps_sync_tool_session_owner_until_thread_stops(
     tmp_path,
 ):
@@ -390,7 +320,7 @@ async def test_stream_completion_delivers_all_queued_callbacks_in_order(chunks):
 
     bus = EventBus()
     bus.on(StreamDeltaReady, lambda event: deltas.append(event.content_delta))
-    result = await ModelInvoker(Stream(), RuntimeConfig(model="fake"), bus).complete(
+    result = await ModelInvoker(Stream(), ReactConfig(model="fake"), bus).complete(
         [], [], session_key="s", channel="c", chat_id="1", iteration=0
     )
     assert result.text == "done" and deltas == [str(i) for i in range(chunks)]
@@ -440,7 +370,7 @@ async def test_repeated_model_cancel_cannot_interrupt_provider_cleanup(stream):
                 stopped.set()
 
     invoker = ModelInvoker(
-        Client(), RuntimeConfig(model="fake", stream=stream), EventBus()
+        Client(), ReactConfig(model="fake", stream=stream), EventBus()
     )
     task = asyncio.create_task(
         invoker.complete([], [], session_key="s", channel="c", chat_id="1", iteration=0)

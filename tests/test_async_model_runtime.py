@@ -10,10 +10,10 @@ from __future__ import annotations
 import asyncio
 import unittest
 
-from infra.providers.model_client_adapter import ModelClientProvider
-from infra.providers.llm_provider import OpenAICompatibleClient
-from agent.model_runtime.types import ContentSafetyError, ContextLengthError
 from core.schema import ModelResponse
+from infra.providers.llm_provider import OpenAICompatibleClient
+from infra.providers.model_client_adapter import ModelClientProvider
+from plugins.models.types import ContentSafetyError, ContextLengthError
 
 
 class _AsyncClient:
@@ -120,7 +120,7 @@ class SharedStreamParseTests(unittest.TestCase):
         resp, deltas = self._run(
             [
                 'data: {"choices":[{"delta":{"content":"Hel"}}]}',
-                ':heartbeat comment ignored',
+                ":heartbeat comment ignored",
                 'data: {"choices":[{"delta":{"content":"lo"},"finish_reason":"stop"}]}',
                 "data: [DONE]",
                 'data: {"choices":[{"delta":{"content":"IGNORED_AFTER_DONE"}}]}',

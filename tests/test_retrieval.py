@@ -6,18 +6,20 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from core.memory.legacy import MemoryRuntime
-from agent.retrieval.default_pipeline import (
+from plugins.ledger.manager import SessionManager
+from plugins.retrieval.default_pipeline import (
     RRF_K,
     RetrievalRequest,
     hotness_boost,
     plan_injection,
     rrf_fuse,
 )
-from session.manager import SessionManager
 
 
 class _Rec:
-    def __init__(self, rid, content="c", memory_type="fact", reinforcement=0, source_ref=""):
+    def __init__(
+        self, rid, content="c", memory_type="fact", reinforcement=0, source_ref=""
+    ):
         self.id = rid
         self.content = content
         self.memory_type = memory_type
@@ -113,7 +115,9 @@ class InjectionBudgetTests(unittest.TestCase):
 
     def test_at_least_one_record_survives_a_tiny_budget(self):
         # 预算再小也要给出一条，否则检索结果等于白拿。
-        block, injected, _ = plan_injection([_Rec("1", content="z" * 300)], max_chars=10)
+        block, injected, _ = plan_injection(
+            [_Rec("1", content="z" * 300)], max_chars=10
+        )
         self.assertEqual(injected, 1)
         self.assertIn("z", block)
 
@@ -126,7 +130,9 @@ class RecallIntegrationTests(unittest.TestCase):
     def test_lexical_lane_finds_exact_entity_without_embeddings(self):
         with tempfile.TemporaryDirectory() as tmp:
             memory = self._memory(tmp)
-            memory.memorize("deploy script lives at scripts/rollout.sh", memory_type="fact")
+            memory.memorize(
+                "deploy script lives at scripts/rollout.sh", memory_type="fact"
+            )
             memory.memorize("user likes cats", memory_type="preference")
 
             hits = memory.recall("scripts/rollout.sh")
@@ -209,10 +215,14 @@ class RecallIntegrationTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             memory = self._memory(tmp)
-            memory.memorize("用户的部署脚本在 scripts/rollout.sh。", memory_type="procedure")
+            memory.memorize(
+                "用户的部署脚本在 scripts/rollout.sh。", memory_type="procedure"
+            )
 
             # 逐字重复 → 强化旧记录，不新增
-            memory.memorize("用户的部署脚本在 scripts/rollout.sh。", memory_type="procedure")
+            memory.memorize(
+                "用户的部署脚本在 scripts/rollout.sh。", memory_type="procedure"
+            )
             self.assertEqual(len(memory.list_records()), 1)
             self.assertEqual(memory.list_records()[0]["reinforcement"], 2)
 
@@ -221,8 +231,6 @@ class RecallIntegrationTests(unittest.TestCase):
                 "部署脚本在 scripts/rollout.sh，每次发版都跑它", memory_type="procedure"
             )
             self.assertEqual(len(memory.list_records()), 2)
-
-
 
     def test_lexical_similarity_cannot_safely_dedupe_negation(self):
         """不要用词法相似度做去重：否定句的相似度比真重复还高。
@@ -241,7 +249,9 @@ class RecallIntegrationTests(unittest.TestCase):
             return len(ta & tb) / max(1, len(ta | tb))
 
         negation = jaccard("CI 跑在 GitHub Actions 上", "CI 不跑在 GitHub Actions 上")
-        true_dup = jaccard("错误码 E4011 表示配额超限", "用户的错误码 E4011 表示配额超限。")
+        true_dup = jaccard(
+            "错误码 E4011 表示配额超限", "用户的错误码 E4011 表示配额超限。"
+        )
 
         self.assertGreater(
             negation,
@@ -253,7 +263,9 @@ class RecallIntegrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             memory = self._memory(tmp)
             for i in range(40):
-                memory.memorize("fact number %d about deployment" % i, memory_type="fact")
+                memory.memorize(
+                    "fact number %d about deployment" % i, memory_type="fact"
+                )
 
             block = memory.build_retrieval_block("deployment", limit=40)
             self.assertLessEqual(len(block), 1600)

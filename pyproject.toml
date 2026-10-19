@@ -26,6 +26,7 @@ dependencies = [
     "telegramify-markdown>=0.5",
     "websockets>=15,<17",
     "yoyo-migrations==9.0.0",
+    "python-json-logger>=3,<5",
 ]
 keywords = ["agent", "harness", "tool-calling"]
 
@@ -63,7 +64,6 @@ include = [
     "plugin_packages*",
     "plugins*",
     "proactive_v2*",
-    "session*",
     "scripts*",
     "utils*",
 ]
@@ -71,6 +71,7 @@ include = [
 [tool.setuptools.package-data]
 "eval.longmemeval" = ["LICENSE"]
 "plugins.akasha2" = ["LICENSE", "UPSTREAM.json"]
+"agent.plugin_composition" = ["LICENSE", "UPSTREAM.json"]
 "migrations" = ["yoyo/*.py"]
 "plugin_packages.curated_feeds" = [
     "README.md",

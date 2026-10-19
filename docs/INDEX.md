@@ -41,7 +41,7 @@
 | [记忆架构](./architecture/memory.md) | MemoryServices、Default、Akasha 和真相源 |
 | [插件架构](./architecture/plugins.md) | 声明、代际、准入、热重载和资源回收 |
 | [Proactive 与 Drift](./architecture/proactive.md) | 模块 DAG、提交边界、feedback 和运行轨迹 |
-| [快照与租约](./architecture/snapshot-leases.md) | 在途 turn 如何锁定能力代际 |
+| [快照与租约](./architecture/ownership-and-reload.md) | 在途 turn 如何锁定能力代际 |
 
 ## 运行与验证
 
@@ -85,3 +85,5 @@
 - 实际执行证据只写在 `operations/verification.md`。
 - 文件或目录改名时必须运行链接检查。
 - `Reference/` 是开发审计输入，不是文档或运行时依赖。
+
+当前组合内核与主链验证：[2026-10-20 原生组合验证](operations/evaluations/2026-10-20-native-composition.md)。

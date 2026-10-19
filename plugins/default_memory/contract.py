@@ -1,9 +1,10 @@
 """Public memory capability values, independent of the selected implementation."""
 
-from dataclasses import dataclass
 import inspect
 import logging
+from dataclasses import dataclass
 from typing import Any
+
 from agent.composition import ServiceKey
 from core.memory.engine import MemoryEngine
 
@@ -58,7 +59,7 @@ class MemoryServices:
             raise first_error
 
 
-MEMORY_SERVICES = ServiceKey[MemoryServices]("memory.services.v1", MemoryServices)
+MEMORY_SERVICES = ServiceKey[MemoryServices]("memory.services.v1")
 
 
 class MemoryReader:
@@ -74,4 +75,9 @@ class MemoryReader:
         return self._engine.describe()
 
 
-MEMORY_READER = ServiceKey[MemoryReader]("memory.retrieval.v1", MemoryReader)
+MEMORY_READER = ServiceKey[MemoryReader]("memory.retrieval.v1")
+
+from agent.composition import ServiceKey
+
+MEMORY = ServiceKey("memory.profile.v1")
+RECALL_INSPECTOR = ServiceKey("memory.recall_inspector.v1")

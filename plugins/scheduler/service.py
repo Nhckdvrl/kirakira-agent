@@ -10,11 +10,11 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from agent.composition import ResourceScope
-from agent.model_runtime.types import ModelRequestError
-from agent.tools.registry import object_schema
 from bus.events import InboundMessage, OutboundMessage
 from bus.queue import OutboundDeliveryError
 from core.schema import ToolSpec
+from plugins.models.types import ModelRequestError
+from plugins.tools.registry import object_schema
 
 from .store import Fire, Job, JobStore
 from .timing import advance, is_cron_expr, next_cron_fire, parse_duration, parse_when_at

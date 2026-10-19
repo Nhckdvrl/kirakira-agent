@@ -15,11 +15,11 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import uuid4
 
-from agent.model_runtime.types import RetryableModelError
 from bootstrap.runtime import build_runtime
 from bus.events_lifecycle import ModelAttemptStatus
 from core.schema import ToolSpec
 from infra.providers.step_plan import STEP5_MODEL, STEP_PLAN_BASE_URL, StepPlanClient
+from plugins.models.types import RetryableModelError
 from scripts.verify_scheduler_step_plan import summary
 
 
@@ -112,8 +112,23 @@ async def verify(args):
             str(path): hashlib.sha256(path.read_bytes()).hexdigest()
             for path in [
                 Path(__file__).resolve().relative_to(Path.cwd().resolve()),
-                *sorted(Path("agent/core").glob("*.py")),
-                Path("agent/tools/registry.py"),
+                *[
+                    path
+                    for owner in (
+                        "agent/plugin_composition",
+                        "agent/composition",
+                        "bootstrap",
+                        "plugins/reply_program",
+                        "plugins/react",
+                        "plugins/models",
+                        "plugins/sources",
+                        "plugins/conversation",
+                        "plugins/delivery",
+                        "plugins/ledger",
+                    )
+                    for path in sorted(Path(owner).glob("*.py"))
+                ],
+                Path("plugins/tools/registry.py"),
                 Path("utils/async_tasks.py"),
             ]
         },
@@ -366,6 +381,52 @@ async def verify(args):
                         assert (work / "probe.txt").read_text().strip() == nonce
                         evidence["first_reply"] = first.content
 
+                    elif category == "provider_reload":
+                        from agent.composition import Module
+                        from plugins.models.contract import (
+                            MEMORY_MODEL,
+                            MODEL,
+                            MODEL_ID,
+                        )
+                        from plugins.sources.contract import ADMISSION
+
+                        await runtime.start_background(start_channels=False)
+                        ledger, previous = runtime.session_manager, runtime.pipeline
+                        admission = runtime.composition.services.resolve(ADMISSION)
+                        first = await ask(f"Reply with exactly PRE_{nonce}.")
+                        assert "PRE_" + nonce in first.content
+
+                        async def replace_models(ctx):
+                            await ctx.provide(MODEL, observed)
+                            await ctx.provide(MEMORY_MODEL, observed)
+                            await ctx.provide(MODEL_ID, STEP5_MODEL)
+
+                        await runtime.composition.replace(
+                            "models",
+                            Module(
+                                "models",
+                                replace_models,
+                                provides=(MODEL, MEMORY_MODEL, MODEL_ID),
+                                config=runtime.composition._modules["models"].config,
+                                native=True,
+                            ),
+                        )
+                        assert runtime.session_manager is ledger
+                        assert runtime.pipeline is not previous
+                        assert (
+                            runtime.composition.services.resolve(ADMISSION) is admission
+                        )
+                        second = await ask(f"Reply with exactly POST_{nonce}.")
+                        assert "POST_" + nonce in second.content
+                        messages = ledger.get_or_create("verify:main").messages
+                        assert len(messages) == 4
+                        evidence.update(
+                            ledger_preserved=True,
+                            admission_preserved=True,
+                            conversation_replaced=True,
+                            original_messages=4,
+                        )
+
                     elif category == "compaction_restart":
                         runtime.reasoner.config.context_window = 40_000
                         runtime.reasoner.config.history_window = 100_000
@@ -525,6 +586,7 @@ async def verify(args):
         "files_restart",
         "stream_cancel",
         "compaction_restart",
+        "provider_reload",
     )
     await asyncio.gather(
         *(
@@ -557,6 +619,7 @@ def main():
             "files_restart",
             "stream_cancel",
             "compaction_restart",
+            "provider_reload",
         ),
     )
     args = parser.parse_args()

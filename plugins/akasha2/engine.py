@@ -33,8 +33,11 @@ from core.memory.engine import (
 )
 from memory2.embedder import Embedder
 from plugins.akasha.consumption import publications
-from session.embedding_store import MessageEmbeddingStore
-from session.turn_source import committed_turn_from_snapshot, original_message_snapshot
+from plugins.ledger.embedding_store import MessageEmbeddingStore
+from plugins.ledger.turn_source import (
+    committed_turn_from_snapshot,
+    original_message_snapshot,
+)
 
 from .application.cycle import MemoryCycle
 from .domain.model import ContextState, MemoryConfig, Turn

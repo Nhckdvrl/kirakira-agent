@@ -8,7 +8,7 @@ import pytest
 
 from core.memory.engine import MemoryQuery
 from plugins.akasha2.infrastructure.persistence import logical_state_sha256
-from session.manager import SessionManager
+from plugins.ledger.manager import SessionManager
 from tests.test_akasha2_runtime import add, engine
 
 

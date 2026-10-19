@@ -1,103 +1,88 @@
-# 架构总览
+# Runtime 架构
 
-Kirakira 是一个本地优先的多渠道 Agent Runtime。它有三条运行链，但共享同一套 Session、工具、
-记忆、插件和消息总线。
+Kirakira 使用 Akashic 的原生 Context / Fiber / Effect 内核。参考提交固定为
+[`21b38f0e102d9e1bdc5576725635dce29f135c0c`](https://github.com/kachofugetsu09/akashic-agent/tree/21b38f0e102d9e1bdc5576725635dce29f135c0c)。
+`agent/plugin_composition/UPSTREAM.json` 逐文件记录来源和 SHA-256，包含原样移植的内核及其直接依赖；
+许可证随源码保留。`scripts/check_upstream_kernel.py` 在本地和 CI 检查字节一致性。
 
-```text
-Channel/CLI
-  → MessageBus
-  → AgentLoop
-  → PassiveTurnPipeline
-  → Context render
-  → ReAct + tools
-  → Session commit
-  → Channel delivery
+## 骨架与装配
 
-Scheduler run → 原 Session admission → 同一 Pipeline → 来源标记提交 → 投递回执
-Scheduler notify → 原 Session admission → 原样消息提交 → 投递回执
-Proactive tick → scoped Wake/Drift → 共享 reasoner 与各自提交语义
+`agent/plugin_composition/` 是唯一的激活、依赖和资源生命周期权威：
+
+- `CompositionRoot` 持有一张当前依赖图；服务发布和撤销驱动消费者的局部激活。
+- `Context` 属于一次确切的 Fiber activation。消费者声明 `inject`，通过 `require/get` 读取该次激活的依赖。
+- `Fiber` 管理 pending、loading、active、failed、unloading、disposed 状态，以及自己的子树。
+- `Effect` 在取得资源前建立所有权；按逆序清理，失败时保留责任，显式重试。
+- `OwnerCall` 与 `RuntimeScope` 保护实际执行入口。旧 activation 的入口不会悄悄改绑新实例。
+- `spawn` 启动 Fiber 所有的任务；退出先取消并等待任务和实际调用，再释放资源。
+- 原生事件、健康状态、incident、readiness 和拓扑视图来自同一 Root。
+
+`bootstrap/distribution.py` 只选择业务 provider。`bootstrap/runtime.py` 创建组合并交给
+`Application`；Application 提供直接入口和启动/停止外观，不再另外维护一套逐服务启动、关闭流程。
+`agent/composition/` 是分发声明和旧 SDK 的适配层，所有服务查找和变更都委托给原生 Root，
+没有第二张依赖图或独立的代际计数。普通 provider 直接接收上游原生 Context。
+
+显式 `start_background` 是应用层启动闸：构造 Runtime 时可以执行直接请求，后台循环和网络监听在
+启动闸打开后运行。后续局部重新激活的 provider 使用相同闸门；资源仍由原生 Effect/Fiber 持有。
+
+## 主链
+
+```mermaid
+flowchart TD
+    A[渠道 / 直接入口 / 控制协议] --> B[Ledger 不可变输入]
+    B --> C[Sources 输入身份与 epoch]
+    C --> D[Conversation 会话准入]
+    D --> E[Reply Program 持久程序与恢复]
+    E --> F[Context 历史投影与记忆材料]
+    F --> G[ReAct 模型与工具循环]
+    G --> H[Models / Tools / MCP]
+    H --> G
+    G --> I[Delivery 消息提交与程序结算]
+    I --> J[渠道投递与回执]
+    K[Wake / Drift / Scheduler / 子任务] --> G
 ```
 
-## 执行职责
-
-`runtime.py` 只负责装配后的生命周期与直接入口；`loop.py` 负责渠道调度。
-`pipeline.py` 负责对话提交与记忆边界，`admission.py` 为渠道、直接和控制调用统一排队与取消。
-`conversation.py` 构造上下文，`reasoner.py` 执行共享循环，`model_io.py` 与 `tool_io.py` 拥有 I/O。
-scoped Wake/Drift 与子任务都复用该循环。`execution.py` 保存执行事实和不确定结果，
-不把执行完成等同于渠道送达。恢复限制见 [ADR0008](../decisions/0008-core-execution-and-admission.md)。
-
-`tool_batch.py` 为提供者显式声明的独立读取提供有界并发，写操作与工具加载/终结操作保持屏障，
-结果按模型顺序进入上下文。准入层拥有全部入口的在途与等待任务；取消排空、关闭顺序与中断控制
-提示见 [ADR0014](../decisions/0014-main-chain-batches-and-physical-drain.md)。
-
-## 目录 owner
-
-| 目录 | 负责什么 |
+| Owner | 职责 |
 | --- | --- |
-| `agent/composition/` | 有版本能力、代际借用与资源 scope |
-| `agent/` | 推理循环、上下文、工具、MCP、插件、子 Agent、控制协议 |
-| `bootstrap/` | 组合根、CLI/setup、supervisor、控制面和 dashboard 装配 |
-| `bus/` | 入站/出站队列和 lifecycle 事件 |
-| `core/` | 共享 schema、网络和记忆协议/runtime |
-| `infra/` | provider、Channel、控制连接和持久化 adapter |
-| `session/` | Session 与消息 embedding 的权威存储 |
-| `memory2/` | Default Memory 的算法和结构化存储 |
-| `plugins/` | Default/Akasha、Proactive、Drift、Scheduler 等一方实现 |
-| `plugin_packages/` | 通过公开插件 API 分发的插件包 |
-| `proactive_v2/` | 主动链的 frame、模块合同和 tick 编排 |
-| `frontend/` | TUI 和本地 Web 表现层 |
-| `eval/` | 记忆评测工具 |
-| `migrations/` | append-only workspace migration |
-| `kirakira_agent/` | 只保留 `python -m kirakira_agent` 入口 |
+| `plugins/ledger` | Session、append-only 消息、不可变输入、通用 owner 事务、消息向量缓存 |
+| `plugins/sources` | 来源 head/epoch、输入替代、会话准入与关闭排空 |
+| `plugins/conversation` | 接受请求、获取准入、激活程序、处理中断与终态 |
+| `plugins/reply_program` | 默认回复程序、稳定请求回执、工具效果记录、暂停和显式续跑 |
+| `plugins/reply` | 渠道入站 follower、可投递的恢复工作 |
+| `plugins/context` | 对话上下文、AGENTS/Skill、历史投影和压缩 |
+| `plugins/react` | 共享模型/工具循环、终结策略、批次和执行结果 |
+| `plugins/models` | 客户端构造、当前生成的重试和流式取消 |
+| `plugins/tools` | 当前工具目录、逐生成工具菜单、实际调用和工具提供者 |
+| `plugins/mcp` | 声明选择、每个连接的独立 owner、进程和实际调用排空 |
+| `plugins/delivery` | 消息与程序的同库结算、投递与后续事件 |
+| `plugins/extensions` | 已安装文件、原生 apply 插件、旧类式 SDK 适配、jobs/services/hooks |
+| `plugins/projects` / `plugins/working_directory` | 项目默认目录和独立 Session cwd |
+| `plugins/proactive_flow` / `plugins/drift_flow` / `plugins/scheduler` | 主动和定时业务，各自持有业务状态 |
+| `plugins/default_memory` / `plugins/akasha` / `plugins/akasha2` | 可选择的长期记忆提供者 |
 
-依赖方向是“外层装配依赖内层合同”：`bootstrap` 可以组合所有 owner；`core` 不应反向依赖
-`bootstrap` 或具体 Channel。具体 provider、Channel 和存储通过 `infra` adapter 接入。
+`agent/core` 和顶层 `session` 已移除。模型、工具、回复、MCP、记忆和控制业务都由各自插件包提供。
+`agent/plugins/__init__.py` 只保留已有插件的公共导入入口。
 
-## 装配与工具提供者
+## 持久事实与恢复
 
-`bootstrap/runtime.py` 负责构造、失败回收和所有权交接；`bootstrap/app.py` 负责命令入口。
-渠道与主动链路有各自的装配模块。Runtime 与 ToolRegistry 共用 ResourceScope 的物理关闭边界，
-关闭失败在所有动作尝试后聚合报告。
+接受输入时，原始消息、来源 head 和回复程序在 `sessions.db` 同一 owner 事务中提交。
+程序保存输入 ID、模型/工具授权摘要及效果记录，通过 Ledger 读取原始输入。
+Session 最终消息和程序结算也在同一事务中完成；来源 epoch 和输入身份在提交时再次核对。
 
-工作区、网页与记忆工具分别由 `agent/tools/builtins.py`、`agent/tools/web.py` 和
-`plugins/memory_tools/tools.py` 实现，完整对话工具面由 `bootstrap/tools.py` 组合。
-项目和目录由 `bootstrap/workspace.py` 装配，经版本能力提供给消费者，工具、控制协议和 Web 共用服务。
-插件公共类型在 `agent/plugins/api.py`，管理器负责加载与代际操作。
-详见 [ADR0010](../decisions/0010-provider-ownership-and-runtime-disposal.md)。
+已保存结果的工具调用在续跑时复用结果。已开始但结果未知的操作进入 `needs_reconciliation`，
+要求显式核实及依据；不会因为重启自动重放。管理入口在同一 Session 准入下执行。
+渠道恢复需要已有投递订阅；直接请求保持暂停，等待明确的续跑操作。
 
-## 主要持久状态
+上下文压缩是历史投影，不能删除原始消息。Akasha2 算法继续固定在独立的
+`d85b00c233686b68b082052b1b20123905aeab13`，本轮没有改动记忆算法或迁移旧库。
 
-| 文件 | owner | 作用 |
-| --- | --- | --- |
-| `sessions.db` | `SessionManager` / owner 记录 | Session、消息真相、compaction ledger；项目与 Session cwd 在同库按 owner 命名和版本保存 |
-| `memory/coremem.db` | Default Memory | 结构化长期记忆 |
-| `memory/akasha.db` | Akasha | v1 图、激活和查询状态 |
-| `memory/akasha2.db` | Akasha2 | 图、消费位置、向量空间与原始消息绑定的原子快照 |
-| `proactive.db` | Proactive state | 事件、决策、ACK、feedback、tick trace |
-| `drift/drift.db` | Drift state | proposal、run、journal、continuity、hazard schedule |
-| `.kirakira/executions.db` | `ExecutionStore` | 模型/工具事实、终态与待核对调用；不自动重放 |
-| `.kirakira/control.db` | ControlStore | programmatic turn 状态 |
-| `migrations.sqlite3` | Yoyo | workspace migration ledger |
+## 热更新与范围
 
-## 四条关键不变量
+替换 provider 先撤销旧激活并排空，再接入当前选择；依赖消费者由原生图重新激活，无关分支保持身份。
+模型替换会重建依赖它的回复程序、工具及扩展子树，Ledger 和独立 Sources 准入不因此关闭。
+工具菜单只在一次模型生成内固定具体工具对象，下一次生成重新读取当前可用工具。
+详见[所有权与局部更新](./ownership-and-reload.md)。
 
-1. Session 历史与模型上下文投影分离；context limit 只能推进 summary ledger，不能删除历史。
-2. 热更新只切换新 turn 的 current snapshot；在途 turn 继续使用原代际。
-3. 外部副作用以真实 delivery/tool result 为提交边界，不能先写“成功”。
-4. `Reference/` 只用于开发审计，不能成为运行依赖。
-
-## 项目与执行目录
-
-runtime workspace 保存运行状态，Session cwd 决定本轮文件和新 Shell 的代码目录。
-Project 默认目录只在 Session 真正创建时继承，与 Session、全部 initializer 同事务提交；
-旧会话从不回填。后续切换有独立修订和回执，外部操作经过 admission，Agent 工具要求独占批次。
-现有进程固定启动目录，子任务在自身 Session 创建时继承后独立。
-
-每次新模型生成读取当前仓库的 AGENTS 链，并同步 compactor 的实时 system 材料；
-这些规则不是原始会话事实，也不授予权限。目录丢失不回退或自动重建。
-合同和本地/远程边界见 [ADR0015](../decisions/0015-projects-and-session-directories.md)。
-
-从 [当前状态](../status/current.md) 继续了解已完成范围，或按
-[文档索引](../INDEX.md) 进入具体子系统。
-
-Scheduler 入口和故障边界见 [ADR0011](../decisions/0011-source-session-scheduler.md)。
+内核字节一致性、业务拆分和全部上游功能完成是不同的验收项。完整功能范围仍是
+[70 个生产插件及 3 个跨目录面](../status/akashic-features.md)；其中后台结果注入、完整执行宿主、
+全部模型/资源提供方和产品客户端仍需继续补齐。不能从固定内核或测试数量推导功能全部完成。

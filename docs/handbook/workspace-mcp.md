@@ -36,17 +36,19 @@ revision 由文件内容和 watch path 内容计算，不依赖 mtime。只 `tou
 | `workspace_mcp_remove` | 删除声明并发布新代际 |
 | `workspace_mcp_status` | 查看声明、代际和最近错误 |
 
-这些 deferred tools 需要先用 `tool_search` 解锁。`apply` 失败会回滚声明，并把旧内容备份到
-`mcp/backups/`。`status` 只显示 env 键名，不回显密钥值。新工具从下一轮开始可见。
+这些 deferred tools 需要先用 `tool_search` 解锁。声明通过预校验后先持久化选择，再接入运行时。
+连接失败保留当前选择及错误；替换前内容保存在 `.toml.previous.bak`，不自动恢复旧实例。
+`status` 只显示 env 键名，不回显密钥值。下一次模型生成读取当前可用工具。
 
-## 换代语义
+## 局部更新语义
 
-- 所有声明作为一批候选发布；任一声明或连接失败，整批作废；
-- 失败时旧代际继续服务，修好文件后 watcher 会自动重试；
-- 删除全部声明会发布一个合法的空代际；
-- 在途 turn 继续使用自己锁定的旧代际，租约释放后才关闭旧连接。
+- 解析或路径校验失败时不应用非法声明。
+- 每个有效 server 选择独立应用；未改变的连接保持身份。
+- 改变的 server 先撤销旧入口，等待已接纳的调用，再释放连接并接入当前选择。
+- 连接失败保持不可用及诊断，不自动把旧实现恢复成运行事实。
+- 删除声明会撤销相应工具和连接，其他 server 不重启。
 
-完整原理见[快照、代际与租约](../architecture/snapshot-leases.md)。
+原理见[所有权与局部更新](../architecture/ownership-and-reload.md)。
 
 ## 排查
 

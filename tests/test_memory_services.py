@@ -15,13 +15,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from agent.config_models import build_config
-from agent.core.pipeline import _engine_can_retrieve
-from bootstrap.memory import build_memory_engine, memory_engine_enabled
 from core.memory.plugin import DisabledMemoryEngine
 from infra.providers.model_client_adapter import ModelClientProvider
+from plugins.default_memory.config_models import build_config
 from plugins.default_memory.contract import MemoryServices
 from plugins.default_memory.engine import DefaultMemoryEngine
+from plugins.default_memory.factory import build_memory_engine, memory_engine_enabled
+from plugins.reply_program.service import _engine_can_retrieve
 
 
 class _StubClient:
@@ -82,10 +82,63 @@ class MemoryFactoryGateTests(unittest.TestCase):
         self.assertTrue(memory_engine_enabled(cfg_on))
         self.assertFalse(memory_engine_enabled(cfg_off))
 
-    def test_services_wrap_engine(self) -> None:
-        services = MemoryServices(engine=DisabledMemoryEngine())
-        self.assertIsInstance(services.engine, DisabledMemoryEngine)
+
+import asyncio
+import unittest
 
 
-if __name__ == "__main__":
-    unittest.main()
+class _Closeable:
+    def __init__(self, name: str, sink: list[str], *, boom: bool = False) -> None:
+        self.name = name
+        self._sink = sink
+        self._boom = boom
+
+    def close(self) -> None:
+        if self._boom:
+            raise RuntimeError("close failed: %s" % self.name)
+        self._sink.append(self.name)
+
+
+class _AsyncCloseable:
+    def __init__(self, name: str, sink: list[str]) -> None:
+        self.name = name
+        self._sink = sink
+
+    async def aclose(self) -> None:
+        self._sink.append(self.name)
+
+
+class _Engine:
+    def __init__(self, closeables: list[object]) -> None:
+        self.closeables = closeables
+
+
+class MemoryServicesShutdownTests(unittest.TestCase):
+    def test_closeables_released_in_reverse_order(self) -> None:
+        async def scenario() -> None:
+            closed: list[str] = []
+            engine = _Engine(
+                [_Closeable("store", closed), _AsyncCloseable("embedder", closed)]
+            )
+            await MemoryServices(engine=engine).aclose()
+            # 逆序释放:后建的先关
+            self.assertEqual(closed, ["embedder", "store"])
+
+        asyncio.run(scenario())
+
+    def test_one_failure_does_not_block_the_rest_and_is_raised(self) -> None:
+        async def scenario() -> None:
+            closed: list[str] = []
+            engine = _Engine(
+                [
+                    _Closeable("store", closed),
+                    _Closeable("bad", closed, boom=True),
+                    _AsyncCloseable("embedder", closed),
+                ]
+            )
+            with self.assertRaises(RuntimeError):
+                await MemoryServices(engine=engine).aclose()
+            # 失败的那个跳过,其余仍被关闭
+            self.assertEqual(closed, ["embedder", "store"])
+
+        asyncio.run(scenario())

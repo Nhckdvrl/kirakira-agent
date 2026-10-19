@@ -2,7 +2,7 @@ import re
 from datetime import UTC, datetime
 
 from agent.composition import ServiceKey
-from session.owner_store import StateConflict
+from plugins.ledger.owner_store import StateConflict
 
 PROJECTS = ServiceKey("projects.v1")
 OWNER = "projects"

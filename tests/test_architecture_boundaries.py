@@ -2,8 +2,6 @@
 
 import ast
 from pathlib import Path
-import re
-
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_ROOTS = (
@@ -20,35 +18,9 @@ SOURCE_ROOTS = (
     "plugin_packages",
     "plugins",
     "proactive_v2",
-    "session",
+    "plugins/ledger",
     "utils",
 )
-
-
-def test_channel_sources_live_in_canonical_package() -> None:
-    for name in (
-        "base.py",
-        "contract.py",
-        "reply_context.py",
-        "telegram_channel.py",
-        "telegram_utils.py",
-    ):
-        assert (ROOT / "infra/channels" / name).is_file()
-    assert not (ROOT / "kirakira_agent/channels").exists()
-
-
-def test_upstream_pins_are_metadata_only() -> None:
-    for path in (
-        ROOT / "infra/channels/REFERENCE_PIN",
-        ROOT / "agent/SUPERVISOR_REFERENCE_PIN",
-    ):
-        assert re.fullmatch(r"[0-9a-f]{40}", path.read_text(encoding="utf-8").strip())
-
-
-def test_supervisor_uses_canonical_owner() -> None:
-    from agent.supervisor import RESTART_EXIT_CODE
-
-    assert RESTART_EXIT_CODE == 75
 
 
 def test_production_code_does_not_read_reference_checkout() -> None:
@@ -76,52 +48,6 @@ def test_production_code_does_not_read_reference_checkout() -> None:
     assert violations == []
 
 
-def test_runtime_architecture_has_single_canonical_owner() -> None:
-    legacy_paths = (
-        "kirakira_agent/_compat",
-        "kirakira_agent/akasha",
-        "kirakira_agent/channels",
-        "kirakira_agent/control",
-        "kirakira_agent/coremem",
-        "kirakira_agent/drift",
-        "kirakira_agent/eval",
-        "kirakira_agent/mcp",
-        "kirakira_agent/models",
-        "kirakira_agent/proactive",
-        "kirakira_agent/prompting",
-        "kirakira_agent/tools",
-        "kirakira_agent/tui",
-        "kirakira_agent/agent.py",
-        "kirakira_agent/bootstrap.py",
-        "kirakira_agent/bus.py",
-        "kirakira_agent/cli.py",
-        "kirakira_agent/config.py",
-        "kirakira_agent/context.py",
-        "kirakira_agent/dashboard.py",
-        "kirakira_agent/embeddings.py",
-        "kirakira_agent/entry.py",
-        "kirakira_agent/event_bus.py",
-        "kirakira_agent/events.py",
-        "kirakira_agent/lifecycle.py",
-        "kirakira_agent/memory.py",
-        "kirakira_agent/memory_admin.py",
-        "kirakira_agent/observe.py",
-        "kirakira_agent/ports.py",
-        "kirakira_agent/readiness.py",
-        "kirakira_agent/retrieval.py",
-        "kirakira_agent/runtime.py",
-        "kirakira_agent/schema.py",
-        "kirakira_agent/session.py",
-        "kirakira_agent/subagent.py",
-        "kirakira_agent/supervisor.py",
-        "kirakira_agent/turns.py",
-        "kirakira_agent/plugins.py",
-        "kirakira_agent/snapshot.py",
-        "kirakira_agent/tool_hooks.py",
-    )
-    assert [path for path in legacy_paths if (ROOT / path).exists()] == []
-
-
 def test_brand_package_is_only_a_public_entry_shell() -> None:
     files = {
         path.name
@@ -143,55 +69,25 @@ def test_brand_package_is_only_a_public_entry_shell() -> None:
                     names = [node.module or ""]
                 else:
                     continue
-                if any(name == "kirakira_agent" or name.startswith("kirakira_agent.") for name in names):
+                if any(
+                    name == "kirakira_agent" or name.startswith("kirakira_agent.")
+                    for name in names
+                ):
                     violations.append(f"{path.relative_to(ROOT)}:{node.lineno}")
     assert violations == []
 
 
-def test_required_architecture_owners_are_real_packages() -> None:
-    required = (
-        "agent/control",
-        "agent/core",
-        "agent/lifecycle",
-        "agent/looping",
-        "agent/mcp",
-        "agent/migrations",
-        "agent/model_runtime",
-        "agent/plugins",
-        "agent/prompting",
-        "agent/retrieval",
-        "agent/tool_hooks",
-        "agent/tools",
-        "agent/turns",
-        "bootstrap",
-        "bus",
-        "core/memory",
-        "core/net",
-        "eval/longmemeval",
-        "frontend/tui",
-        "infra/channels",
-        "infra/control",
-        "infra/persistence",
-        "infra/providers",
-        "memory2",
-        "migrations",
-        "plugin_packages/curated_feeds",
-        "plugins/akasha",
-        "plugins/default_memory",
-        "plugins/drift_flow",
-        "plugins/proactive_flow",
-        "plugins/wake_proactive",
-        "proactive_v2",
-        "session",
-        "utils",
-    )
-    missing = []
-    empty = []
-    for relative in required:
-        owner = ROOT / relative
-        if not owner.is_dir():
-            missing.append(relative)
-        elif not any(path.suffix == ".py" for path in owner.iterdir() if path.is_file()):
-            empty.append(relative)
-    assert missing == []
-    assert empty == []
+from scripts.check_change_impact import impacted_tests
+
+
+def test_context_change_selects_semantic_and_runtime_contracts() -> None:
+    selected = impacted_tests(["plugins/models/query_compaction.py"])
+    assert "tests/test_session.py" in selected
+    assert "tests/test_query_compaction.py" in selected
+
+
+def test_scheduler_change_stays_targeted_but_keeps_global_boundaries() -> None:
+    selected = impacted_tests(["plugins/scheduler/service.py"])
+    assert "tests/test_scheduler.py" in selected
+    assert "tests/test_architecture_boundaries.py" in selected
+    assert "tests/test_proactive.py" not in selected

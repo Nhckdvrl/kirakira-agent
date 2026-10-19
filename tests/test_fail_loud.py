@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 
 from core.memory.legacy import MemoryRuntime
-from session.manager import SessionManager
+from plugins.ledger.manager import SessionManager
 
 
 class BoomEmbeddings:

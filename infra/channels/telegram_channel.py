@@ -4,18 +4,17 @@ Telegram Channel
 将 Telegram Bot 接入 MessageBus，支持 allowFrom 白名单。
 """
 
-import logging
 import asyncio
 import html
 import json
+import logging
 from collections.abc import Coroutine
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 from telegram import BotCommand, Update
 from telegram.constants import ChatAction
-from telegram.error import Conflict, NetworkError, TelegramError, TimedOut
+from telegram.error import Conflict, TelegramError
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -39,21 +38,21 @@ from bus.events_lifecycle import (
     TurnStarted,
 )
 from bus.queue import MessageBus
-from agent.looping.interrupt import InterruptController
 from infra.channels.base import AttachmentStore, MessageDeduper, SessionIdentityIndex
 from infra.channels.contract import ChannelContext
 from infra.channels.delivery import deliver_message_parts
 from infra.channels.reply_context import build_reply_inbound_text
 from infra.channels.telegram_utils import (
-    TelegramOutboundLimiter,
     TelegramLiveEditQueue,
     TelegramLiveTextMessage,
+    TelegramOutboundLimiter,
     TelegramStreamMessage,
     send_markdown,
     send_stream_markdown,
     send_thinking_block,
 )
-from session.manager import SessionManager
+from plugins.ledger.manager import SessionManager
+from plugins.sources.interrupt import InterruptController
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +76,6 @@ class _ToolLiveLine:
 
 
 class TelegramChannel:
-
     def __init__(
         self,
         token: str,
@@ -106,9 +104,7 @@ class TelegramChannel:
         self._app = Application.builder().token(token).build()
         self._bot_commands = bot_commands or []
         self._app.add_handler(CommandHandler("stop", self._on_stop_command))
-        self._app.add_handler(
-            MessageHandler(filters.COMMAND, self._on_command)
-        )
+        self._app.add_handler(MessageHandler(filters.COMMAND, self._on_command))
         self._app.add_handler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, self._on_message)
         )
@@ -125,7 +121,9 @@ class TelegramChannel:
         self._polling_conflict_task: asyncio.Task[None] | None = None
         self._telegram_outbound_limiter = TelegramOutboundLimiter()
         self._active_streams: dict[str, TelegramStreamMessage] = {}
-        self._live_edit_queue = TelegramLiveEditQueue(limiter=self._telegram_outbound_limiter)
+        self._live_edit_queue = TelegramLiveEditQueue(
+            limiter=self._telegram_outbound_limiter
+        )
         self._live_messages: dict[str, TelegramLiveTextMessage] = {}
         self._reply_buffers: dict[str, str] = {}
         self._thinking_buffers: dict[str, str] = {}
@@ -165,7 +163,11 @@ class TelegramChannel:
         task.add_done_callback(_done)
 
     async def _cancel_live_tasks(self, session_key: str) -> None:
-        tasks = [task for task in self._live_tasks_by_session.get(session_key, set()) if not task.done()]
+        tasks = [
+            task
+            for task in self._live_tasks_by_session.get(session_key, set())
+            if not task.done()
+        ]
         if not tasks:
             return
         for task in tasks:
@@ -556,7 +558,9 @@ class TelegramChannel:
         if cid <= 0:
             return None
         key = str(cid)
-        stream = TelegramStreamMessage(self._app.bot, cid, self._telegram_outbound_limiter)
+        stream = TelegramStreamMessage(
+            self._app.bot, cid, self._telegram_outbound_limiter
+        )
         self._active_streams[key] = stream
 
         async def _push(delta: dict[str, str] | str) -> None:
@@ -605,7 +609,9 @@ class TelegramChannel:
         next_at = self._thinking_live_next_at.get(event.session_key, 0.0)
         if now < next_at and live_len - last_len < _LIVE_STREAM_MIN_CHARS:
             return
-        self._thinking_live_next_at[event.session_key] = now + _LIVE_STREAM_MIN_INTERVAL_S
+        self._thinking_live_next_at[event.session_key] = (
+            now + _LIVE_STREAM_MIN_INTERVAL_S
+        )
         self._live_last_lengths[event.session_key] = live_len
         self._start_live_task(
             event.session_key,
@@ -953,7 +959,9 @@ def _format_tool_target(arguments: dict[str, object]) -> str:
     for key in primary_keys:
         value = arguments.get(key)
         if value is not None and value != "":
-            return f"\"{_clip_inline(_stringify_tool_value(value), _TOOL_PREVIEW_LIMIT)}\""
+            return (
+                f'"{_clip_inline(_stringify_tool_value(value), _TOOL_PREVIEW_LIMIT)}"'
+            )
     return ""
 
 
@@ -978,7 +986,7 @@ def _clip_inline(text: str, limit: int) -> str:
 def _tail_text(text: str, limit: int) -> str:
     if len(text) <= limit:
         return text
-    return "..." + text[-(limit - 3):]
+    return "..." + text[-(limit - 3) :]
 
 
 def _live_buffer_len(reply: str, thinking: str) -> int:

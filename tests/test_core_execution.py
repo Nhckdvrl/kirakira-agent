@@ -4,20 +4,20 @@ import asyncio
 
 import pytest
 
-from agent.core.admission import TurnAdmission
-from agent.core.contracts import RuntimeConfig
-from agent.core.execution import ExecutionStore
-from agent.core.model_io import ModelInvoker
-from agent.core.reasoner import DefaultReasoner
-from agent.core.scoped import run_scoped
-from agent.model_runtime.types import ContextLengthError
-from agent.tools.registry import ToolRegistry
-from agent.turns.policy import ReasoningPolicy
-from agent.turns.result import TurnOutbound, TurnResult, commit_turn_result
 from bus.event_bus import EventBus
 from bus.events import InboundMessage
 from core.schema import ModelResponse, ToolCall, ToolSpec
-from session.manager import SessionManager
+from plugins.execution.service import ExecutionStore
+from plugins.ledger.manager import SessionManager
+from plugins.models.invoker import ModelInvoker
+from plugins.models.types import ContextLengthError
+from plugins.react.contract import ReactConfig
+from plugins.react.policy import ReasoningPolicy
+from plugins.react.reasoner import ReactProgram
+from plugins.react.result import TurnOutbound, TurnResult, commit_turn_result
+from plugins.reply_program.scoped import run_scoped
+from plugins.sources.admission import TurnAdmission
+from plugins.tools.registry import ToolRegistry
 from tests.test_runtime import build_test_runtime
 from tests.test_turn_result import _effect, _Port
 
@@ -36,10 +36,10 @@ class Model:
 
 
 def reasoner(tmp_path, model, tools=None):
-    return DefaultReasoner(
+    return ReactProgram(
         model_client=model,
         tools=tools or ToolRegistry(),
-        config=RuntimeConfig(model="fake", stream=False),
+        config=ReactConfig(model="fake", stream=False),
         context=None,
         event_bus=EventBus(),
         execution_store=ExecutionStore(tmp_path / "executions.db"),
@@ -169,7 +169,7 @@ async def test_stream_cancel_joins_provider_worker():
         def complete_stream(self, *args):
             raise AssertionError("must use async stream")
 
-    invoker = ModelInvoker(Stream(), RuntimeConfig(model="fake"), EventBus())
+    invoker = ModelInvoker(Stream(), ReactConfig(model="fake"), EventBus())
     task = asyncio.create_task(
         invoker.complete([], [], session_key="s", channel="c", chat_id="1", iteration=0)
     )
@@ -296,7 +296,7 @@ async def test_intent_persistence_failure_prevents_tool_and_stops_run(tmp_path):
 
 @pytest.mark.asyncio
 async def test_hook_cannot_use_revoked_grant(tmp_path):
-    from agent.tool_hooks import HookOutcome
+    from plugins.tools.hooks import HookOutcome
 
     tools, effects, grant = ToolRegistry(), [], {"send"}
     tools.register(ToolSpec("send", "send", {}), lambda: effects.append("sent"))

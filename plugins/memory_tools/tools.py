@@ -5,7 +5,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from agent.tools.registry import ToolRegistry, object_schema
 from core.memory.engine import (
     MemoryCapability,
     MemoryMutation,
@@ -15,7 +14,8 @@ from core.memory.engine import (
 )
 from core.memory.legacy import MemoryRuntime
 from core.schema import ToolSpec
-from session.manager import SessionManager
+from plugins.ledger.manager import SessionManager
+from plugins.tools.registry import ToolRegistry, object_schema
 
 # 引擎的注入选择器只接受这四类(retriever.py 的 `else: continue`),其余类型即使被
 # 检索命中也**永远不会注入上下文**。Reference 靠工具 schema 的 enum 防住;kirakira 的

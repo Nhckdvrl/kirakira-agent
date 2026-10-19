@@ -6,7 +6,7 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from agent.model_runtime.types import ModelClient
+from plugins.models.types import ModelClient
 
 
 @dataclass

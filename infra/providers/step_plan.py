@@ -4,9 +4,9 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
 
-from agent.model_runtime.retry import retry_after_seconds
-from agent.model_runtime.types import RetryableModelError
 from infra.providers.llm_provider import OpenAICompatibleClient
+from plugins.models.retry import retry_after_seconds
+from plugins.models.types import RetryableModelError
 
 STEP_PLAN_BASE_URL = "https://api.stepfun.com/step_plan/v1"
 STEP5_MODEL = "step-5-preview"

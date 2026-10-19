@@ -32,7 +32,7 @@ runtime 不继续启动。迁移合同见[Workspace 迁移](../operations/worksp
 
 ## Channel 边界
 
-Channel 只负责外部消息接入和投递确认。内部统一转换为 message envelope，再交给 Session、AgentLoop 或
+Channel 只负责外部消息接入和投递确认。内部统一转换为 message envelope，再交给 Session、ReplyFollower 或
 Proactive。当前配置面包括 Web Chat、Telegram、QQ 和 QQBot，实际启用集合由 `config.toml` 决定。
 
 投递 callback 是提交边界：
@@ -50,4 +50,6 @@ Proactive。当前配置面包括 Web Chat、Telegram、QQ 和 QQBot，实际启
 ## 关停
 
 关停按依赖逆序执行：停止接收新请求，等待或中断在途任务，关闭 Proactive/Channel/MCP/插件，释放
-数据库和 workspace lock。各资源的 close/terminate 必须幂等，单个关闭失败不能跳过后续资源。
+数据库和 workspace lock。原生 Fiber 在释放资源前等待实际调用和自己的任务退出。
+失败的 owner 保留资源和依赖供显式重试，无关子分支继续尝试关闭。
+完整合同见[所有权与局部更新](./ownership-and-reload.md)。

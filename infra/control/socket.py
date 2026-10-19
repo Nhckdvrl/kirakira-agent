@@ -6,8 +6,8 @@ import logging
 import os
 from pathlib import Path
 
-from agent.control.service import ControlService
 from infra.control.connection import NdjsonConnection
+from plugins.control.service import ControlService
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,9 @@ class SocketAppServer:
     ) -> None:
         raw_endpoint = str(endpoint)
         self._tcp_address = _parse_loopback_tcp(raw_endpoint)
-        self.endpoint: str | Path = raw_endpoint if self._tcp_address else Path(raw_endpoint)
+        self.endpoint: str | Path = (
+            raw_endpoint if self._tcp_address else Path(raw_endpoint)
+        )
         self._service = service
         self._slots = asyncio.Semaphore(max_connections)
         self._max_pending_requests = max_pending_requests
@@ -42,7 +44,9 @@ class SocketAppServer:
         # 1. 只删除无法连接的旧 socket；活跃 owner 必须 fail-loud。
         if self._tcp_address is not None:
             host, port = self._tcp_address
-            self._server = await asyncio.start_server(self._accept, host=host, port=port)
+            self._server = await asyncio.start_server(
+                self._accept, host=host, port=port
+            )
             socket = self._server.sockets[0]
             bound_host, bound_port = socket.getsockname()[:2]
             self.endpoint = f"{bound_host}:{bound_port}"
@@ -55,7 +59,7 @@ class SocketAppServer:
         if endpoint.exists():
             try:
                 reader, writer = await asyncio.open_unix_connection(str(endpoint))
-            except (ConnectionRefusedError, FileNotFoundError, OSError):
+            except ConnectionRefusedError, FileNotFoundError, OSError:
                 endpoint.unlink()
             else:
                 writer.close()
@@ -74,7 +78,9 @@ class SocketAppServer:
             raise
         logger.info("app-server listening on %s", self.endpoint)
 
-    async def _accept(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+    async def _accept(
+        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> None:
         async with self._slots:
             connection = NdjsonConnection(
                 reader,
@@ -89,7 +95,7 @@ class SocketAppServer:
             self._connections.add(task)
             try:
                 await connection.run()
-            except (ConnectionError, BrokenPipeError):
+            except ConnectionError, BrokenPipeError:
                 logger.info("app-server client disconnected")
             finally:
                 self._connections.discard(task)

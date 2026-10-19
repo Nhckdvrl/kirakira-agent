@@ -12,6 +12,10 @@ class ResourceScope:
         self._closed = False
         self._closing = None
 
+    @property
+    def tasks(self):
+        return tuple(self._tasks)
+
     def on_close(self, closer):
         if self._closed:
             raise RuntimeError("resource scope is closed")
@@ -37,26 +41,39 @@ class ResourceScope:
         task.add_done_callback(self._settled)
         return task
 
-    async def _close(self):
+    async def stop_tasks(self):
         tasks = tuple(self._tasks)
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _close(self):
+        await self.stop_tasks()
         errors, self._errors = self._errors, []
+        failed = []
         for closer in reversed(self._closers):
             try:
                 result = closer()
                 if inspect.isawaitable(result):
                     await result
             except asyncio.CancelledError:
+                failed.append(closer)
                 errors.append(RuntimeError("resource closer cancelled during disposal"))
             except Exception as exc:  # noqa: BLE001 -- attempt every resource closer
+                failed.append(closer)
                 errors.append(exc)
-        self._closers.clear()
+        # Keep the original owner of failed physical disposal for an explicit retry.
+        self._closers = list(reversed(failed))
         if errors:
             raise BaseExceptionGroup("provider resource cleanup failed", errors)
 
     async def close(self):
+        if (
+            self._closing is not None
+            and self._closing.done()
+            and self._closing.exception() is not None
+        ):
+            self._closing = None
         if self._closing is None:
             self._closed = True
             self._closing = asyncio.create_task(self._close())

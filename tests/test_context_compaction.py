@@ -7,16 +7,15 @@ from types import SimpleNamespace
 
 import pytest
 
-from agent.model_runtime.context_compaction import (
+from plugins.ledger.compaction_runtime import SessionCompactionRuntime
+from plugins.ledger.manager import SessionManager
+from plugins.models.context_compaction import (
     SUMMARY_HEADINGS,
     CommittedContextUnit,
     ContextCompactionError,
     ContextCompactor,
     ContextPayloadSegments,
 )
-from session.compaction_runtime import SessionCompactionRuntime
-from session.manager import SessionManager
-
 
 _SUMMARY = "\n".join([heading + "\nvalue" for heading in SUMMARY_HEADINGS])
 

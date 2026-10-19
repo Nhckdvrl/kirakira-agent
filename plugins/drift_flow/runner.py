@@ -1,6 +1,6 @@
 """Drift runner：把"一轮 Drift"跑成一次 agent run。
 
-复用被动对话的 ``DefaultReasoner`` 与 ``build_workspace_registry`` 工具集，
+复用被动对话的 ``ReactProgram`` 与 ``build_workspace_registry`` 工具集，
 额外挂上 ``message_push`` / ``finish_drift`` 收尾工具。SKILL.md 正文作为
 system prompt，Drift Briefing 作为首条消息注入。跑完把结果落到 drift.db，
 并在主事件循环上投递草稿消息。
@@ -20,11 +20,17 @@ from pathlib import Path
 from typing import Any, Callable, List, Optional, Sequence
 from uuid import uuid4
 
-from agent.core.scoped import run_scoped
-from agent.model_runtime.types import ModelClient
-from agent.tools import build_workspace_registry
-from agent.turns.policy import ReasoningPolicy
-from agent.turns.result import (
+from bus.queue import MessageBus
+from plugins.drift_flow.drive import sample_drift_delay_hours
+from plugins.drift_flow.skills import DriftSkill, discover_skills, ensure_example_skill
+from plugins.drift_flow.state import DriftStateStore
+from plugins.drift_flow.tools import DriftRunContext, register_drift_tools
+from plugins.ledger.manager import SessionManager
+from plugins.ledger.turn_source import is_memory_source
+from plugins.memory_tools.tools import register_memory_tools
+from plugins.models.types import ModelClient
+from plugins.react.policy import ReasoningPolicy
+from plugins.react.result import (
     BusOutboundPort,
     CallableSideEffect,
     TurnOutbound,
@@ -32,15 +38,9 @@ from agent.turns.result import (
     TurnTrace,
     commit_turn_result,
 )
-from bus.queue import MessageBus
-from plugins.drift_flow.drive import sample_drift_delay_hours
-from plugins.drift_flow.skills import DriftSkill, discover_skills, ensure_example_skill
-from plugins.drift_flow.state import DriftStateStore
-from plugins.drift_flow.tools import DriftRunContext, register_drift_tools
-from plugins.memory_tools.tools import register_memory_tools
+from plugins.reply_program.scoped import run_scoped
+from plugins.tools import build_workspace_registry
 from proactive_v2.config import DriftConfig
-from session.manager import SessionManager
-from session.turn_source import is_memory_source
 
 logger = logging.getLogger(__name__)
 

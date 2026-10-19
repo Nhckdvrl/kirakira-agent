@@ -1,6 +1,6 @@
 # 当前状态
 
-更新日期：2026-10-19。主链参考核对至 Akashic `21b38f0e102d9e1bdc5576725635dce29f135c0c`。
+更新日期：2026-10-20。主链参考核对至 Akashic `21b38f0e102d9e1bdc5576725635dce29f135c0c`。
 记忆移植继续固定 `d85b00c233686b68b082052b1b20123905aeab13`；算法、双通道与公开 cost 协议未变。
 实现合同见 [ADR0009](../decisions/0009-components-recovery-and-akasha2.md) 和
 [ADR0015](../decisions/0015-projects-and-session-directories.md)，实际运行结果见
@@ -9,6 +9,19 @@
 
 项目统一使用 Python 3.14.6：`.python-version` 固定解释器，`uv.lock` 固定依赖，
 本地使用项目 `.venv`，CI 读取相同版本文件并只执行一个任务；不再维护多版本测试矩阵。
+
+## 当前骨架
+
+Context/Fiber/Effect、OwnerCall、事件、健康与拓扑使用固定提交的原生代码。
+`agent/plugin_composition/UPSTREAM.json` 和 CI 锁定逐文件摘要；没有并行的自建依赖图。
+普通业务 provider 直接使用原生 Context，默认组合位于 `bootstrap/distribution.py`。
+`agent/core` 与顶层 `session` 已移除，主链按 Ledger / Sources / Conversation /
+Reply Program / Context / ReAct / Models / Tools / MCP / Delivery 分为普通 owner。
+类式插件只在扩展加载边界适配，已有功能在同一原生 Root 中接回。
+
+架构合同以 [Runtime 架构](../architecture/overview.md) 和
+[所有权与局部更新](../architecture/ownership-and-reload.md) 为准。上游完整功能仍需按清单补齐，
+不把原生内核一致性当成功能全部完成。
 
 ## 已落地
 
@@ -20,11 +33,11 @@
 - Scheduler 提供者使用来源会话、notify/run、none/session 历史与持久 fire；投递回执后完成，未知结果停止自动重放。
 - 删除未接线的旧同步 Agent、手工压缩入口和图快照代码；渠道排队与中断统一归 admission。
 - 模型当前生成有界重试、Retry-After、可取消等待、流片段 reset、TUI 状态及截断拒绝；已执行工具不因网络恢复重复。
-- 显式安全读取使用有界并发，写入/加载/终结工具保持屏障；子调用借用 journal 与快照，结果按模型顺序入上下文。
+- 显式安全读取使用有界并发，写入/加载/终结工具保持屏障；子调用保存执行事实并使用具体工具菜单，结果按模型顺序入上下文。
 - 流结束使用完成通知；重复取消保留模型清理和同步工具线程的物理排空；关闭覆盖直接与排队入口。
 - 中断控制状态在下一请求有明确 system 提示，重启后仍有效；日志未结算检查避开大模型正文解码。
-- Plugin API 3：提供者拥有版本能力，消费者声明依赖并持有 generation lease；资源 scope 物理排空，缺失依赖拒绝发布并撤销贡献。
-- 记忆构造归 bootstrap、工具归 memory_tools 提供者；工作区工具不持有记忆服务，Drift 显式只读记忆。
+- Plugin API 3：提供者拥有版本能力，消费者声明依赖，实际调用保留确切 Fiber activation；资源 scope 物理排空，缺失依赖拒绝发布并撤销贡献。
+- 记忆构造归 default_memory provider、工具归 memory_tools 提供者；工作区工具不持有记忆服务，Drift 显式只读记忆。
 - 插件公共 API 与 manager 分离，删除无效服务包装与未使用的宿主参数；CLI 与渠道/主动装配分离。
 - 装配/启动失败回收、后台任务所有权、取消等待物理关闭、失败后继续关闭和错误聚合已接入。
 - Wake 可选持久兴趣估计、修订身份、质量衰减池与多来源排序；最终 share/skip、版本失效、ACK、投递去重与重试合同保留。
@@ -40,7 +53,7 @@
 ## 保留的基础能力
 
 Session SQLite append-only、上下文投影与 compaction ledger、Shell/PTY/stdin、独立子任务、Scheduler、
-插件/MCP 代际、多渠道投递、ACK/feedback、workspace 锁与 Yoyo ledger 继续使用现有实现。
+插件/MCP 的局部激活、多渠道投递、ACK/feedback、workspace 锁与 Yoyo ledger 继续使用现有实现。
 本次没有修改用户真实 workspace、迁移历史记忆或更换已有账户配置。
 
 ## 功能推进顺序
@@ -69,7 +82,7 @@ Session SQLite append-only、上下文投影与 compaction ledger、Shell/PTY/st
 | 主动体验 | 兴趣池已接入；显式规则与证据估计仍需标注 | 实际来源上的有用率、打扰率、静默正确率及日预算 |
 | Scheduler 续跑 | 来源会话、notify/run、历史隔离、触发结算已接入；仍是整轮排队 | 工具边界让出用户、保存并恢复同一持久程序；已完成副作用不重放 |
 | 自主目标发现 | 提案队列已有持久生命周期，候选仍来自显式技能 | 有证据的 proposal planner、过期与用户意图修正 |
-| 组件全面拆分 | 通用能力宿主已接入插件和对话记忆；部分内置工具/维护仍由 bootstrap 装配 | 逐个迁移业务 owner，不能靠目录改名宣称完成 |
+| 扩展功能补齐 | 原生内核和普通业务 owner 已接入；旧类式 SDK 集中适配 | 原生 Task 服务、后台结果注入及完整执行宿主按功能清单继续补齐 |
 | 项目与目录 | 本地端到端功能已接入，不等于整个上游执行宿主或工作台 | prepared 目标与恢复、宿主路径能力、终端和改动视图 |
 | Session/Ledger | 沿用当前 append-only 消息与多份业务状态 | 不宣称已移植上游全部 Ledger 消息程序与跨业务事务 |
 | 多租户隔离 | 当前是单用户跨会话记忆；不把 MemoryScope 当租户安全边界 | 显式 isolated/global/off 图路由与独立授权 |

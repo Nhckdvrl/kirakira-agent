@@ -7,12 +7,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from bus.queue import MessageBus
+from core.schema import ModelResponse, ToolCall
 from plugins.drift_flow.runner import DriftRunner
 from plugins.drift_flow.skills import discover_skills, ensure_example_skill
 from plugins.drift_flow.state import DriftStateStore
+from plugins.ledger.manager import SessionManager
 from proactive_v2.config import DriftConfig
-from core.schema import ModelResponse, ToolCall
-from session.manager import SessionManager
 
 NOW = datetime(2026, 7, 22, 12, 0, 0, tzinfo=timezone.utc)
 
@@ -63,7 +63,11 @@ class DriftStateTests(unittest.TestCase):
     def test_min_interval_gating(self):
         self.assertTrue(self.store.can_run(NOW, 3.0))
         self.store.record_run(
-            skill="s", now=NOW, status="completed", briefing="b", message_result="silent"
+            skill="s",
+            now=NOW,
+            status="completed",
+            briefing="b",
+            message_result="silent",
         )
         self.assertFalse(self.store.can_run(NOW + timedelta(hours=1), 3.0))
         self.assertTrue(self.store.can_run(NOW + timedelta(hours=4), 3.0))
@@ -90,7 +94,11 @@ class _ScriptedClient:
         if self._step == 1:
             return ModelResponse(
                 tool_calls=[
-                    ToolCall(id="t1", name="message_push", arguments={"message": "最近在听什么歌？"})
+                    ToolCall(
+                        id="t1",
+                        name="message_push",
+                        arguments={"message": "最近在听什么歌？"},
+                    )
                 ]
             )
         if self._step == 2:
@@ -113,9 +121,13 @@ class DriftRunnerTests(unittest.TestCase):
                 sessions = SessionManager(Path(tmp))
                 runner = DriftRunner(
                     config=DriftConfig(enabled=True, min_interval_hours=0),
-                    workspace=Path(tmp), bus=MessageBus(), session_manager=sessions,
-                    model_client=_ScriptedClient(), model="fake",
-                    target_channel="web", target_chat_id="u1",
+                    workspace=Path(tmp),
+                    bus=MessageBus(),
+                    session_manager=sessions,
+                    model_client=_ScriptedClient(),
+                    model="fake",
+                    target_channel="web",
+                    target_chat_id="u1",
                 )
 
                 async def changed(_skill, _briefing, ctx, key):
@@ -135,6 +147,7 @@ class DriftRunnerTests(unittest.TestCase):
                 self.assertEqual(runner._state.recent_runs()[0]["status"], "paused")
                 runner.close()
                 sessions.close()
+
         asyncio.run(scenario())
 
     def test_unfinished_draft_is_never_delivered(self):
@@ -145,14 +158,20 @@ class DriftRunnerTests(unittest.TestCase):
                 bus = MessageBus()
                 runner = DriftRunner(
                     config=DriftConfig(enabled=True, min_interval_hours=0, max_steps=1),
-                    workspace=workdir, bus=bus, session_manager=sessions,
-                    model_client=_ScriptedClient(), model="fake",
-                    target_channel="web", target_chat_id="u1",
+                    workspace=workdir,
+                    bus=bus,
+                    session_manager=sessions,
+                    model_client=_ScriptedClient(),
+                    model="fake",
+                    target_channel="web",
+                    target_chat_id="u1",
                 )
+
                 # The provider ignores forced finish and only stages a draft.
                 # Delivery would wait on the bus; fail immediately if attempted.
                 async def forbidden_delivery(*args, **kwargs):
                     raise AssertionError("unfinished draft must not reach delivery")
+
                 runner._commit = forbidden_delivery
                 self.assertTrue(await runner.maybe_run(NOW, "web:u1"))
                 recent = runner._state.recent_runs()
@@ -160,6 +179,7 @@ class DriftRunnerTests(unittest.TestCase):
                 self.assertEqual(recent[0]["message_result"], "silent")
                 runner.close()
                 sessions.close()
+
         asyncio.run(scenario())
 
     def test_end_to_end_run_pushes_and_records(self):

@@ -12,14 +12,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, cast, runtime_checkable
 
-from agent.model_runtime.json_utils import load_json_object_loose
-from agent.prompting.context_frame import is_context_frame
 from bus.publisher import TurnCommitted
 from core.memory.events import ConsolidationCommitted
 from core.memory.store import MemoryStore
 from infra.persistence.json_store import atomic_write_text
 from infra.providers.model_client_adapter import LLMProvider
-from session.turn_source import is_memory_source
+from plugins.context.context_frame import is_context_frame
+from plugins.ledger.turn_source import is_memory_source
+from plugins.models.json_utils import load_json_object_loose
 
 if TYPE_CHECKING:
     from bus.publisher import EventBus

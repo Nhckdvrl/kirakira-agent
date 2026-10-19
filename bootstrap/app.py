@@ -9,14 +9,14 @@ import sys
 from pathlib import Path
 
 from agent.config import config_value, load_dotenv, load_toml_config
-from agent.core.runtime import CoreRuntime
 from agent.supervisor import RESTART_EXIT_CODE
+from bootstrap.application import Application
 from bootstrap.runtime import build_runtime
 from core.schema import JsonDict
 
 
 async def runtime_repl(
-    runtime: CoreRuntime, workdir: Path, session_id: str | None = None
+    runtime: Application, workdir: Path, session_id: str | None = None
 ) -> None:
     """Backward-compatible name for the line-oriented streaming client."""
 
@@ -25,7 +25,7 @@ async def runtime_repl(
     await runtime_plain_repl(runtime, workdir, session_id=session_id)
 
 
-async def runtime_serve(runtime: CoreRuntime) -> int:
+async def runtime_serve(runtime: Application) -> int:
     """跑后台服务直到停止信号或 agent 自请求重启。
 
     返回进程退出码:重启提交成立时返回 RESTART_EXIT_CODE(75),supervisor 收到
@@ -52,7 +52,7 @@ async def runtime_serve(runtime: CoreRuntime) -> int:
         try:
             loop.add_signal_handler(watched, stop_event.set)
             registered_signals.append(watched)
-        except (NotImplementedError, RuntimeError):
+        except NotImplementedError, RuntimeError:
             pass
     restart_requested = False
     stop_task = asyncio.create_task(stop_event.wait(), name="shutdown_signal")
@@ -73,7 +73,7 @@ async def runtime_serve(runtime: CoreRuntime) -> int:
         if restart_task is not None and restart_task in done:
             await restart_task
             restart_requested = True
-    except (KeyboardInterrupt, asyncio.CancelledError):
+    except KeyboardInterrupt, asyncio.CancelledError:
         pass
     finally:
         for pending_task in (stop_task, restart_task):
@@ -112,7 +112,7 @@ def resolve_workspace(
 
 
 async def _main_async(args: argparse.Namespace, workdir: Path) -> int:
-    from bootstrap.workspace_lock import WorkspaceInstanceLock
+    from agent.workspace_lock import WorkspaceInstanceLock
 
     workspace_lock = WorkspaceInstanceLock(workdir)
     workspace_lock.acquire()
@@ -152,7 +152,7 @@ async def _main_async(args: argparse.Namespace, workdir: Path) -> int:
         workspace_lock.release()
 
 
-async def _run_proactive_once(runtime: CoreRuntime) -> None:
+async def _run_proactive_once(runtime: Application) -> None:
     """手动跑一次主动 tick 并打印状态，供演示/调试（不等电量定时器）。"""
     import json as _json
 
@@ -329,7 +329,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "memory":
         import json as _json
 
-        from bootstrap.memory_admin import (
+        from plugins.default_memory.admin import (
             backup,
             clear,
             doctor,

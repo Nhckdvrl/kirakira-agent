@@ -12,11 +12,11 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
-from agent.core.contracts import RuntimeConfig
-from agent.core.model_io import ModelInvoker
-from agent.model_runtime.usage import usage_from_mapping
 from bus.event_bus import EventBus
 from infra.providers.step_plan import STEP5_MODEL, STEP_PLAN_BASE_URL, StepPlanClient
+from plugins.models.invoker import ModelInvoker
+from plugins.models.usage import usage_from_mapping
+from plugins.react.contract import ReactConfig
 
 from .judge_prompt import get_anscheck_prompt
 
@@ -29,7 +29,7 @@ async def run(a):
     )
     invoker = ModelInvoker(
         client,
-        RuntimeConfig(
+        ReactConfig(
             model=STEP5_MODEL,
             stream=False,
             max_tokens=a.max_tokens,

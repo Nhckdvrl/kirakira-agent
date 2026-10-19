@@ -17,13 +17,12 @@ from pathlib import Path
 from typing import Any
 
 from agent.config import config_value, load_dotenv, load_toml_config
-from agent.model_runtime.usage import usage_from_mapping
 from bootstrap.runtime import build_runtime
 from core.memory.embeddings import EmbeddingClient
 from core.memory.engine import MemoryQuery, MemoryScope
 from core.schema import ToolSpec
 from infra.providers.llm_provider import OpenAICompatibleClient
-
+from plugins.models.usage import usage_from_mapping
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -41,9 +40,7 @@ def _configured() -> tuple[dict[str, Any], dict[str, str]]:
         "embedding_model": os.getenv("EMBEDDING_MODEL_ID")
         or str(config_value(config, "memory", "embedding", "model", default="")),
         "embedding_base_url": os.getenv("EMBEDDING_BASE_URL")
-        or str(
-            config_value(config, "memory", "embedding", "base_url", default="")
-        ),
+        or str(config_value(config, "memory", "embedding", "base_url", default="")),
         "embedding_api_key": os.getenv("EMBEDDING_API_KEY")
         or str(config_value(config, "memory", "embedding", "api_key", default="")),
     }
@@ -183,7 +180,10 @@ async def _runtime_checks(values: dict[str, str]) -> dict[str, Any]:
                 for message in tool_messages
                 for name in (message.get("tools_used") or [])
             }
-            if "read_file" not in used or "KIRAKIRA_FILE_TOOL_OK" not in tool_out.content:
+            if (
+                "read_file" not in used
+                or "KIRAKIRA_FILE_TOOL_OK" not in tool_out.content
+            ):
                 raise AssertionError("runtime did not execute and consume read_file")
 
             context_session = runtime.session_manager.get_or_create("online:context")
@@ -204,20 +204,24 @@ async def _runtime_checks(values: dict[str, str]) -> dict[str, Any]:
                 skip_memory_retrieval=True,
             )
             if "KIRAKIRA_CONTEXT_OK" not in context_out.content:
-                raise AssertionError("online context turn returned an unexpected response")
+                raise AssertionError(
+                    "online context turn returned an unexpected response"
+                )
             context_session = runtime.session_manager.get_or_create("online:context")
             persisted_ids = [str(item["id"]) for item in context_session.messages]
             if persisted_ids[: len(old_ids)] != old_ids:
                 raise AssertionError("context projection mutated durable history")
-            context_trace = dict(context_session.messages[-1].get("context_trace") or {})
+            context_trace = dict(
+                context_session.messages[-1].get("context_trace") or {}
+            )
             attempts = list(context_trace.get("attempts") or [])
             if not attempts:
                 raise AssertionError("context trace is missing")
-            checkpoint = runtime.session_manager.get_active_compaction(
-                "online:context"
-            )
+            checkpoint = runtime.session_manager.get_active_compaction("online:context")
             if checkpoint is None or checkpoint.generation < 1:
-                raise AssertionError("session context compaction ledger did not advance")
+                raise AssertionError(
+                    "session context compaction ledger did not advance"
+                )
             required_headings = (
                 "## Goal",
                 "## Constraints & Preferences",
@@ -229,11 +233,14 @@ async def _runtime_checks(values: dict[str, str]) -> dict[str, Any]:
                 "## Next Steps",
                 "## Critical Context",
             )
-            if tuple(
-                line.strip()
-                for line in checkpoint.summary.splitlines()
-                if line.lstrip().startswith("#")
-            ) != required_headings:
+            if (
+                tuple(
+                    line.strip()
+                    for line in checkpoint.summary.splitlines()
+                    if line.lstrip().startswith("#")
+                )
+                != required_headings
+            ):
                 raise AssertionError("online compaction summary headings are invalid")
             coverage = str(
                 ((context_trace.get("react_stats") or {}).get("model_usage") or {}).get(

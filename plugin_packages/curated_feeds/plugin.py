@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from typing import Any, List
 
-from agent.plugins.specs import (
+from agent.plugins import Plugin
+from plugins.extensions.specs import (
     McpServerSpec,
     PluginSemanticCheck,
     ProactiveSourceSpec,
 )
-from agent.plugins import Plugin
 
 
 class CuratedFeedsConfig:
@@ -71,9 +71,7 @@ class CuratedFeedsPlugin(Plugin):
         ids = [str(item.get("id") or "").strip() for item in config.feeds]
         if any(not item for item in ids) or len(ids) != len(set(ids)):
             return [
-                PluginSemanticCheck.fail(
-                    "subscription_ids", "feed id 必须非空且唯一"
-                )
+                PluginSemanticCheck.fail("subscription_ids", "feed id 必须非空且唯一")
             ]
         return [
             PluginSemanticCheck.ok(

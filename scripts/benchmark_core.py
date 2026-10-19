@@ -29,14 +29,14 @@ def summary(samples):
 
 async def measure(a):
     sys.path.insert(0, str(a.implementation.resolve()))
-    from agent.core.contracts import RuntimeConfig
-    from agent.core.execution import ExecutionStore
-    from agent.core.model_io import ModelInvoker
-    from agent.core.reasoner import DefaultReasoner
-    from agent.tools.registry import ToolRegistry
     from bus.event_bus import EventBus
     from bus.events_lifecycle import StreamDeltaReady
     from core.schema import ModelResponse, ToolCall, ToolSpec
+    from plugins.execution.service import ExecutionStore
+    from plugins.models.invoker import ModelInvoker
+    from plugins.react.contract import ReactConfig
+    from plugins.react.reasoner import ReactProgram
+    from plugins.tools.registry import ToolRegistry
 
     report = {
         "implementation": subprocess.check_output(
@@ -78,7 +78,7 @@ async def measure(a):
 
         bus = EventBus()
         bus.on(StreamDeltaReady, lambda event: deltas.append(event.content_delta))
-        invoker = ModelInvoker(Stream(), RuntimeConfig(model="fixture"), bus)
+        invoker = ModelInvoker(Stream(), ReactConfig(model="fixture"), bus)
         samples = []
         for repetition in range(a.repeats + 2):
             deltas.clear()
@@ -156,10 +156,10 @@ async def measure(a):
 
         store = ExecutionStore(root / "fanout.db")
         try:
-            engine = DefaultReasoner(
+            engine = ReactProgram(
                 model_client=Model(),
                 tools=registry,
-                config=RuntimeConfig(model="fixture", stream=False),
+                config=ReactConfig(model="fixture", stream=False),
                 context=None,
                 event_bus=EventBus(),
                 execution_store=store,

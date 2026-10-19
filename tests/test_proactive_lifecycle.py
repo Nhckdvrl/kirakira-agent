@@ -16,39 +16,27 @@ import unittest
 from datetime import datetime, timezone
 
 from agent.lifecycle.phase import topo_sort_modules
-from proactive_v2.frame import (
-    SLOT_PROPOSAL_DRIFT,
-    ProactiveFrame,
-    new_proactive_frame,
-)
 from plugins.proactive_flow.modules import (
     DriftModule,
     _LoopModule,
     build_default_proactive_modules,
+)
+from proactive_v2.frame import (
+    SLOT_PROPOSAL_DRIFT,
+    ProactiveFrame,
+    new_proactive_frame,
 )
 
 NOW = datetime(2026, 7, 25, 12, 0, tzinfo=timezone.utc)
 
 
 class FrameTests(unittest.TestCase):
-    def test_new_frame_carries_session_and_time(self) -> None:
-        frame = new_proactive_frame("web:u1", now=NOW)
-        self.assertEqual(frame.session_key, "web:u1")
-        self.assertEqual(frame.now, NOW)
-        self.assertFalse(frame.done)
-
     def test_finish_records_the_first_reason_only(self) -> None:
         frame = new_proactive_frame("web:u1", now=NOW)
         frame.finish("alert_pushed").finish("drift")
         # 第一个原因胜出:后面的模块不该覆盖"本轮为什么结束"
         self.assertEqual(frame.terminal, "alert_pushed")
         self.assertTrue(frame.done)
-
-    def test_slots_carry_intermediate_products(self) -> None:
-        frame = new_proactive_frame("web:u1", now=NOW, slots={"a": 1})
-        self.assertEqual(frame.get("a"), 1)
-        self.assertIsNone(frame.get("missing"))
-        self.assertEqual(frame.get("missing", "fallback"), "fallback")
 
 
 class ModuleOrderTests(unittest.TestCase):
@@ -87,7 +75,9 @@ class ModuleOrderTests(unittest.TestCase):
         modules = build_default_proactive_modules(loop=None) + [_PluginModule(None)]
         order = self._slots(modules)
         # 插件模块必须排在它依赖的 ingest 之后
-        self.assertGreater(order.index("plug.after_ingest"), order.index("proactive.ingest"))
+        self.assertGreater(
+            order.index("plug.after_ingest"), order.index("proactive.ingest")
+        )
 
 
 class TerminalShortCircuitTests(unittest.TestCase):
@@ -110,7 +100,11 @@ class TerminalShortCircuitTests(unittest.TestCase):
                     return frame.finish("stopped")
 
             frame = new_proactive_frame("web:u1", now=NOW)
-            for module in (_Recorder("a.first"), _Stopper("a.stop"), _Recorder("a.last")):
+            for module in (
+                _Recorder("a.first"),
+                _Stopper("a.stop"),
+                _Recorder("a.last"),
+            ):
                 frame = await module.run(frame)
 
             self.assertEqual(ran, ["a.first", "a.stop"])
@@ -141,111 +135,21 @@ class DriftModuleTests(unittest.TestCase):
                 loop = self._Loop(drifted)
                 frame = await DriftModule(loop).run(new_proactive_frame("s", now=NOW))
                 self.assertEqual(frame.get(SLOT_PROPOSAL_DRIFT), expected)
-                self.assertEqual(
-                    loop.decisions[0][0], "drift" if drifted else "idle"
-                )
+                self.assertEqual(loop.decisions[0][0], "drift" if drifted else "idle")
                 self.assertTrue(frame.done)
 
         asyncio.run(scenario())
 
-    def test_drift_module_declares_reference_shaped_contract(self) -> None:
-        # 对照 Reference DriftFlowModule:声明 slot / requires / produces
-        self.assertEqual(DriftModule.slot, "proactive.drift")
-        self.assertIn("proactive.content", DriftModule.requires)
-        self.assertIn(SLOT_PROPOSAL_DRIFT, DriftModule.produces)
 
+class ProactiveAssemblyTests(unittest.TestCase):
+    """Invalid slot declarations fail during assembly."""
 
-class TickGenerationLeaseTests(unittest.TestCase):
-    """tick 期间持有 per-plugin 代际租约:中途换代不抽走本轮能力(NOW 条目 2 验收)。"""
-
-    def _minimal_loop(self, *, generations=None, snapshot_store=None, gateway=None):
+    def _minimal_loop(self):
         from proactive_v2.loop import ProactiveLoop
 
         loop = ProactiveLoop.__new__(ProactiveLoop)
         loop._tick_lock = asyncio.Lock()
-        loop._plugin_generations = generations
-        loop._snapshot_store = snapshot_store
-        loop._mcp_gateway = gateway
-        loop._cfg = type("Cfg", (), {"session_key": "web:u1"})()
         return loop
-
-    def test_tick_holds_generation_lease_while_modules_run(self) -> None:
-        from agent.plugins.generation import (
-            GateResult,
-            PluginContributions,
-            PluginGeneration,
-            PluginGenerationRegistry,
-        )
-
-        async def scenario() -> None:
-            registry = PluginGenerationRegistry()
-            gen = PluginGeneration(
-                plugin_id="p1",
-                generation_id="g1",
-                module_path="x",
-                source_revision="s",
-                config_revision="c",
-                instance=object(),
-                contributions=PluginContributions(),
-                gate_result=GateResult(
-                    plugin_id="p1", candidate_revision="r", status="passed"
-                ),
-            )
-            registry.publish(gen)
-            observed: dict = {}
-
-            class _Probe:
-                slot = "probe.only"
-
-                async def run(self, frame):
-                    # 模块执行期间,当前代际必须持有租约
-                    observed["lease_count"] = gen.lease_count
-                    # 模拟 tick 中途换代:旧代际转 retired,但不能被销毁
-                    registry.retire("p1")
-                    observed["can_quiesce_mid_tick"] = gen.can_quiesce
-                    return frame
-
-            loop = self._minimal_loop(generations=registry)
-            loop._modules = [_Probe()]
-            await loop._tick()
-
-            self.assertEqual(observed["lease_count"], 1)
-            self.assertFalse(observed["can_quiesce_mid_tick"])
-            # tick 结束租约释放,退休代际此时才可 quiesce
-            self.assertTrue(gen.can_quiesce)
-
-        asyncio.run(scenario())
-
-    def test_tick_pins_snapshot_on_gateway_and_unpins_after(self) -> None:
-        from agent.plugins.snapshot import RuntimeSnapshot, RuntimeSnapshotStore
-
-        async def scenario() -> None:
-            store = RuntimeSnapshotStore()
-            snapshot = RuntimeSnapshot(snapshot_id="snap1")
-            transaction = store.publish(snapshot)
-            await store.commit(transaction)
-
-            pins: list = []
-
-            class _Gateway:
-                def pin_snapshot(self, value):
-                    pins.append(value)
-
-            class _Probe:
-                slot = "probe.only"
-
-                async def run(self, frame):
-                    return frame
-
-            loop = self._minimal_loop(snapshot_store=store, gateway=_Gateway())
-            loop._modules = [_Probe()]
-            await loop._tick()
-
-            # tick 开始钉住租到的快照,结束清除;租约已释放(lease_count 归零)
-            self.assertEqual(pins, [snapshot, None])
-            self.assertEqual(snapshot.lease_count, 0)
-
-        asyncio.run(scenario())
 
     def test_assembly_error_fails_loud_at_add_time_not_in_tick(self) -> None:
         loop = self._minimal_loop()

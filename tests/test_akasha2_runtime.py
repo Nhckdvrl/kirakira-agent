@@ -1,15 +1,21 @@
 """Real source + graph + atomic checkpoint tests; hash vectors test integrity only."""
 
+import sqlite3
 from datetime import datetime, timezone
 from types import SimpleNamespace
-import sqlite3
+
 import pytest
-from agent.config_models import Config, MemoryConfig, MemoryEmbeddingConfig
+
 from core.memory.engine import MemoryQuery
-from session.manager import SessionManager
+from eval.longmemeval.offline_ab import DeterministicEmbedder
 from plugins.akasha2.engine import Akasha2MemoryEngine
 from plugins.akasha2.infrastructure.persistence import logical_state_sha256
-from eval.longmemeval.offline_ab import DeterministicEmbedder
+from plugins.default_memory.config_models import (
+    Config,
+    MemoryConfig,
+    MemoryEmbeddingConfig,
+)
+from plugins.ledger.manager import SessionManager
 
 
 def engine(path, **kwargs):
@@ -123,8 +129,9 @@ async def test_publish_failure_poisoned_engine_does_not_continue(tmp_path, monke
 @pytest.mark.asyncio
 async def test_offline_rebuild_uses_fixed_vectors_without_changing_source(tmp_path):
     import hashlib
+
+    from plugins.ledger.embedding_store import MessageEmbeddingStore
     from scripts.replay_akasha2 import rebuild
-    from session.embedding_store import MessageEmbeddingStore
 
     sessions = SessionManager(tmp_path)
     add(sessions)

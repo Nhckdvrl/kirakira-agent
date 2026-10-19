@@ -2,16 +2,17 @@
 
 import argparse
 import asyncio
-from datetime import datetime, timezone
 import json
+from datetime import datetime, timezone
 from pathlib import Path
+
 from bus.queue import MessageBus
-from infra.providers.step_plan import StepPlanClient, STEP5_MODEL, STEP_PLAN_BASE_URL
+from infra.providers.step_plan import STEP5_MODEL, STEP_PLAN_BASE_URL, StepPlanClient
+from plugins.ledger.manager import SessionManager
 from plugins.wake_proactive.sources import SourceRegistry
 from plugins.wake_proactive.state import ProactiveStateStore
 from proactive_v2.config import ProactiveConfig
 from proactive_v2.loop import ProactiveLoop
-from session.manager import SessionManager
 from scripts.verify_step_plan import ObservedClient
 
 

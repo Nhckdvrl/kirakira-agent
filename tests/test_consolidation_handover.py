@@ -14,8 +14,8 @@ from types import SimpleNamespace
 from typing import Any
 
 from plugins.default_memory.contract import MemoryServices
-from agent.core.pipeline import PassiveTurnPipeline
-from agent.core.contracts import RuntimeConfig
+from plugins.react.contract import ReactConfig
+from plugins.reply_program.service import DefaultReplyProgram
 
 
 class _Session:
@@ -41,9 +41,9 @@ class _Maintenance:
         return SimpleNamespace(consolidated_count=1, trace={"mode": "markdown"})
 
 
-def _pipeline(maintenance: Any) -> PassiveTurnPipeline:
-    pipeline = PassiveTurnPipeline.__new__(PassiveTurnPipeline)
-    pipeline.config = RuntimeConfig(model="m", history_window=10)
+def _pipeline(maintenance: Any) -> DefaultReplyProgram:
+    pipeline = DefaultReplyProgram.__new__(DefaultReplyProgram)
+    pipeline.config = ReactConfig(model="m", history_window=10)
     pipeline._memory_services = (
         MemoryServices(markdown=SimpleNamespace(maintenance=maintenance))
         if maintenance is not None
@@ -80,9 +80,7 @@ class ContextGuardTests(unittest.TestCase):
             pipeline = _pipeline(maintenance)
             # history_window=10 → threshold = 10 + max(5,5) = 15
             session = _Session(count=5)
-            self.assertEqual(
-                await pipeline._guard_memory_context(session, "cli:1"), ""
-            )
+            self.assertEqual(await pipeline._guard_memory_context(session, "cli:1"), "")
             self.assertEqual(maintenance.calls, [])
 
         asyncio.run(scenario())
@@ -92,9 +90,7 @@ class ContextGuardTests(unittest.TestCase):
             maintenance = _Maintenance(advances=True)
             pipeline = _pipeline(maintenance)
             session = _Session(count=40)
-            self.assertEqual(
-                await pipeline._guard_memory_context(session, "cli:1"), ""
-            )
+            self.assertEqual(await pipeline._guard_memory_context(session, "cli:1"), "")
             # 强制归档,且推进后保存了 session
             self.assertEqual(len(maintenance.calls), 1)
             self.assertTrue(maintenance.calls[0].force)

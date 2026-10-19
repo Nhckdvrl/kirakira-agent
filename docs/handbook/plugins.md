@@ -1,6 +1,6 @@
 # 插件开发与管理
 
-插件用代码声明能力。每个插件根目录必须有 `plugin.py`，其中定义 `Plugin` 子类；旧版
+插件用代码声明能力。每个插件根目录必须有 `plugin.py`，其中导出 `async def apply(ctx)`；已有 `Plugin` 子类继续由 SDK 适配；旧版
 `.aka-plugin/plugin.json` 已不再使用。
 
 ```text
@@ -46,7 +46,7 @@ class DemoPlugin(Plugin):
 | `plugin_doctor` | 检查目录结构与能力声明 | 立即 |
 
 这些操作不要求重启 runtime。安装来源中的代码会在随后的插件换代中加载，因此只应安装可信代码。
-正在运行的 turn 持有旧快照，换代不会抽走它已经看到的工具或 MCP 连接。
+每次模型生成获取具体工具菜单。实际调用持有当前 owner；旧菜单不会自动改绑新实现，下一次生成重新读取可用工具。
 
 ## 启停清单
 
@@ -85,7 +85,7 @@ class DemoPlugin(Plugin):
 ```
 
 相对路径按插件根解析，不能越出插件目录。运行 MCP 时会注入
-`KIRAKIRA_PLUGIN_DATA_DIR`。插件 MCP 与 Workspace MCP 使用同一套代际换代和租约语义，server
+`KIRAKIRA_PLUGIN_DATA_DIR`。插件 MCP 与 Workspace MCP 使用同一套逐连接 owner 和实际调用排空语义，server
 名称不能冲突。
 
 ## 配置与数据
@@ -111,7 +111,7 @@ class DemoPlugin(Plugin):
 - 单个插件导入或初始化失败：撤销该插件已注册的能力，其他插件继续加载；
 - skill 路径或 MCP `cwd` 越界：该插件加载失败；
 - manifest 非法：整体失败，因为启用集合不再可信；
-- 新一代 MCP 连接失败：候选代际作废，旧代际继续服务；
+- 当前 MCP 连接失败：保留选择和错误，不自动恢复旧实现；
 - terminate 按加载逆序执行，并要求幂等。
 
 ## API 3 的服务依赖与资源
@@ -122,7 +122,7 @@ API 3 不再通过 `context.memory` / `context.session_manager` 取得任意业�
 ```python
 from agent.plugins import Plugin, ServiceKey
 
-COUNTER = ServiceKey('example.counter.v1', int)
+COUNTER = ServiceKey[int]('example.counter.v1')
 
 class Provider(Plugin):
     name = 'provider'
@@ -140,7 +140,7 @@ class Consumer(Plugin):
 ```
 
 两个类分别放在各自插件包；真实对象合同放在提供者可稳定导入的 contract 模块。
-同名 key 必须保持同一合同类型；改变 ABI 需要 `.v2`，不能在热重载时偷偷替换合同类。
+ServiceKey 按名字识别，类型参数用于静态检查。提供者维护稳定合同；破坏性 ABI 变更应使用新名字。
 prepare 只构造贡献，不应借用尚未发布的依赖。宿主不会隐式安装缺失提供者。
 
 用 `context.spawn(coroutine)` 登记任务，用 `context.on_close(closer)` 登记资源。

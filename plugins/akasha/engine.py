@@ -7,10 +7,10 @@ akasha 记忆引擎 — 生产运行时层
 
 from __future__ import annotations
 
-import json
-import logging
 import asyncio
 import hashlib
+import json
+import logging
 import sqlite3
 import threading
 from contextlib import closing
@@ -21,33 +21,6 @@ from typing import TYPE_CHECKING, cast
 
 import numpy as np
 
-from plugins.akasha.core import (
-    # 与 core 共享的类型
-    ActivationTrace,
-    AkashaActivationSnapshot,
-    AkashaCandidate,
-    AkashaNode,
-    CoreConfig,
-    DENSE_CANDIDATE_LIMIT,
-    DENSE_SEED_LIMIT,
-    RecallBudget,
-    SourceMessage,
-    build_dense_message_index,
-    initial_strength,
-    parse_ts_unix,
-    turn_key,
-    # 算法函数（按内部约定统一使用 _ 前缀别名）
-    compute_candidates as _core_compute_candidates,
-    compute_candidates_from_snapshot as _core_compute_candidates_from_snapshot,
-    dense_message_candidates as _dense_message_candidates,
-    edges_by_src as _edges_by_src,
-    fan_counts as _fan_counts,
-    graph_seed_keys_from_snapshot as _graph_seed_keys_from_snapshot,
-    parse_turn_key as _parse_turn_key,
-    recall_budget_from_dense as _recall_budget_from_dense,
-    reinforce_boost_from_payload as _reinforce_boost_from_payload,
-)
-from agent.config_models import Config  # noqa: F401
 from bus.events_lifecycle import TurnCommitted
 from core.memory.engine import (
     EngineProfile,
@@ -67,8 +40,52 @@ from core.memory.engine import (
 )
 from memory2.embedder import Embedder
 from plugins.akasha.config import AkashaConfig, resolve_akasha_db_path
+from plugins.akasha.core import (
+    DENSE_CANDIDATE_LIMIT,
+    DENSE_SEED_LIMIT,
+    # 与 core 共享的类型
+    ActivationTrace,
+    AkashaActivationSnapshot,
+    AkashaCandidate,
+    AkashaNode,
+    CoreConfig,
+    RecallBudget,
+    build_dense_message_index,
+    initial_strength,
+    parse_ts_unix,
+    turn_key,
+)
+from plugins.akasha.core import (
+    # 算法函数（按内部约定统一使用 _ 前缀别名）
+    compute_candidates as _core_compute_candidates,
+)
+from plugins.akasha.core import (
+    compute_candidates_from_snapshot as _core_compute_candidates_from_snapshot,
+)
+from plugins.akasha.core import (
+    dense_message_candidates as _dense_message_candidates,
+)
+from plugins.akasha.core import (
+    edges_by_src as _edges_by_src,
+)
+from plugins.akasha.core import (
+    fan_counts as _fan_counts,
+)
+from plugins.akasha.core import (
+    graph_seed_keys_from_snapshot as _graph_seed_keys_from_snapshot,
+)
+from plugins.akasha.core import (
+    parse_turn_key as _parse_turn_key,
+)
+from plugins.akasha.core import (
+    recall_budget_from_dense as _recall_budget_from_dense,
+)
+from plugins.akasha.core import (
+    reinforce_boost_from_payload as _reinforce_boost_from_payload,
+)
 from plugins.akasha.store import AkashaStore
-from session.embedding_store import MessageEmbeddingStore
+from plugins.default_memory.config_models import Config  # noqa: F401
+from plugins.ledger.embedding_store import MessageEmbeddingStore
 
 if TYPE_CHECKING:
     from bus.event_bus import EventBus
@@ -140,9 +157,7 @@ class AkashaMemoryEngine:
             or config.light_base_url
             or config.base_url
             or "",
-            api_key=embedding.api_key
-            or config.light_api_key
-            or config.api_key,
+            api_key=embedding.api_key or config.light_api_key or config.api_key,
             model=embedding.model,
             output_dimensionality=embedding.output_dimensionality,
             requester=http_resources.external_default,
@@ -150,6 +165,7 @@ class AkashaMemoryEngine:
         self._event_bus = event_publisher
         self._commit_lock = asyncio.Lock()
         from plugins.akasha.consumption import initialize_cursor
+
         try:
             initialize_cursor(self._store, self._session_db_path)
         except BaseException:
@@ -177,21 +193,28 @@ class AkashaMemoryEngine:
     # 启动时自动检查 / 建 FTS IDF 表。缺失或漂移过大时重建。
     def _ensure_idf_table(self) -> None:
         from plugins.akasha.core import (
-            build_idf_table, idf_table_is_stale, load_idf_from_db, set_idf_table,
+            build_idf_table,
+            idf_table_is_stale,
+            load_idf_from_db,
+            set_idf_table,
         )
+
         sessions_db = str(self._session_db_path)
         conn = self._store.db
         stale = idf_table_is_stale(sessions_db, conn)
         source_table_exists = False
         if self._session_db_path.exists():
             with closing(sqlite3.connect(sessions_db)) as source_db:
-                source_table_exists = source_db.execute(
-                    """
+                source_table_exists = (
+                    source_db.execute(
+                        """
                     SELECT 1
                     FROM sqlite_master
                     WHERE type = 'table' AND name = 'messages'
                     """
-                ).fetchone() is not None
+                    ).fetchone()
+                    is not None
+                )
         if stale and source_table_exists:
             idf = build_idf_table(sessions_db, conn)
             print(f"[akasha] built FTS IDF table: {len(idf)} tokens")
@@ -235,7 +258,10 @@ class AkashaMemoryEngine:
                 parameters={
                     "type": "object",
                     "properties": {
-                        "query": {"type": "string", "description": "要召回的历史对话主题"},
+                        "query": {
+                            "type": "string",
+                            "description": "要召回的历史对话主题",
+                        },
                         "limit": {
                             "type": "integer",
                             "description": "最多返回条数",
@@ -260,7 +286,10 @@ class AkashaMemoryEngine:
                     parameters={
                         "type": "object",
                         "properties": {
-                            "note": {"type": "string", "description": "为什么加强(简述纠正/强调的要点)"},
+                            "note": {
+                                "type": "string",
+                                "description": "为什么加强(简述纠正/强调的要点)",
+                            },
                         },
                         "required": [],
                     },
@@ -287,7 +316,9 @@ class AkashaMemoryEngine:
         # 2. 空 query 不触发状态更新。
         query_text = request.text.strip()
         if not query_text:
-            return MemoryQueryResult(trace={"engine": self.DESCRIPTOR.name, "hit_count": 0})
+            return MemoryQueryResult(
+                trace={"engine": self.DESCRIPTOR.name, "hit_count": 0}
+            )
 
         # 3. 检索旧 turn 图；所有查询入口都不学习。
         now_ts = _query_timestamp_unix(request)
@@ -316,7 +347,10 @@ class AkashaMemoryEngine:
             dense_limit = min(request.limit, dense_limit)
             ripple_limit = min(request.limit, ripple_limit)
         dense_cards = self._cards_from_keys(
-            [(item.key, item.score, "dense", _candidate_signals(item)) for item in result.dense_items],
+            [
+                (item.key, item.score, "dense", _candidate_signals(item))
+                for item in result.dense_items
+            ],
             limit=dense_limit,
             cutoff=datetime.fromtimestamp(now_ts, timezone.utc).isoformat(),
         )
@@ -348,7 +382,11 @@ class AkashaMemoryEngine:
         cards = [*dense_cards, *ripple_cards]
 
         # 5. 记录检索诊断日志（context/answer intent 才有意义）。
-        if stateful and request.intent in {"context", "answer"} and request.scope.session_key:
+        if (
+            stateful
+            and request.intent in {"context", "answer"}
+            and request.scope.session_key
+        ):
             self._write_query_log(
                 request=request,
                 result=result,
@@ -360,7 +398,9 @@ class AkashaMemoryEngine:
 
         return MemoryQueryResult(
             text_block=text_block,
-            records=[_card_to_record(card, injected=bool(text_block)) for card in cards],
+            records=[
+                _card_to_record(card, injected=bool(text_block)) for card in cards
+            ],
             trace={
                 "engine": self.DESCRIPTOR.name,
                 "profile": self.DESCRIPTOR.profile.value,
@@ -499,7 +539,14 @@ class AkashaMemoryEngine:
         sort_order: str = "desc",
     ) -> tuple[list[dict[str, object]], int]:
         # 1. 过滤项先保持 MVP，只支持 q 和分页排序。
-        _ = (memory_type, status, source_ref, scope_channel, scope_chat_id, has_embedding)
+        _ = (
+            memory_type,
+            status,
+            source_ref,
+            scope_channel,
+            scope_chat_id,
+            has_embedding,
+        )
         return self._store.list_items_for_dashboard(
             q=q,
             page=page,
@@ -651,15 +698,23 @@ class AkashaMemoryEngine:
             try:
                 await self.catch_up()
             except Exception:
-                logger.exception("Akasha recovery paused at unconsumed publication; will retry")
+                logger.exception(
+                    "Akasha recovery paused at unconsumed publication; will retry"
+                )
             await asyncio.sleep(30)
 
     async def catch_up(self, *, max_items: int = 64) -> int:
-        from plugins.akasha.consumption import initialize_cursor, publications, skip_publication
+        from plugins.akasha.consumption import (
+            initialize_cursor,
+            publications,
+            skip_publication,
+        )
 
         async with self._commit_lock:
             initialize_cursor(self._store, self._session_db_path)
-            cursor = self._store.db.execute("SELECT position FROM akasha_source_cursor").fetchone()[0]
+            cursor = self._store.db.execute(
+                "SELECT position FROM akasha_source_cursor"
+            ).fetchone()[0]
             pending = publications(self._session_db_path, cursor, max_items)
             for publication in pending:
                 if publication["extra_json"] is None:
@@ -670,13 +725,18 @@ class AkashaMemoryEngine:
                     skip_publication(self._store, publication, "scheduler")
                     continue
                 event = TurnCommitted(
-                    session_key=publication["session_key"], channel="memory", chat_id="",
-                    assistant_message_id=publication["message_id"], extra=extra,
+                    session_key=publication["session_key"],
+                    channel="memory",
+                    chat_id="",
+                    assistant_message_id=publication["message_id"],
+                    extra=extra,
                     tool_chain_raw=tuple(extra.get("tool_chain") or ()),
                 )
                 messages = _load_committed_turn_messages(self._session_db_path, event)
                 if not messages:
-                    skip_publication(self._store, publication, "ineligible_or_incomplete_turn")
+                    skip_publication(
+                        self._store, publication, "ineligible_or_incomplete_turn"
+                    )
                     continue
                 await self._learn_committed(event, messages, publication["position"])
             return len(pending)
@@ -686,29 +746,45 @@ class AkashaMemoryEngine:
         from plugins.akasha.replay import ReplayMessage
 
         model = self._config.memory.embedding.model
-        vectors = [self._embedding_store.get(message_id=m.id, content=m.content, model=model)
-                   for m in messages]
+        vectors = [
+            self._embedding_store.get(message_id=m.id, content=m.content, model=model)
+            for m in messages
+        ]
         missing = [i for i, vector in enumerate(vectors) if vector is None]
         if missing:
-            fresh = await self._embedder.embed_batch([messages[i].content for i in missing])
+            fresh = await self._embedder.embed_batch(
+                [messages[i].content for i in missing]
+            )
             if len(fresh) != len(missing):
                 raise ValueError("embedding count differs from committed messages")
             for index, vector in zip(missing, fresh, strict=True):
                 vectors[index] = vector
-        items = [ReplayMessage(message, vector) for message, vector in zip(messages, vectors, strict=True)]
+        items = [
+            ReplayMessage(message, vector)
+            for message, vector in zip(messages, vectors, strict=True)
+        ]
         validate_turn(items)
         if _load_committed_turn_messages(self._session_db_path, event) != messages:
             raise ValueError("memory source changed while generating embeddings")
         for item in items:
-            self._embedding_store.upsert(message_id=item.message.id, content=item.message.content,
-                                         model=model, embedding=item.embedding)
+            self._embedding_store.upsert(
+                message_id=item.message.id,
+                content=item.message.content,
+                model=model,
+                embedding=item.embedding,
+            )
         try:
             apply_committed_turn(
-                store=self._store, config=self._akasha_config,
-                source_db_path=self._session_db_path, items=items, model=model,
+                store=self._store,
+                config=self._akasha_config,
+                source_db_path=self._session_db_path,
+                items=items,
+                model=model,
                 message_embeddings=self._message_embeddings,
                 message_turn_keys=self._message_turn_keys,
-                reinforce_boost=_reinforce_boost_for_turn(event.extra, event.tool_chain_raw),
+                reinforce_boost=_reinforce_boost_for_turn(
+                    event.extra, event.tool_chain_raw
+                ),
                 source_position=source_position,
             )
         finally:
@@ -725,9 +801,7 @@ class AkashaMemoryEngine:
         )
         message_embeddings = {
             message_id: np.asarray(embedding, dtype=np.float32)
-            for message_id, embedding in self._embedding_store.list(
-                model=model
-            )
+            for message_id, embedding in self._embedding_store.list(model=model)
         }
         message_turn_keys, message_timestamps = _load_message_cache_metadata(
             self._session_db_path
@@ -793,8 +867,7 @@ class AkashaMemoryEngine:
             edges_meta=dict(self._edges_meta),
             fan=dict(self._fan),
             edges_by_src={
-                key: dict(value)
-                for key, value in self._edges_by_src.items()
+                key: dict(value) for key, value in self._edges_by_src.items()
             },
             message_embeddings=dict(self._message_embeddings),
             message_turn_keys=dict(self._message_turn_keys),
@@ -810,11 +883,14 @@ class AkashaMemoryEngine:
         for key, node in snapshot.nodes.items():
             if node.first_ts_unix > now_ts:
                 continue
-            if max(
-                node.last_activated_ts,
-                node.last_strength_ts,
-                node.last_resource_ts,
-            ) > now_ts:
+            if (
+                max(
+                    node.last_activated_ts,
+                    node.last_strength_ts,
+                    node.last_resource_ts,
+                )
+                > now_ts
+            ):
                 node = replace(
                     node,
                     strength=initial_strength(node.salience),
@@ -865,8 +941,7 @@ class AkashaMemoryEngine:
             and snapshot.edges_meta.get(edge, 0.0) <= now_ts
         }
         visible_edges_meta = {
-            edge: snapshot.edges_meta.get(edge, 0.0)
-            for edge in visible_edges
+            edge: snapshot.edges_meta.get(edge, 0.0) for edge in visible_edges
         }
         return AkashaActivationSnapshot(
             nodes=visible_nodes,
@@ -1045,12 +1120,16 @@ class AkashaMemoryEngine:
         if store is None:
             return
         store.insert_query_log(
-            query_id=_query_log_id(request.scope.session_key or "", seq, request.intent, request.text),
+            query_id=_query_log_id(
+                request.scope.session_key or "", seq, request.intent, request.text
+            ),
             session_key=request.scope.session_key or "",
             seq=seq,
             query_text=request.text.strip(),
             intent=request.intent,
-            ts=datetime.fromtimestamp(_query_timestamp_unix(request) or 0.0, timezone.utc).isoformat(),
+            ts=datetime.fromtimestamp(
+                _query_timestamp_unix(request) or 0.0, timezone.utc
+            ).isoformat(),
             seed_count=result.trace.seed_count,
             pool_count=result.trace.pool_count,
             activated_count=len(result.activation_items),
@@ -1076,19 +1155,32 @@ class AkashaMemoryEngine:
         # 1. Dense 块优先展示重叠项，Ripple 块只展示 ripple-only。
         parts: list[str] = []
         if dense_cards or ripple_cards:
-            date_label = datetime.fromtimestamp(now_ts, timezone.utc).astimezone().strftime("%Y-%m-%d")
+            date_label = (
+                datetime.fromtimestamp(now_ts, timezone.utc)
+                .astimezone()
+                .strftime("%Y-%m-%d")
+            )
             parts.append(f"# Akasha memory now={date_label}")
         if dense_cards:
-            parts.append(_format_cards("## 左脑记忆：精确回忆", _sort_cards_by_time(dense_cards)))
+            parts.append(
+                _format_cards("## 左脑记忆：精确回忆", _sort_cards_by_time(dense_cards))
+            )
         if ripple_cards:
-            parts.append(_format_cards("## 右脑联想：潜意识第一反应", _sort_cards_by_time(ripple_cards)))
+            parts.append(
+                _format_cards(
+                    "## 右脑联想：潜意识第一反应", _sort_cards_by_time(ripple_cards)
+                )
+            )
 
         # 2. 应用字符预算，避免历史消息过长撑爆上下文。
         text = "\n\n".join(part for part in parts if part.strip())
         max_chars = max(1, self._akasha_config.inject_max_chars)
         if len(text) <= max_chars:
             return text
-        return text[:max_chars].rstrip() + f"\n...[Akasha 已截断 {len(text) - max_chars} 字]"
+        return (
+            text[:max_chars].rstrip()
+            + f"\n...[Akasha 已截断 {len(text) - max_chars} 字]"
+        )
 
 
 @dataclass(frozen=True)
@@ -1254,7 +1346,9 @@ def _current_query_seq(
 
 
 # 从 sessions.db 反查 after-turn 已经持久化的本轮消息。
-from session.turn_source import load_committed_turn_messages as _load_committed_turn_messages
+from plugins.ledger.turn_source import (
+    load_committed_turn_messages as _load_committed_turn_messages,
+)
 
 
 # 从 sessions.db 读取 turn card。
@@ -1300,7 +1394,9 @@ def _load_turn_card(
         for row in (user_row, assistant_row)
         if row is not None and str(row["id"]).strip()
     ]
-    assistant_text = str(assistant_row["content"] or "") if assistant_row is not None else ""
+    assistant_text = (
+        str(assistant_row["content"] or "") if assistant_row is not None else ""
+    )
     user_text = str(user_row["content"] or "") if user_row is not None else ""
     if user_row is not None:
         happened_at = str(user_row["ts"] or "")
@@ -1361,7 +1457,9 @@ def _normalize_card_text(text: str) -> str:
 # 生成注入去重键，只压掉 user 和助手预览都相同的候选。
 def _card_dedupe_key(card: AkashaCard) -> tuple[str, str]:
     # 1. 同一句历史消息可能在不同 turn 重复出现，展示时只保留最高分。
-    return _normalize_card_text(card.user_message), _normalize_card_text(card.assistant_preview)
+    return _normalize_card_text(card.user_message), _normalize_card_text(
+        card.assistant_preview
+    )
 
 
 def _source_refs(
@@ -1376,7 +1474,9 @@ def _source_refs(
 
 def _card_ts(card: AkashaCard) -> float:
     try:
-        return datetime.fromisoformat(card.happened_at.replace("Z", "+00:00")).timestamp()
+        return datetime.fromisoformat(
+            card.happened_at.replace("Z", "+00:00")
+        ).timestamp()
     except ValueError:
         return 0.0
 
@@ -1397,7 +1497,9 @@ def _format_cards(title: str, cards: list[AkashaCard]) -> str:
     # 1. 每条 card 都带 source_ref，agent 需要事实时可继续 fetch_messages。
     lines = [title]
     for card in cards:
-        user_text = json.dumps(_normalize_card_text(card.user_message), ensure_ascii=False)
+        user_text = json.dumps(
+            _normalize_card_text(card.user_message), ensure_ascii=False
+        )
         assistant_text = json.dumps(
             _normalize_card_text(card.assistant_preview),
             ensure_ascii=False,

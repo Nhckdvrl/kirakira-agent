@@ -6,42 +6,22 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from agent.mcp import (
+import pytest
+
+from core.schema import ToolCall
+from plugins.mcp import (
     McpCatalogPublisher,
     McpClient,
     WorkspaceMcpWatcher,
     load_workspace_mcp_declarations,
 )
-from core.schema import ToolCall
-from agent.plugins.snapshot import (
-    RuntimeSnapshotStore,
-    SnapshotToolView,
-    bind_runtime_snapshot,
-    reset_runtime_snapshot,
-)
-from agent.tools.registry import ToolRegistry
+from plugins.tools.registry import ToolMenu, ToolRegistry
 
 
 def _build_watcher(servers):
-    """按运行时的真实装配方式接线：store + publisher + watcher。"""
-
-    store = RuntimeSnapshotStore()
-    publisher = McpCatalogPublisher(store)
-    store.set_drain_handler(publisher.drain_snapshot)
-    return store, WorkspaceMcpWatcher(servers, publisher)
-
-
-async def _call_via_snapshot(store, tools, call):
-    """模拟一个 turn：先锁定快照租约，再通过快照视图调用工具。"""
-
-    lease = store.lease()
-    token = bind_runtime_snapshot(lease)
-    try:
-        view = SnapshotToolView(tools, lease.snapshot)
-        return await view.execute_async(call)
-    finally:
-        reset_runtime_snapshot(token)
-        await lease.release()
+    tools = ToolRegistry()
+    publisher = McpCatalogPublisher(tools)
+    return tools, WorkspaceMcpWatcher(servers, publisher)
 
 
 SERVER = Path(__file__).parent / "fixtures" / "fake_mcp_server.py"
@@ -100,7 +80,9 @@ class WorkspaceMcpDeclarationTests(unittest.TestCase):
             )
             first = load_workspace_mcp_declarations(servers).revision
             watched.write_text("v2", encoding="utf-8")
-            self.assertNotEqual(load_workspace_mcp_declarations(servers).revision, first)
+            self.assertNotEqual(
+                load_workspace_mcp_declarations(servers).revision, first
+            )
 
     def test_rejects_name_mismatching_filename(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -141,20 +123,17 @@ class WorkspaceMcpWatcherTests(unittest.TestCase):
         servers.mkdir(parents=True)
         return servers
 
-    def test_publishes_declared_server_tools_into_snapshot(self):
+    def test_publishes_declared_server_tools_into_live_registry(self):
         async def scenario():
             with tempfile.TemporaryDirectory() as tmp:
                 servers = self._servers_dir(tmp)
                 (servers / "fake.toml").write_text(_declaration(), encoding="utf-8")
-                tools = ToolRegistry()
                 store, watcher = _build_watcher(servers)
                 try:
                     self.assertTrue(await watcher.reconcile())
-                    # MCP 工具只存在于快照里，不污染共享注册表。
-                    self.assertFalse(tools.has("mcp_fake__echo"))
-                    self.assertIn("mcp_fake__echo", store.current.mcp_tool_names)
-                    result = await _call_via_snapshot(
-                        store, tools, ToolCall("1", "mcp_fake__echo", {"text": "hello"})
+                    self.assertIn("mcp_fake__echo", tuple(store.names()))
+                    result = await store.execute_async(
+                        ToolCall("1", "mcp_fake__echo", {"text": "hello"})
                     )
                     self.assertEqual(result.content, "hello")
                     self.assertEqual(watcher.status()["servers"], ["fake"])
@@ -163,16 +142,15 @@ class WorkspaceMcpWatcherTests(unittest.TestCase):
 
         asyncio.run(scenario())
 
-    def test_mcp_tools_are_deferred_in_snapshot_view(self):
+    def test_mcp_tools_are_deferred_in_model_menu(self):
         async def scenario():
             with tempfile.TemporaryDirectory() as tmp:
                 servers = self._servers_dir(tmp)
                 (servers / "fake.toml").write_text(_declaration(), encoding="utf-8")
-                tools = ToolRegistry()
                 store, watcher = _build_watcher(servers)
                 try:
                     await watcher.reconcile()
-                    view = SnapshotToolView(tools, store.current)
+                    view = ToolMenu(store)
                     self.assertTrue(view.is_deferred("mcp_fake__echo"))
                     # deferred 工具未解锁时不进入可见列表。
                     self.assertNotIn(
@@ -181,10 +159,7 @@ class WorkspaceMcpWatcherTests(unittest.TestCase):
                     )
                     self.assertIn(
                         "mcp_fake__echo",
-                        [
-                            spec.name
-                            for spec in view.visible_specs({"mcp_fake__echo"})
-                        ],
+                        [spec.name for spec in view.visible_specs({"mcp_fake__echo"})],
                     )
                 finally:
                     await watcher.shutdown()
@@ -217,51 +192,8 @@ class WorkspaceMcpWatcherTests(unittest.TestCase):
                     await watcher.reconcile()
                     (servers / "fake.toml").unlink()
                     self.assertTrue(await watcher.reconcile())
-                    self.assertEqual(store.current.mcp_tool_names, ())
+                    self.assertEqual(tuple(store.names()), ())
                     self.assertEqual(watcher.status()["servers"], [])
-                finally:
-                    await watcher.shutdown()
-
-        asyncio.run(scenario())
-
-    def test_in_flight_turn_keeps_its_tools_across_hot_reload(self):
-        """换代不能把在途 turn 的工具抽走，也不能提前断开它正在用的连接。"""
-
-        async def scenario():
-            with tempfile.TemporaryDirectory() as tmp:
-                servers = self._servers_dir(tmp)
-                (servers / "fake.toml").write_text(_declaration(), encoding="utf-8")
-                tools = ToolRegistry()
-                store, watcher = _build_watcher(servers)
-                try:
-                    await watcher.reconcile()
-
-                    # 一个 turn 开始，锁定当前快照。
-                    lease = store.lease()
-                    pinned = lease.snapshot
-                    self.assertIn("mcp_fake__echo", pinned.mcp_tool_names)
-
-                    # turn 进行中，声明变了并完成换代。
-                    (servers / "fake.toml").unlink()
-                    (servers / "second.toml").write_text(
-                        _declaration("second"), encoding="utf-8"
-                    )
-                    self.assertTrue(await watcher.reconcile())
-                    self.assertEqual(
-                        store.current.mcp_tool_names,
-                        ("mcp_second__echo", "mcp_second__fail"),
-                    )
-
-                    # 在途 turn 仍然看得到并且能真正调用旧代际的工具。
-                    view = SnapshotToolView(tools, pinned)
-                    result = await view.execute_async(
-                        ToolCall("1", "mcp_fake__echo", {"text": "in-flight"})
-                    )
-                    self.assertEqual(result.content, "in-flight")
-
-                    # 租约释放后旧代际才排空。
-                    await lease.release()
-                    self.assertEqual(pinned.state, "drained")
                 finally:
                     await watcher.shutdown()
 
@@ -272,7 +204,6 @@ class WorkspaceMcpWatcherTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmp:
                 servers = self._servers_dir(tmp)
                 (servers / "fake.toml").write_text(_declaration(), encoding="utf-8")
-                tools = ToolRegistry()
                 store, watcher = _build_watcher(servers)
                 try:
                     await watcher.reconcile()
@@ -284,7 +215,7 @@ class WorkspaceMcpWatcherTests(unittest.TestCase):
                     )
                     with self.assertRaises(ValueError):
                         await watcher.reconcile()
-                    self.assertIn("mcp_fake__echo", store.current.mcp_tool_names)
+                    self.assertIn("mcp_fake__echo", tuple(store.names()))
                     self.assertEqual(watcher.status()["generationId"], generation)
 
                     # 删掉坏声明后内容回到正在服务的 revision，无需换代。
@@ -298,8 +229,8 @@ class WorkspaceMcpWatcherTests(unittest.TestCase):
                     )
                     self.assertTrue(await watcher.reconcile())
                     self.assertEqual(watcher.status()["servers"], ["fake", "second"])
-                    result = await _call_via_snapshot(
-                        store, tools, ToolCall("1", "mcp_second__echo", {"text": "ok"})
+                    result = await store.execute_async(
+                        ToolCall("1", "mcp_second__echo", {"text": "ok"})
                     )
                     self.assertEqual(result.content, "ok")
                 finally:
@@ -307,12 +238,11 @@ class WorkspaceMcpWatcherTests(unittest.TestCase):
 
         asyncio.run(scenario())
 
-    def test_unconnectable_server_keeps_previous_generation_serving(self):
+    def test_unconnectable_new_server_preserves_unrelated_connection(self):
         async def scenario():
             with tempfile.TemporaryDirectory() as tmp:
                 servers = self._servers_dir(tmp)
                 (servers / "fake.toml").write_text(_declaration(), encoding="utf-8")
-                tools = ToolRegistry()
                 store, watcher = _build_watcher(servers)
                 try:
                     await watcher.reconcile()
@@ -326,9 +256,7 @@ class WorkspaceMcpWatcherTests(unittest.TestCase):
                     with self.assertRaises(Exception):
                         await watcher.reconcile()
                     # 旧 server 的连接没有被这次失败带走。
-                    result = await _call_via_snapshot(
-                        store,
-                        tools,
+                    result = await store.execute_async(
                         ToolCall("1", "mcp_fake__echo", {"text": "still-alive"}),
                     )
                     self.assertEqual(result.content, "still-alive")
@@ -358,28 +286,50 @@ class WorkspaceMcpWatcherTests(unittest.TestCase):
                         source="plugins",
                     )
                     self.assertEqual(
-                        store.current.mcp_tool_names,
-                        ("mcp_fake__echo", "mcp_fake__fail", "mcp_plugged__echo", "mcp_plugged__fail"),
+                        tuple(store.names()),
+                        (
+                            "mcp_fake__echo",
+                            "mcp_fake__fail",
+                            "mcp_plugged__echo",
+                            "mcp_plugged__fail",
+                        ),
                     )
                 finally:
                     await watcher.shutdown()
 
         asyncio.run(scenario())
 
-    def test_shutdown_releases_generations(self):
-        async def scenario():
-            with tempfile.TemporaryDirectory() as tmp:
-                servers = self._servers_dir(tmp)
-                (servers / "fake.toml").write_text(_declaration(), encoding="utf-8")
-                store, watcher = _build_watcher(servers)
-                await watcher.reconcile()
-                await watcher.shutdown()
-                self.assertIsNone(watcher._publisher.host.get(
-                    store.current.mcp_generation_id
-                ))
-
-        asyncio.run(scenario())
-
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@pytest.mark.asyncio
+async def test_partial_mcp_setup_retains_failed_cleanup_until_explicit_retry(
+    monkeypatch,
+):
+    from plugins.mcp.host import McpGenerationHost
+
+    attempts = []
+
+    class FailedClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def connect(self):
+            raise OSError("handshake failed")
+
+        async def disconnect(self):
+            attempts.append("close")
+            if len(attempts) == 1:
+                raise OSError("process still running")
+
+    monkeypatch.setattr("plugins.mcp.host.McpClient", FailedClient)
+    host = McpGenerationHost()
+    import pytest
+
+    with pytest.raises(BaseExceptionGroup, match="setup and cleanup"):
+        await host.prepare("partial", server_specs={"broken": {"command": ["unused"]}})
+    assert host.get("partial") is not None
+    await host.close("partial")
+    assert host.get("partial") is None and attempts == ["close", "close"]

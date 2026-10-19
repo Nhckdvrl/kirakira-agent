@@ -1,31 +1,29 @@
 """Kirakira Agent learning harness module."""
 
-import tempfile
-import unittest
-from unittest import mock
 import asyncio
 import gzip
 import json
 import os
-import socket
 import shlex
+import socket
 import sys
+import tempfile
 import threading
 import time
-import urllib.parse
-import urllib.error
+import unittest
 import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from unittest import mock
 
-from bus.queue import MessageBus
 from bus.events import OutboundMessage
+from bus.queue import MessageBus
 from core.schema import ToolCall, ToolSpec
-from agent.skills import SkillLoader
-from agent.tools.builtins import WorkspaceTools, build_workspace_registry, safe_path
-from agent.tools.web import WebTools
-from agent.tools.registry import ToolRegistry
-from agent.tool_hooks import ToolExecutionRequest, ToolExecutor
+from plugins.skills.service import SkillLoader
+from plugins.tools.builtins import WorkspaceTools, build_workspace_registry, safe_path
+from plugins.tools.hooks import ToolExecutionRequest, ToolExecutor
+from plugins.tools.registry import ToolRegistry
+from plugins.tools.web import WebTools
 
 
 def _exa_sse(payload: dict) -> str:
@@ -44,7 +42,9 @@ class _FakeHttpxResponse:
 class _FakeHttpxClient:
     """替身 httpx.Client：要么返回预置 SSE，要么在 post 时抛出。"""
 
-    def __init__(self, *, text: str | None = None, exc: Exception | None = None) -> None:
+    def __init__(
+        self, *, text: str | None = None, exc: Exception | None = None
+    ) -> None:
         self._text = text
         self._exc = exc
 
@@ -80,7 +80,11 @@ class ToolTests(unittest.TestCase):
     def test_registry_executes_and_handles_unknown_tool(self):
         registry = ToolRegistry()
         registry.register(
-            ToolSpec("echo", "Echo text", {"type": "object", "properties": {}, "required": []}),
+            ToolSpec(
+                "echo",
+                "Echo text",
+                {"type": "object", "properties": {}, "required": []},
+            ),
             lambda text: text,
         )
         ok = registry.execute(ToolCall("1", "echo", {"text": "hi"}))
@@ -96,7 +100,11 @@ class ToolTests(unittest.TestCase):
 
         registry = ToolRegistry()
         registry.register(
-            ToolSpec("echo_async", "Echo text asynchronously", {"type": "object", "properties": {}, "required": []}),
+            ToolSpec(
+                "echo_async",
+                "Echo text asynchronously",
+                {"type": "object", "properties": {}, "required": []},
+            ),
             echo_async,
         )
 
@@ -186,7 +194,7 @@ class ToolTests(unittest.TestCase):
                 invoked.append(True)
                 return "done"
 
-            with self.assertLogs("agent.tool_hooks", level="ERROR"):
+            with self.assertLogs("plugins.tools.hooks", level="ERROR"):
                 result = await executor.execute(request, invoke)
             self.assertEqual(result.status, "error")
             self.assertEqual(invoked, [])
@@ -285,9 +293,9 @@ class ToolTests(unittest.TestCase):
 
     def test_web_fetch_returns_source_metadata_and_decodes_compression(self):
         html_body = (
-            '<html><head><title>市场日报</title>'
+            "<html><head><title>市场日报</title>"
             '<meta property="article:published_time" content="2026-07-20T09:30:00+08:00">'
-            '</head><body><p>指数上涨，来源可核验。</p></body></html>'
+            "</head><body><p>指数上涨，来源可核验。</p></body></html>"
         ).encode("utf-8")
 
         class Handler(BaseHTTPRequestHandler):
@@ -316,8 +324,11 @@ class ToolTests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(
-                os.environ, {"KIRAKIRA_ALLOW_PRIVATE_WEB_FETCH": "true"}
+            with (
+                tempfile.TemporaryDirectory() as tmp,
+                mock.patch.dict(
+                    os.environ, {"KIRAKIRA_ALLOW_PRIVATE_WEB_FETCH": "true"}
+                ),
             ):
                 tools = WebTools()
                 for path in ("gzip", "deflate"):
@@ -368,8 +379,11 @@ class ToolTests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(
-                os.environ, {"KIRAKIRA_ALLOW_PRIVATE_WEB_FETCH": "true"}
+            with (
+                tempfile.TemporaryDirectory() as tmp,
+                mock.patch.dict(
+                    os.environ, {"KIRAKIRA_ALLOW_PRIVATE_WEB_FETCH": "true"}
+                ),
             ):
                 tools = WebTools()
                 decoded = json.loads(
@@ -401,8 +415,11 @@ class ToolTests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(
-                os.environ, {"KIRAKIRA_ALLOW_PRIVATE_WEB_FETCH": "true"}
+            with (
+                tempfile.TemporaryDirectory() as tmp,
+                mock.patch.dict(
+                    os.environ, {"KIRAKIRA_ALLOW_PRIVATE_WEB_FETCH": "true"}
+                ),
             ):
                 registry = build_workspace_registry(Path(tmp))
                 for path, code in (("forbidden", "403"), ("missing", "404")):
@@ -434,7 +451,9 @@ class ToolTests(unittest.TestCase):
                 )
             with mock.patch(
                 "httpx.Client",
-                return_value=_FakeHttpxClient(exc=__import__("httpx").HTTPError("offline")),
+                return_value=_FakeHttpxClient(
+                    exc=__import__("httpx").HTTPError("offline")
+                ),
             ):
                 failed = registry.execute(
                     ToolCall("failed", "web_search", {"query": "latest news"})
@@ -529,7 +548,7 @@ class ToolTests(unittest.TestCase):
                         "1",
                         "bash",
                         {
-                            "command": "python -c \"import time; time.sleep(30)\"",
+                            "command": 'python -c "import time; time.sleep(30)"',
                             "run_in_background": True,
                         },
                     )
@@ -554,7 +573,7 @@ class ToolTests(unittest.TestCase):
                             "1",
                             "bash",
                             {
-                                "command": "python -c \"import time; time.sleep(30)\"",
+                                "command": 'python -c "import time; time.sleep(30)"',
                                 "run_in_background": True,
                             },
                         )
@@ -578,7 +597,9 @@ class ToolTests(unittest.TestCase):
 
                 await registry.cleanup_owner("web:a")
                 self.assertFalse(
-                    registry._tools["bash"].handler.__self__._shell_processes._executions
+                    registry._tools[
+                        "bash"
+                    ].handler.__self__._shell_processes._executions
                 )
                 await registry.shutdown()
 

@@ -19,36 +19,35 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
-from agent.config_models import (
-    Config,
-    MemoryConfig,
-    MemoryEmbeddingConfig,
-)
+from bus.event_bus import EventBus
+from bus.events_lifecycle import TurnCommitted
+from core.memory.engine import MemoryQuery, MemoryScope
+from core.memory.events import ConsolidationCommitted
 from infra.providers.model_client_adapter import LLMResponse
 from plugins.akasha.config import AkashaConfig
 from plugins.akasha.core import build_idf_table, set_idf_table
 from plugins.akasha.engine import AkashaMemoryEngine
-from plugins.default_memory.engine import DefaultMemoryEngine
 from plugins.default_memory.config import (
     DefaultMemoryConfig,
     RetrievalConfig,
     RetrievalThresholdsConfig,
 )
-from core.memory.engine import MemoryQuery, MemoryScope
-from core.memory.events import ConsolidationCommitted
-from bus.event_bus import EventBus
-from bus.events_lifecycle import TurnCommitted
-from session.manager import SessionManager
+from plugins.default_memory.config_models import (
+    Config,
+    MemoryConfig,
+    MemoryEmbeddingConfig,
+)
+from plugins.default_memory.engine import DefaultMemoryEngine
+from plugins.ledger.manager import SessionManager
 
 from .dataset import (
+    SUPPORTED_QUESTION_TYPES,
     LMEInstance,
     LMETurn,
-    SUPPORTED_QUESTION_TYPES,
     builtin_smoke_instances,
     load_longmemeval,
 )
 from .metrics import normalise, reciprocal_rank
-
 
 _DIMENSION = 64
 _TOKEN_RE = re.compile(r"[a-z0-9]+|[\u3400-\u9fff]", re.IGNORECASE)
@@ -285,7 +284,9 @@ async def _ingest_case(
                 )
             elif engine_name == "default":
                 text = " ".join(
-                    f"{turn.role}: {turn.content}" for turn in group if turn.content.strip()
+                    f"{turn.role}: {turn.content}"
+                    for turn in group
+                    if turn.content.strip()
                 )
                 await bus.fanout(
                     ConsolidationCommitted(
@@ -422,7 +423,9 @@ async def _run_engine_case(
             refs = sorted(_source_refs(record))
             if evidence_rank is None and set(refs).intersection(gold_refs):
                 evidence_rank = rank
-            if answer_rank is None and normalise(instance.answer) in normalise(record.summary):
+            if answer_rank is None and normalise(instance.answer) in normalise(
+                record.summary
+            ):
                 answer_rank = rank
             retrieved.append(
                 {
@@ -480,7 +483,9 @@ async def run_offline_ab(
         raise FileExistsError(f"offline eval workspace must be empty: {workspace}")
     workspace.mkdir(parents=True, exist_ok=True)
     selected = builtin_smoke_instances() if instances is None else instances
-    selected = [item for item in selected if item.question_type in SUPPORTED_QUESTION_TYPES]
+    selected = [
+        item for item in selected if item.question_type in SUPPORTED_QUESTION_TYPES
+    ]
     results: list[OfflineCaseResult] = []
     for instance in selected:
         for engine_name in ("default", "akasha"):

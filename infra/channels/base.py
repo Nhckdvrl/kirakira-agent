@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Callable
 from uuid import uuid4
 
-from session.manager import SessionManager
+from plugins.ledger.manager import SessionManager
 
 _MISSING_METADATA = object()
 
@@ -56,7 +56,9 @@ class AttachmentStore:
                 ) from exc
             raise
 
-    def create_staging_path(self, *, prefix: str = ".upload-", suffix: str = ".part") -> Path:
+    def create_staging_path(
+        self, *, prefix: str = ".upload-", suffix: str = ".part"
+    ) -> Path:
         """在附件目录创建一个仅供当前写入的 staging 路径。"""
 
         root = self._resolve_root()

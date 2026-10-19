@@ -12,7 +12,6 @@ import hashlib
 import logging
 import random
 import time
-from contextlib import asynccontextmanager
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,16 +19,6 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 from uuid import uuid4
 
 from agent.lifecycle.phase import topo_sort_modules
-from agent.model_runtime.types import ModelClient
-from agent.plugins.snapshot import bind_runtime_snapshot, reset_runtime_snapshot
-from agent.turns.result import (
-    BusOutboundPort,
-    CallableSideEffect,
-    TurnOutbound,
-    TurnResult,
-    TurnTrace,
-    commit_turn_result,
-)
 from bus.queue import MessageBus, OutboundDeliveryError
 from core.memory.engine import (
     MemoryCapability,
@@ -37,9 +26,20 @@ from core.memory.engine import (
     MemoryQueryFilters,
     MemoryScope,
 )
+from plugins.ledger.manager import SessionManager
+from plugins.ledger.turn_source import is_memory_source
+from plugins.models.types import ModelClient
 from plugins.proactive_flow.admission import AdmissionStamp, DecisionSuperseded
 from plugins.proactive_flow.judge import Decision, ProactiveJudge
 from plugins.proactive_flow.modules import build_default_proactive_modules
+from plugins.react.result import (
+    BusOutboundPort,
+    CallableSideEffect,
+    TurnOutbound,
+    TurnResult,
+    TurnTrace,
+    commit_turn_result,
+)
 from plugins.wake_proactive import energy
 from plugins.wake_proactive.sources import SourceRegistry
 from plugins.wake_proactive.state import ProactiveStateStore
@@ -50,8 +50,6 @@ from proactive_v2.contracts import (
     rank_content,
 )
 from proactive_v2.frame import new_proactive_frame
-from session.manager import SessionManager
-from session.turn_source import is_memory_source
 
 logger = logging.getLogger(__name__)
 
@@ -81,8 +79,6 @@ class ProactiveLoop:
         passive_busy_fn: Callable[[str], bool] | None = None,
         rng: random.Random | None = None,
         memory_services: Any = None,
-        plugin_generations: Any = None,
-        snapshot_store: Any = None,
         mcp_gateway: Any = None,
         execution_store: Any = None,
     ) -> None:
@@ -107,10 +103,8 @@ class ProactiveLoop:
         self._tick_lock = asyncio.Lock()
         self._wake = asyncio.Event()
         self._workspace = Path(session_manager.workspace)
-        # tick 的两份代际租约(与被动 turn 同一对保证,见 runtime.AgentLoop.run):
+        # tick 的两份代际租约(与被动 turn 同一对保证,见 runtime.ReplyFollower.run):
         # per-plugin 代际防模块/源在 tick 中途被 quiesce,snapshot 租约固定本轮 MCP 工具代际。
-        self._plugin_generations = plugin_generations
-        self._snapshot_store = snapshot_store
         self._mcp_gateway = mcp_gateway
         # 主动链路是模块流水线;默认模块覆盖原有 tick 的每一步。
         # 照 Reference ProactiveKernel:装配期编译一次(排序失败 fail loud),不在每 tick 重排。
@@ -208,43 +202,10 @@ class ProactiveLoop:
 
     # ── tick 主链路 ──────────────────────────────────────────────
 
-    @asynccontextmanager
-    async def _plugin_generation_lease(self):
-        """未接插件代际注册表时是空操作,便于测试与最小构造(同被动侧)。"""
-        registry = self._plugin_generations
-        if registry is None:
-            yield ()
-            return
-        async with registry.lease_committed() as leased:
-            yield leased
-
     async def _tick(self) -> None:
-        """跑一遍模块流水线。
-
-        模块顺序在装配期已按 `requires` 依赖图编译好(不是注册行序);提前结束由
-        `frame.terminal` 表达,而不是 return——因此插件可以声明依赖后插进中间,
-        不必改这个函数。
-
-        整个 tick 持有 per-plugin 代际租约与 runtime snapshot 租约:tick 进行中发生
-        插件换代/热重载,本轮仍用开始时的模块集合与工具代际跑完,新代际下一轮生效。
-        """
-        modules = list(self._modules)
-        async with self._tick_lock, self._plugin_generation_lease():
-            store = self._snapshot_store
-            if store is None or store.current is None:
-                await self._run_modules(modules)
-                return
-            lease = store.lease()
-            snapshot_token = bind_runtime_snapshot(lease)
-            if self._mcp_gateway is not None:
-                self._mcp_gateway.pin_snapshot(lease.snapshot)
-            try:
-                await self._run_modules(modules)
-            finally:
-                reset_runtime_snapshot(snapshot_token)
-                if self._mcp_gateway is not None:
-                    self._mcp_gateway.pin_snapshot(None)
-                await lease.release()
+        """Sources and tools admit their own calls; ticks own no global lease."""
+        async with self._tick_lock:
+            await self._run_modules(list(self._modules))
 
     async def _run_modules(self, modules: List[object]) -> None:
         frame = new_proactive_frame(self._cfg.session_key)

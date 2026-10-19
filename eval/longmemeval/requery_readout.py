@@ -11,10 +11,14 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-from agent.config_models import Config, MemoryConfig, MemoryEmbeddingConfig
 from core.memory.engine import MemoryQuery
 from plugins.akasha2.engine import Akasha2MemoryEngine
 from plugins.akasha2.infrastructure.persistence import logical_state_sha256
+from plugins.default_memory.config_models import (
+    Config,
+    MemoryConfig,
+    MemoryEmbeddingConfig,
+)
 
 from .dataset import load_longmemeval
 from .offline_ab import _turn_groups

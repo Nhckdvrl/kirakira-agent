@@ -18,8 +18,8 @@ from pathlib import Path
 from bus.queue import MessageBus
 from plugins.drift_flow.drive import advance_drift_drive, sample_drift_delay_hours
 from plugins.drift_flow.runner import DriftRunner
+from plugins.ledger.manager import SessionManager
 from proactive_v2.config import DriftConfig
-from session.manager import SessionManager
 
 NOW = datetime(2026, 7, 25, 12, 0, tzinfo=timezone.utc)
 

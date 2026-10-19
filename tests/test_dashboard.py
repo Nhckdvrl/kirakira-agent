@@ -20,7 +20,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from bootstrap.dashboard_api import DashboardService
+from plugins.dashboard.service import DashboardService
 
 
 class _FakeAdminEngine:
@@ -244,45 +244,19 @@ class SessionPanelTests(unittest.TestCase):
 
 
 class PluginPanelTests(unittest.TestCase):
-    def test_generation_lease_counts_are_surfaced(self) -> None:
+    def test_actual_activation_calls_and_draining_are_surfaced(self):
+        owners = [
+            dict(name="plugin:p1", generation="g1", state="active", calls=2),
+            dict(name="plugin:p2", generation="g2", state="draining", calls=1),
+        ]
         manager = SimpleNamespace(
-            active=[
-                SimpleNamespace(
-                    plugin_id="p1",
-                    version="1.0",
-                    desc="d",
-                    root="/r",
-                    instance=object(),
-                )
-            ],
-            errors={"bad": "boom"},
-            generations=SimpleNamespace(
-                active=(
-                    SimpleNamespace(
-                        plugin_id="p1",
-                        generation_id="g1",
-                        revision="r",
-                        state="active",
-                        lease_count=2,
-                    ),
-                ),
-                retired=(
-                    SimpleNamespace(
-                        plugin_id="p1",
-                        generation_id="g0",
-                        state="retired",
-                        lease_count=1,
-                        can_quiesce=False,
-                    ),
-                ),
-            ),
+            active=[], errors={"bad": "boom"}, status=lambda: owners
         )
         payload = DashboardService(
             workspace=Path("."), plugin_manager=manager
         ).plugins()
-        self.assertEqual(payload["generations"][0]["lease_count"], 2)
-        # 仍有在途租约的退休代际不可销毁——这正是热重载不抽走能力的运行时证据
-        self.assertFalse(payload["retired"][0]["can_quiesce"])
+        self.assertEqual(payload["activations"][0]["calls"], 2)
+        self.assertEqual(payload["draining"], [owners[1]])
         self.assertEqual(payload["errors"], {"bad": "boom"})
 
 

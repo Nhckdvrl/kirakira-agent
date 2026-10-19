@@ -1,0 +1,210 @@
+from __future__ import annotations
+
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from enum import Enum
+from pathlib import Path
+from typing import Generic, TypeVar
+
+T = TypeVar("T", covariant=True)
+Service = TypeVar("Service")
+
+
+class CompositionError(RuntimeError):
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+class FiberState(str, Enum):
+    PENDING = "pending"
+    LOADING = "loading"
+    ACTIVE = "active"
+    FAILED = "failed"
+    UNLOADING = "unloading"
+    DISPOSED = "disposed"
+
+
+@dataclass(frozen=True, slots=True)
+class ServiceKey(Generic[Service]):
+    """服务名决定注入身份；历史 binding 名只用于读取原选择。"""
+
+    name: str
+    binding_names: tuple[str, ...] = field(default=(), compare=False)
+
+    def __post_init__(self) -> None:
+        if not self.name or self.name.strip() != self.name:
+            raise ValueError("ServiceKey.name 必须是非空且无首尾空白的字符串")
+        if any(not name or name.strip() != name for name in self.binding_names):
+            raise ValueError("ServiceKey.binding_names 必须是非空且无首尾空白的字符串")
+        if len(set((self.name, *self.binding_names))) != 1 + len(self.binding_names):
+            raise ValueError("ServiceKey.binding_names 不能重复或包含当前服务名")
+
+
+@dataclass(frozen=True, slots=True)
+class FiberView:
+    fiber_id: int
+    name: str
+    state: FiberState
+    required_for_readiness: bool
+    missing_services: tuple[str, ...]
+    error: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class HealthView:
+    owner: str
+    name: str
+    required: bool
+    healthy: bool
+    reason: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class IncidentView:
+    fiber_id: int
+    sequence: int
+    owner: str
+    kind: str
+    message: str
+    error_type: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class TopologyFiberView:
+    name: str
+    parent: str | None
+    required_for_readiness: bool
+    dependencies: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class TopologyView:
+    generation_id: str
+    identity: str
+    composition_revision: int
+    fibers: tuple[TopologyFiberView, ...]
+    services: tuple[str, ...]
+    effects: tuple[str, ...]
+    listeners: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class CallerIdentity:
+    """由内核核对实际调用作用域后返回的插件身份，不是授权凭据。"""
+
+    plugin_id: str
+    generation_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class PluginRuntime:
+    """Expose the Core-assigned paths and config to one mounted plugin tree."""
+
+    plugin_id: str
+    generation_id: str
+    plugin_dir: Path
+    data_dir: Path
+    workspace: Path
+    config: Mapping[str, object]
+    workspace_roots: tuple[str, ...] = ()
+    workspace_files: tuple[str, ...] = ()
+
+    def workspace_root(self, name: str) -> Path:
+        """解析插件声明过的产品级 workspace 顶层目录。"""
+
+        if name not in self.workspace_roots:
+            raise CompositionError(
+                "WORKSPACE_ROOT_UNDECLARED",
+                f"{self.plugin_id} 未声明 workspace root: {name}",
+            )
+        return resolve_declared_workspace_root(self.workspace, name)
+
+    def workspace_file(self, name: str) -> Path:
+        """Resolve one declared product file without broad directory access."""
+
+        if name not in self.workspace_files:
+            raise CompositionError(
+                "WORKSPACE_FILE_UNDECLARED",
+                f"{self.plugin_id} 未声明 workspace file: {name}",
+            )
+        return resolve_declared_workspace_file(self.workspace, name)
+
+
+def resolve_declared_workspace_root(workspace: Path, name: str) -> Path:
+    """解析 Core 分配的顶层 workspace root，并拒绝符号链接越界。"""
+
+    root = workspace.resolve(strict=False)
+    declared = root / name
+    if ".plugin-credentials" in Path(name).parts:
+        raise CompositionError("CREDENTIAL_STORE_PRIVATE", "私有凭据只能通过授权 broker 访问")
+    if declared.is_symlink():
+        raise CompositionError(
+            "WORKSPACE_ROOT_SYMLINK",
+            f"workspace root 不能是符号链接: {declared}",
+        )
+    resolved = declared.resolve(strict=False)
+    if not resolved.is_relative_to(root):
+        raise CompositionError(
+            "WORKSPACE_ROOT_ESCAPE",
+            f"workspace root 越界: {declared}",
+        )
+    if declared.exists() and not declared.is_dir():
+        raise CompositionError(
+            "WORKSPACE_ROOT_NOT_DIRECTORY",
+            f"workspace root 不是目录: {declared}",
+        )
+    return resolved
+
+
+def resolve_declared_workspace_file(workspace: Path, name: str) -> Path:
+    """Resolve one relative file and reject symlinks or workspace escape."""
+
+    root = workspace.resolve(strict=False)
+    declared = root / name
+    if ".plugin-credentials" in Path(name).parts:
+        raise CompositionError("CREDENTIAL_STORE_PRIVATE", "私有凭据只能通过授权 broker 访问")
+    try:
+        relative = declared.relative_to(root)
+    except ValueError as error:
+        raise CompositionError(
+            "WORKSPACE_FILE_ESCAPE",
+            f"workspace file 越界: {declared}",
+        ) from error
+    current = root
+    for part in relative.parts:
+        current /= part
+        if current.is_symlink():
+            raise CompositionError(
+                "WORKSPACE_FILE_SYMLINK",
+                f"workspace file 路径不能包含符号链接: {current}",
+            )
+    resolved = declared.resolve(strict=False)
+    if not resolved.is_relative_to(root):
+        raise CompositionError(
+            "WORKSPACE_FILE_ESCAPE",
+            f"workspace file 越界: {declared}",
+        )
+    if declared.exists() and not declared.is_file():
+        raise CompositionError(
+            "WORKSPACE_FILE_NOT_FILE",
+            f"workspace file 不是普通文件: {declared}",
+        )
+    return resolved
+
+
+@dataclass(frozen=True, slots=True)
+class CompositionReceipt:
+    generation_id: str
+    ready: bool
+    fibers: tuple[FiberView, ...]
+    services: tuple[str, ...]
+    effects: tuple[str, ...]
+    required_pending: tuple[str, ...]
+    optional_pending: tuple[str, ...]
+    health: tuple[HealthView, ...]
+    required_degraded: tuple[str, ...]
+    incidents: tuple[IncidentView, ...]
+    incident_sequence: int
+    incident_counts: tuple[tuple[str, int], ...]
+    incident_overflowed: bool

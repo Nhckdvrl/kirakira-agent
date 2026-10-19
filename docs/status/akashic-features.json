@@ -31,7 +31,7 @@
       "kirakira_paths": [
         "infra/channels",
         "bus",
-        "agent/tools/message_push.py"
+        "plugins/tools/message_push.py"
       ],
       "acceptance": "Web/Android 输入与日志订阅共用持久消息源；验证断线补读、客户端重连、附件和重复输入交接。"
     },
@@ -45,7 +45,7 @@
       "kirakira_paths": [
         "infra/channels",
         "bus",
-        "agent/tools/message_push.py"
+        "plugins/tools/message_push.py"
       ],
       "acceptance": "从已保存的消息构造客户端可见输出；发送确认和日志订阅游标独立，重启后不产生另一份正文真相。"
     },
@@ -69,7 +69,7 @@
       "kirakira_paths": [
         "infra/channels",
         "bus",
-        "agent/tools/message_push.py"
+        "plugins/tools/message_push.py"
       ],
       "acceptance": "入站先完成持久交接；固定原 binding，连接关闭排空、断线恢复与消息接纳去重均可验证。"
     },
@@ -91,10 +91,10 @@
       "upstream_entry": "plugins/commands/plugin.py",
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/commands/plugin.py",
       "kirakira_paths": [
-        "agent/core",
-        "session",
-        "agent/control",
-        "agent/tools",
+        "plugins/reply_program",
+        "plugins/ledger",
+        "plugins/control",
+        "plugins/tools",
         "plugins/scheduler"
       ],
       "acceptance": "独立命令目录与实际实现绑定；目录执行短生命周期，未知效果须可查询与核对，不能自动重做。"
@@ -107,8 +107,8 @@
       "upstream_entry": "plugins/compaction/plugin.py",
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/compaction/plugin.py",
       "kirakira_paths": [
-        "agent/model_runtime/context_compaction.py",
-        "session/compaction_runtime.py"
+        "plugins/models/context_compaction.py",
+        "plugins/ledger/compaction_runtime.py"
       ],
       "acceptance": "只发布不可变消息前缀摘要；保留已使用摘要及原文读取口，重启、取消、摘要失败不丢历史。"
     },
@@ -130,10 +130,10 @@
       "upstream_entry": "plugins/content/plugin.py",
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/content/plugin.py",
       "kirakira_paths": [
-        "agent/core",
-        "session",
-        "agent/control",
-        "agent/tools",
+        "plugins/reply_program",
+        "plugins/ledger",
+        "plugins/control",
+        "plugins/tools",
         "plugins/scheduler"
       ],
       "acceptance": "文本、图片、附件按固定协议从同一原文解析；各 renderer 不得另外保存冲突正文或读取动态替代物。"
@@ -147,7 +147,7 @@
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/content_view/plugin.py",
       "kirakira_paths": [
         "core/memory",
-        "agent/tools/registry.py"
+        "plugins/tools/registry.py"
       ],
       "acceptance": "按原消息位置读完整工具输出或范围，能够展开被模型上下文截断的结果，并保留来源身份。"
     },
@@ -159,9 +159,9 @@
       "upstream_entry": "plugins/context/plugin.py",
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/context/plugin.py",
       "kirakira_paths": [
-        "agent/core/conversation.py",
-        "agent/model_runtime",
-        "agent/prompting"
+        "plugins/context/conversation.py",
+        "plugins/models",
+        "plugins/context"
       ],
       "acceptance": "仅用固定日志与已取得材料组装模型请求；检索、摘要和实时材料各由独立 owner 提供，重试不偷换历史。"
     },
@@ -173,8 +173,8 @@
       "upstream_entry": "plugins/conversation/plugin.py",
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/conversation/plugin.py",
       "kirakira_paths": [
-        "agent/core/pipeline.py",
-        "agent/core/admission.py"
+        "plugins/reply_program/service.py",
+        "plugins/sources/admission.py"
       ],
       "acceptance": "按来源接纳新输入、停止与同轮 steering；输入控制和选择回复程序分离，忙闲/重启行为可复现。"
     },
@@ -201,7 +201,7 @@
       "kirakira_paths": [
         "infra/channels",
         "bus",
-        "agent/tools/message_push.py"
+        "plugins/tools/message_push.py"
       ],
       "acceptance": "独立发送已保存的消息，固定原目的地与出站绑定；已知回执去重，未知外部结果保留待核对。"
     },
@@ -215,7 +215,7 @@
       "kirakira_paths": [
         "infra/channels",
         "bus",
-        "agent/tools/message_push.py"
+        "plugins/tools/message_push.py"
       ],
       "acceptance": "完整可见回复与显式通知按来源自己的选择投递；中间工具文本不得因默认策略泄漏到用户渠道。"
     },
@@ -257,7 +257,7 @@
       "upstream_entry": "plugins/files/plugin.py",
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/files/plugin.py",
       "kirakira_paths": [
-        "agent/tools/builtins.py",
+        "plugins/tools/builtins.py",
         "plugins/working_directory"
       ],
       "acceptance": "文件操作固定执行目标及其 cwd 依赖；补齐宿主后端、prepared 参数、未知结果查询和恢复合同。",
@@ -274,7 +274,7 @@
       "upstream_entry": "plugins/gateway/plugin.py",
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/gateway/plugin.py",
       "kirakira_paths": [
-        "agent/control",
+        "plugins/control",
         "infra/control"
       ],
       "acceptance": "协议握手、类型校验、事件订阅、取消、重连和远程命令均走同一 owner；客户端不能另造运行状态。"
@@ -307,7 +307,7 @@
       "upstream_entry": "plugins/jobs/plugin.py",
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/jobs/plugin.py",
       "kirakira_paths": [
-        "agent/subagent.py",
+        "plugins/subagent/service.py",
         "bus"
       ],
       "acceptance": "后台任务完成时，忙则注入当前轮，闲则唤醒原会话；结果通知和消费去重在重启后仍成立。"
@@ -320,9 +320,9 @@
       "upstream_entry": "plugins/ledger/plugin.py",
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/ledger/plugin.py",
       "kirakira_paths": [
-        "session/manager.py",
-        "session/owner_store.py",
-        "session/publications.py"
+        "plugins/ledger/manager.py",
+        "plugins/ledger/owner_store.py",
+        "plugins/ledger/publications.py"
       ],
       "acceptance": "持久 Message/附件/入站交接与 owner 状态共库事务；来源程序和消息原文保持可恢复顺序，非仅轮末提交。"
     },
@@ -334,10 +334,10 @@
       "upstream_entry": "plugins/ledger_invariants/plugin.py",
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/ledger_invariants/plugin.py",
       "kirakira_paths": [
-        "agent/core",
-        "session",
-        "agent/control",
-        "agent/tools",
+        "plugins/reply_program",
+        "plugins/ledger",
+        "plugins/control",
+        "plugins/tools",
         "plugins/scheduler"
       ],
       "acceptance": "检查消息追加顺序、来源身份和 Turn 关闭前缀；失败须在提交处拒绝，覆盖取消、崩溃和并发接纳。"
@@ -373,10 +373,10 @@
       "upstream_entry": "plugins/mcp/plugin.py",
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/mcp/plugin.py",
       "kirakira_paths": [
-        "agent/plugins",
+        "plugins/extensions",
         "agent/composition",
-        "agent/mcp",
-        "agent/skills.py"
+        "plugins/mcp",
+        "plugins/skills/service.py"
       ],
       "acceptance": "按调用获得固定代际 MCP 会话；子进程由资源 owner 管理，热更新和取消等待实际关闭。"
     },
@@ -390,7 +390,7 @@
       "kirakira_paths": [
         "infra/channels",
         "bus",
-        "agent/tools/message_push.py"
+        "plugins/tools/message_push.py"
       ],
       "acceptance": "固定授权目的地的主动发送及安全重启；回执、未知结果和重启提交边界须由真实入口验证。"
     },
@@ -403,8 +403,8 @@
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/models/plugin.py",
       "kirakira_paths": [
         "infra/providers",
-        "agent/model_runtime",
-        "agent/config_models.py"
+        "plugins/models",
+        "plugins/default_memory/config_models.py"
       ],
       "acceptance": "统一 provider-neutral 连接、目录、启停及角色选择；运行期配置事务、能力与 usage 投影覆盖真实 UI/API。"
     },
@@ -461,8 +461,8 @@
       "upstream_entry": "plugins/programmatic/plugin.py",
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/programmatic/plugin.py",
       "kirakira_paths": [
-        "agent/control/service.py",
-        "agent/core/scoped.py"
+        "plugins/control/service.py",
+        "plugins/reply_program/scoped.py"
       ],
       "acceptance": "程序输入、停止、恢复与结果有完整 API；原文可查但默认排除记忆学习，完成结果可重复读取。"
     },
@@ -475,7 +475,7 @@
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/projects/plugin.py",
       "kirakira_paths": [
         "plugins/projects",
-        "bootstrap/workspace.py",
+        "plugins/projects/factory.py",
         "frontend/workspace_ui.py"
       ],
       "acceptance": "稳定 ID、创建回执、改名/归档和创建时目录默认值已接入；继续补齐完整工作台项目/会话组织及可扩展 scope 维度。",
@@ -492,7 +492,7 @@
       "upstream_entry": "plugins/prompt/plugin.py",
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/prompt/plugin.py",
       "kirakira_paths": [
-        "agent/prompting"
+        "plugins/context"
       ],
       "acceptance": "每次请求读取人格与行为材料，附带已接纳输入时间和渠道事实；保持事实来源、规则优先级和实时文件失效语义。"
     },
@@ -504,9 +504,9 @@
       "upstream_entry": "plugins/react/plugin.py",
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/react/plugin.py",
       "kirakira_paths": [
-        "agent/core/reasoner.py",
-        "agent/core/tool_io.py",
-        "agent/core/model_io.py"
+        "plugins/react/reasoner.py",
+        "plugins/tools/invoker.py",
+        "plugins/models/invoker.py"
       ],
       "acceptance": "上下文、模型、内容与工具可独立替换；完整批次持久化与续跑不重放已完成副作用，并与来源程序分离。"
     },
@@ -518,10 +518,10 @@
       "upstream_entry": "plugins/reply/plugin.py",
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/reply/plugin.py",
       "kirakira_paths": [
-        "agent/core",
-        "session",
-        "agent/control",
-        "agent/tools",
+        "plugins/reply_program",
+        "plugins/ledger",
+        "plugins/control",
+        "plugins/tools",
         "plugins/scheduler"
       ],
       "acceptance": "跟随持久日志组合默认回复；接纳、材料、模型和工具独立，忙时输入与后台结果正确进入同一轮。"
@@ -534,10 +534,10 @@
       "upstream_entry": "plugins/reply_program/plugin.py",
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/reply_program/plugin.py",
       "kirakira_paths": [
-        "agent/core",
-        "session",
-        "agent/control",
-        "agent/tools",
+        "plugins/reply_program",
+        "plugins/ledger",
+        "plugins/control",
+        "plugins/tools",
         "plugins/scheduler"
       ],
       "acceptance": "一次回复的资源与执行组合可持久恢复；停止/关闭排空真实资源，不承担来源策略和后台监听。"
@@ -550,7 +550,7 @@
       "upstream_entry": "plugins/runtime_diagnostics/plugin.py",
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/runtime_diagnostics/plugin.py",
       "kirakira_paths": [
-        "bootstrap/dashboard_api.py",
+        "plugins/dashboard/service.py",
         "scripts/inspect_execution.py"
       ],
       "acceptance": "按 owner 提供运行指标、停顿现场、插件操作和限时诊断；本阶段只补可用功能，不据此开展整体性能优化。"
@@ -564,7 +564,7 @@
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/runtime_inspection/plugin.py",
       "kirakira_paths": [
         "scripts/inspect_execution.py",
-        "bootstrap/dashboard_api.py"
+        "plugins/dashboard/service.py"
       ],
       "acceptance": "汇总 owner 的只读运行时文档、任务与技能投影；检查不能改变状态，也不能暴露私密配置。"
     },
@@ -598,8 +598,8 @@
       "upstream_entry": "plugins/shell/plugin.py",
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/shell/plugin.py",
       "kirakira_paths": [
-        "agent/tools/unified_exec.py",
-        "agent/tools/builtins.py"
+        "plugins/tools/unified_exec.py",
+        "plugins/tools/builtins.py"
       ],
       "acceptance": "实际执行 cwd、PTY/stdin 与进程 owner 已接入；继续补齐宿主执行 backend、预备参数及断连后的进程查询。",
       "functional_evidence": [
@@ -616,7 +616,7 @@
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/shell_ui/plugin.py",
       "kirakira_paths": [
         "frontend/web_ui.py",
-        "bootstrap/dashboard_api.py"
+        "plugins/dashboard/service.py"
       ],
       "acceptance": "完整应用外框、设置工作区与插件列表；操作必须映射真实能力状态、错误和发布回执。"
     },
@@ -648,8 +648,8 @@
       "upstream_entry": "plugins/skills/plugin.py",
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/skills/plugin.py",
       "kirakira_paths": [
-        "agent/skills.py",
-        "agent/skill_loader.py"
+        "plugins/skills/service.py",
+        "plugins/skills/loader.py"
       ],
       "acceptance": "技能目录发现与按需读取遵循授权和资源代际；显示确切来源，并与子 Agent/Drift 使用同一读取合同。"
     },
@@ -661,8 +661,8 @@
       "upstream_entry": "plugins/sources/plugin.py",
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/sources/plugin.py",
       "kirakira_paths": [
-        "session/turn_source.py",
-        "agent/core/pipeline.py"
+        "plugins/ledger/turn_source.py",
+        "plugins/reply_program/service.py"
       ],
       "acceptance": "来源注册拥有接纳与控制，程序由调用方选择；权限、时间、记忆排除和接纳回执不可只靠字符串渠道判断。"
     },
@@ -674,10 +674,10 @@
       "upstream_entry": "plugins/stable_view/plugin.py",
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/stable_view/plugin.py",
       "kirakira_paths": [
-        "agent/plugins",
+        "plugins/extensions",
         "agent/composition",
-        "agent/mcp",
-        "agent/skills.py"
+        "plugins/mcp",
+        "plugins/skills/service.py"
       ],
       "acceptance": "CLI 查看当前已发布组合树、依赖及状态；输出来自 actual stable 代际，不能显示未发布候选为当前。"
     },
@@ -689,7 +689,7 @@
       "upstream_entry": "plugins/standard_web/plugin.py",
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/standard_web/plugin.py",
       "kirakira_paths": [
-        "agent/tools/web.py"
+        "plugins/tools/web.py"
       ],
       "acceptance": "Web 搜索/读取通过独立提供方能力组合；上层工具不持有某个商业端点或凭据。"
     },
@@ -701,7 +701,7 @@
       "upstream_entry": "plugins/subagent/plugin.py",
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/subagent/plugin.py",
       "kirakira_paths": [
-        "agent/subagent.py"
+        "plugins/subagent/service.py"
       ],
       "acceptance": "独立持久消息任务、固定工具权限、继承 cwd 并回传父会话；补齐忙时注入、恢复和父/子取消生命周期。",
       "functional_evidence": [
@@ -719,7 +719,7 @@
       "kirakira_paths": [
         "infra/channels",
         "bus",
-        "agent/tools/message_push.py"
+        "plugins/tools/message_push.py"
       ],
       "acceptance": "真实 Telegram 入站交接、reply/context/附件转换和发送 binding；重复 update 与断线重启不会重复接纳。"
     },
@@ -733,7 +733,7 @@
       "kirakira_paths": [
         "infra/channels",
         "bus",
-        "agent/tools/message_push.py"
+        "plugins/tools/message_push.py"
       ],
       "acceptance": "固定凭据发送正文和附件；多段结果、真实发送回执、未知外部结果及重启核对可验证。"
     },
@@ -755,10 +755,10 @@
       "upstream_entry": "plugins/timer/plugin.py",
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/timer/plugin.py",
       "kirakira_paths": [
-        "agent/core",
-        "session",
-        "agent/control",
-        "agent/tools",
+        "plugins/reply_program",
+        "plugins/ledger",
+        "plugins/control",
+        "plugins/tools",
         "plugins/scheduler"
       ],
       "acceptance": "单次截止时间等待可取消并按 owner 排空；只拥有等待，不混入调度、来源或轮次策略。"
@@ -771,10 +771,10 @@
       "upstream_entry": "plugins/tool_search/plugin.py",
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/tool_search/plugin.py",
       "kirakira_paths": [
-        "agent/plugins",
+        "plugins/extensions",
         "agent/composition",
-        "agent/mcp",
-        "agent/skills.py"
+        "plugins/mcp",
+        "plugins/skills/service.py"
       ],
       "acceptance": "仅检索已授予工具，展示完整 schema 并解码间接调用；热更新与固定代际授权在实际执行前再检查。"
     },
@@ -786,10 +786,10 @@
       "upstream_entry": "plugins/tools/plugin.py",
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/tools/plugin.py",
       "kirakira_paths": [
-        "agent/core",
-        "session",
-        "agent/control",
-        "agent/tools",
+        "plugins/reply_program",
+        "plugins/ledger",
+        "plugins/control",
+        "plugins/tools",
         "plugins/scheduler"
       ],
       "acceptance": "固定实现、prepared 参数和稳定 effect key；结果可查询，独占批次/授权/取消/未知效果恢复由公共合同保证。"
@@ -802,10 +802,10 @@
       "upstream_entry": "plugins/turn_projection/plugin.py",
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/turn_projection/plugin.py",
       "kirakira_paths": [
-        "agent/core",
-        "session",
-        "agent/control",
-        "agent/tools",
+        "plugins/reply_program",
+        "plugins/ledger",
+        "plugins/control",
+        "plugins/tools",
         "plugins/scheduler"
       ],
       "acceptance": "从不可变消息推导逻辑 Turn 和中断状态；无第二份内容或消费游标，跨来源及重启投影一致。"
@@ -818,7 +818,7 @@
       "upstream_entry": "plugins/ui/plugin.py",
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/ui/plugin.py",
       "kirakira_paths": [
-        "bootstrap/dashboard_api.py",
+        "plugins/dashboard/service.py",
         "frontend"
       ],
       "acceptance": "通过版本能力注册和封存插件 UI；候选/active 代际隔离，真实 RPC 校验、资产和关闭归各自 owner。"
@@ -831,7 +831,7 @@
       "upstream_entry": "plugins/vision/plugin.py",
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/vision/plugin.py",
       "kirakira_paths": [
-        "agent/tools/builtins.py"
+        "plugins/tools/builtins.py"
       ],
       "acceptance": "独立 vision 角色读取图片及会话 cwd 路径；多图、预算、损坏文件和原生 provider 内容映射可验证。"
     },
@@ -878,7 +878,7 @@
       "upstream_entry": "plugins/web_fetch_http/plugin.py",
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/web_fetch_http/plugin.py",
       "kirakira_paths": [
-        "agent/tools/web.py"
+        "plugins/tools/web.py"
       ],
       "acceptance": "直接 HTTP(S) 读取、正文提取、窄范围续读与来源引用；超时、重定向、流限制和错误明确可用。"
     },
@@ -890,7 +890,7 @@
       "upstream_entry": "plugins/web_search_exa/plugin.py",
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/web_search_exa/plugin.py",
       "kirakira_paths": [
-        "agent/tools/web.py"
+        "plugins/tools/web.py"
       ],
       "acceptance": "Exa 独立端点/代理/key 配置与搜索能力；结果来源、错误、取消和 onboarding 验证通过实际工具链。"
     },
@@ -903,8 +903,8 @@
       "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/21b38f0e102d9e1bdc5576725635dce29f135c0c/plugins/working_directory/plugin.py",
       "kirakira_paths": [
         "plugins/working_directory",
-        "agent/core/reasoner.py",
-        "agent/control/service.py"
+        "plugins/react/reasoner.py",
+        "plugins/control/service.py"
       ],
       "acceptance": "每 Session cwd、实时 AGENTS、独占切换及回执/CAS 已接入；补齐宿主路径能力、prepared 调用和持久续跑。",
       "functional_evidence": [
@@ -942,8 +942,8 @@
         "schema/app-server-v2.json"
       ],
       "kirakira_paths": [
-        "agent/control/client.py",
-        "agent/control/protocol"
+        "plugins/control/client.py",
+        "plugins/control/protocol"
       ],
       "acceptance": "可安装 SDK、应用控制协议、typed event 与流式 turn 生命周期；重连、恢复、取消和错误行为以实际客户端验证。"
     },

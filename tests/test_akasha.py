@@ -14,7 +14,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from bootstrap.memory import resolve_memory_plugin
+from plugins.default_memory.factory import resolve_memory_plugin
 
 
 class EngineRoutingTests(unittest.TestCase):
@@ -54,7 +54,7 @@ class ToolProfileDrivesRegistrationTests(unittest.TestCase):
     def _registry_for(self, profile) -> set[str]:
         from core.memory.engine import MemoryCapability
         from plugins.memory_tools.tools import _register_memory_tools
-        from agent.tools.registry import ToolRegistry
+        from plugins.tools.registry import ToolRegistry
 
         engine = SimpleNamespace(
             DESCRIPTOR=SimpleNamespace(
@@ -114,7 +114,7 @@ class ToolProfileDrivesRegistrationTests(unittest.TestCase):
     def test_disabled_engine_keeps_legacy_trio(self) -> None:
         """kirakira 的显式偏离:引擎未承重时仍注册词法版三件套。"""
         from plugins.memory_tools.tools import _register_memory_tools
-        from agent.tools.registry import ToolRegistry
+        from plugins.tools.registry import ToolRegistry
 
         handlers = SimpleNamespace(
             _live_memory_engine=lambda: None,
@@ -136,7 +136,7 @@ class SessionMessagesProjectionTests(unittest.TestCase):
     def test_projection_tracks_sessions(self) -> None:
         import tempfile
 
-        from session.manager import SessionManager
+        from plugins.ledger.manager import SessionManager
 
         with tempfile.TemporaryDirectory() as tmp:
             manager = SessionManager(Path(tmp))
@@ -166,7 +166,7 @@ class SessionMessagesProjectionTests(unittest.TestCase):
     def test_index_lives_at_reference_path(self) -> None:
         import tempfile
 
-        from session.manager import SessionManager
+        from plugins.ledger.manager import SessionManager
 
         with tempfile.TemporaryDirectory() as tmp:
             manager = SessionManager(Path(tmp))

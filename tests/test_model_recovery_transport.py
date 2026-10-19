@@ -1,22 +1,24 @@
 """Model generation recovery over real loopback HTTP/SSE boundaries."""
 
 import asyncio
+import json
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-import json
 from threading import Thread
+
 import pytest
-from agent.core.contracts import RuntimeConfig
-from agent.core.execution import ExecutionStore
-from agent.core.reasoner import DefaultReasoner
-from agent.model_runtime.retry import ModelRetryPolicy, retry_after_seconds
-from agent.model_runtime.types import ModelRetriesExhausted, ModelOutputTruncated
-from agent.tools.registry import ToolRegistry
+
 from bus.event_bus import EventBus
 from bus.events_lifecycle import ModelAttemptStatus, StreamDeltaReady
 from core.schema import ToolSpec
 from infra.providers.llm_provider import OpenAICompatibleClient
 from infra.providers.step_plan import StepPlanClient, validate_step_plan_url
+from plugins.execution.service import ExecutionStore
+from plugins.models.retry import ModelRetryPolicy, retry_after_seconds
+from plugins.models.types import ModelOutputTruncated, ModelRetriesExhausted
+from plugins.react.contract import ReactConfig
+from plugins.react.reasoner import ReactProgram
+from plugins.tools.registry import ToolRegistry
 
 
 @contextmanager
@@ -93,13 +95,13 @@ async def test_completed_tool_is_not_replayed_when_http_and_stream_fail(tmp_path
             ToolSpec("write", "write once", {"type": "object", "properties": {}}), write
         )
         store = ExecutionStore(tmp_path / "runs.db")
-        engine = DefaultReasoner(
+        engine = ReactProgram(
             model_client=OpenAICompatibleClient(base_url=url, api_key="local-test"),
             tools=tools,
             context=None,
             event_bus=bus,
             execution_store=store,
-            config=RuntimeConfig(
+            config=ReactConfig(
                 model="fake",
                 retry_policy=ModelRetryPolicy(max_retries=2, initial_delay=0),
             ),
@@ -141,12 +143,12 @@ async def test_completed_tool_is_not_replayed_when_http_and_stream_fail(tmp_path
 async def test_bounded_transport_and_nonretryable_failures(
     tmp_path, status, body, error, attempts
 ):
-    from agent.core.model_io import ModelInvoker
+    from plugins.models.invoker import ModelInvoker
 
     with server([(status, body)]) as (url, bodies):
         invoker = ModelInvoker(
             OpenAICompatibleClient(base_url=url, api_key="local-test"),
-            RuntimeConfig(
+            ReactConfig(
                 model="fake",
                 retry_policy=ModelRetryPolicy(max_retries=2, initial_delay=0),
             ),
@@ -179,8 +181,8 @@ def test_retry_after_and_plan_only_endpoint():
 
 @pytest.mark.asyncio
 async def test_cancellation_interrupts_server_directed_backoff():
-    from agent.core.model_io import ModelInvoker
-    from agent.model_runtime.types import RetryableModelError
+    from plugins.models.invoker import ModelInvoker
+    from plugins.models.types import RetryableModelError
 
     class Client:
         calls = 0
@@ -193,7 +195,7 @@ async def test_cancellation_interrupts_server_directed_backoff():
     bus = EventBus()
     waiting = asyncio.Event()
     bus.on(ModelAttemptStatus, lambda event: waiting.set())
-    invoker = ModelInvoker(client, RuntimeConfig(model="fake", stream=False), bus)
+    invoker = ModelInvoker(client, ReactConfig(model="fake", stream=False), bus)
     task = asyncio.create_task(
         invoker.complete([], [], session_key="s", channel="c", chat_id="1", iteration=1)
     )

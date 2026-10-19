@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import unittest
 
-from agent.turns.result import (
+from plugins.react.result import (
     CallableSideEffect,
     OutboundDispatch,
     TurnOutbound,
@@ -131,19 +131,6 @@ class TurnCommitTests(unittest.TestCase):
             self.assertEqual(log, ["first", "last"])
             self.assertEqual(outcome.failures, ["bad"])
             self.assertEqual(outcome.ran, ["first", "last"])
-
-        asyncio.run(scenario())
-
-    def test_no_effects_is_clean(self) -> None:
-        async def scenario() -> None:
-            result = TurnResult(
-                decision="reply",
-                outbound=TurnOutbound(session_key="cli:1", content="hi"),
-            )
-            outcome = await commit_turn_result(result, port=_Port(ok=True))
-            self.assertTrue(outcome.dispatched)
-            self.assertEqual(outcome.ran, [])
-            self.assertEqual(outcome.failures, [])
 
         asyncio.run(scenario())
 

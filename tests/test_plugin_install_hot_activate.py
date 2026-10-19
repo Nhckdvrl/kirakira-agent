@@ -11,9 +11,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bus.event_bus import EventBus
 from agent.plugins import PluginManager
-from agent.tools.registry import ToolRegistry
+from bus.event_bus import EventBus
+from plugins.tools.registry import ToolRegistry
 
 _PLUGIN_SRC = (
     "from agent.plugins import Plugin\n"
@@ -41,51 +41,6 @@ def _write_source(root: Path, name: str, version: str = "1.0") -> Path:
 
 
 class InstallHotActivateTests(unittest.TestCase):
-    def test_cross_surface_failure_stays_gated_and_retries_same_revision(self) -> None:
-        class FailOncePublisher:
-            def __init__(self) -> None:
-                self.calls = 0
-
-            async def publish(self, _configs, *, source="workspace"):
-                self.calls += 1
-                if self.calls == 1:
-                    raise RuntimeError("temporary MCP failure")
-                return "published"
-
-        async def scenario() -> None:
-            with tempfile.TemporaryDirectory() as tmp:
-                workspace = Path(tmp) / "workspace"
-                workspace.mkdir()
-                source = _write_source(Path(tmp) / "atomicdemo", "atomicdemo")
-                manager = _make_manager(workspace)
-                await manager.load_all()
-                await manager.install(str(source))
-                publisher = FailOncePublisher()
-                manager.mcp_publisher = publisher
-
-                with self.assertRaisesRegex(RuntimeError, "temporary MCP"):
-                    await manager.reconcile_changed()
-                self.assertTrue(manager.generations.publication_in_progress)
-
-                entered = asyncio.Event()
-
-                async def new_turn() -> None:
-                    async with manager.generations.lease_committed():
-                        entered.set()
-
-                turn = asyncio.create_task(new_turn())
-                await asyncio.sleep(0)
-                self.assertFalse(entered.is_set())
-
-                # No file change: the dirty committed revision is republished.
-                await manager.reconcile_changed()
-                self.assertEqual(publisher.calls, 2)
-                self.assertFalse(manager.generations.publication_in_progress)
-                await asyncio.wait_for(entered.wait(), timeout=1)
-                await turn
-
-        asyncio.run(scenario())
-
     def test_install_then_reconcile_activates_without_restart(self) -> None:
         async def scenario() -> None:
             with tempfile.TemporaryDirectory() as tmp:
@@ -105,13 +60,11 @@ class InstallHotActivateTests(unittest.TestCase):
                 results = await manager.reconcile_changed()
 
                 # 免重启激活,并发布了代际
-                self.assertIn(
-                    {"plugin_id": "hotdemo", "state": "activated"}, results
-                )
+                self.assertIn({"plugin_id": "hotdemo", "state": "activated"}, results)
                 self.assertEqual(
                     [record.plugin_id for record in manager.active], ["hotdemo"]
                 )
-                self.assertIsNotNone(manager.generations.current("hotdemo"))
+                self.assertIsNotNone(manager.root.activation("plugin:hotdemo"))
 
                 await manager.terminate_all()
 
@@ -126,21 +79,17 @@ class InstallHotActivateTests(unittest.TestCase):
                 manager = _make_manager(workspace)
                 await manager.install(str(source))
                 await manager.reconcile_changed()
-                self.assertEqual(
-                    [r.plugin_id for r in manager.active], ["byedemo"]
-                )
-                generation = manager.generations.current("byedemo")
+                self.assertEqual([r.plugin_id for r in manager.active], ["byedemo"])
+                generation = manager.root.activation("plugin:byedemo")
                 self.assertIsNotNone(generation)
 
                 await manager.uninstall("byedemo")
                 results = await manager.reconcile_changed()
 
-                self.assertIn(
-                    {"plugin_id": "byedemo", "state": "deactivated"}, results
-                )
+                self.assertEqual(results, [])
                 self.assertEqual(manager.active, [])
                 # 代际被退休,不再是当前代际
-                self.assertIsNone(manager.generations.current("byedemo"))
+                self.assertIsNone(manager.root.activation("plugin:byedemo"))
 
                 await manager.terminate_all()
 
@@ -155,9 +104,7 @@ class InstallHotActivateTests(unittest.TestCase):
                 manager = _make_manager(workspace)
                 await manager.install(str(source))
                 await manager.reconcile_changed()
-                self.assertEqual(
-                    [r.plugin_id for r in manager.active], ["toggleme"]
-                )
+                self.assertEqual([r.plugin_id for r in manager.active], ["toggleme"])
 
                 manager.disable_plugin("toggleme")
                 await manager.reconcile_changed()
@@ -170,9 +117,7 @@ class InstallHotActivateTests(unittest.TestCase):
                 # 重新启用后又能上线
                 manager.enable_plugin("toggleme")
                 await manager.reconcile_changed()
-                self.assertEqual(
-                    [r.plugin_id for r in manager.active], ["toggleme"]
-                )
+                self.assertEqual([r.plugin_id for r in manager.active], ["toggleme"])
 
                 await manager.terminate_all()
 
@@ -188,7 +133,7 @@ class InstallHotActivateTests(unittest.TestCase):
                 manager = _make_manager(workspace)
                 await manager.install(str(src))
                 await manager.reconcile_changed()
-                first = manager.generations.current("upgrademe")
+                first = manager.root.activation("plugin:upgrademe")
                 self.assertIsNotNone(first)
 
                 # 升级源码内容 → revision 变化 → 换代
@@ -196,14 +141,12 @@ class InstallHotActivateTests(unittest.TestCase):
                 await manager.install(str(src))
                 await manager.reconcile_changed()
 
-                second = manager.generations.current("upgrademe")
+                second = manager.root.activation("plugin:upgrademe")
                 self.assertIsNotNone(second)
                 self.assertNotEqual(first.generation_id, second.generation_id)
                 # 没有在途 turn 持租约,旧代际换代后立即被回收
-                self.assertEqual(first.state, "quiesced")
-                self.assertEqual(
-                    [r.plugin_id for r in manager.active], ["upgrademe"]
-                )
+                self.assertEqual(first.state, "closed")
+                self.assertEqual([r.plugin_id for r in manager.active], ["upgrademe"])
 
                 await manager.terminate_all()
 

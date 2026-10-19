@@ -10,33 +10,7 @@ import asyncio
 import unittest
 from typing import Any, Dict, List
 
-from agent.plugins.generation import (
-    GateResult,
-    PluginContributions,
-    PluginGeneration,
-    PluginGenerationRegistry,
-    compute_generation_id,
-)
-from agent.plugins.specs import PluginSemanticCheck
-from agent.plugins.watcher import PluginWatcher
-
-
-def _generation(plugin_id: str, revision: str, *, failing: bool = False) -> PluginGeneration:
-    checks = (PluginSemanticCheck.fail("bad", "nope"),) if failing else ()
-    return PluginGeneration(
-        plugin_id=plugin_id,
-        generation_id=compute_generation_id(
-            plugin_id=plugin_id, source_revision=revision, config_revision="c"
-        ),
-        module_path="demo.plugin",
-        source_revision=revision,
-        config_revision="c",
-        instance=object(),
-        contributions=PluginContributions(),
-        gate_result=GateResult.from_checks(
-            plugin_id=plugin_id, candidate_revision=revision, checks=checks
-        ),
-    )
+from plugins.extensions.watcher import PluginWatcher
 
 
 class _FakeManager:
@@ -45,7 +19,6 @@ class _FakeManager:
     def __init__(self) -> None:
         self.revision = "r1"
         self.reconcile_calls = 0
-        self.generations = PluginGenerationRegistry()
         self.raise_on_scan: Exception | None = None
         self.reconcile_failures = 0
 
@@ -60,66 +33,6 @@ class _FakeManager:
             self.reconcile_failures -= 1
             raise RuntimeError("temporary publish failure")
         return [{"plugin_id": "demo", "state": "swapped"}]
-
-
-class LeaseProtectsInFlightTurnTests(unittest.TestCase):
-    def test_swap_during_active_lease_keeps_old_generation_alive(self) -> None:
-        registry = PluginGenerationRegistry()
-        old = _generation("demo", "v1")
-        registry.publish(old)
-
-        # 模拟一次在途 turn 持有租约
-        with registry.lease_active() as leased:
-            self.assertEqual(len(leased), 1)
-            self.assertEqual(old.lease_count, 1)
-
-            # turn 进行中发生热重载换代
-            registry.publish(_generation("demo", "v2"))
-            self.assertEqual(old.state, "retired")
-            # 关键:旧代际仍不可销毁,因为 turn 还在用
-            self.assertFalse(old.can_quiesce)
-            self.assertEqual(registry.drain_quiescible(), ())
-
-        # turn 结束释放租约后才可回收
-        self.assertEqual(old.lease_count, 0)
-        self.assertTrue(old.can_quiesce)
-        self.assertEqual(len(registry.drain_quiescible()), 1)
-
-    def test_lease_active_releases_even_on_exception(self) -> None:
-        registry = PluginGenerationRegistry()
-        gen = _generation("demo", "v1")
-        registry.publish(gen)
-        with self.assertRaises(ValueError):
-            with registry.lease_active():
-                self.assertEqual(gen.lease_count, 1)
-                raise ValueError("turn blew up")
-        self.assertEqual(gen.lease_count, 0)
-
-    def test_lease_active_with_no_plugins_is_noop(self) -> None:
-        registry = PluginGenerationRegistry()
-        with registry.lease_active() as leased:
-            self.assertEqual(leased, ())
-
-    def test_committed_lease_waits_for_publication_gate(self) -> None:
-        async def scenario() -> None:
-            registry = PluginGenerationRegistry()
-            registry.publish(_generation("demo", "v1"))
-            await registry.begin_publication()
-            entered = asyncio.Event()
-
-            async def acquire() -> None:
-                async with registry.lease_committed() as leased:
-                    self.assertEqual(len(leased), 1)
-                    entered.set()
-
-            task = asyncio.create_task(acquire())
-            await asyncio.sleep(0)
-            self.assertFalse(entered.is_set())
-            await registry.finish_publication()
-            await asyncio.wait_for(entered.wait(), timeout=1)
-            await task
-
-        asyncio.run(scenario())
 
 
 class WatcherTests(unittest.TestCase):
@@ -202,18 +115,6 @@ class WatcherTests(unittest.TestCase):
             task.cancel()
 
         asyncio.run(scenario())
-
-    def test_status_reports_generations_and_pending_leases(self) -> None:
-        manager = _FakeManager()
-        old = _generation("demo", "v1")
-        manager.generations.publish(old)
-        old.acquire()
-        manager.generations.publish(_generation("demo", "v2"))
-
-        status = PluginWatcher(manager).status()
-        self.assertIn("demo", status["activeGenerations"])
-        self.assertEqual(len(status["retiredPending"]), 1)
-        self.assertEqual(status["retiredPending"][0]["leases"], 1)
 
 
 if __name__ == "__main__":

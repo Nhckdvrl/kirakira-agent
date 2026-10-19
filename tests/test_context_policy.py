@@ -1,16 +1,16 @@
 import unittest
 
-from agent.model_runtime.context_policy import (
+from core.schema import ToolSpec
+from plugins.models.context_policy import (
     build_runtime_context_budget,
     estimate_context_tokens,
     recommended_context_settings,
 )
-from agent.model_runtime.usage import (
+from plugins.models.usage import (
     UsageCoverage,
     aggregate_usage,
     usage_from_mapping,
 )
-from core.schema import ToolSpec
 
 
 class RecommendedContextSettingsTest(unittest.TestCase):
@@ -69,7 +69,10 @@ class RuntimeContextBudgetTest(unittest.TestCase):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "image_url", "image_url": {"url": "x", "detail": "low"}}
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": "x", "detail": "low"},
+                        }
                     ],
                 }
             ],
@@ -97,9 +100,7 @@ class ModelUsageGovernanceTest(unittest.TestCase):
     def test_missing_request_usage_keeps_aggregate_partial(self) -> None:
         usage = aggregate_usage(
             [
-                usage_from_mapping(
-                    {"prompt_tokens": 100, "completion_tokens": 20}
-                ),
+                usage_from_mapping({"prompt_tokens": 100, "completion_tokens": 20}),
                 usage_from_mapping({}),
             ]
         )

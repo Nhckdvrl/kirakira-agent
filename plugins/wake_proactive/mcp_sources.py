@@ -15,11 +15,11 @@ import logging
 from typing import Any, Dict, List, Protocol, Sequence
 from uuid import uuid4
 
-from agent.plugins.specs import (
+from core.schema import ToolCall
+from plugins.extensions.specs import (
     RegisteredProactiveSource,
     proactive_source_key,
 )
-from core.schema import ToolCall
 
 logger = logging.getLogger(__name__)
 
@@ -46,18 +46,6 @@ class ToolRegistryMcpGateway:
 
     def __init__(self, tools: Any) -> None:
         self._tools = tools
-        self._pinned_snapshot: Any = None
-
-    def pin_snapshot(self, snapshot: Any) -> None:
-        """由 ProactiveLoop 在 tick 开始/结束时设置与清除。单事件循环内 tick 串行,无并发。"""
-        self._pinned_snapshot = snapshot
-
-    def _view(self) -> Any:
-        if self._pinned_snapshot is not None:
-            from agent.plugins.snapshot import SnapshotToolView
-
-            return SnapshotToolView(self._tools, self._pinned_snapshot)
-        return self._tools
 
     async def call(
         self,
@@ -67,19 +55,27 @@ class ToolRegistryMcpGateway:
     ) -> Any:
         if self._tools is None:
             raise RuntimeError("共享 ToolRegistry 不可用")
-        tools = self._view()
+        tools = self._tools
         available = set(tools.names())
-        registered = tool_name if tool_name in available else "mcp_%s__%s" % (server, tool_name)
+        registered = (
+            tool_name if tool_name in available else "mcp_%s__%s" % (server, tool_name)
+        )
         if registered not in available:
             raise RuntimeError("MCP tool 不可用: %s.%s" % (server, tool_name))
         result = await tools.execute_async(
-            ToolCall(id="proactive-%s" % uuid4().hex[:8], name=registered, arguments=dict(args))
+            ToolCall(
+                id="proactive-%s" % uuid4().hex[:8],
+                name=registered,
+                arguments=dict(args),
+            )
         )
         text = getattr(result, "content", None)
         if text is None:
             text = str(result)
         if getattr(result, "is_error", False):
-            raise RuntimeError("MCP tool 调用失败: %s.%s: %s" % (server, tool_name, text))
+            raise RuntimeError(
+                "MCP tool 调用失败: %s.%s: %s" % (server, tool_name, text)
+            )
         stripped = str(text).strip()
         if stripped.startswith(("[", "{")):
             return json.loads(stripped)

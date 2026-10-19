@@ -6,11 +6,11 @@ from math import isfinite
 from pathlib import Path
 from typing import cast
 
-from agent.plugins.config import (
+from infra.persistence.json_store import atomic_write_text
+from plugins.extensions.config import (
     builtin_plugin_data_dir,
     ensure_workspace_plugin_data_dir,
 )
-from infra.persistence.json_store import atomic_write_text
 
 
 @dataclass(frozen=True)
@@ -47,7 +47,9 @@ def load_akasha_config(
         nearby_dense_threshold=_float_value(payload, "nearby_dense_threshold", 0.28),
         activation_threshold=_float_value(payload, "activation_threshold", 0.22),
         soft_recall_threshold=_float_value(payload, "soft_recall_threshold", 0.165),
-        soft_recall_direct_floor=_float_value(payload, "soft_recall_direct_floor", 0.45),
+        soft_recall_direct_floor=_float_value(
+            payload, "soft_recall_direct_floor", 0.45
+        ),
         cross_boost=_float_value(payload, "cross_boost", 36.0),
     )
 
@@ -56,19 +58,21 @@ def load_akasha_config(
 def render_akasha_config(config: AkashaConfig | None = None) -> str:
     # 1. 使用传入配置或默认配置生成本地配置文本。
     cfg = config or AkashaConfig()
-    return "\n".join([
-        f'db_path = "{cfg.db_path}"',
-        f"inject_max_chars = {cfg.inject_max_chars}",
-        f"assistant_preview_chars = {cfg.assistant_preview_chars}",
-        f"dense_seed_threshold = {cfg.dense_seed_threshold}",
-        f"nearby_time_seconds = {cfg.nearby_time_seconds}",
-        f"nearby_dense_threshold = {cfg.nearby_dense_threshold}",
-        f"activation_threshold = {cfg.activation_threshold}",
-        f"soft_recall_threshold = {cfg.soft_recall_threshold}",
-        f"soft_recall_direct_floor = {cfg.soft_recall_direct_floor}",
-        f"cross_boost = {cfg.cross_boost}",
-        "",
-    ])
+    return "\n".join(
+        [
+            f'db_path = "{cfg.db_path}"',
+            f"inject_max_chars = {cfg.inject_max_chars}",
+            f"assistant_preview_chars = {cfg.assistant_preview_chars}",
+            f"dense_seed_threshold = {cfg.dense_seed_threshold}",
+            f"nearby_time_seconds = {cfg.nearby_time_seconds}",
+            f"nearby_dense_threshold = {cfg.nearby_dense_threshold}",
+            f"activation_threshold = {cfg.activation_threshold}",
+            f"soft_recall_threshold = {cfg.soft_recall_threshold}",
+            f"soft_recall_direct_floor = {cfg.soft_recall_direct_floor}",
+            f"cross_boost = {cfg.cross_boost}",
+            "",
+        ]
+    )
 
 
 def ensure_akasha_config_file(

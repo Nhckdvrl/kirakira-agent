@@ -5,11 +5,13 @@ import unittest
 from pathlib import Path
 
 from core.memory.legacy import MemoryRuntime
-from session.manager import SessionManager
+from plugins.ledger.manager import SessionManager
 
 
 class MemoryTests(unittest.TestCase):
-    def test_optional_embeddings_add_semantic_recall_without_breaking_lexical_store(self):
+    def test_optional_embeddings_add_semantic_recall_without_breaking_lexical_store(
+        self,
+    ):
         class FakeEmbeddings:
             def embed(self, text):
                 if "coding" in text or "编程" in text:
@@ -83,7 +85,10 @@ class MemoryTests(unittest.TestCase):
 
             sessions.delete_session("web:deleted")
 
-            statuses = {item["id"]: item["status"] for item in memory.list_records(include_forgotten=True)}
+            statuses = {
+                item["id"]: item["status"]
+                for item in memory.list_records(include_forgotten=True)
+            }
             self.assertEqual(statuses[removed.id], "forgotten")
             self.assertEqual(statuses[kept.id], "active")
             sessions.close()

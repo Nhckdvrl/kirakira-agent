@@ -10,8 +10,7 @@ from urllib.parse import quote
 from yoyo import get_backend, read_migrations
 
 from agent.migrations.context import bind_migration_context
-from bootstrap.workspace_lock import WorkspaceInstanceLock
-
+from agent.workspace_lock import WorkspaceInstanceLock
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _USERNAME_ENV_KEYS = ("LOGNAME", "USER", "LNAME", "USERNAME")

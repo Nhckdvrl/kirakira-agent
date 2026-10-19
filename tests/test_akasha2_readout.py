@@ -6,12 +6,16 @@ from types import SimpleNamespace
 
 import pytest
 
-from agent.config_models import Config, MemoryConfig, MemoryEmbeddingConfig
 from core.memory.engine import MemoryQuery, MemoryQueryFilters
 from plugins.akasha2.domain.readout import RecallItem
 from plugins.akasha2.engine import Akasha2MemoryEngine
 from plugins.akasha2.infrastructure.persistence import logical_state_sha256
-from session.manager import SessionManager
+from plugins.default_memory.config_models import (
+    Config,
+    MemoryConfig,
+    MemoryEmbeddingConfig,
+)
+from plugins.ledger.manager import SessionManager
 
 
 class Embeddings:

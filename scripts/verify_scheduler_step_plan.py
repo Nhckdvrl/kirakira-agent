@@ -23,7 +23,7 @@ from bus.events import InboundMessage
 from bus.events_lifecycle import TurnCommitted
 from core.schema import ToolSpec
 from infra.providers.step_plan import STEP5_MODEL, STEP_PLAN_BASE_URL, StepPlanClient
-from session.turn_source import load_committed_turn_messages
+from plugins.ledger.turn_source import load_committed_turn_messages
 
 
 class MeteredClient:

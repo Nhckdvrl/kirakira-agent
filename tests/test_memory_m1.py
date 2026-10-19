@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import asyncio
+import json
 import socket
 import sqlite3
 import tempfile
@@ -12,15 +12,15 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from bus.event_bus import EventBus
 from bus.queue import MessageBus
+from core.memory.legacy import MemoryRuntime
+from core.schema import ToolCall
 from infra.channels.contract import ChannelContext
 from infra.channels.web_chat_channel import WebChannel
-from bus.event_bus import EventBus
-from core.memory.legacy import MemoryRuntime
-from bootstrap.memory_admin import clear, doctor, migrate, rollback, verify
-from core.schema import ToolCall
-from session.manager import SessionManager
-from bootstrap.tools import build_tool_registry
+from plugins.default_memory.admin import clear, doctor, migrate, rollback, verify
+from plugins.ledger.manager import SessionManager
+from plugins.tools.factory import build_tool_registry
 
 
 class MemoryM1Tests(unittest.TestCase):
@@ -77,9 +77,13 @@ class MemoryM1Tests(unittest.TestCase):
     def test_doctor_is_read_only(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             workspace = self._workspace(Path(tmp))
-            before = sorted(str(path.relative_to(workspace)) for path in workspace.rglob("*"))
+            before = sorted(
+                str(path.relative_to(workspace)) for path in workspace.rglob("*")
+            )
             report = doctor(workspace, project_root=Path(__file__).resolve().parents[1])
-            after = sorted(str(path.relative_to(workspace)) for path in workspace.rglob("*"))
+            after = sorted(
+                str(path.relative_to(workspace)) for path in workspace.rglob("*")
+            )
             self.assertEqual(before, after)
             self.assertEqual(report["legacy"]["items"], 2)
             self.assertEqual(report["coremem"]["integrity"], "missing")
@@ -92,7 +96,9 @@ class MemoryM1Tests(unittest.TestCase):
             self.assertTrue(result["verify"]["ok"])
             self.assertFalse((workspace / "memory" / "items.json").exists())
             self.assertIn("手写内容", (workspace / "memory" / "MEMORY.md").read_text())
-            self.assertNotIn("managed-memory", (workspace / "memory" / "MEMORY.md").read_text())
+            self.assertNotIn(
+                "managed-memory", (workspace / "memory" / "MEMORY.md").read_text()
+            )
 
             conn = sqlite3.connect(workspace / "memory" / "coremem.db")
             try:
@@ -100,11 +106,17 @@ class MemoryM1Tests(unittest.TestCase):
                     "SELECT id, memory_type, status, reinforcement, source_ref, extra_json "
                     "FROM memory_items ORDER BY id"
                 ).fetchall()
-                self.assertEqual(conn.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+                self.assertEqual(
+                    conn.execute("PRAGMA integrity_check").fetchone()[0], "ok"
+                )
             finally:
                 conn.close()
-            self.assertEqual(rows[0][:5], ("mem_0001", "profile", "active", 2, "web:a:0"))
-            self.assertEqual(json.loads(rows[0][5])["legacy_memory_type"], "requested_memory")
+            self.assertEqual(
+                rows[0][:5], ("mem_0001", "profile", "active", 2, "web:a:0")
+            )
+            self.assertEqual(
+                json.loads(rows[0][5])["legacy_memory_type"], "requested_memory"
+            )
             self.assertEqual(rows[1][2], "superseded")
             self.assertIn("rule_schema", json.loads(rows[1][5]))
 
@@ -113,7 +125,11 @@ class MemoryM1Tests(unittest.TestCase):
             self.assertEqual(runtime.recall("蓝色")[0].id, "mem_0001")
             registry = build_tool_registry(workspace, memory=runtime)
             tool_result = registry.execute(
-                ToolCall("call-1", "memorize", {"content": "用户偏好安静", "memory_type": "preference"})
+                ToolCall(
+                    "call-1",
+                    "memorize",
+                    {"content": "用户偏好安静", "memory_type": "preference"},
+                )
             )
             self.assertFalse(tool_result.is_error)
             recalled = registry.execute(
@@ -125,7 +141,11 @@ class MemoryM1Tests(unittest.TestCase):
             self.assertIn(new.id, [item["id"] for item in runtime.list_records()])
             self.assertEqual(runtime.forget([new.id]), [new.id])
             self.assertEqual(
-                next(item for item in runtime.list_records(include_forgotten=True) if item["id"] == new.id)["status"],
+                next(
+                    item
+                    for item in runtime.list_records(include_forgotten=True)
+                    if item["id"] == new.id
+                )["status"],
                 "superseded",
             )
             runtime.store2.close()
@@ -147,10 +167,15 @@ class MemoryM1Tests(unittest.TestCase):
                 migrate(workspace)
                 sessions = SessionManager(workspace)
                 memory = MemoryRuntime(workspace, session_manager=sessions)
-                created = memory.memorize("Dashboard 临时记忆", memory_type="preference")
+                created = memory.memorize(
+                    "Dashboard 临时记忆", memory_type="preference"
+                )
                 channel = WebChannel(host="127.0.0.1", port=self._free_port())
                 ctx = ChannelContext(
-                    MessageBus(), sessions, EventBus(), workspace,
+                    MessageBus(),
+                    sessions,
+                    EventBus(),
+                    workspace,
                     __import__("logging").getLogger("test.memory2.dashboard"),
                     memory=memory,
                 )
@@ -160,7 +185,8 @@ class MemoryM1Tests(unittest.TestCase):
                     listed = json.loads(
                         await asyncio.to_thread(
                             lambda: urllib.request.urlopen(
-                                base + "/api/memories?q=Dashboard&memory_type=preference&status=active",
+                                base
+                                + "/api/memories?q=Dashboard&memory_type=preference&status=active",
                                 timeout=5,
                             ).read()
                         )
@@ -169,26 +195,39 @@ class MemoryM1Tests(unittest.TestCase):
                     patch = urllib.request.Request(
                         base + "/api/memory",
                         data=json.dumps(
-                            {"id": created.id, "content": "Dashboard 已编辑", "memory_type": "event"}
+                            {
+                                "id": created.id,
+                                "content": "Dashboard 已编辑",
+                                "memory_type": "event",
+                            }
                         ).encode(),
                         headers={"content-type": "application/json"},
                         method="PATCH",
                     )
-                    await asyncio.to_thread(lambda: urllib.request.urlopen(patch, timeout=5).read())
-                    self.assertEqual(memory.store2.get_item_for_dashboard(created.id)["memory_type"], "event")
+                    await asyncio.to_thread(
+                        lambda: urllib.request.urlopen(patch, timeout=5).read()
+                    )
+                    self.assertEqual(
+                        memory.store2.get_item_for_dashboard(created.id)["memory_type"],
+                        "event",
+                    )
 
                     unconfirmed = urllib.request.Request(
                         base + f"/api/memory?id={created.id}&hard=true", method="DELETE"
                     )
                     with self.assertRaises(urllib.error.HTTPError) as caught:
                         await asyncio.to_thread(
-                            lambda: urllib.request.urlopen(unconfirmed, timeout=5).read()
+                            lambda: urllib.request.urlopen(
+                                unconfirmed, timeout=5
+                            ).read()
                         )
                     self.assertEqual(caught.exception.code, 400)
 
                     confirmed = urllib.request.Request(
                         base + "/api/memories/delete",
-                        data=json.dumps({"ids": [created.id], "confirm": "HARD_DELETE"}).encode(),
+                        data=json.dumps(
+                            {"ids": [created.id], "confirm": "HARD_DELETE"}
+                        ).encode(),
                         headers={"content-type": "application/json"},
                         method="POST",
                     )
@@ -220,7 +259,9 @@ class MemoryM1Tests(unittest.TestCase):
             result = clear(workspace, confirm="CLEAR_ALL_MEMORY")
 
             self.assertEqual(result["deleted_structured_items"], 2)
-            self.assertEqual((workspace / "memory" / "SELF.md").read_text(), original_self)
+            self.assertEqual(
+                (workspace / "memory" / "SELF.md").read_text(), original_self
+            )
             self.assertTrue((workspace / "sessions" / "keep.json").exists())
             self.assertEqual(
                 (workspace / "memory" / "RECENT_CONTEXT.md").read_text(),
@@ -243,7 +284,14 @@ class MemoryM1Tests(unittest.TestCase):
                 (workspace / "memory" / "SELF.md").read_text(), "# Self Model\n"
             )
             self.assertTrue(
-                (workspace / "memory" / "backups" / purge["backup_id"] / "sessions" / "keep.json").exists()
+                (
+                    workspace
+                    / "memory"
+                    / "backups"
+                    / purge["backup_id"]
+                    / "sessions"
+                    / "keep.json"
+                ).exists()
             )
 
 
@@ -274,7 +322,7 @@ class RepairKindsTests(unittest.TestCase):
         conn.close()
 
     def test_dry_run_reports_without_writing(self) -> None:
-        from bootstrap.memory_admin import repair_kinds
+        from plugins.default_memory.admin import repair_kinds
 
         with tempfile.TemporaryDirectory() as raw:
             tmp = Path(raw)
@@ -291,7 +339,7 @@ class RepairKindsTests(unittest.TestCase):
             conn.close()
 
     def test_repair_maps_legacy_types_and_backs_up(self) -> None:
-        from bootstrap.memory_admin import repair_kinds
+        from plugins.default_memory.admin import repair_kinds
 
         with tempfile.TemporaryDirectory() as raw:
             tmp = Path(raw)
@@ -312,7 +360,7 @@ class RepairKindsTests(unittest.TestCase):
             self.assertEqual(types, {"a": "profile", "b": "profile", "c": "preference"})
 
     def test_repair_is_idempotent(self) -> None:
-        from bootstrap.memory_admin import repair_kinds
+        from plugins.default_memory.admin import repair_kinds
 
         with tempfile.TemporaryDirectory() as raw:
             tmp = Path(raw)
@@ -323,7 +371,7 @@ class RepairKindsTests(unittest.TestCase):
             self.assertIn("没有需要修复", again["note"])
 
     def test_missing_db_is_reported_not_raised(self) -> None:
-        from bootstrap.memory_admin import repair_kinds
+        from plugins.default_memory.admin import repair_kinds
 
         with tempfile.TemporaryDirectory() as raw:
             report = repair_kinds(Path(raw))

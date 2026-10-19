@@ -75,7 +75,9 @@ class RecallInspector:
         self._active_turns[session_key] = turn
         if not self.enabled:
             return turn
-        items = [self._compact(record) for record in (records or [])[:_MAX_ITEMS_PER_RECORD]]
+        items = [
+            self._compact(record) for record in (records or [])[:_MAX_ITEMS_PER_RECORD]
+        ]
         self._append(
             {
                 "kind": "context_prepare",
@@ -114,15 +116,20 @@ class RecallInspector:
         raw_items = payload.get("items")
         items = [
             self._compact_dict(item)
-            for item in (raw_items if isinstance(raw_items, list) else [])[:_MAX_ITEMS_PER_RECORD]
+            for item in (raw_items if isinstance(raw_items, list) else [])[
+                :_MAX_ITEMS_PER_RECORD
+            ]
             if isinstance(item, dict)
         ]
         self._append(
             {
                 "kind": "recall_memory",
                 # 没有在途 turn 时(如 Drift 线程内调用)单开一轮,不丢记录。
-                "turn_id": self._active_turns.get(session_key) or turn_id_for(
-                    session_key, _now_iso(), json.dumps(arguments or {}, ensure_ascii=False)
+                "turn_id": self._active_turns.get(session_key)
+                or turn_id_for(
+                    session_key,
+                    _now_iso(),
+                    json.dumps(arguments or {}, ensure_ascii=False),
                 ),
                 "session_key": session_key,
                 "channel": channel,
@@ -162,7 +169,7 @@ class RecallInspector:
     def _safe_json(text: str) -> dict[str, Any]:
         try:
             value = json.loads(text or "{}")
-        except (json.JSONDecodeError, TypeError):
+        except json.JSONDecodeError, TypeError:
             return {}
         return value if isinstance(value, dict) else {}
 
@@ -266,7 +273,9 @@ class RecallInspector:
             item["context_prepare_count"] = int(prepare.get("count") or 0)
             item["injected"] = bool(prepare.get("injected"))
             item["recall_call_count"] = len(calls)
-            item["recall_memory_count"] = sum(int(call.get("count") or 0) for call in calls)
+            item["recall_memory_count"] = sum(
+                int(call.get("count") or 0) for call in calls
+            )
         result.sort(key=lambda item: str(item.get("timestamp") or ""), reverse=True)
         return result
 
@@ -312,7 +321,7 @@ class RecallMemoryToolHook:
         return getattr(ctx.request, "tool_name", "") == "recall_memory"
 
     async def run(self, ctx: Any) -> Any:
-        from agent.tool_hooks import HookOutcome
+        from plugins.tools.hooks import HookOutcome
 
         try:
             request = ctx.request

@@ -8,17 +8,6 @@ import time
 import unittest
 from pathlib import Path
 
-from agent.core.contracts import RuntimeConfig
-from agent.core.loop import AgentLoop
-from agent.core.pipeline import PassiveTurnPipeline
-from agent.core.reasoner import DefaultReasoner
-from agent.model_runtime.types import ContextLengthError
-from agent.plugins.snapshot import RuntimeSnapshotStore, compile_snapshot
-from agent.prompting.context_builder import ContextBuilder
-from agent.subagent import SubagentManager
-from agent.tool_hooks import HookOutcome
-from agent.tools.registry import Tool
-from bootstrap.tools import build_tool_registry
 from bus.event_bus import EventBus
 from bus.events import InboundMessage, OutboundMessage
 from bus.events_lifecycle import (
@@ -33,7 +22,20 @@ from bus.events_lifecycle import (
 from bus.queue import MessageBus
 from core.memory.legacy import MemoryRuntime
 from core.schema import ModelResponse, ToolCall, ToolSpec
-from session.manager import SessionManager
+from plugins.context.context_builder import ContextBuilder
+from plugins.conversation.service import ConversationService
+from plugins.delivery.service import DeliveryService
+from plugins.ledger.manager import SessionManager
+from plugins.models.types import ContextLengthError
+from plugins.react.contract import ReactConfig
+from plugins.react.reasoner import ReactProgram
+from plugins.reply.follower import ReplyFollower
+from plugins.reply_program.service import DefaultReplyProgram
+from plugins.sources.admission import TurnAdmission
+from plugins.subagent.service import SubagentManager
+from plugins.tools.factory import build_tool_registry
+from plugins.tools.hooks import HookOutcome
+from plugins.tools.registry import Tool
 
 
 class FakeModel:
@@ -51,7 +53,9 @@ def _snapshot_tool(name, reply):
         return reply
 
     return Tool(
-        spec=ToolSpec(name, "snapshot tool %s" % name, {"type": "object", "properties": {}}),
+        spec=ToolSpec(
+            name, "snapshot tool %s" % name, {"type": "object", "properties": {}}
+        ),
         handler=handler,
         deferred=True,
     )
@@ -69,39 +73,45 @@ def _tool_result_for(session_manager, session_key, tool_name):
     raise AssertionError("tool %s was never called" % tool_name)
 
 
-def build_test_runtime(workdir, model, *, snapshot_store=None):
+def build_test_runtime(workdir, model):
     bus = MessageBus()
     event_bus = EventBus()
     session_manager = SessionManager(workdir)
     memory = MemoryRuntime(workdir, session_manager=session_manager)
     tools = build_tool_registry(workdir, memory=memory, session_manager=session_manager)
     context = ContextBuilder(workdir, memory)
-    config = RuntimeConfig(model="fake", max_iterations=5, max_tokens=1000, history_window=20)
-    reasoner = DefaultReasoner(
+    config = ReactConfig(
+        model="fake", max_iterations=5, max_tokens=1000, history_window=20
+    )
+    reasoner = ReactProgram(
         model_client=model,
         tools=tools,
         config=config,
         context=context,
         event_bus=event_bus,
     )
-    pipeline = PassiveTurnPipeline(
-        bus=bus,
-        event_bus=event_bus,
-        session_manager=session_manager,
-        memory=memory,
-        tools=tools,
-        reasoner=reasoner,
-        config=config,
-        snapshot_store=snapshot_store,
+    pipeline = ConversationService(
+        program=DefaultReplyProgram(
+            delivery=DeliveryService(session_manager, bus, event_bus),
+            bus=bus,
+            event_bus=event_bus,
+            session_manager=session_manager,
+            memory=memory,
+            tools=tools,
+            reasoner=reasoner,
+            config=config,
+        ),
+        admission=TurnAdmission(session_manager),
     )
-    return bus, AgentLoop(bus=bus, pipeline=pipeline), session_manager, memory
+    return bus, ReplyFollower(bus=bus, pipeline=pipeline), session_manager, memory
 
 
 class RuntimeTests(unittest.TestCase):
     def test_agent_loop_parallelizes_sessions_but_serializes_same_session(self):
         class RecordingPipeline:
             def __init__(self, bus, sessions):
-                from agent.core.admission import TurnAdmission
+                from plugins.sources.admission import TurnAdmission
+
                 self.bus = bus
                 self.admission = TurnAdmission(sessions)
                 self.events = []
@@ -126,7 +136,7 @@ class RuntimeTests(unittest.TestCase):
             temporary = tempfile.TemporaryDirectory()
             sessions = SessionManager(Path(temporary.name))
             pipeline = RecordingPipeline(bus, sessions)
-            loop = AgentLoop(bus=bus, pipeline=pipeline)
+            loop = ReplyFollower(bus=bus, pipeline=pipeline)
             received = []
 
             async def collect(message):
@@ -230,7 +240,9 @@ class RuntimeTests(unittest.TestCase):
                     [
                         ModelResponse(
                             tool_calls=[
-                                ToolCall("parent_call", "spawn", {"task": "inspect project"})
+                                ToolCall(
+                                    "parent_call", "spawn", {"task": "inspect project"}
+                                )
                             ]
                         ),
                         ModelResponse(text="child result"),
@@ -254,7 +266,9 @@ class RuntimeTests(unittest.TestCase):
                 )
 
                 self.assertEqual(outbound.content, "parent result")
-                self.assertNotIn("spawn", [spec.name for spec in model.calls[1]["tools"]])
+                self.assertNotIn(
+                    "spawn", [spec.name for spec in model.calls[1]["tools"]]
+                )
                 child_files = [
                     path
                     for path in (Path(tmp) / "sessions").glob("*.json")
@@ -355,7 +369,9 @@ class RuntimeTests(unittest.TestCase):
 
                 release.set()
                 self.assertTrue(await manager.wait(timeout=2.0))
-                self.assertEqual(json.loads(await manager.manage("list"))["running_count"], 0)
+                self.assertEqual(
+                    json.loads(await manager.manage("list"))["running_count"], 0
+                )
                 await manager.shutdown()
 
         asyncio.run(scenario())
@@ -368,7 +384,9 @@ class RuntimeTests(unittest.TestCase):
                         ModelResponse(
                             tool_calls=[
                                 ToolCall(
-                                    "search", "tool_search", {"query": "select:remote_demo"}
+                                    "search",
+                                    "tool_search",
+                                    {"query": "select:remote_demo"},
                                 )
                             ]
                         ),
@@ -401,87 +419,6 @@ class RuntimeTests(unittest.TestCase):
                 self.assertIn(
                     "remote_demo", [spec.name for spec in model.calls[1]["tools"]]
                 )
-
-        asyncio.run(scenario())
-
-    def test_turn_pins_snapshot_tools_across_mid_turn_hot_reload(self):
-        """turn 中途换代时，本轮必须继续看到并调用它开始时锁定的那代工具。"""
-
-        async def scenario():
-            with tempfile.TemporaryDirectory() as tmp:
-                store = RuntimeSnapshotStore()
-                gen1 = compile_snapshot(
-                    mcp_tools={"mcp_a__ping": _snapshot_tool("mcp_a__ping", "gen1-pong")},
-                    mcp_generation_id="gen1",
-                    revision="1",
-                )
-                await store.commit(store.publish(gen1))
-
-                swapped = asyncio.Event()
-
-                async def swap_generation(**_kwargs):
-                    # 模拟 watcher 在本轮工具调用之后立刻完成换代。
-                    await store.commit(
-                        store.publish(
-                            compile_snapshot(
-                                mcp_tools={
-                                    "mcp_b__ping": _snapshot_tool("mcp_b__ping", "gen2")
-                                },
-                                mcp_generation_id="gen2",
-                                revision="2",
-                            )
-                        )
-                    )
-                    swapped.set()
-                    return "swapped"
-
-                model = FakeModel(
-                    [
-                        ModelResponse(
-                            tool_calls=[ToolCall("s", "trigger_reload", {})]
-                        ),
-                        ModelResponse(
-                            tool_calls=[
-                                ToolCall("search", "tool_search", {"query": "select:mcp_a__ping"})
-                            ]
-                        ),
-                        ModelResponse(tool_calls=[ToolCall("p", "mcp_a__ping", {})]),
-                        ModelResponse(text="done"),
-                    ]
-                )
-                _bus, loop, _sessions, _memory = build_test_runtime(
-                    Path(tmp), model, snapshot_store=store
-                )
-                loop.pipeline.tools.register(
-                    ToolSpec(
-                        "trigger_reload",
-                        "swap the runtime snapshot mid-turn",
-                        {"type": "object", "properties": {}, "required": []},
-                    ),
-                    swap_generation,
-                )
-
-                outbound = await loop.pipeline.run(
-                    InboundMessage("cli", "tester", "chat", "ping"),
-                    "cli:chat",
-                    dispatch_outbound=False,
-                )
-
-                self.assertTrue(swapped.is_set())
-                self.assertEqual(outbound.content, "done")
-                # 换代后本轮 tool_search 仍然只看得到自己那一代的 MCP 工具。
-                search_result = json.loads(
-                    _tool_result_for(_sessions, "cli:chat", "tool_search")
-                )
-                self.assertEqual(search_result["unlocked"], ["mcp_a__ping"])
-                # 并且真的调用到了旧代际的实现，而不是报工具不存在。
-                self.assertEqual(
-                    _tool_result_for(_sessions, "cli:chat", "mcp_a__ping"), "gen1-pong"
-                )
-                # 全局 current 已经切到新代际。
-                self.assertEqual(store.current.mcp_tool_names, ("mcp_b__ping",))
-                # 本轮租约释放后，旧代际才允许排空。
-                self.assertEqual(gen1.state, "drained")
 
         asyncio.run(scenario())
 
@@ -519,7 +456,10 @@ class RuntimeTests(unittest.TestCase):
                 self.assertEqual(outbound.content, "recovered")
                 self.assertEqual(len(model.calls), 2)
                 self.assertLessEqual(len(model.calls[1]), len(model.calls[0]))
-                self.assertEqual([item.plan_name for item in prepared], ["full", "trim_skills_catalog"])
+                self.assertEqual(
+                    [item.plan_name for item in prepared],
+                    ["full", "trim_skills_catalog"],
+                )
                 saved = sessions.get_or_create("cli:chat")
                 trace = saved.messages[-1]["context_trace"]
                 self.assertEqual(trace["selected_plan"], "trim_skills_catalog")
@@ -531,12 +471,14 @@ class RuntimeTests(unittest.TestCase):
                 )
                 # Prompt degradation is a per-attempt runtime view. It must never
                 # rewrite or delete the durable conversation history.
-                self.assertEqual(saved.messages[: len(original_history)], original_history)
+                self.assertEqual(
+                    saved.messages[: len(original_history)], original_history
+                )
 
         asyncio.run(scenario())
 
     def test_react_usage_counts_requests_without_provider_telemetry(self):
-        stats = DefaultReasoner._react_stats(
+        stats = ReactProgram._react_stats(
             [120, 150],
             [
                 {"prompt_tokens": 100, "completion_tokens": 20},
@@ -614,7 +556,9 @@ class RuntimeTests(unittest.TestCase):
                 self.assertNotIn(
                     "read_file", [spec.name for spec in model.calls[0]["tools"]]
                 )
-                call = sessions.get_or_create("cli:chat").messages[-1]["tool_chain"][0]["calls"][0]
+                call = sessions.get_or_create("cli:chat").messages[-1]["tool_chain"][0][
+                    "calls"
+                ][0]
                 self.assertEqual(call["status"], "denied")
                 self.assertIn(("read_file", "denied"), events)
 
@@ -641,7 +585,9 @@ class RuntimeTests(unittest.TestCase):
                     dispatch_outbound=False,
                 )
 
-                call = sessions.get_or_create("cli:chat").messages[-1]["tool_chain"][0]["calls"][0]
+                call = sessions.get_or_create("cli:chat").messages[-1]["tool_chain"][0][
+                    "calls"
+                ][0]
                 self.assertEqual(call["status"], "error")
 
         asyncio.run(scenario())
@@ -665,7 +611,9 @@ class RuntimeTests(unittest.TestCase):
                 )
 
                 session = sessions.get_or_create("cli:chat")
-                self.assertEqual([msg["role"] for msg in session.messages], ["assistant"])
+                self.assertEqual(
+                    [msg["role"] for msg in session.messages], ["assistant"]
+                )
                 self.assertEqual(memory.recall("不应写入"), [])
 
         asyncio.run(scenario())
@@ -677,7 +625,11 @@ class RuntimeTests(unittest.TestCase):
                 (workdir / "README.md").write_text("hello")
                 model = FakeModel(
                     [
-                        ModelResponse(tool_calls=[ToolCall("call_1", "read_file", {"path": "README.md"})]),
+                        ModelResponse(
+                            tool_calls=[
+                                ToolCall("call_1", "read_file", {"path": "README.md"})
+                            ]
+                        ),
                         ModelResponse(text="读到了 hello。"),
                     ]
                 )
@@ -694,16 +646,19 @@ class RuntimeTests(unittest.TestCase):
                     asyncio.create_task(loop.run()),
                     asyncio.create_task(bus.dispatch_outbound()),
                 ]
-                await bus.publish_inbound(InboundMessage("cli", "tester", "chat", "read README"))
+                await bus.publish_inbound(
+                    InboundMessage("cli", "tester", "chat", "read README")
+                )
                 await asyncio.wait_for(asyncio.gather(*tasks), timeout=5)
 
                 self.assertEqual(got[0].content, "读到了 hello。")
                 session = sessions.get_or_create("cli:chat")
                 self.assertEqual(session.messages[-1]["tools_used"], ["read_file"])
-                self.assertEqual(session.messages[-1]["tool_chain"][0]["calls"][0]["result"], "hello")
+                self.assertEqual(
+                    session.messages[-1]["tool_chain"][0]["calls"][0]["result"], "hello"
+                )
 
         asyncio.run(scenario())
-
 
     def test_memorize_tool_does_not_duplicate_consolidation_memory(self):
         async def scenario():
@@ -711,7 +666,13 @@ class RuntimeTests(unittest.TestCase):
                 workdir = Path(tmp)
                 model = FakeModel(
                     [
-                        ModelResponse(tool_calls=[ToolCall("call_1", "memorize", {"content": "我喜欢蓝色"})]),
+                        ModelResponse(
+                            tool_calls=[
+                                ToolCall(
+                                    "call_1", "memorize", {"content": "我喜欢蓝色"}
+                                )
+                            ]
+                        ),
                         ModelResponse(text="记住了。"),
                     ]
                 )
@@ -726,7 +687,9 @@ class RuntimeTests(unittest.TestCase):
                     asyncio.create_task(loop.run()),
                     asyncio.create_task(bus.dispatch_outbound()),
                 ]
-                await bus.publish_inbound(InboundMessage("cli", "tester", "chat", "请记住：我喜欢蓝色"))
+                await bus.publish_inbound(
+                    InboundMessage("cli", "tester", "chat", "请记住：我喜欢蓝色")
+                )
                 await asyncio.wait_for(asyncio.gather(*tasks), timeout=5)
 
                 recalled = memory.recall("蓝色", limit=10)
@@ -759,7 +722,9 @@ class RuntimeTests(unittest.TestCase):
                     asyncio.create_task(loop.run()),
                     asyncio.create_task(bus.dispatch_outbound()),
                 ]
-                await bus.publish_inbound(InboundMessage("cli", "tester", "chat", "hello"))
+                await bus.publish_inbound(
+                    InboundMessage("cli", "tester", "chat", "hello")
+                )
                 await asyncio.wait_for(asyncio.gather(*tasks), timeout=5)
 
                 self.assertEqual(got, ["blocked by plugin"])
@@ -812,7 +777,11 @@ class RuntimeTests(unittest.TestCase):
                 (workdir / "README.md").write_text("hello")
                 model = FakeModel(
                     [
-                        ModelResponse(tool_calls=[ToolCall("call_1", "read_file", {"path": "README.md"})]),
+                        ModelResponse(
+                            tool_calls=[
+                                ToolCall("call_1", "read_file", {"path": "README.md"})
+                            ]
+                        ),
                         ModelResponse(text="工具被拦截了。"),
                     ]
                 )
@@ -828,7 +797,9 @@ class RuntimeTests(unittest.TestCase):
                     asyncio.create_task(loop.run()),
                     asyncio.create_task(bus.dispatch_outbound()),
                 ]
-                await bus.publish_inbound(InboundMessage("cli", "tester", "chat", "read README"))
+                await bus.publish_inbound(
+                    InboundMessage("cli", "tester", "chat", "read README")
+                )
                 await asyncio.wait_for(asyncio.gather(*tasks), timeout=5)
 
                 session = sessions.get_or_create("cli:chat")
@@ -845,15 +816,30 @@ class RuntimeTests(unittest.TestCase):
                 (workdir / "README.md").write_text("hello")
                 model = FakeModel(
                     [
-                        ModelResponse(tool_calls=[ToolCall("call_1", "read_file", {"path": "README.md"})]),
+                        ModelResponse(
+                            tool_calls=[
+                                ToolCall("call_1", "read_file", {"path": "README.md"})
+                            ]
+                        ),
                         ModelResponse(text="done"),
                     ]
                 )
                 bus, loop, _sessions, _memory = build_test_runtime(workdir, model)
                 events = []
-                loop.pipeline.event_bus.on(TurnStarted, lambda event: events.append(("turn", event.session_key)))
-                loop.pipeline.event_bus.on(ToolCallStarted, lambda event: events.append(("tool_start", event.tool_name)))
-                loop.pipeline.event_bus.on(ToolCallCompleted, lambda event: events.append(("tool_done", event.tool_name, event.status)))
+                loop.pipeline.event_bus.on(
+                    TurnStarted,
+                    lambda event: events.append(("turn", event.session_key)),
+                )
+                loop.pipeline.event_bus.on(
+                    ToolCallStarted,
+                    lambda event: events.append(("tool_start", event.tool_name)),
+                )
+                loop.pipeline.event_bus.on(
+                    ToolCallCompleted,
+                    lambda event: events.append(
+                        ("tool_done", event.tool_name, event.status)
+                    ),
+                )
 
                 async def collect(_msg):
                     loop.stop()
@@ -864,7 +850,9 @@ class RuntimeTests(unittest.TestCase):
                     asyncio.create_task(loop.run()),
                     asyncio.create_task(bus.dispatch_outbound()),
                 ]
-                await bus.publish_inbound(InboundMessage("cli", "tester", "chat", "read README"))
+                await bus.publish_inbound(
+                    InboundMessage("cli", "tester", "chat", "read README")
+                )
                 await asyncio.wait_for(asyncio.gather(*tasks), timeout=5)
 
                 self.assertIn(("turn", "cli:chat"), events)
@@ -873,7 +861,9 @@ class RuntimeTests(unittest.TestCase):
 
         asyncio.run(scenario())
 
-    def test_lifecycle_contract_correlates_iterations_and_finishes_authoritatively(self):
+    def test_lifecycle_contract_correlates_iterations_and_finishes_authoritatively(
+        self,
+    ):
         class StreamingToolModel:
             def __init__(self):
                 self.responses = [
@@ -882,9 +872,7 @@ class RuntimeTests(unittest.TestCase):
                         ModelResponse(
                             text="checking",
                             tool_calls=[
-                                ToolCall(
-                                    "call_1", "read_file", {"path": "README.md"}
-                                )
+                                ToolCall("call_1", "read_file", {"path": "README.md"})
                             ],
                         ),
                     ),

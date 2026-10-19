@@ -7,12 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from bootstrap.control import build_turn_executor
-from agent.control.models import TurnItemKind, TurnRequest
 from bus.events import OutboundMessage
 from core.schema import ToolCall, ToolResult
-from agent.tool_hooks import ToolExecutionRequest, ToolExecutor
-from agent.tools.builtins import build_workspace_registry
+from plugins.control.factory import build_turn_executor
+from plugins.control.models import TurnItemKind, TurnRequest
+from plugins.tools.builtins import build_workspace_registry
+from plugins.tools.hooks import ToolExecutionRequest, ToolExecutor
 
 
 @pytest.fixture
@@ -89,7 +89,9 @@ async def test_failed_tool_declaring_attention_keeps_error_status():
     )
 
     async def failing(name, args):
-        return ToolResult("1", "Error: nope", is_error=True, mobile_attention="confirmation")
+        return ToolResult(
+            "1", "Error: nope", is_error=True, mobile_attention="confirmation"
+        )
 
     result = await executor.execute(request, failing)
     assert result.status == "error"
@@ -134,7 +136,9 @@ async def test_binding_projects_attention_and_tool_calls():
     )
     pipeline = _FakePipeline(outbound)
     execute = build_turn_executor(pipeline)
-    result = await execute(TurnRequest("programmatic:x", "hi", {"_controlItemEvent": object()}))
+    result = await execute(
+        TurnRequest("programmatic:x", "hi", {"_controlItemEvent": object()})
+    )
 
     assert result.response == "done"
     assert result.assistant_data["mobileAttention"] == "confirmation"
@@ -156,7 +160,8 @@ async def test_attention_reaches_outbound_metadata_through_pipeline():
     import tempfile as _tempfile
 
     from bus.events import InboundMessage
-    from core.schema import ModelResponse, ToolCall as _ToolCall
+    from core.schema import ModelResponse
+    from core.schema import ToolCall as _ToolCall
     from tests.test_runtime import build_test_runtime
 
     class _Model:
@@ -165,7 +170,9 @@ async def test_attention_reaches_outbound_metadata_through_pipeline():
                 ModelResponse(
                     text="",
                     tool_calls=[
-                        _ToolCall("1", "request_user_confirmation", {"prompt": "要删库吗?"})
+                        _ToolCall(
+                            "1", "request_user_confirmation", {"prompt": "要删库吗?"}
+                        )
                     ],
                 ),
                 ModelResponse(text="请确认后我再动手。"),

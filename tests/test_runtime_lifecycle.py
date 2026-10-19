@@ -31,7 +31,7 @@ async def test_channel_start_failure_rolls_back_all_background_tasks(
         start_all=AsyncMock(side_effect=RuntimeError("channel failed")),
         stop_all=AsyncMock(),
     )
-    runtime.channel_host = failed_channels
+    await replace_channels(runtime, failed_channels)
     with pytest.raises(RuntimeError, match="channel failed"):
         await runtime.start_background()
     assert failed_channels.stop_all.await_count == 1
@@ -48,7 +48,9 @@ async def test_channel_start_failure_rolls_back_all_background_tasks(
 
 
 @pytest.mark.asyncio
-async def test_failed_resource_does_not_skip_later_closers(tmp_path, monkeypatch):
+async def test_failed_resource_keeps_dependencies_until_explicit_retry(
+    tmp_path, monkeypatch
+):
     runtime = await runtime_at(tmp_path, monkeypatch)
     shutdown = runtime.tools.shutdown
     closed = []
@@ -56,7 +58,8 @@ async def test_failed_resource_does_not_skip_later_closers(tmp_path, monkeypatch
     async def fail_after_disposal():
         await shutdown()
         closed.append("tools")
-        raise RuntimeError("tool cleanup fixture failed")
+        if closed.count("tools") == 1:
+            raise RuntimeError("tool cleanup fixture failed")
 
     monkeypatch.setattr(runtime.tools, "shutdown", fail_after_disposal)
     close = runtime.control_store.close
@@ -69,11 +72,12 @@ async def test_failed_resource_does_not_skip_later_closers(tmp_path, monkeypatch
     with pytest.raises(ExceptionGroup) as result:
         await runtime.stop_background([])
     assert "tool cleanup fixture failed" in repr(result.value)
-    assert closed == ["tools", "control"]
+    assert closed == ["control", "tools"]
+    # A failed owner must retain its still-needed ledger until retry succeeds.
+    assert runtime.session_manager._index.execute("SELECT 1").fetchone()[0] == 1
+    await runtime.stop_background([])
+    assert closed == ["control", "tools", "tools"]
     assert_sessions_closed(runtime)
-    with pytest.raises(ExceptionGroup):
-        await runtime.stop_background([])
-    assert closed == ["tools", "control"]
 
 
 @pytest.mark.asyncio
@@ -153,9 +157,13 @@ async def test_shutdown_drains_direct_turns_and_waiters_before_closing_stores(
                 model_calls.append("stopped")
 
     runtime.reasoner._model_io.model_client = Blocking()
-    first = asyncio.create_task(runtime.process_direct("active", session_key="test:direct"))
+    first = asyncio.create_task(
+        runtime.process_direct("active", session_key="test:direct")
+    )
     await entered.wait()
-    waiter = asyncio.create_task(runtime.process_direct("queued", session_key="test:direct"))
+    waiter = asyncio.create_task(
+        runtime.process_direct("queued", session_key="test:direct")
+    )
     await asyncio.sleep(0)
     closing = asyncio.create_task(runtime.stop_background([]))
     try:
@@ -196,11 +204,12 @@ async def test_one_shot_disabled_or_failed_channel_still_closes_runtime(
     second_path = tmp_path / "second"
     second_path.mkdir()
     runtime = await runtime_at(second_path, monkeypatch)
-    runtime.proactive_loop = SimpleNamespace(stop=lambda: None, close=lambda: None)
-    runtime.channel_host = SimpleNamespace(
+    failed_channel = SimpleNamespace(
         start_all=AsyncMock(side_effect=RuntimeError("fixture start failed")),
         stop_all=AsyncMock(),
     )
+    await replace_channels(runtime, failed_channel)
+    await replace_proactive(runtime)
     with pytest.raises(RuntimeError, match="fixture start failed"):
         await _run_proactive_once(runtime)
     assert_sessions_closed(runtime)
@@ -220,7 +229,7 @@ async def test_runtime_owns_started_tasks_even_if_caller_passes_an_empty_list(
 
 @pytest.mark.asyncio
 async def test_tool_registry_closes_all_callbacks_despite_one_failure():
-    from agent.tools.registry import ToolRegistry
+    from plugins.tools.registry import ToolRegistry
 
     tools = ToolRegistry()
     closed = []
@@ -243,9 +252,9 @@ async def test_late_assembly_failure_rolls_back_earlier_resources(
     tmp_path, monkeypatch
 ):
     from agent.plugins import PluginManager
-    from bootstrap import runtime as assembly
     from core.memory.legacy import MemoryRuntime
-    from session.manager import SessionManager
+    from plugins.control import provider as assembly
+    from plugins.ledger.manager import SessionManager
 
     closed = []
     close_session, stop_memory, stop_plugins = (
@@ -276,3 +285,93 @@ async def test_late_assembly_failure_rolls_back_earlier_resources(
     with pytest.raises(RuntimeError, match="late assembly failed"):
         await runtime_at(tmp_path, monkeypatch)
     assert closed == ["plugins", "memory", "session"]
+
+
+async def replace_channels(runtime, channels):
+    from agent.composition import Module
+    from plugins.channels.contract import CHANNELS
+
+    def apply(ctx):
+        ctx.provide(CHANNELS, channels)
+        ctx.on_start(channels.start_all)
+        ctx.on_close(channels.stop_all)
+
+    await runtime.composition.replace(
+        "channels", Module("channels", apply, provides=(CHANNELS,))
+    )
+
+
+async def replace_proactive(runtime):
+    from agent.composition import Module
+    from plugins.proactive_flow.contract import DRIFT, PROACTIVE
+
+    fake = SimpleNamespace(stop=lambda: None, close=lambda: None)
+
+    def apply(ctx):
+        ctx.provide(PROACTIVE, fake)
+        ctx.provide(DRIFT, None)
+        ctx.on_close(fake.close)
+
+    await runtime.composition.replace(
+        "proactive", Module("proactive", apply, provides=(PROACTIVE, DRIFT))
+    )
+
+
+@pytest.mark.asyncio
+async def test_model_replacement_reconnects_main_chain_without_replacing_ledger_or_closing_source_admission(
+    tmp_path, monkeypatch
+):
+    from agent.composition import Module
+    from core.schema import ModelResponse
+    from plugins.models.contract import MEMORY_MODEL, MODEL, MODEL_ID
+    from plugins.sources.contract import ADMISSION
+    from tests.test_runtime import FakeModel
+
+    plugin_dir = tmp_path / ".kirakira/plugins/native_echo"
+    plugin_dir.mkdir(parents=True)
+    (plugin_dir / "config.toml").write_text('marker="native-config"\n')
+    (plugin_dir / "plugin.py").write_text(
+        'from plugins.tools.contract import TOOLS\nfrom core.schema import ToolSpec\napi_version = 3\ninject = (TOOLS,)\nasync def apply(ctx):\n    await ctx.require(TOOLS).register_owned(\n        ctx, ToolSpec("native_echo", "echo", {}), lambda: ctx.config["marker"])\n'
+    )
+    runtime = await runtime_at(tmp_path, monkeypatch)
+    root = runtime.composition
+    await runtime.start_background(start_channels=False)
+    ledger = runtime.session_manager
+    admission = root.services.resolve(ADMISSION)
+    old_conversation = runtime.pipeline
+    old_manager = runtime.plugin_manager
+    old_plugin = old_manager.instances[0]
+    model = FakeModel([ModelResponse(text="first"), ModelResponse(text="second")])
+
+    async def models(ctx):
+        await ctx.provide(MODEL, model)
+        await ctx.provide(MEMORY_MODEL, model)
+        await ctx.provide(MODEL_ID, "fixture")
+
+    module = Module(
+        "models",
+        models,
+        provides=(MODEL, MEMORY_MODEL, MODEL_ID),
+        config=root._modules["models"].config,
+        native=True,
+    )
+    try:
+        await root.replace("models", module)
+        assert runtime.session_manager is ledger
+        assert root.services.resolve(ADMISSION) is admission
+        assert runtime.pipeline is not old_conversation
+        assert runtime.plugin_manager is not old_manager
+        assert runtime.plugin_manager.instances[0] is not old_plugin
+        assert (await runtime.process_direct("one")).content == "first"
+        # A second replacement must rebuild children and tools cleanly again.
+        await root.replace("models", module)
+        assert (await runtime.process_direct("two")).content == "second"
+        assert len(runtime.session_manager.get_or_create("direct:local").messages) == 4
+        assert runtime.plugin_manager.root.native is root.native
+        from core.schema import ToolCall
+
+        assert (
+            await runtime.tools.execute_async(ToolCall("native", "native_echo", {}))
+        ).content == "native-config"
+    finally:
+        await runtime.stop_background([])

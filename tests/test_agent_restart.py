@@ -17,19 +17,19 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from agent.control.context import current_turn_id
-from agent.control.errors import RuntimeClosedError
-from agent.control.models import TurnRequest
-from agent.control.ports import ControlExecutionResult
-from agent.control.runtime import ConversationRuntime
-from agent.control.store import ControlStore
-from agent.restart import (
+from agent.supervisor import _valid_commit
+from plugins.control.context import current_turn_id
+from plugins.control.errors import RuntimeClosedError
+from plugins.control.models import TurnRequest
+from plugins.control.ports import ControlExecutionResult
+from plugins.control.runtime import ConversationRuntime
+from plugins.control.store import ControlStore
+from plugins.runtime_restart.coordination import (
     RestartCoordinator,
     RestartRejectedError,
     RestartState,
     SupervisorCommitChannel,
 )
-from agent.supervisor import _valid_commit
 
 NONCE = "n" * 64
 
@@ -200,9 +200,7 @@ class ConversationRuntimeAdmissionTests(unittest.TestCase):
 
     def _runtime(self, tmp: str, executor, coordinator=None) -> ConversationRuntime:
         store = ControlStore(Path(tmp) / "control.db")
-        return ConversationRuntime(
-            store, executor, restart_coordinator=coordinator
-        )
+        return ConversationRuntime(store, executor, restart_coordinator=coordinator)
 
     def test_restart_from_turn_freezes_admission_until_committed(self) -> None:
         async def scenario() -> None:

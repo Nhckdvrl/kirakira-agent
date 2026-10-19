@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agent.config_models import Config
 from core.memory.plugin import MemoryPluginBuildDeps, MemoryPluginRuntime
 from plugins.akasha.config import (
     ensure_akasha_config_file,
@@ -10,6 +9,7 @@ from plugins.akasha.config import (
     resolve_akasha_db_path,
 )
 from plugins.akasha.engine import AkashaMemoryEngine
+from plugins.default_memory.config_models import Config
 
 
 class MemoryPlugin:

@@ -171,6 +171,7 @@ async function send() {
     });
     const data = await resp.json();
     if (data.error) add("error", "错误", data.error);
+    else if (data.metadata?.program_status === "superseded") add("notice", "输入已更新", "上一轮已让出，继续处理最新输入。");
     else add("agent", "Kirakira", data.content || "(空回复)", data.metadata);
   } catch (err) {
     add("error", "错误", String(err));
@@ -334,7 +335,7 @@ tabs.overview = async () => {
         ? pill(m.engine + " · 承重", "ok") : pill("引擎未承重（词法回退）", "warn"))
     + tile("会话", d.sessions ?? 0, "")
     + tile("插件", pl.active ?? 0, (pl.errors ? pill(pl.errors + " 个错误", "crit") : "")
-        + " " + (pl.generations ? pill(pl.generations + " 代际在册", "mut") : ""))
+        + " " + (pl.activations ? pill(pl.activations + " 运行实例", "mut") : ""))
     + tile("主动推送", p.enabled ? "运行中" : "未启用",
         p.enabled ? (pill("未读 alert " + (p.unread_alert ?? 0), (p.unread_alert ? "warn" : "mut"))
           + " " + pill("content " + (p.unread_content ?? 0), "mut")) : "")
@@ -459,16 +460,16 @@ tabs.plugins = async () => {
     "<tr><td class=\\"mono\\">" + esc(p.id) + "</td><td>" + esc(p.version || "—") + "</td>"
     + '<td class="clip">' + esc(clip(p.desc, 70)) + "</td>"
     + "<td>" + (p.lifecycle ? pill("已装载", "ok") : pill("仅声明", "mut")) + "</td></tr>");
-  const gens = (d.generations || []).map(g =>
-    "<tr><td class=\\"mono\\">" + esc(g.plugin_id) + "</td>"
-    + '<td class="mono muted">' + esc(g.generation_id) + "</td>"
+  const gens = (d.activations || []).map(g =>
+    "<tr><td class=\\"mono\\">" + esc(g.name) + "</td>"
+    + '<td class="mono muted">' + esc(g.generation) + "</td>"
     + "<td>" + pill(g.state, g.state === "active" ? "ok" : "mut") + "</td>"
-    + '<td class="num">' + (g.lease_count ?? 0) + "</td></tr>");
-  const retired = (d.retired || []).map(g =>
-    "<tr><td class=\\"mono\\">" + esc(g.plugin_id) + "</td>"
-    + '<td class="mono muted">' + esc(g.generation_id) + "</td>"
-    + '<td class="num">' + (g.lease_count ?? 0) + "</td>"
-    + "<td>" + (g.can_quiesce ? pill("可销毁", "ok") : pill("仍有在途租约", "warn")) + "</td></tr>");
+    + '<td class="num">' + (g.calls ?? 0) + "</td></tr>");
+  const retired = (d.draining || []).map(g =>
+    "<tr><td class=\\"mono\\">" + esc(g.name) + "</td>"
+    + '<td class="mono muted">' + esc(g.generation) + "</td>"
+    + '<td class="num">' + (g.calls ?? 0) + "</td>"
+    + "<td>" + ((g.calls === 0) ? pill("可销毁", "ok") : pill("仍有在途租约", "warn")) + "</td></tr>");
   const errs = Object.entries(d.errors || {}).map(([k, v]) =>
     "<tr><td class=\\"mono\\">" + esc(k) + "</td><td>" + esc(v) + "</td></tr>");
   return "<h2>插件与代际</h2><p class=\\"sub\\">lease_count 非零 = 仍有在途 turn 持着该代际，"

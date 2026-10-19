@@ -7,9 +7,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from agent.tools.message_push import MessagePushTool
-from infra.channels.base import AttachmentStore
-from infra.channels.delivery import deliver_message_parts
 from bus.events import (
     AttachmentKind,
     ChannelAttachment,
@@ -17,6 +14,9 @@ from bus.events import (
     DeliveryReceipt,
     DeliveryStatus,
 )
+from infra.channels.base import AttachmentStore
+from infra.channels.delivery import deliver_message_parts
+from plugins.tools.message_push import MessagePushTool
 
 
 class ChannelDeliveryTests(unittest.IsolatedAsyncioTestCase):
@@ -65,9 +65,7 @@ class ChannelDeliveryTests(unittest.IsolatedAsyncioTestCase):
         async def send_text(_chat_id: str, _content: str) -> None:
             calls.append("text")
 
-        async def send_file(
-            _chat_id: str, _source: str, _filename: str | None
-        ) -> None:
+        async def send_file(_chat_id: str, _source: str, _filename: str | None) -> None:
             calls.append("file")
             raise RuntimeError("upload failed")
 
@@ -97,9 +95,7 @@ class ChannelDeliveryTests(unittest.IsolatedAsyncioTestCase):
         async def send_text(_chat_id: str, _content: str) -> None:
             raise AssertionError("there is no text")
 
-        async def send_file(
-            _chat_id: str, _source: str, _filename: str | None
-        ) -> None:
+        async def send_file(_chat_id: str, _source: str, _filename: str | None) -> None:
             raise RuntimeError("upload failed")
 
         async def send_image(_chat_id: str, _source: str) -> None:
@@ -110,7 +106,9 @@ class ChannelDeliveryTests(unittest.IsolatedAsyncioTestCase):
                 channel="test",
                 chat_id="chat-1",
                 content="",
-                attachments=(ChannelAttachment(AttachmentKind.FILE, "/tmp/report.txt"),),
+                attachments=(
+                    ChannelAttachment(AttachmentKind.FILE, "/tmp/report.txt"),
+                ),
             ),
             send_text=send_text,
             send_file=send_file,

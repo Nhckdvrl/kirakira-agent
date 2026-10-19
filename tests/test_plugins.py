@@ -6,11 +6,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bus.event_bus import EventBus
 from agent.plugins import PluginManager
+from bus.event_bus import EventBus
 from core.schema import ToolCall
-from agent.tool_hooks import HookContext, ToolExecutionRequest
-from agent.tools.registry import ToolRegistry
+from plugins.tools.hooks import HookContext, ToolExecutionRequest
+from plugins.tools.registry import ToolRegistry
 
 
 def write_enablement(workspace, body):
@@ -55,7 +55,9 @@ class PluginTests(unittest.TestCase):
             data_dir = workspace / ".kirakira" / "plugin-data" / "demo"
             root.mkdir(parents=True)
             data_dir.mkdir(parents=True)
-            root.joinpath("config.toml").write_text('value = "packaged"\n', encoding="utf-8")
+            root.joinpath("config.toml").write_text(
+                'value = "packaged"\n', encoding="utf-8"
+            )
             data_dir.joinpath("config.local.toml").write_text(
                 'value = "private"\n', encoding="utf-8"
             )
@@ -82,14 +84,16 @@ class PluginTests(unittest.TestCase):
                     workspace=workspace,
                 )
                 await manager.load_all()
-                self.assertEqual([record.plugin_id for record in manager.active], ["demo"])
+                self.assertEqual(
+                    [record.plugin_id for record in manager.active], ["demo"]
+                )
 
                 result = await manager.reconcile_disabled_and_drain("demo", timeout=1)
 
                 self.assertEqual(result, "插件已停用并排空: demo")
                 self.assertEqual(manager.active, [])
-                self.assertIsNone(manager.generations.current("demo"))
-                self.assertEqual(manager.generations.retired, ())
+                self.assertIsNone(manager.root.activation("plugin:demo"))
+                self.assertEqual(manager.status(), ())
                 manifest = (workspace / ".kirakira" / "manifest.toml").read_text()
                 self.assertIn("enabled = false", manifest)
 
@@ -217,7 +221,8 @@ class PluginTests(unittest.TestCase):
                 self.assertEqual(skills.reloads, 1)
                 self.assertIn("demo", mcp.configs)
                 self.assertEqual(
-                    mcp.configs["demo"]["command"][1], str((root / "server.py").resolve())
+                    mcp.configs["demo"]["command"][1],
+                    str((root / "server.py").resolve()),
                 )
                 self.assertEqual(mcp.configs["demo"]["env"]["TOKEN"], "test")
                 listed = json.loads(manager.list_plugins())["active"][0]
@@ -311,7 +316,13 @@ class PluginTests(unittest.TestCase):
                 self.assertIn("Upgraded", upgrade)
                 self.assertEqual(len(reload_calls), 2)
                 self.assertTrue(
-                    (workspace / ".kirakira" / "plugins" / "installed-demo" / "plugin.py").is_file()
+                    (
+                        workspace
+                        / ".kirakira"
+                        / "plugins"
+                        / "installed-demo"
+                        / "plugin.py"
+                    ).is_file()
                 )
                 # 升级后不留备份残渣
                 leftovers = [
@@ -356,11 +367,13 @@ class PluginTests(unittest.TestCase):
                     workspace=workspace,
                 )
 
-                with self.assertLogs("agent.plugins", level="ERROR"):
+                with self.assertLogs("plugins.extensions", level="ERROR"):
                     await manager.load_all()
 
                 self.assertFalse(tools.has("leaked"))
-                self.assertEqual([plugin.name for plugin in manager.instances], ["good"])
+                self.assertEqual(
+                    [plugin.name for plugin in manager.instances], ["good"]
+                )
                 self.assertIn("a_bad", manager.errors)
 
         asyncio.run(scenario())
@@ -393,7 +406,7 @@ class PluginTests(unittest.TestCase):
                     workspace=workspace,
                 )
 
-                with self.assertLogs("agent.plugins", level="ERROR"):
+                with self.assertLogs("plugins.extensions", level="ERROR"):
                     await manager.load_all()
 
                 self.assertIn("bad", manager.errors)

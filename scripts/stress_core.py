@@ -18,11 +18,11 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 
-from agent.model_runtime.types import RetryableModelError
 from bootstrap.runtime import build_runtime
 from bus.events import InboundMessage
 from bus.events_lifecycle import TurnFinished, TurnStarted
 from core.schema import ModelResponse, ToolCall, ToolSpec
+from plugins.models.types import RetryableModelError
 
 
 def distribution(values):

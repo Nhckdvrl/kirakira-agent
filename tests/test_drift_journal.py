@@ -12,10 +12,10 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from core.schema import ToolCall
 from plugins.drift_flow.state import DriftStateStore
 from plugins.drift_flow.tools import DriftRunContext, register_drift_tools
-from core.schema import ToolCall
-from agent.tools.registry import ToolRegistry
+from plugins.tools.registry import ToolRegistry
 
 NOW = datetime(2026, 7, 25, 12, 0, tzinfo=timezone.utc)
 
@@ -45,11 +45,17 @@ class JournalStoreTests(unittest.TestCase):
             store.append_journal("audit", "progress", {"note": "q"}, NOW, key="topic-b")
 
             self.assertEqual(
-                [e["payload"]["note"] for e in store.load_journal("audit", entry_type="progress")],
+                [
+                    e["payload"]["note"]
+                    for e in store.load_journal("audit", entry_type="progress")
+                ],
                 ["p", "q"],
             )
             self.assertEqual(
-                [e["payload"]["note"] for e in store.load_journal("audit", key="topic-a")],
+                [
+                    e["payload"]["note"]
+                    for e in store.load_journal("audit", key="topic-a")
+                ],
                 ["p"],
             )
             store.close()

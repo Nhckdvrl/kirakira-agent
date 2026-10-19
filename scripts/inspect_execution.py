@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from agent.core.execution import ExecutionStore
+from plugins.execution.service import ExecutionStore
 
 
 def main():

@@ -12,9 +12,6 @@ from typing import TYPE_CHECKING, TypedDict, cast
 
 import json_repair
 
-from agent.config_models import Config
-from infra.providers.model_client_adapter import LLMProvider, LLMResponse
-from agent.skill_loader import SkillsLoader
 from bus.event_bus import EventSubscription
 from bus.events_lifecycle import TurnCommitted
 from core.memory.engine import (
@@ -38,18 +35,21 @@ from core.memory.utils import (
     should_require_scope_match,
 )
 from core.net.http import SharedHttpResources
+from infra.providers.model_client_adapter import LLMProvider, LLMResponse
 from memory2.embedder import Embedder
 from memory2.memorizer import Memorizer
-from plugins.default_memory.compat_worker import (
-    # 模型兼容边界:deepseek 会用单键对象包裹 JSON 数组。见 compat_worker 模块说明。
-    CompatPostResponseMemoryWorker as PostResponseMemoryWorker,
-)
 from memory2.procedure_tagger import ProcedureTagger
 from memory2.query_builder import build_procedure_queries
 from memory2.retriever import Retriever
 from memory2.rule_schema import build_procedure_rule_schema
 from memory2.store import VEC_DIM, MemoryHit, MemoryStore2
+from plugins.default_memory.compat_worker import (
+    # 模型兼容边界:deepseek 会用单键对象包裹 JSON 数组。见 compat_worker 模块说明。
+    CompatPostResponseMemoryWorker as PostResponseMemoryWorker,
+)
 from plugins.default_memory.config import DefaultMemoryConfig, resolve_memory_db_path
+from plugins.default_memory.config_models import Config
+from plugins.skills.loader import SkillsLoader
 
 if TYPE_CHECKING:
     from bus.event_bus import EventBus
@@ -201,18 +201,14 @@ def _coerce_emotional_weight(value: object) -> int:
         return 0
     try:
         return max(0, min(10, int(value)))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return 0
 
 
 def _dict_items(value: object) -> list[dict[str, object]]:
     if not isinstance(value, list):
         return []
-    return [
-        cast(dict[str, object], item)
-        for item in value
-        if isinstance(item, dict)
-    ]
+    return [cast(dict[str, object], item) for item in value if isinstance(item, dict)]
 
 
 def _build_long_term_prompt(*, conversation: str, existing_profile: str) -> str:
@@ -447,7 +443,10 @@ def _default_memory_tool_profile() -> MemoryToolProfile:
             parameters={
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string", "description": "要查找的记忆主题，推荐写成陈述句"},
+                    "query": {
+                        "type": "string",
+                        "description": "要查找的记忆主题，推荐写成陈述句",
+                    },
                     "intent": {
                         "type": "string",
                         "enum": ["answer", "timeline"],
@@ -485,7 +484,10 @@ def _default_memory_tool_profile() -> MemoryToolProfile:
             parameters={
                 "type": "object",
                 "properties": {
-                    "summary": {"type": "string", "description": "一句话描述要记住的内容"},
+                    "summary": {
+                        "type": "string",
+                        "description": "一句话描述要记住的内容",
+                    },
                     "memory_kind": {
                         "type": "string",
                         "enum": ["procedure", "preference", "event", "profile", ""],
@@ -590,9 +592,7 @@ class DefaultMemoryEngine:
             or config.light_base_url
             or config.base_url
             or "",
-            api_key=embedding.api_key
-            or config.light_api_key
-            or config.api_key,
+            api_key=embedding.api_key or config.light_api_key or config.api_key,
             model=embedding.model,
             output_dimensionality=embedding.output_dimensionality,
             requester=http_resources.external_default,
@@ -624,9 +624,7 @@ class DefaultMemoryEngine:
             model=self._light_model,
             skills_fn=lambda: [
                 record.name
-                for record in skills_loader.list_skill_records(
-                    filter_unavailable=False
-                )
+                for record in skills_loader.list_skill_records(filter_unavailable=False)
             ],
         )
         self._post_response_worker = PostResponseMemoryWorker(
@@ -804,15 +802,16 @@ class DefaultMemoryEngine:
             top_k=request.limit,
             scope_channel=scope.channel or None,
             scope_chat_id=scope.chat_id or None,
-            require_scope_match=bool(request.filters.hints.get("require_scope_match", False)),
+            require_scope_match=bool(
+                request.filters.hints.get("require_scope_match", False)
+            ),
             aux_queries=queries[1:],
             time_start=request.filters.time_start,
             time_end=request.filters.time_end,
         )
         text_block, injected_ids = retriever.build_injection_block(items)
         records = [
-            self._build_record(item, injected_ids=injected_ids)
-            for item in items
+            self._build_record(item, injected_ids=injected_ids) for item in items
         ]
         return MemoryQueryResult(
             text_block=text_block,
@@ -900,7 +899,8 @@ class DefaultMemoryEngine:
         if memory_type == "procedure":
             extra["rule_schema"] = build_procedure_rule_schema(
                 summary=request.summary,
-                tool_requirement=str(request.metadata.get("tool_requirement") or "") or None,
+                tool_requirement=str(request.metadata.get("tool_requirement") or "")
+                or None,
                 steps=list(steps or []),
             )
             await self._attach_trigger_tags(extra=extra, summary=request.summary)
@@ -935,7 +935,9 @@ class DefaultMemoryEngine:
             accepted=bool(found_ids),
             status="superseded",
             affected_ids=found_ids,
-            missing_ids=[item_id for item_id in clean_ids if item_id not in set(found_ids)],
+            missing_ids=[
+                item_id for item_id in clean_ids if item_id not in set(found_ids)
+            ],
             items=[
                 {
                     "id": item.get("id"),
@@ -1134,9 +1136,7 @@ class DefaultMemoryEngine:
                 },
                 source_ref=f"{source_ref}#profile",
                 happened_at=happened_at,
-                emotional_weight=_coerce_emotional_weight(
-                    item.get("emotional_weight")
-                ),
+                emotional_weight=_coerce_emotional_weight(item.get("emotional_weight")),
             )
             saved_counts["profile"] += 1
             logger.info("consolidation long_term saved: type=profile %r", summary[:60])
@@ -1178,8 +1178,12 @@ class DefaultMemoryEngine:
         self,
         request: MemoryQuery,
     ) -> MemoryQueryResult:
-        hyp1_task = asyncio.create_task(self._gen_hypothesis(request.text, style="event"))
-        hyp2_task = asyncio.create_task(self._gen_hypothesis(request.text, style="general"))
+        hyp1_task = asyncio.create_task(
+            self._gen_hypothesis(request.text, style="event")
+        )
+        hyp2_task = asyncio.create_task(
+            self._gen_hypothesis(request.text, style="general")
+        )
         hyp1, hyp2 = await asyncio.gather(hyp1_task, hyp2_task)
         aux_queries = [text for text in (hyp1, hyp2) if text]
         scope = resolve_memory_scope(request.scope)
@@ -1228,7 +1232,9 @@ class DefaultMemoryEngine:
             limit=request.limit,
         )
         return MemoryQueryResult(
-            records=[self._build_record(item) for item in hits if isinstance(item, dict)],
+            records=[
+                self._build_record(item) for item in hits if isinstance(item, dict)
+            ],
             trace={
                 "source": self.DESCRIPTOR.name,
                 "intent": "timeline",
@@ -1368,7 +1374,9 @@ class DefaultMemoryEngine:
         injected_ids: list[str] | None = None,
     ) -> MemoryRecord:
         extra = item.get("extra_json")
-        signals = dict(cast(dict[str, object], extra)) if isinstance(extra, dict) else {}
+        signals = (
+            dict(cast(dict[str, object], extra)) if isinstance(extra, dict) else {}
+        )
         memory_kind = str(item.get("memory_type", "") or "")
         item_id = str(item.get("id", "") or "")
         source_ref = str(item.get("source_ref", "") or "")
@@ -1425,9 +1433,7 @@ class DefaultMemoryEngine:
                 maybe_tool_chain = message.get("tool_chain")
                 if isinstance(maybe_tool_chain, list):
                     tool_chain = [
-                        item
-                        for item in maybe_tool_chain
-                        if isinstance(item, dict)
+                        item for item in maybe_tool_chain if isinstance(item, dict)
                     ]
         if not user_message and not assistant_response:
             return None

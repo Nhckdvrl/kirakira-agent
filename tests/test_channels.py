@@ -7,28 +7,31 @@ import tempfile
 import threading
 import unittest
 import urllib.request
-from types import SimpleNamespace
-from unittest import mock
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
+from bus.event_bus import EventBus
+from bus.events import OutboundMessage
 from bus.queue import MessageBus
+from core.memory.legacy import MemoryRuntime
+from core.schema import ModelResponse
 from infra.channels.contract import ChannelContext
 from infra.channels.qq_channel import QQChannel
 from infra.channels.qqbot_channel import QQBotChannel
 from infra.channels.telegram_channel import TelegramChannel
 from infra.channels.web_chat_channel import WebChannel
-from agent.prompting.context_builder import ContextBuilder
-from bus.event_bus import EventBus
-from core.memory.legacy import MemoryRuntime
-from agent.core.loop import AgentLoop
-from agent.core.reasoner import DefaultReasoner
-from agent.core.pipeline import PassiveTurnPipeline
-from agent.core.contracts import RuntimeConfig
-from core.schema import ModelResponse
-from bus.events import OutboundMessage
-from session.manager import SessionManager
-from bootstrap.tools import build_tool_registry
+from plugins.context.context_builder import ContextBuilder
+from plugins.conversation.service import ConversationService
+from plugins.delivery.service import DeliveryService
+from plugins.ledger.manager import SessionManager
+from plugins.react.contract import ReactConfig
+from plugins.react.reasoner import ReactProgram
+from plugins.reply.follower import ReplyFollower
+from plugins.reply_program.service import DefaultReplyProgram
+from plugins.sources.admission import TurnAdmission
+from plugins.tools.factory import build_tool_registry
 
 
 class FakeModel:
@@ -54,24 +57,30 @@ def build_runtime(workdir, text):
     memory = MemoryRuntime(workdir, session_manager=sessions)
     tools = build_tool_registry(workdir, memory=memory, session_manager=sessions)
     context = ContextBuilder(workdir, memory)
-    config = RuntimeConfig(model="fake", max_iterations=3, max_tokens=1000, history_window=20)
-    reasoner = DefaultReasoner(
+    config = ReactConfig(
+        model="fake", max_iterations=3, max_tokens=1000, history_window=20
+    )
+    reasoner = ReactProgram(
         model_client=FakeModel(text),
         tools=tools,
         config=config,
         context=context,
         event_bus=event_bus,
     )
-    pipeline = PassiveTurnPipeline(
-        bus=bus,
-        event_bus=event_bus,
-        session_manager=sessions,
-        memory=memory,
-        tools=tools,
-        reasoner=reasoner,
-        config=config,
+    pipeline = ConversationService(
+        program=DefaultReplyProgram(
+            delivery=DeliveryService(sessions, bus, event_bus),
+            bus=bus,
+            event_bus=event_bus,
+            session_manager=sessions,
+            memory=memory,
+            tools=tools,
+            reasoner=reasoner,
+            config=config,
+        ),
+        admission=TurnAdmission(sessions),
     )
-    return bus, event_bus, sessions, AgentLoop(bus=bus, pipeline=pipeline)
+    return bus, event_bus, sessions, ReplyFollower(bus=bus, pipeline=pipeline)
 
 
 async def start_core(bus, loop):
@@ -206,25 +215,31 @@ class ChannelTests(unittest.TestCase):
                 event_bus = EventBus()
                 sessions = SessionManager(workdir)
                 memory = MemoryRuntime(workdir, session_manager=sessions)
-                tools = build_tool_registry(workdir, memory=memory, session_manager=sessions)
-                config = RuntimeConfig(model="fake", max_iterations=3)
-                reasoner = DefaultReasoner(
+                tools = build_tool_registry(
+                    workdir, memory=memory, session_manager=sessions
+                )
+                config = ReactConfig(model="fake", max_iterations=3)
+                reasoner = ReactProgram(
                     model_client=EchoModel(),
                     tools=tools,
                     config=config,
                     context=ContextBuilder(workdir, memory),
                     event_bus=event_bus,
                 )
-                pipeline = PassiveTurnPipeline(
-                    bus=bus,
-                    event_bus=event_bus,
-                    session_manager=sessions,
-                    memory=memory,
-                    tools=tools,
-                    reasoner=reasoner,
-                    config=config,
+                pipeline = ConversationService(
+                    program=DefaultReplyProgram(
+                        delivery=DeliveryService(sessions, bus, event_bus),
+                        bus=bus,
+                        event_bus=event_bus,
+                        session_manager=sessions,
+                        memory=memory,
+                        tools=tools,
+                        reasoner=reasoner,
+                        config=config,
+                    ),
+                    admission=TurnAdmission(sessions),
                 )
-                loop = AgentLoop(bus=bus, pipeline=pipeline)
+                loop = ReplyFollower(bus=bus, pipeline=pipeline)
                 port = free_port()
                 channel = WebChannel(host="127.0.0.1", port=port)
                 ctx = ChannelContext(
@@ -251,7 +266,9 @@ class ChannelTests(unittest.TestCase):
                         method="POST",
                     )
                     return json.loads(
-                        urllib.request.urlopen(request, timeout=10).read().decode("utf-8")
+                        urllib.request.urlopen(request, timeout=10)
+                        .read()
+                        .decode("utf-8")
                     )
 
                 try:
@@ -276,21 +293,34 @@ class ChannelTests(unittest.TestCase):
                 bus, event_bus, sessions, loop = build_runtime(workdir, "web ok")
                 port = free_port()
                 channel = WebChannel(host="127.0.0.1", port=port)
-                ctx = ChannelContext(bus, sessions, event_bus, workdir, __import__("logging").getLogger("test.web"))
+                ctx = ChannelContext(
+                    bus,
+                    sessions,
+                    event_bus,
+                    workdir,
+                    __import__("logging").getLogger("test.web"),
+                )
                 tasks = await start_core(bus, loop)
                 await channel.start(ctx)
                 try:
-                    data = json.dumps({"session_id": "test-web", "text": "hello"}).encode("utf-8")
+                    data = json.dumps(
+                        {"session_id": "test-web", "text": "hello"}
+                    ).encode("utf-8")
                     req = urllib.request.Request(
                         "http://127.0.0.1:%d/message" % port,
                         data=data,
                         headers={"content-type": "application/json"},
                         method="POST",
                     )
-                    body = await asyncio.to_thread(lambda: urllib.request.urlopen(req, timeout=10).read())
+                    body = await asyncio.to_thread(
+                        lambda: urllib.request.urlopen(req, timeout=10).read()
+                    )
                     payload = json.loads(body.decode("utf-8"))
                     self.assertEqual(payload["content"], "web ok")
-                    self.assertEqual(sessions.get_or_create("web:test-web").messages[-1]["content"], "web ok")
+                    self.assertEqual(
+                        sessions.get_or_create("web:test-web").messages[-1]["content"],
+                        "web ok",
+                    )
                 finally:
                     await channel.stop()
                     await stop_core(bus, loop, tasks)
@@ -362,12 +392,14 @@ class ChannelTests(unittest.TestCase):
                 )
                 await channel.start(ctx)
                 try:
-                    dashboard = (
-                        await asyncio.to_thread(
-                            lambda: urllib.request.urlopen(
+                    dashboard = await asyncio.to_thread(
+                        lambda: (
+                            urllib.request.urlopen(
                                 "http://127.0.0.1:%d/memory" % port,
                                 timeout=5,
-                            ).read().decode("utf-8")
+                            )
+                            .read()
+                            .decode("utf-8")
                         )
                     )
                     # /memory 现在是仪表盘的旧地址别名(老书签不至于 404)
@@ -394,7 +426,9 @@ class ChannelTests(unittest.TestCase):
                     await asyncio.to_thread(
                         lambda: urllib.request.urlopen(patch_request, timeout=5).read()
                     )
-                    self.assertEqual(memory.recall("updated")[0].content, "updated memory")
+                    self.assertEqual(
+                        memory.recall("updated")[0].content, "updated memory"
+                    )
 
                     delete_request = urllib.request.Request(
                         "http://127.0.0.1:%d/api/memory?id=%s" % (port, record.id),
@@ -425,7 +459,13 @@ class ChannelTests(unittest.TestCase):
                     group_allow=["777"],
                     require_at=True,
                 )
-                ctx = ChannelContext(bus, sessions, event_bus, workdir, __import__("logging").getLogger("test.qq"))
+                ctx = ChannelContext(
+                    bus,
+                    sessions,
+                    event_bus,
+                    workdir,
+                    __import__("logging").getLogger("test.qq"),
+                )
                 tasks = await start_core(bus, loop)
                 await channel.start(ctx)
                 try:
@@ -443,12 +483,19 @@ class ChannelTests(unittest.TestCase):
                         headers={"content-type": "application/json"},
                         method="POST",
                     )
-                    body = await asyncio.to_thread(lambda: urllib.request.urlopen(req, timeout=10).read())
+                    body = await asyncio.to_thread(
+                        lambda: urllib.request.urlopen(req, timeout=10).read()
+                    )
                     payload = json.loads(body.decode("utf-8"))
                     self.assertTrue(payload["ok"])
                     await asyncio.sleep(0.5)
-                    self.assertEqual(sessions.get_or_create("qq:gqq:777").messages[-1]["content"], "qq ok")
-                    self.assertTrue(any(path == "/send_group_msg" for path, _ in onebot.received))
+                    self.assertEqual(
+                        sessions.get_or_create("qq:gqq:777").messages[-1]["content"],
+                        "qq ok",
+                    )
+                    self.assertTrue(
+                        any(path == "/send_group_msg" for path, _ in onebot.received)
+                    )
                 finally:
                     await channel.stop()
                     await stop_core(bus, loop, tasks)
@@ -467,8 +514,12 @@ class ChannelTests(unittest.TestCase):
             )
 
             self.assertTrue(channel._is_allowed(SimpleNamespace(id=123, username=None)))
-            self.assertTrue(channel._is_allowed(SimpleNamespace(id=999, username="Alice")))
-            self.assertFalse(channel._is_allowed(SimpleNamespace(id=999, username="bob")))
+            self.assertTrue(
+                channel._is_allowed(SimpleNamespace(id=999, username="Alice"))
+            )
+            self.assertFalse(
+                channel._is_allowed(SimpleNamespace(id=999, username="bob"))
+            )
             sessions.close()
 
     def test_telegram_plain_update_does_not_require_reply_context(self):
@@ -533,7 +584,9 @@ class ChannelTests(unittest.TestCase):
         asyncio.run(scenario())
 
     def test_qq_api_rejects_failed_retcode(self):
-        onebot = FakeOneBotServer(body=b'{"status":"failed","retcode":100,"wording":"bad"}')
+        onebot = FakeOneBotServer(
+            body=b'{"status":"failed","retcode":100,"wording":"bad"}'
+        )
         onebot.start()
         try:
             channel = QQChannel(api_base_url="http://127.0.0.1:%d" % onebot.port)

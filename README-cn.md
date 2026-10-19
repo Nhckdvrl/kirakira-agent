@@ -185,22 +185,25 @@ uv run kirakira-verify-online
 
 ## 目录
 
+组合内核直接复用固定提交的 Akashic 源码，逐文件校验字节一致性。
+业务装配和边界见[Runtime 架构](docs/architecture/overview.md)。
+
 ```text
-agent/            推理、生命周期、工具、MCP、插件、调度、子 Agent
-bootstrap/        组合根、初始化、supervisor、控制面与 dashboard 装配
-bus/              消息队列和事件合同
-core/             共享 schema、网络与记忆协议/runtime
-infra/            provider、渠道、控制与持久化 adapter
-session/          权威 Session 与消息 embedding store
-memory2/          默认结构化记忆算法
-plugins/          Default/Akasha、Proactive、Drift 等一方实现
-plugin_packages/  可分发插件包
-proactive_v2/     主动内核、frame 与 tick 编排
-frontend/         TUI 与本地 Web 表现层
-eval/             记忆评测
-migrations/       append-only workspace migration
-scripts/          迁移、change-impact、在线验证
-kirakira_agent/   仅公开 `python -m kirakira_agent` 入口壳
+agent/            原生 Context/Fiber/Effect 内核、配置与 supervisor
+bootstrap/        默认组合、应用外观与 CLI/setup
+plugins/ledger/   权威 Session/消息、不可变输入与 owner 事务
+plugins/          回复、来源、ReAct、模型、工具、MCP、记忆与主动业务 owner
+bus/              message queue and event contracts
+core/             shared schema, network and memory contracts
+infra/            provider, channel, control and persistence adapters
+memory2/          default structured-memory algorithms and storage
+plugin_packages/  distributable extension packages
+proactive_v2/     proactive frame and tick orchestration
+frontend/         terminal and local Web presentation surfaces
+eval/             memory evaluation harnesses
+migrations/       append-only workspace migrations
+scripts/          verification, migration and change-impact tools
+kirakira_agent/   public `python -m kirakira_agent` entry shell
 ```
 
 workspace 解析顺序为：`--workspace` → `KIRAKIRA_WORKSPACE` →

@@ -97,9 +97,7 @@ class ChatLane:
     @staticmethod
     def _skip_cancelled_non_passive(state: _LaneState) -> None:
         while state.serving_non_passive_ticket in state.cancelled_non_passive_tickets:
-            state.cancelled_non_passive_tickets.remove(
-                state.serving_non_passive_ticket
-            )
+            state.cancelled_non_passive_tickets.remove(state.serving_non_passive_ticket)
             state.serving_non_passive_ticket += 1
 
     async def run_non_passive(
@@ -145,17 +143,25 @@ class MessageBus:
     def __init__(self, chat_lane: ChatLane | None = None) -> None:
         self._inbound: asyncio.Queue[InboundMessage] = asyncio.Queue()
         self._outbound: asyncio.Queue[_OutboundEnvelope] = asyncio.Queue()
-        self._subscribers: Dict[str, List[Callable[[OutboundMessage], Awaitable[None]]]] = {}
+        self._subscribers: Dict[
+            str, List[Callable[[OutboundMessage], Awaitable[None]]]
+        ] = {}
         self._chat_lane = chat_lane or ChatLane()
         self._running = False
+        self.inbound_acceptor: Callable[[InboundMessage], None] | None = None
         self._dispatch_tasks: set[asyncio.Task[None]] = set()
 
     async def publish_inbound(self, msg: InboundMessage) -> None:
+        if self.inbound_acceptor is not None:
+            self.inbound_acceptor(msg)
         await self._chat_lane.mark_passive_pending(msg.channel, msg.chat_id)
         await self._inbound.put(msg)
 
     async def consume_inbound(self) -> InboundMessage:
         return await self._inbound.get()
+
+    def has_outbound_subscribers(self, channel: str) -> bool:
+        return bool(self._subscribers.get(channel))
 
     async def complete_inbound(self, msg: InboundMessage) -> None:
         await self._chat_lane.mark_passive_done(msg.channel, msg.chat_id)
@@ -210,9 +216,7 @@ class MessageBus:
         try:
             while self._running:
                 try:
-                    envelope = await asyncio.wait_for(
-                        self._outbound.get(), timeout=1.0
-                    )
+                    envelope = await asyncio.wait_for(self._outbound.get(), timeout=1.0)
                 except asyncio.TimeoutError:
                     continue
                 task = asyncio.create_task(
@@ -224,7 +228,9 @@ class MessageBus:
                 task.add_done_callback(self._dispatch_tasks.discard)
         finally:
             if self._dispatch_tasks:
-                await asyncio.gather(*list(self._dispatch_tasks), return_exceptions=True)
+                await asyncio.gather(
+                    *list(self._dispatch_tasks), return_exceptions=True
+                )
 
     async def _dispatch_one(self, envelope: _OutboundEnvelope) -> None:
         msg = envelope.message

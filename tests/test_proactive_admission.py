@@ -7,17 +7,19 @@ from unittest.mock import AsyncMock
 import pytest
 
 from bus.queue import MessageBus
+from plugins.ledger.manager import SessionManager
 from plugins.proactive_flow.admission import DecisionSuperseded
 from plugins.proactive_flow.judge import Decision
 from plugins.wake_proactive.sources import SourceRegistry
 from plugins.wake_proactive.state import ProactiveStateStore
 from proactive_v2.config import ProactiveConfig
 from proactive_v2.loop import ProactiveLoop
-from session.manager import SessionManager
 from tests.test_proactive_decisions import NOW, Script
 
 
-def test_revisions_survive_restart_and_old_result_cannot_consume_or_check_new_payload(tmp_path):
+def test_revisions_survive_restart_and_old_result_cannot_consume_or_check_new_payload(
+    tmp_path,
+):
     path = tmp_path / "proactive.db"
     store = ProactiveStateStore(path)
     event = {"item_id": "s:1", "_source": "s", "event_id": "1", "title": "old"}
@@ -47,10 +49,18 @@ def test_decision_is_rejected_if_inputs_change_during_model_call(tmp_path, chang
         event = {"item_id": "s:1", "_source": "s", "event_id": "1", "title": "music"}
         store.ingest("content", [event], NOW)
         busy = False
-        loop = ProactiveLoop(config=ProactiveConfig(channel="web", chat_id="one"),
-            bus=MessageBus(), session_manager=sessions, model_client=Script([]),
-            sources=SourceRegistry(), state=store, passive_busy_fn=lambda _: busy)
-        loop._deliver = AsyncMock(side_effect=AssertionError("stale decision reached delivery"))
+        loop = ProactiveLoop(
+            config=ProactiveConfig(channel="web", chat_id="one"),
+            bus=MessageBus(),
+            session_manager=sessions,
+            model_client=Script([]),
+            sources=SourceRegistry(),
+            state=store,
+            passive_busy_fn=lambda _: busy,
+        )
+        loop._deliver = AsyncMock(
+            side_effect=AssertionError("stale decision reached delivery")
+        )
 
         async def changed(*_args, **_kwargs):
             nonlocal busy
@@ -75,6 +85,7 @@ def test_decision_is_rejected_if_inputs_change_during_model_call(tmp_path, chang
         assert store.recent_decision_runs()[0]["decision"]["status"] == "superseded"
         store.close()
         sessions.close()
+
     asyncio.run(scenario())
 
 
@@ -84,10 +95,17 @@ def test_revision_arriving_during_delivery_is_not_settled_by_old_ack(tmp_path):
         store = ProactiveStateStore(tmp_path / "proactive.db")
         event = {"item_id": "s:1", "_source": "s", "event_id": "1", "title": "old"}
         store.ingest("content", [event], NOW)
-        loop = ProactiveLoop(config=ProactiveConfig(channel="web", chat_id="one"),
-            bus=MessageBus(), session_manager=sessions, model_client=Script([]),
-            sources=SourceRegistry(), state=store)
-        loop._judge.decide_content = AsyncMock(return_value=Decision(True, "old", ["s:1"]))
+        loop = ProactiveLoop(
+            config=ProactiveConfig(channel="web", chat_id="one"),
+            bus=MessageBus(),
+            session_manager=sessions,
+            model_client=Script([]),
+            sources=SourceRegistry(),
+            state=store,
+        )
+        loop._judge.decide_content = AsyncMock(
+            return_value=Decision(True, "old", ["s:1"])
+        )
 
         async def send(*_args):
             store.ingest("content", [{**event, "title": "new"}], NOW)
@@ -99,4 +117,5 @@ def test_revision_arriving_during_delivery_is_not_settled_by_old_ack(tmp_path):
         assert not store.pending_feedback()
         store.close()
         sessions.close()
+
     asyncio.run(scenario())

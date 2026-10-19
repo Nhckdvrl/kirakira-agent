@@ -4,8 +4,8 @@ import asyncio
 import json
 from dataclasses import dataclass
 
-from agent.control.protocol.router import ConnectionRouter
-from agent.control.service import ControlService
+from plugins.control.protocol.router import ConnectionRouter
+from plugins.control.service import ControlService
 
 
 @dataclass(frozen=True)
@@ -41,7 +41,9 @@ class NdjsonConnection:
         self._request_tasks: set[asyncio.Task[None]] = set()
 
     async def send(self, message: dict[str, object]) -> None:
-        encoded = (json.dumps(message, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
+        encoded = (
+            json.dumps(message, ensure_ascii=False, separators=(",", ":")) + "\n"
+        ).encode("utf-8")
         written = (
             asyncio.get_running_loop().create_future()
             if message.get("method") == "turn/completed"
@@ -63,11 +65,13 @@ class NdjsonConnection:
                 if not line:
                     break
                 if len(line) > self._max_message_bytes:
-                    await self.send({
-                        "jsonrpc": "2.0",
-                        "id": None,
-                        "error": {"code": -32600, "message": "Message too large"},
-                    })
+                    await self.send(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": None,
+                            "error": {"code": -32600, "message": "Message too large"},
+                        }
+                    )
                     break
                 task = asyncio.create_task(
                     self._router.handle_line(line),

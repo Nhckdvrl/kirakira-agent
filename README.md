@@ -140,22 +140,25 @@ governance and Akasha v1 ingest/retrieval. It never prints credentials.
 
 ## Layout
 
+The composition kernel is byte-identical to the pinned Akashic revision.
+See [runtime architecture](docs/architecture/overview.md) for ownership and integration boundaries.
+
 ```text
-agent/            reasoning, lifecycle, tools, MCP, plugins, subagents
-bootstrap/        composition root, setup, supervisor, control and dashboard wiring
-bus/              message queue and logical event contracts
-core/             shared schema, network and memory contracts/runtime
+agent/            native Context/Fiber/Effect kernel, configuration and supervisor
+bootstrap/        distribution, application facade and CLI/setup
+plugins/ledger/   canonical Session/messages, immutable inputs and owner transactions
+plugins/          ordinary reply, source, ReAct, model, tool, MCP, memory and proactive owners
+bus/              message queue and event contracts
+core/             shared schema, network and memory contracts
 infra/            provider, channel, control and persistence adapters
-session/          authoritative session and message-embedding stores
 memory2/          default structured-memory algorithms and storage
-plugins/          first-party memory, Wake, Drift and Scheduler implementations
-plugin_packages/  distributable plugins
-proactive_v2/     proactive kernel, frame and tick orchestration
+plugin_packages/  distributable extension packages
+proactive_v2/     proactive frame and tick orchestration
 frontend/         terminal and local Web presentation surfaces
 eval/             memory evaluation harnesses
 migrations/       append-only workspace migrations
-scripts/          migration, change-impact and online verification tools
-kirakira_agent/   public `python -m kirakira_agent` entry shell only
+scripts/          verification, migration and change-impact tools
+kirakira_agent/   public `python -m kirakira_agent` entry shell
 ```
 
 Runtime state lives under the selected workspace. Resolution order is

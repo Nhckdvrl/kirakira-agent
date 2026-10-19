@@ -8,8 +8,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from agent.model_runtime.query_compaction import QueryCompactor
-from session.manager import Session, SessionManager
+from plugins.ledger.manager import Session, SessionManager
+from plugins.models.query_compaction import QueryCompactor
 
 
 def _batch(index: int, size: int = 700) -> list[dict[str, object]]:

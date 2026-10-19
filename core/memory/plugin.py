@@ -20,11 +20,11 @@ from core.memory.engine import (
 )
 
 if TYPE_CHECKING:
-    from agent.config_models import Config
-    from infra.providers.model_client_adapter import LLMProvider
     from bus.publisher import EventBus
     from core.memory.markdown import MarkdownMemoryRuntime
     from core.net.http import SharedHttpResources
+    from infra.providers.model_client_adapter import LLMProvider
+    from plugins.default_memory.config_models import Config
 
 
 @dataclass(frozen=True)

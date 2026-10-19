@@ -4,12 +4,19 @@ import json
 import os
 import unittest
 
+from core.schema import (
+    ModelResponse,
+    ToolCall,
+    ToolResult,
+    ToolSpec,
+    assistant_message_from_response,
+    tool_result_message,
+)
 from infra.providers.llm_provider import (
     OpenAICompatibleClient,
     _parse_tool_arguments,
 )
-from agent.model_runtime.types import ContextLengthError
-from core.schema import ModelResponse, ToolCall, ToolResult, ToolSpec, assistant_message_from_response, tool_result_message
+from plugins.models.types import ContextLengthError
 
 
 class OpenAICompatibleTests(unittest.TestCase):
@@ -57,11 +64,20 @@ class OpenAICompatibleTests(unittest.TestCase):
 
     def test_tool_choice_passes_through_payload(self):
         client = OpenAICompatibleClient(base_url="http://example.test/v1", api_key="")
-        tools = [ToolSpec("finish_drift", "finish", {"type": "object", "properties": {}})]
-        default = client._build_payload([{"role": "user", "content": "x"}], tools, "", "m", 20)
+        tools = [
+            ToolSpec("finish_drift", "finish", {"type": "object", "properties": {}})
+        ]
+        default = client._build_payload(
+            [{"role": "user", "content": "x"}], tools, "", "m", 20
+        )
         self.assertEqual(default["tool_choice"], "auto")
         required = client._build_payload(
-            [{"role": "user", "content": "x"}], tools, "", "m", 20, tool_choice="required"
+            [{"role": "user", "content": "x"}],
+            tools,
+            "",
+            "m",
+            20,
+            tool_choice="required",
         )
         self.assertEqual(required["tool_choice"], "required")
         named = {"type": "function", "function": {"name": "finish_drift"}}
@@ -70,7 +86,9 @@ class OpenAICompatibleTests(unittest.TestCase):
         )
         self.assertEqual(forced["tool_choice"], named)
         # 无工具时不携带 tool_choice(与旧行为一致)
-        bare = client._build_payload([{"role": "user", "content": "x"}], [], "", "m", 20)
+        bare = client._build_payload(
+            [{"role": "user", "content": "x"}], [], "", "m", 20
+        )
         self.assertNotIn("tool_choice", bare)
 
     def test_stream_parser_accumulates_text_reasoning_and_fragmented_tool_call(self):
@@ -195,10 +213,16 @@ class OpenAICompatibleTests(unittest.TestCase):
         }
 
         response = client.parse_response(payload)
-        converted = client._to_openai_messages([assistant_message_from_response(response)], system="")
+        converted = client._to_openai_messages(
+            [assistant_message_from_response(response)], system=""
+        )
 
-        self.assertEqual(response.reasoning_content, "Need to read README before answering.")
-        self.assertEqual(converted[0]["reasoning_content"], "Need to read README before answering.")
+        self.assertEqual(
+            response.reasoning_content, "Need to read README before answering."
+        )
+        self.assertEqual(
+            converted[0]["reasoning_content"], "Need to read README before answering."
+        )
 
     def test_tool_result_message_shape(self):
         message = tool_result_message(ToolResult("call_1", "done", False))
@@ -209,7 +233,9 @@ class OpenAICompatibleTests(unittest.TestCase):
 
     def test_to_openai_messages_serializes_tool_call_arguments(self):
         client = OpenAICompatibleClient(base_url="http://example.test/v1", api_key="")
-        response = ModelResponse(tool_calls=[ToolCall("call_1", "bash", {"command": "pwd"})])
+        response = ModelResponse(
+            tool_calls=[ToolCall("call_1", "bash", {"command": "pwd"})]
+        )
         messages = [assistant_message_from_response(response)]
 
         converted = client._to_openai_messages(messages, system="sys")
@@ -221,14 +247,20 @@ class OpenAICompatibleTests(unittest.TestCase):
     def test_deepseek_v4_disables_thinking_by_default(self):
         client = OpenAICompatibleClient(base_url="https://api.deepseek.com", api_key="")
 
-        self.assertEqual(client._thinking_config("deepseek-v4-flash"), {"type": "disabled"})
+        self.assertEqual(
+            client._thinking_config("deepseek-v4-flash"), {"type": "disabled"}
+        )
 
     def test_thinking_config_can_be_overridden(self):
         old_value = os.environ.get("OPENAI_COMPATIBLE_THINKING")
         os.environ["OPENAI_COMPATIBLE_THINKING"] = "enabled"
         try:
-            client = OpenAICompatibleClient(base_url="https://api.deepseek.com", api_key="")
-            self.assertEqual(client._thinking_config("deepseek-v4-flash"), {"type": "enabled"})
+            client = OpenAICompatibleClient(
+                base_url="https://api.deepseek.com", api_key=""
+            )
+            self.assertEqual(
+                client._thinking_config("deepseek-v4-flash"), {"type": "enabled"}
+            )
         finally:
             if old_value is None:
                 os.environ.pop("OPENAI_COMPATIBLE_THINKING", None)

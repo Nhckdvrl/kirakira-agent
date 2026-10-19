@@ -17,10 +17,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from types import SimpleNamespace
 
-from agent.model_runtime.types import RetryableModelError
 from eval.longmemeval.dataset import load_longmemeval
 from eval.longmemeval.protocol import chronological, select_fixed
 from infra.providers.step_plan import STEP5_MODEL, STEP_PLAN_BASE_URL, StepPlanClient
+from plugins.models.types import RetryableModelError
 
 
 def conversation_inputs(batch):

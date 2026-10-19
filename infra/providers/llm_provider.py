@@ -8,15 +8,14 @@ import urllib.request
 from typing import Any, Callable, Dict, List, Optional
 
 from core.schema import JsonDict, ModelResponse, ToolCall, ToolSpec
-from agent.model_runtime.context_policy import estimate_context_tokens
-from agent.model_runtime.types import (
+from plugins.models.context_policy import estimate_context_tokens
+from plugins.models.json_utils import load_json_object_loose
+from plugins.models.retry import retry_after_seconds
+from plugins.models.types import (
     ContentSafetyError,
     ContextLengthError,
     RetryableModelError,
 )
-from agent.model_runtime.json_utils import load_json_object_loose
-from agent.model_runtime.retry import retry_after_seconds
-
 
 logger = logging.getLogger(__name__)
 
@@ -51,8 +50,14 @@ class OpenAICompatibleClient:
         context_window: int = 0,
         effective_context_percent: float = 0.9,
     ) -> None:
-        self.base_url = (base_url or os.getenv("OPENAI_COMPATIBLE_BASE_URL") or "").rstrip("/")
-        self.api_key = api_key if api_key is not None else os.getenv("OPENAI_COMPATIBLE_API_KEY", "")
+        self.base_url = (
+            base_url or os.getenv("OPENAI_COMPATIBLE_BASE_URL") or ""
+        ).rstrip("/")
+        self.api_key = (
+            api_key
+            if api_key is not None
+            else os.getenv("OPENAI_COMPATIBLE_API_KEY", "")
+        )
         self.timeout = timeout
         self.thinking_enabled = thinking_enabled
         self.context_window = int(context_window)
@@ -162,10 +167,22 @@ class OpenAICompatibleClient:
         chunks = state["chunks"]
         finish_reason = state["finish_reason"]
         if not finish_reason:
-            raise RetryableModelError('Model stream ended without a terminal finish reason')
-        if finish_reason == 'length':
-            return ModelResponse(text=''.join(state['text_parts']), stop_reason='length',
-                usage=next((dict(chunk['usage']) for chunk in reversed(chunks) if chunk.get('usage')), {}))
+            raise RetryableModelError(
+                "Model stream ended without a terminal finish reason"
+            )
+        if finish_reason == "length":
+            return ModelResponse(
+                text="".join(state["text_parts"]),
+                stop_reason="length",
+                usage=next(
+                    (
+                        dict(chunk["usage"])
+                        for chunk in reversed(chunks)
+                        if chunk.get("usage")
+                    ),
+                    {},
+                ),
+            )
         calls = []
         for index in sorted(state["raw_calls"]):
             item = state["raw_calls"][index]
@@ -178,7 +195,9 @@ class OpenAICompatibleClient:
             text="".join(state["text_parts"]),
             reasoning_content="".join(state["reasoning_parts"]),
             tool_calls=calls,
-            stop_reason="length" if finish_reason == "length" else ("tool_use" if calls or finish_reason == "tool_calls" else "end_turn"),
+            stop_reason="length"
+            if finish_reason == "length"
+            else ("tool_use" if calls or finish_reason == "tool_calls" else "end_turn"),
             raw={"stream_chunks": chunks[-20:]},
             usage=next(
                 (
@@ -211,24 +230,35 @@ class OpenAICompatibleClient:
         content = json.dumps(payload).encode("utf-8")
         state = self._new_stream_state()
         try:
-            async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=False) as client:
+            async with httpx.AsyncClient(
+                timeout=self.timeout, follow_redirects=False
+            ) as client:
                 async with client.stream(
                     "POST", url, content=content, headers=headers
                 ) as response:
                     if response.status_code >= 400:
-                        detail = (await response.aread()).decode("utf-8", errors="replace")
+                        detail = (await response.aread()).decode(
+                            "utf-8", errors="replace"
+                        )
                         raise self._http_error_for(
                             response.status_code, detail
                         ) or RetryableModelError(
-                            "Model request failed: HTTP %s %s" % (response.status_code, detail),
+                            "Model request failed: HTTP %s %s"
+                            % (response.status_code, detail),
                             status_code=response.status_code,
-                            retry_after=retry_after_seconds(response.headers.get('Retry-After')),
+                            retry_after=retry_after_seconds(
+                                response.headers.get("Retry-After")
+                            ),
                         )
                     async for raw_line in response.aiter_lines():
-                        if not self._consume_stream_line(raw_line.strip(), state, on_delta):
+                        if not self._consume_stream_line(
+                            raw_line.strip(), state, on_delta
+                        ):
                             break
         except httpx.RequestError as exc:
-            raise RetryableModelError(f'Model stream transport failed: {type(exc).__name__}') from exc
+            raise RetryableModelError(
+                f"Model stream transport failed: {type(exc).__name__}"
+            ) from exc
         return self._finalize_stream(state)
 
     # --- async-native transport (Phase 1): 直接 await，去掉 to_thread 阻抗 ---
@@ -276,16 +306,30 @@ class OpenAICompatibleClient:
 
     async def _arequest(self, payload: Dict[str, Any]) -> str:
         import httpx
-        async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=False) as client:
+
+        async with httpx.AsyncClient(
+            timeout=self.timeout, follow_redirects=False
+        ) as client:
             try:
-                response = await client.post(self._chat_completions_url(),
-                    content=json.dumps(payload).encode('utf-8'), headers=self._headers())
+                response = await client.post(
+                    self._chat_completions_url(),
+                    content=json.dumps(payload).encode("utf-8"),
+                    headers=self._headers(),
+                )
             except httpx.RequestError as exc:
-                raise RetryableModelError(f'Model transport failed: {type(exc).__name__}') from exc
+                raise RetryableModelError(
+                    f"Model transport failed: {type(exc).__name__}"
+                ) from exc
             if response.status_code >= 400:
-                raise self._http_error_for(response.status_code, response.text) or RetryableModelError(
-                    f'Model request failed: HTTP {response.status_code} {response.text}',
-                    status_code=response.status_code, retry_after=retry_after_seconds(response.headers.get('Retry-After')))
+                raise self._http_error_for(
+                    response.status_code, response.text
+                ) or RetryableModelError(
+                    f"Model request failed: HTTP {response.status_code} {response.text}",
+                    status_code=response.status_code,
+                    retry_after=retry_after_seconds(
+                        response.headers.get("Retry-After")
+                    ),
+                )
             return response.text
 
     def parse_response(self, payload: JsonDict) -> ModelResponse:
@@ -316,7 +360,15 @@ class OpenAICompatibleClient:
             )
 
         finish_reason = choice.get("finish_reason") or ""
-        stop_reason = "length" if finish_reason == "length" else ("tool_use" if tool_calls or finish_reason == "tool_calls" else "end_turn")
+        stop_reason = (
+            "length"
+            if finish_reason == "length"
+            else (
+                "tool_use"
+                if tool_calls or finish_reason == "tool_calls"
+                else "end_turn"
+            )
+        )
         return ModelResponse(
             text=text,
             reasoning_content=reasoning_content,
@@ -380,17 +432,25 @@ class OpenAICompatibleClient:
             )
 
     def _open(self, payload: Dict[str, Any]):
-        request = urllib.request.Request(self._chat_completions_url(),
-            data=json.dumps(payload).encode('utf-8'), headers=self._headers(), method='POST')
+        request = urllib.request.Request(
+            self._chat_completions_url(),
+            data=json.dumps(payload).encode("utf-8"),
+            headers=self._headers(),
+            method="POST",
+        )
         try:
             return urllib.request.urlopen(request, timeout=self.timeout)
         except urllib.error.HTTPError as exc:
-            detail = exc.read().decode('utf-8', errors='replace')
+            detail = exc.read().decode("utf-8", errors="replace")
             raise self._http_error_for(exc.code, detail) or RetryableModelError(
-                f'Model request failed: HTTP {exc.code} {detail}', status_code=exc.code,
-                retry_after=retry_after_seconds(exc.headers.get('Retry-After') if exc.headers else None)) from exc
+                f"Model request failed: HTTP {exc.code} {detail}",
+                status_code=exc.code,
+                retry_after=retry_after_seconds(
+                    exc.headers.get("Retry-After") if exc.headers else None
+                ),
+            ) from exc
         except urllib.error.URLError as exc:
-            raise RetryableModelError(f'Model transport failed: {exc.reason}') from exc
+            raise RetryableModelError(f"Model transport failed: {exc.reason}") from exc
 
     def _chat_completions_url(self) -> str:
         if self.base_url.endswith("/chat/completions"):
@@ -427,7 +487,9 @@ class OpenAICompatibleClient:
             },
         }
 
-    def _to_openai_messages(self, messages: List[JsonDict], system: str) -> List[JsonDict]:
+    def _to_openai_messages(
+        self, messages: List[JsonDict], system: str
+    ) -> List[JsonDict]:
         converted: List[JsonDict] = []
         if system:
             converted.append({"role": "system", "content": system})
@@ -452,7 +514,9 @@ class OpenAICompatibleClient:
                             "type": "function",
                             "function": {
                                 "name": (call.get("function") or {}).get("name"),
-                                "arguments": json.dumps((call.get("function") or {}).get("arguments", {})),
+                                "arguments": json.dumps(
+                                    (call.get("function") or {}).get("arguments", {})
+                                ),
                             },
                         }
                         for call in msg.get("tool_calls", [])

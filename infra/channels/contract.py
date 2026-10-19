@@ -5,13 +5,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
-from agent.looping.interrupt import InterruptController
-from agent.tools.message_push import MessagePushTool
 from bus.event_bus import EventBus
 from bus.queue import MessageBus
 from core.net.http import SharedHttpResources
 from infra.channels.base import AttachmentStore
-from session.manager import SessionManager
+from plugins.ledger.manager import SessionManager
+from plugins.sources.interrupt import InterruptController
+from plugins.tools.message_push import MessagePushTool
 
 
 class Channel(Protocol):

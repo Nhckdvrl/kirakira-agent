@@ -11,16 +11,16 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from agent.control.client import ControlClient, RemoteControlError
-from bootstrap.dashboard_api import DashboardService
 from bootstrap.runtime import build_runtime
-from bootstrap.workspace import build_workspace_services
 from core.schema import ModelResponse, ToolCall
 from infra.channels.contract import ChannelContext
 from infra.channels.web_chat_channel import WebChannel
+from plugins.control.client import ControlClient, RemoteControlError
+from plugins.dashboard.service import DashboardService
+from plugins.ledger.manager import SessionManager
+from plugins.ledger.owner_store import StateConflict
+from plugins.projects.factory import build_workspace_services
 from plugins.working_directory.service import read_agents
-from session.manager import SessionManager
-from session.owner_store import StateConflict
 
 
 def identity():

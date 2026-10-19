@@ -5,18 +5,22 @@ from __future__ import annotations
 import asyncio
 import unittest
 
-from agent.model_runtime.fallback import ResilientModelClient
-from agent.model_runtime.types import ContextLengthError, RetryableModelError
 from core.schema import ModelResponse
+from plugins.models.fallback import ResilientModelClient
+from plugins.models.types import ContextLengthError, RetryableModelError
 
 
 class _Client:
-    def __init__(self, result: ModelResponse | BaseException, *, delta: str = "") -> None:
+    def __init__(
+        self, result: ModelResponse | BaseException, *, delta: str = ""
+    ) -> None:
         self.result = result
         self.delta = delta
         self.models: list[str] = []
 
-    async def acomplete(self, messages, tools, system, model, max_tokens, tool_choice="auto"):
+    async def acomplete(
+        self, messages, tools, system, model, max_tokens, tool_choice="auto"
+    ):
         self.models.append(model)
         if isinstance(self.result, BaseException):
             raise self.result
@@ -91,7 +95,12 @@ class ResilientModelClientTests(unittest.TestCase):
 
             with self.assertRaises(RetryableModelError):
                 await client.acomplete_stream(
-                    [], [], "", "ignored", 100, lambda content, _reasoning: deltas.append(content)
+                    [],
+                    [],
+                    "",
+                    "ignored",
+                    100,
+                    lambda content, _reasoning: deltas.append(content),
                 )
 
             self.assertEqual(deltas, ["visible"])

@@ -8,21 +8,24 @@ from types import SimpleNamespace
 import pytest
 import pytest_asyncio
 
-from agent.core.contracts import RuntimeConfig
-from agent.core.execution import ExecutionStore
-from agent.core.pipeline import PassiveTurnPipeline
-from agent.core.reasoner import DefaultReasoner
-from agent.model_runtime.types import ModelRequestError
-from agent.prompting.context_builder import ContextBuilder
-from agent.tools.registry import ToolRegistry
-from bootstrap.tools import build_tool_registry
 from bus.event_bus import EventBus
 from bus.queue import MessageBus
 from core.memory.legacy import MemoryRuntime
 from core.schema import ModelResponse, ToolCall, ToolSpec
+from plugins.context.context_builder import ContextBuilder
+from plugins.conversation.service import ConversationService
+from plugins.delivery.service import DeliveryService
+from plugins.execution.service import ExecutionStore
+from plugins.ledger.manager import SessionManager
+from plugins.models.types import ModelRequestError
+from plugins.react.contract import ReactConfig
+from plugins.react.reasoner import ReactProgram
+from plugins.reply_program.service import DefaultReplyProgram
 from plugins.scheduler.service import SchedulerService
 from plugins.scheduler.store import JobStore
-from session.manager import SessionManager
+from plugins.sources.admission import TurnAdmission
+from plugins.tools.factory import build_tool_registry
+from plugins.tools.registry import ToolRegistry
 
 
 class Model:
@@ -51,22 +54,26 @@ async def runtime(tmp_path):
     )
     model = Model([ModelResponse(text="done")])
     executions = ExecutionStore(tmp_path / "executions.db")
-    reasoner = DefaultReasoner(
+    reasoner = ReactProgram(
         model_client=model,
         tools=tools,
-        config=RuntimeConfig(model="fixture", stream=False),
+        config=ReactConfig(model="fixture", stream=False),
         context=ContextBuilder(tmp_path, memory),
         event_bus=events,
         execution_store=executions,
     )
-    pipeline = PassiveTurnPipeline(
-        bus=bus,
-        event_bus=events,
-        session_manager=sessions,
-        memory=memory,
-        tools=tools,
-        reasoner=reasoner,
-        config=reasoner.config,
+    pipeline = ConversationService(
+        program=DefaultReplyProgram(
+            delivery=DeliveryService(sessions, bus, events),
+            bus=bus,
+            event_bus=events,
+            session_manager=sessions,
+            memory=memory,
+            tools=tools,
+            reasoner=reasoner,
+            config=reasoner.config,
+        ),
+        admission=TurnAdmission(sessions),
     )
     scheduler = SchedulerService(
         tmp_path / "schedules.json",
@@ -289,7 +296,7 @@ async def test_recovery_never_reexecutes_an_inflight_fire(runtime):
 async def test_queued_fire_can_recover_before_any_model_or_tool_execution(runtime):
     job = await due(runtime, action="run")
     runtime.scheduler._claim(job)
-    from agent.tools.registry import ToolRegistry
+    from plugins.tools.registry import ToolRegistry
 
     reopened = SchedulerService(
         runtime.path / "schedules.json",

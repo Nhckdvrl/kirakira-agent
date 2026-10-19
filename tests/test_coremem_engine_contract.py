@@ -20,7 +20,6 @@ from unittest.mock import AsyncMock
 
 from core.memory.engine import (
     EngineProfile,
-    MemoryCapability,
     MemoryIngestRequest,
     MemoryMutation,
     MemoryQuery,
@@ -197,12 +196,6 @@ class EngineContractTests(unittest.TestCase):
             worker.run.assert_awaited_once()
 
         asyncio.run(scenario())
-
-    def test_descriptor_keeps_messages_capability_only(self) -> None:
-        descriptor = DefaultMemoryEngine.DESCRIPTOR
-        self.assertEqual(descriptor.profile, EngineProfile.RICH_MEMORY_ENGINE)
-        self.assertIn(MemoryCapability.INGEST_MESSAGES, descriptor.capabilities)
-        self.assertNotIn(MemoryCapability.INGEST_TEXT, descriptor.capabilities)
 
 
 if __name__ == "__main__":

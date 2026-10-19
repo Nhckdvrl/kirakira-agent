@@ -1,15 +1,15 @@
 """Reference-compatible prompt assembly and skill activation contracts."""
 
-from datetime import datetime
-from pathlib import Path
 import tempfile
 import unittest
+from datetime import datetime
+from pathlib import Path
 
-from agent.prompting.context_builder import ContextBuilder
 from core.memory.legacy import MemoryRuntime
-from agent.prompting import SYSTEM_CONTEXT_FRAME_MARKER
-from session.manager import SessionManager
-from agent.skills import SkillLoader
+from plugins.context import SYSTEM_CONTEXT_FRAME_MARKER
+from plugins.context.context_builder import ContextBuilder
+from plugins.ledger.manager import SessionManager
+from plugins.skills.service import SkillLoader
 
 
 class PromptingTests(unittest.TestCase):
@@ -29,7 +29,9 @@ class PromptingTests(unittest.TestCase):
             )
 
             self.assertEqual(result.messages[1]["content"], "old")
-            self.assertTrue(result.messages[-2]["content"].startswith(SYSTEM_CONTEXT_FRAME_MARKER))
+            self.assertTrue(
+                result.messages[-2]["content"].startswith(SYSTEM_CONTEXT_FRAME_MARKER)
+            )
             self.assertIn("remembered fact", result.messages[-2]["content"])
             self.assertNotIn("remembered fact", result.system_prompt)
             self.assertIn("current", result.messages[-1]["content"])
@@ -60,7 +62,9 @@ class PromptingTests(unittest.TestCase):
             self.assertTrue(cached["skills_catalog"])
 
             trimmed = builder.render(**kwargs, disabled_sections={"skills_catalog"})
-            self.assertNotIn("skills_catalog", {item.name for item in trimmed.debug_breakdown})
+            self.assertNotIn(
+                "skills_catalog", {item.name for item in trimmed.debug_breakdown}
+            )
             self.assertNotIn("demo skill", trimmed.system_prompt)
 
     def test_always_skill_is_loaded_without_an_explicit_mention(self):

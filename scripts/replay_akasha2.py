@@ -6,19 +6,25 @@ The endpoint identifies the existing vector space; it is never contacted.
 
 import argparse
 import asyncio
-from contextlib import closing
 import hashlib
 import json
 import os
-from pathlib import Path
 import sqlite3
 import tempfile
-import numpy as np
-from agent.config_models import Config, MemoryConfig, MemoryEmbeddingConfig
-from plugins.akasha2.engine import Akasha2MemoryEngine, _vector
-from session.turn_source import load_committed_turn_messages
-from bus.events_lifecycle import TurnCommitted
+from contextlib import closing
+from pathlib import Path
 from types import SimpleNamespace
+
+import numpy as np
+
+from bus.events_lifecycle import TurnCommitted
+from plugins.akasha2.engine import Akasha2MemoryEngine, _vector
+from plugins.default_memory.config_models import (
+    Config,
+    MemoryConfig,
+    MemoryEmbeddingConfig,
+)
+from plugins.ledger.turn_source import load_committed_turn_messages
 
 
 async def rebuild(source, output, model, embedding_endpoint):

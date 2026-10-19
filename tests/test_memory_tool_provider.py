@@ -6,9 +6,6 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from agent.tools import build_workspace_registry
-from agent.tools.registry import ToolRegistry
-from bootstrap.tools import build_tool_registry
 from core.memory.engine import (
     MemoryCapability,
     MemoryQueryResult,
@@ -17,8 +14,11 @@ from core.memory.engine import (
 )
 from core.schema import ToolCall
 from plugins.default_memory.contract import MemoryServices
+from plugins.ledger.manager import SessionManager
 from plugins.memory_tools.tools import register_memory_tools
-from session.manager import SessionManager
+from plugins.tools import build_workspace_registry
+from plugins.tools.factory import build_tool_registry
+from plugins.tools.registry import ToolRegistry
 
 
 def engine():

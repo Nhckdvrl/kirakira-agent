@@ -8,8 +8,14 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from bus.events import InboundMessage, OutboundMessage
 
-
 JsonDict = Dict[str, Any]
+
+
+@dataclass(frozen=True)
+class ProgramSuperseded:
+    session_key: str
+    program_id: str
+    request_id: str
 
 
 @dataclass
@@ -218,9 +224,13 @@ class TurnCommitted:
         object.__setattr__(self, "chat_id", chat_id)
         object.__setattr__(self, "input_message", input_message or user_content)
         object.__setattr__(
-            self, "persisted_user_message", persisted_user_message or input_message or user_content
+            self,
+            "persisted_user_message",
+            persisted_user_message or input_message or user_content,
         )
-        object.__setattr__(self, "assistant_response", assistant_response or assistant_reply)
+        object.__setattr__(
+            self, "assistant_response", assistant_response or assistant_reply
+        )
         object.__setattr__(self, "tools_used", tuple(tools_used))
         object.__setattr__(self, "turn_id", turn_id)
         object.__setattr__(self, "assistant_message_id", assistant_message_id)

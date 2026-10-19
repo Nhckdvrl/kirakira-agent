@@ -1,8 +1,7 @@
 """Persistent interest estimates feed a decaying pool, not a per-item send vote."""
 
-from dataclasses import dataclass
-from datetime import datetime
 import math
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
