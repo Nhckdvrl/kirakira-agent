@@ -32,11 +32,19 @@ async def measure(a):
     from bus.event_bus import EventBus
     from bus.events_lifecycle import StreamDeltaReady
     from core.schema import ModelResponse, ToolCall, ToolSpec
-    from plugins.execution.service import ExecutionStore
-    from plugins.models.invoker import ModelInvoker
-    from plugins.react.contract import ReactConfig
-    from plugins.react.reasoner import ReactProgram
-    from plugins.tools.registry import ToolRegistry
+
+    if (a.implementation / "plugins/react/reasoner.py").is_file():
+        from plugins.execution.service import ExecutionStore
+        from plugins.models.invoker import ModelInvoker
+        from plugins.react.contract import ReactConfig
+        from plugins.react.reasoner import ReactProgram
+        from plugins.tools.registry import ToolRegistry
+    else:
+        from agent.core.contracts import RuntimeConfig as ReactConfig
+        from agent.core.execution import ExecutionStore
+        from agent.core.model_io import ModelInvoker
+        from agent.core.reasoner import DefaultReasoner as ReactProgram
+        from agent.tools.registry import ToolRegistry
 
     report = {
         "implementation": subprocess.check_output(
@@ -47,7 +55,19 @@ async def measure(a):
                 path.read_bytes()
             ).hexdigest()
             for path in [
-                *sorted((a.implementation / "agent/core").glob("*.py")),
+                *[
+                    path
+                    for owner in (
+                        "agent/core",
+                        "agent/composition",
+                        "agent/plugin_composition",
+                        "plugins/react",
+                        "plugins/models",
+                        "plugins/execution",
+                        "plugins/tools",
+                    )
+                    for path in sorted((a.implementation / owner).glob("*.py"))
+                ],
                 a.implementation / "agent/tools/registry.py",
                 a.implementation / "utils/async_tasks.py",
             ]

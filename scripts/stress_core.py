@@ -12,17 +12,13 @@ import math
 import os
 import platform
 import re
+import subprocess
+import sys
 import time
 from collections import Counter
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
-
-from bootstrap.runtime import build_runtime
-from bus.events import InboundMessage
-from bus.events_lifecycle import TurnFinished, TurnStarted
-from core.schema import ModelResponse, ToolCall, ToolSpec
-from plugins.models.types import RetryableModelError
 
 
 def distribution(values):
@@ -34,6 +30,18 @@ def distribution(values):
 
 
 async def verify(args):
+    implementation = args.implementation.resolve()
+    sys.path.insert(0, str(implementation))
+    from bootstrap.runtime import build_runtime
+    from bus.events import InboundMessage
+    from bus.events_lifecycle import TurnFinished, TurnStarted
+    from core.schema import ModelResponse, ToolCall, ToolSpec
+
+    if (implementation / "plugins/models/types.py").is_file():
+        from plugins.models.types import RetryableModelError
+    else:
+        from agent.model_runtime.types import RetryableModelError
+
     args.workspace.mkdir(parents=True, exist_ok=False)
     if args.output.exists():
         raise ValueError("choose a fresh output")
@@ -52,6 +60,13 @@ async def verify(args):
     (args.workspace / "config.toml").write_text(
         '[llm.main]\nmodel="offline-fixture"\nbase_url="http://offline.invalid/v1"\n[memory]\nenabled=false\n'
     )
+    if args.without_extensions:
+        directory = args.workspace / ".kirakira"
+        directory.mkdir()
+        (directory / "manifest.toml").write_text(
+            "[plugins.curated_feeds]\nenabled=false\n"
+            '[plugins."curated-feeds"]\nenabled=false\n'
+        )
     effects, injected, requests = Counter(), set(), 0
     request_digests = {}
     read_active, peak_read = Counter(), 0
@@ -233,6 +248,11 @@ async def verify(args):
         await restarted.stop_background([])
     report = {
         "fixture": "offline production pipeline pressure",
+        "implementation": subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=implementation, text=True
+        ).strip(),
+        "runner_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        "without_extensions": args.without_extensions,
         "python": platform.python_version(),
         "model_network_calls": 0,
         "turns": args.turns,
@@ -256,13 +276,32 @@ async def verify(args):
         "request_digests": request_digests,
         "cases": sorted(rows, key=lambda row: row["ticket"]),
         "source_sha256": {
-            str(path): hashlib.sha256(path.read_bytes()).hexdigest()
+            str(path.relative_to(implementation)): hashlib.sha256(
+                path.read_bytes()
+            ).hexdigest()
             for path in [
-                Path(__file__).resolve().relative_to(Path.cwd().resolve()),
-                *sorted(Path("agent/core").glob("*.py")),
-                Path("agent/tools/registry.py"),
-                Path("utils/async_tasks.py"),
+                *[
+                    path
+                    for owner in (
+                        "agent/core",
+                        "agent/composition",
+                        "agent/plugin_composition",
+                        "bootstrap",
+                        "plugins/conversation",
+                        "plugins/reply_program",
+                        "plugins/sources",
+                        "plugins/ledger",
+                        "plugins/react",
+                        "plugins/models",
+                        "plugins/execution",
+                        "plugins/tools",
+                    )
+                    for path in sorted((implementation / owner).glob("*.py"))
+                ],
+                implementation / "agent/tools/registry.py",
+                implementation / "utils/async_tasks.py",
             ]
+            if path.exists()
         },
         "limitations": [
             "deterministic model, not real task success or provider throughput",
@@ -291,6 +330,8 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--turns", type=int, default=1000)
     parser.add_argument("--sessions", type=int, default=64)
+    parser.add_argument("--implementation", type=Path, default=Path.cwd())
+    parser.add_argument("--without-extensions", action="store_true")
     args = parser.parse_args()
     if args.turns < 1 or not 1 <= args.sessions <= args.turns:
         parser.error("require 1 <= sessions <= turns")
