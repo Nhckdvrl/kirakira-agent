@@ -128,3 +128,18 @@ async def test_missing_capability_withdraws_unpublished_tools_and_resources(tmp_
     assert not registry.has("bad_tool") and manager.active == []
     assert "missing" in manager.errors["broken"]
     await manager.terminate_all()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_resource_closer_does_not_skip_remaining_resources():
+    scope = ResourceScope()
+    events = []
+    scope.on_close(lambda: events.append("remaining resource"))
+
+    async def cancelled_closer():
+        raise asyncio.CancelledError
+
+    scope.on_close(cancelled_closer)
+    with pytest.raises(ExceptionGroup, match="resource cleanup"):
+        await scope.close()
+    assert events == ["remaining resource"]

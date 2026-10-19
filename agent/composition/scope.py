@@ -48,6 +48,8 @@ class ResourceScope:
                 result = closer()
                 if inspect.isawaitable(result):
                     await result
+            except asyncio.CancelledError:
+                errors.append(RuntimeError("resource closer cancelled during disposal"))
             except Exception as exc:  # noqa: BLE001 -- attempt every resource closer
                 errors.append(exc)
         self._closers.clear()
