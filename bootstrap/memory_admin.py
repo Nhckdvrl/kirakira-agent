@@ -489,7 +489,7 @@ def repair_kinds(workspace: Path, *, dry_run: bool = False) -> dict[str, Any]:
     背景:注入选择器只接受 `procedure/preference/event/profile`(retriever 的
     `else: continue`),旧工具 schema 写入的 `identity/fact/requested_memory`
     即使被检索命中也永远进不了上下文——**检索到了却用不上,且完全静默**。
-    写入边界已归一(见 `tools/builtins._canonical_memory_kind`),本命令修存量。
+    写入边界已归一(见 `plugins.memory_tools.tools._canonical_memory_kind`),本命令修存量。
 
     只改 `memory_type` 一列,不动 summary、向量与状态:同一条记忆换个标签,
     语义不变。改前自动备份;`dry_run` 只报告不落库。

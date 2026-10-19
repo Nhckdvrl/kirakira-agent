@@ -17,7 +17,7 @@ from agent.core.reasoner import DefaultReasoner
 from agent.model_runtime.types import RetryableModelError
 from agent.tools.registry import ToolRegistry
 from agent.turns.policy import ReasoningPolicy
-from bootstrap.app import build_runtime
+from bootstrap.runtime import build_runtime
 from bus.event_bus import EventBus
 from core.schema import ToolSpec
 from infra.providers.step_plan import StepPlanClient, STEP5_MODEL, STEP_PLAN_BASE_URL

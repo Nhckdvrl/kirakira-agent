@@ -11,9 +11,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 IMPACT_RULES: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
+    (("bootstrap/runtime.py", "bootstrap/app.py", "bootstrap/channels.py", "bootstrap/proactive.py", "bootstrap/tools.py", "bootstrap/restart.py"), (
+        "tests/test_runtime_lifecycle.py", "tests/test_cli.py", "tests/test_channels.py",
+        "tests/test_plugin_extensibility.py", "tests/test_memory_tool_provider.py",
+    )),
+    (("plugins/memory_tools/",), (
+        "tests/test_memory_tool_provider.py", "tests/test_memory_engine_wiring.py", "tests/test_akasha.py", "tests/test_memory_m1.py",
+    )),
     (("session/", "agent/core/", "agent/model_runtime/"), (
         "tests/semantic/test_context_history_contract.py",
         "tests/test_runtime.py",
+        "tests/test_runtime_lifecycle.py",
         "tests/test_core_execution.py",
         "tests/test_query_compaction.py",
         "tests/test_proactive_decisions.py",

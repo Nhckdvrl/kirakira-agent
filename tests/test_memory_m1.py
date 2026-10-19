@@ -20,7 +20,7 @@ from core.memory.legacy import MemoryRuntime
 from bootstrap.memory_admin import clear, doctor, migrate, rollback, verify
 from core.schema import ToolCall
 from session.manager import SessionManager
-from agent.tools import build_default_registry
+from bootstrap.tools import build_tool_registry
 
 
 class MemoryM1Tests(unittest.TestCase):
@@ -111,7 +111,7 @@ class MemoryM1Tests(unittest.TestCase):
             runtime = MemoryRuntime(workspace)
             self.assertEqual(runtime.engine, "coremem")
             self.assertEqual(runtime.recall("蓝色")[0].id, "mem_0001")
-            registry = build_default_registry(workspace, memory=runtime)
+            registry = build_tool_registry(workspace, memory=runtime)
             tool_result = registry.execute(
                 ToolCall("call-1", "memorize", {"content": "用户偏好安静", "memory_type": "preference"})
             )

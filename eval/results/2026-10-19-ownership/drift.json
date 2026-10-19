@@ -1,0 +1,94 @@
+{
+  "endpoint": "https://api.stepfun.com/step_plan/v1",
+  "model": "step-5-preview",
+  "billing_surface": "step_plan",
+  "reasoning_effort": "medium",
+  "cases": [
+    {
+      "name": "silent",
+      "status": "passed",
+      "proposal_status": "completed",
+      "received": [],
+      "runs": [
+        {
+          "skill": "verify",
+          "run_at": "2026-10-19T08:01:44.948996+00:00",
+          "status": "completed",
+          "briefing": "Idle mode background verification task completed. Appended a progress journal note \"verified silent work\". No proactive message was sent, as required.",
+          "message_result": "silent"
+        }
+      ],
+      "executions": [
+        {
+          "scope": "verify",
+          "status": "terminal_tool"
+        }
+      ]
+    },
+    {
+      "name": "delivered",
+      "status": "passed",
+      "proposal_status": "completed",
+      "received": [
+        "KIRAKIRA_DRIFT_OK"
+      ],
+      "runs": [
+        {
+          "skill": "verify",
+          "run_at": "2026-10-19T08:01:54.071398+00:00",
+          "status": "completed",
+          "briefing": "Drift 空闲模式后台校验完成。未检测到需要主动推送的内容。已按技能指南记录 journal(progress)，确认校验令牌 KIRAKIRA_DRIFT_OK 并通过 message_push 投递。未使用 shell/file/web/scheduling/network 等受限工具，仅使用 journal_append、message_push、finish_drift。",
+          "message_result": "sent"
+        }
+      ],
+      "executions": [
+        {
+          "scope": "verify",
+          "status": "terminal_tool"
+        }
+      ]
+    },
+    {
+      "name": "superseded",
+      "status": "passed",
+      "proposal_status": "superseded",
+      "received": [],
+      "runs": [
+        {
+          "skill": "verify",
+          "run_at": "2026-10-19T08:02:12.265350+00:00",
+          "status": "paused",
+          "briefing": "conversation superseded this run",
+          "message_result": "silent"
+        }
+      ],
+      "executions": [
+        {
+          "scope": "verify",
+          "status": "terminal_tool"
+        }
+      ]
+    },
+    {
+      "name": "paused",
+      "status": "passed",
+      "proposal_status": "paused",
+      "received": [],
+      "runs": [
+        {
+          "skill": "verify",
+          "run_at": "2026-10-19T08:02:45.564067+00:00",
+          "status": "paused",
+          "briefing": "needs next pass",
+          "message_result": "silent"
+        }
+      ],
+      "executions": [
+        {
+          "scope": "verify",
+          "status": "terminal_tool"
+        }
+      ]
+    }
+  ]
+}

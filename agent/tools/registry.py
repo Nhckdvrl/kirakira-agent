@@ -1,13 +1,13 @@
 """Kirakira Agent learning harness module."""
 
 import asyncio
+import inspect
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
-import inspect
 from typing import Any, Callable, Dict, List, Optional
 
+from agent.composition import ResourceScope
 from core.schema import JsonDict, ToolCall, ToolResult, ToolSpec
-
 
 ToolHandler = Callable[..., Any]
 
@@ -50,6 +50,7 @@ class ToolRegistry:
     def __init__(self) -> None:
         self._tools: Dict[str, Tool] = {}
         self._shutdown_callbacks: List[Callable[[], Any]] = []
+        self._shutdown_scope = ResourceScope()
         self._owner_cleanup_callbacks: List[Callable[[str], Any]] = []
         self._context: ContextVar[JsonDict] = ContextVar(
             "kirakira_tool_context", default={}
@@ -144,15 +145,14 @@ class ToolRegistry:
         return dict(self._context.get())
 
     async def shutdown(self) -> None:
-        callbacks = list(reversed(self._shutdown_callbacks))
-        self._shutdown_callbacks.clear()
-        for callback in callbacks:
-            result = callback()
-            if inspect.isawaitable(result):
-                await result
+        try:
+            await self._shutdown_scope.close()
+        finally:
+            self._shutdown_callbacks.clear()
 
     def add_shutdown_callback(self, callback: Callable[[], Any]) -> None:
         if callback not in self._shutdown_callbacks:
+            self._shutdown_scope.on_close(callback)
             self._shutdown_callbacks.append(callback)
 
     def add_owner_cleanup_callback(self, callback: Callable[[str], Any]) -> None:
@@ -170,7 +170,9 @@ class ToolRegistry:
     def execute(self, call: ToolCall) -> ToolResult:
         tool = self._tools.get(call.name)
         if tool is None:
-            return ToolResult(call.id, "Error: Unknown tool '%s'" % call.name, is_error=True)
+            return ToolResult(
+                call.id, "Error: Unknown tool '%s'" % call.name, is_error=True
+            )
         validation_error = _validate_arguments(tool.spec, call.arguments)
         if validation_error:
             return ToolResult(call.id, validation_error, is_error=True)
@@ -182,7 +184,9 @@ class ToolRegistry:
                 except RuntimeError:
                     output = asyncio.run(output)
                 else:
-                    raise RuntimeError("Async tool '%s' requires execute_async" % call.name)
+                    raise RuntimeError(
+                        "Async tool '%s' requires execute_async" % call.name
+                    )
             if isinstance(output, ToolResult):
                 return ToolResult(
                     call.id,
@@ -198,7 +202,9 @@ class ToolRegistry:
     async def execute_async(self, call: ToolCall) -> ToolResult:
         tool = self._tools.get(call.name)
         if tool is None:
-            return ToolResult(call.id, "Error: Unknown tool '%s'" % call.name, is_error=True)
+            return ToolResult(
+                call.id, "Error: Unknown tool '%s'" % call.name, is_error=True
+            )
         validation_error = _validate_arguments(tool.spec, call.arguments)
         if validation_error:
             return ToolResult(call.id, validation_error, is_error=True)

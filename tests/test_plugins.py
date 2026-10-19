@@ -80,8 +80,6 @@ class PluginTests(unittest.TestCase):
                     event_bus=EventBus(),
                     tool_registry=ToolRegistry(),
                     workspace=workspace,
-                    session_manager=None,
-                    memory=None,
                 )
                 await manager.load_all()
                 self.assertEqual([record.plugin_id for record in manager.active], ["demo"])
@@ -114,8 +112,6 @@ class PluginTests(unittest.TestCase):
                 event_bus=EventBus(),
                 tool_registry=ToolRegistry(),
                 workspace=workspace,
-                session_manager=None,
-                memory=None,
             )
             original = manager.watch_revision()
             root.joinpath("mcp_server.py").write_text("VERSION = 2\n", encoding="utf-8")
@@ -157,8 +153,6 @@ class PluginTests(unittest.TestCase):
                     event_bus=EventBus(),
                     tool_registry=tools,
                     workspace=workspace,
-                    session_manager=None,
-                    memory=None,
                 )
 
                 await manager.load_all()
@@ -211,8 +205,6 @@ class PluginTests(unittest.TestCase):
                     event_bus=EventBus(),
                     tool_registry=ToolRegistry(),
                     workspace=workspace,
-                    session_manager=None,
-                    memory=None,
                     mcp_publisher=mcp,
                     skill_loader=skills,
                 )
@@ -252,8 +244,6 @@ class PluginTests(unittest.TestCase):
                     event_bus=EventBus(),
                     tool_registry=ToolRegistry(),
                     workspace=workspace,
-                    session_manager=None,
-                    memory=None,
                 )
 
                 await manager.load_all()
@@ -273,8 +263,6 @@ class PluginTests(unittest.TestCase):
                     event_bus=EventBus(),
                     tool_registry=ToolRegistry(),
                     workspace=workspace,
-                    session_manager=None,
-                    memory=None,
                 )
 
                 with self.assertRaises(ValueError):
@@ -301,8 +289,6 @@ class PluginTests(unittest.TestCase):
                     event_bus=EventBus(),
                     tool_registry=ToolRegistry(),
                     workspace=workspace,
-                    session_manager=None,
-                    memory=None,
                 )
 
                 reload_calls = []
@@ -368,8 +354,6 @@ class PluginTests(unittest.TestCase):
                     event_bus=EventBus(),
                     tool_registry=tools,
                     workspace=workspace,
-                    session_manager=None,
-                    memory=None,
                 )
 
                 with self.assertLogs("agent.plugins", level="ERROR"):
@@ -407,8 +391,6 @@ class PluginTests(unittest.TestCase):
                     event_bus=EventBus(),
                     tool_registry=ToolRegistry(),
                     workspace=workspace,
-                    session_manager=None,
-                    memory=None,
                 )
 
                 with self.assertLogs("agent.plugins", level="ERROR"):

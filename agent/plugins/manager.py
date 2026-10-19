@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import time
 import hashlib
 import importlib.util
 import inspect
@@ -13,15 +12,17 @@ import os
 import re
 import shutil
 import sys
-from dataclasses import dataclass, field
+import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
-from bus.event_bus import EventBus
-from agent.composition import ServiceKey, ServiceRegistry, ResourceScope
+from agent.composition import ServiceRegistry
 from agent.config import load_toml_config
 from agent.lifecycle.phase import inspect_phase, topo_sort_modules
+from agent.plugins.api import Plugin, PluginContext, PluginKVStore
+from agent.plugins.decorators import get_bindings
 from agent.plugins.generation import (
     GateResult,
     PluginContributions,
@@ -30,18 +31,6 @@ from agent.plugins.generation import (
     compute_generation_id,
 )
 from agent.plugins.jobs import PluginJobHost, PluginJobSpec
-from agent.plugins.reload_journal import ReloadJournal
-from agent.plugins.registry import plugin_registry
-from agent.plugins.service_host import PluginServiceHost
-from agent.plugins.specs import (
-    ManagedServiceSpec,
-    McpServerSpec,
-    PluginReadinessContext,
-    PluginSemanticCheck,
-    ProactiveSourceSpec,
-    RegisteredProactiveSource,
-    proactive_source_key,
-)
 from agent.plugins.manifest import (
     MANIFEST_NAME,
     PluginEnablement,
@@ -52,21 +41,19 @@ from agent.plugins.manifest import (
     resolve_skill_roots,
     safe_child,
 )
-from agent.plugins.decorators import (
-    get_bindings,
-    on_after_reasoning,
-    on_after_step,
-    on_after_turn,
-    on_before_reasoning,
-    on_before_step,
-    on_before_turn,
-    on_prompt_render,
-    on_tool_pre,
-    tool,
+from agent.plugins.reload_journal import ReloadJournal
+from agent.plugins.service_host import PluginServiceHost
+from agent.plugins.specs import (
+    PluginReadinessContext,
+    PluginSemanticCheck,
+    ProactiveSourceSpec,
+    RegisteredProactiveSource,
+    proactive_source_key,
 )
-from core.schema import ToolSpec
 from agent.tool_hooks import HookContext, HookOutcome, ToolHook
 from agent.tools.registry import ToolRegistry, object_schema
+from bus.event_bus import EventBus
+from core.schema import ToolSpec
 
 logger = logging.getLogger(__name__)
 
@@ -122,89 +109,6 @@ def _source_plugin_name(source: str) -> str:
     return Path(text).name
 
 
-class PluginKVStore:
-    def __init__(self, path: Path) -> None:
-        self.path = path
-
-    def get(self, key: str, default: Any = None) -> Any:
-        return self._read().get(key, default)
-
-    def set(self, key: str, value: Any) -> None:
-        data = self._read()
-        data[key] = value
-        self._write(data)
-
-    def increment(self, key: str, delta: int = 1) -> int:
-        data = self._read()
-        value = int(data.get(key, 0)) + int(delta)
-        data[key] = value
-        self._write(data)
-        return value
-
-    def _read(self) -> Dict[str, Any]:
-        if not self.path.exists():
-            return {}
-        payload = json.loads(self.path.read_text(encoding="utf-8"))
-        if not isinstance(payload, dict):
-            raise ValueError("Plugin KV store must contain a JSON object")
-        return payload
-
-    def _write(self, data: Dict[str, Any]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        temp = self.path.with_name(".%s.%s.tmp" % (self.path.name, uuid4().hex))
-        try:
-            temp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-            os.replace(temp, self.path)
-        finally:
-            try:
-                temp.unlink()
-            except FileNotFoundError:
-                pass
-
-
-@dataclass
-class PluginContext:
-    event_bus: EventBus
-    tool_registry: ToolRegistry
-    plugin_id: str
-    plugin_dir: Path
-    data_dir: Path
-    kv_store: PluginKVStore
-    workspace: Path
-    config: Any = None
-    services: ServiceRegistry | None = None
-    required_services: tuple = ()
-    scope: ResourceScope = field(default_factory=ResourceScope)
-    _provided: dict = field(default_factory=dict)
-    _published: bool = False
-
-    def provide(self, key: ServiceKey, value):
-        if self._published:
-            raise RuntimeError('capability declarations are frozen after publication')
-        if key in self._provided:
-            raise ValueError('duplicate provided capability: ' + key.name)
-        self._provided[key] = value
-
-    def use(self, key: ServiceKey):
-        if self.services is None:
-            raise RuntimeError('no capability registry was injected')
-        if key.name not in {k.name for k in self.required_services}:
-            raise PermissionError('capability dependency was not declared: ' + key.name)
-        return self.services.use(key)
-
-    def spawn(self, coroutine, *, name=None):
-        return self.scope.spawn(coroutine, name=name)
-
-    def on_close(self, closer):
-        self.scope.on_close(closer)
-
-    def __getitem__(self, key: str) -> Any:
-        return getattr(self, key)
-
-    def get(self, key: str, default: Any = None) -> Any:
-        return getattr(self, key, default)
-
-
 @dataclass
 class ActivePlugin:
     plugin_id: str
@@ -223,7 +127,9 @@ class ActivePlugin:
 class DecoratedToolHook:
     event = "pre_tool_use"
 
-    def __init__(self, name: str, method, tool_name: Optional[str], priority: int) -> None:
+    def __init__(
+        self, name: str, method, tool_name: Optional[str], priority: int
+    ) -> None:
         self.name = name
         self.method = method
         self.tool_name = tool_name
@@ -252,108 +158,6 @@ class DecoratedToolHook:
         return HookOutcome()
 
 
-class Plugin:
-    api_version: int = 3
-    name: str = ""
-    version: str = ""
-    desc: str = ""
-    author: str = ""
-    ConfigModel: Any = None
-
-    def __init_subclass__(cls, **kwargs: object) -> None:
-        # 照 Reference:插件类定义即注册,manager 不必扫描类名。
-        super().__init_subclass__(**kwargs)
-        plugin_registry.register_class(cls)
-
-    @classmethod
-    def requires(cls) -> tuple[ServiceKey, ...]:
-        return ()
-
-    async def initialize(self) -> None:
-        return None
-
-    async def prepare(self) -> None:
-        """Prepare a Runtime API v2 candidate before it becomes visible.
-
-        Existing Kirakira plugins that only implement ``initialize`` keep
-        working through this compatibility seam.
-        """
-
-        await self.initialize()
-
-    def activate(self) -> None:
-        return None
-
-    def retire(self) -> None:
-        return None
-
-    async def terminate(self) -> None:
-        return None
-
-    # --- 语义检查:能力以运行时为准,检查不过的插件不进入可用代际 ---
-
-    def static_semantic_checks(self) -> List[PluginSemanticCheck]:
-        return []
-
-    async def readiness_semantic_checks(
-        self,
-        context: PluginReadinessContext,
-    ) -> List[PluginSemanticCheck]:
-        return []
-
-    @classmethod
-    def skill_roots(cls) -> tuple[str, ...]:
-        return ()
-
-    @classmethod
-    def drift_skill_roots(cls) -> tuple[str, ...]:
-        return ()
-
-    @classmethod
-    def mcp_servers(cls) -> List[McpServerSpec]:
-        return []
-
-    @classmethod
-    def managed_services(cls) -> List[ManagedServiceSpec]:
-        return []
-
-    def proactive_sources(self) -> List[ProactiveSourceSpec]:
-        return []
-
-    def jobs(self) -> List[PluginJobSpec]:
-        return []
-
-    def before_turn_modules(self) -> List[object]:
-        return []
-
-    def before_reasoning_modules(self) -> List[object]:
-        return []
-
-    def prompt_render_modules(self) -> List[object]:
-        return []
-
-    def before_step_modules(self) -> List[object]:
-        return []
-
-    def after_step_modules(self) -> List[object]:
-        return []
-
-    def after_reasoning_modules(self) -> List[object]:
-        return []
-
-    def after_turn_modules(self) -> List[object]:
-        return []
-
-    def tool_hooks(self) -> List[ToolHook]:
-        return []
-
-    def register_tools(self, registry: ToolRegistry) -> None:
-        return None
-
-    def channels(self) -> List[object]:
-        return []
-
-
 class PluginManager:
     def __init__(
         self,
@@ -362,8 +166,6 @@ class PluginManager:
         event_bus: EventBus,
         tool_registry: ToolRegistry,
         workspace: Path,
-        session_manager: Any,
-    memory: Any,
         mcp_publisher: Any = None,
         skill_loader: Any = None,
         service_registry: ServiceRegistry | None = None,
@@ -372,8 +174,6 @@ class PluginManager:
         self.event_bus = event_bus
         self.tool_registry = tool_registry
         self.workspace = workspace
-        self.session_manager = session_manager
-        self.memory = memory
         self.mcp_publisher = mcp_publisher
         self.skill_loader = skill_loader
         self.services = service_registry or ServiceRegistry()
@@ -396,7 +196,9 @@ class PluginManager:
         self.reload_hook: Optional[Any] = None
         self._register_management_tools()
 
-    async def _activate_plugin(self, root: Path, manifest: Dict[str, Any]) -> str | None:
+    async def _activate_plugin(
+        self, root: Path, manifest: Dict[str, Any]
+    ) -> str | None:
         """装载并初始化单个插件目录;返回激活后的 plugin_id,跳过时返回 None。"""
 
         plugin = self._load_one(root / "plugin.py")
@@ -510,7 +312,9 @@ class PluginManager:
             try:
                 plugin.retire()
             except Exception:
-                logger.exception("plugin retire failed: %s", plugin.name or type(plugin).__name__)
+                logger.exception(
+                    "plugin retire failed: %s", plugin.name or type(plugin).__name__
+                )
             try:
                 self.services.withdraw(plugin.context.plugin_id)
                 try:
@@ -518,7 +322,9 @@ class PluginManager:
                 finally:
                     await plugin.terminate()
             except Exception:
-                logger.exception("plugin terminate failed: %s", plugin.name or type(plugin).__name__)
+                logger.exception(
+                    "plugin terminate failed: %s", plugin.name or type(plugin).__name__
+                )
         if self.mcp_publisher is not None:
             await self.mcp_publisher.shutdown()
 
@@ -580,8 +386,7 @@ class PluginManager:
         那种偶然的顺序变化比顺序不可控更难排查。插件全部迁移到 slot 后自动生效。
         """
         if not modules or not all(
-            isinstance(getattr(module, "slot", None), str)
-            and getattr(module, "slot")
+            isinstance(getattr(module, "slot", None), str) and getattr(module, "slot")
             for module in modules
         ):
             return modules
@@ -635,9 +440,7 @@ class PluginManager:
         mcp = {
             name: spec
             for name, spec in self.mcp_servers.items()
-            if any(
-                declared.name == name for declared in plugin.mcp_servers()
-            )
+            if any(declared.name == name for declared in plugin.mcp_servers())
         }
         return PluginContributions(
             skill_roots=tuple(resolve_skill_roots(record.root, plugin.skill_roots())),
@@ -709,13 +512,16 @@ class PluginManager:
         """Publish one admitted generation with a durable phase record."""
 
         current = self.generations.current(generation.plugin_id)
-        context = getattr(generation.instance, 'context', None)
+        context = getattr(generation.instance, "context", None)
         values = context._provided if context is not None else {}
         self.services.validate(generation.plugin_id, values)
-        missing = [key.name for key in getattr(context, 'required_services', ())
-                   if not self.services.contains(key) and key not in values]
+        missing = [
+            key.name
+            for key in getattr(context, "required_services", ())
+            if not self.services.contains(key) and key not in values
+        ]
         if missing:
-            raise LookupError('missing required capabilities: ' + ', '.join(missing))
+            raise LookupError("missing required capabilities: " + ", ".join(missing))
         tx_id = self.reload_journal.begin(
             plugin_id=generation.plugin_id,
             base_snapshot_id=current.generation_id if current is not None else None,
@@ -752,25 +558,27 @@ class PluginManager:
                 )
             raise
 
-    async def _finish_reload_drains(self, drained: tuple[PluginGeneration, ...]) -> None:
+    async def _finish_reload_drains(
+        self, drained: tuple[PluginGeneration, ...]
+    ) -> None:
         active_instances = {id(g.instance) for g in self.generations.active}
         for generation in drained:
             tx_id = self._reload_drains.get(generation.generation_id)
             if id(generation.instance) not in active_instances:
                 self.services.withdraw(generation.plugin_id, generation=generation)
                 try:
-                    context = getattr(generation.instance, 'context', None)
+                    context = getattr(generation.instance, "context", None)
                     if context is not None:
                         await context.scope.close()
                 finally:
-                    terminate = getattr(generation.instance, 'terminate', None)
+                    terminate = getattr(generation.instance, "terminate", None)
                     if callable(terminate):
                         result = terminate()
                         if inspect.isawaitable(result):
                             await result
             if tx_id is not None:
-                if self.reload_journal.get(tx_id).phase == 'draining':
-                    self.reload_journal.advance(tx_id, 'complete')
+                if self.reload_journal.get(tx_id).phase == "draining":
+                    self.reload_journal.advance(tx_id, "complete")
                 self._reload_drains.pop(generation.generation_id, None)
 
     def _request_reload(self) -> None:
@@ -816,9 +624,7 @@ class PluginManager:
                     root.name: root for root in discover_plugin_roots(self.plugin_dirs)
                 }
                 active_ids = {record.plugin_id for record in self.active}
-                desired = {
-                    name for name in discovered if is_enabled(manifest, name)
-                }
+                desired = {name for name in discovered if is_enabled(manifest, name)}
 
                 for plugin_id in sorted(active_ids - desired):
                     await self._deactivate_plugin(plugin_id)
@@ -839,9 +645,7 @@ class PluginManager:
                         continue
                     if activated is not None:
                         self._publication_dirty = True
-                        results.append(
-                            {"plugin_id": plugin_id, "state": "activated"}
-                        )
+                        results.append({"plugin_id": plugin_id, "state": "activated"})
 
                 for record in list(self.active):
                     current = self.generations.current(record.plugin_id)
@@ -925,13 +729,17 @@ class PluginManager:
         if self.generations.current(record.plugin_id) is not None:
             return
         context = record.instance.context
-        for name in getattr(context, '_registered_tools', ()):
+        for name in getattr(context, "_registered_tools", ()):
             self.tool_registry.unregister(name)
-        identities = {id(item) for item in getattr(context, '_registered_modules', ())}
-        self._decorated_modules = {phase: [item for item in values if id(item) not in identities]
-            for phase, values in self._decorated_modules.items()}
-        hooks = {id(item) for item in getattr(context, '_registered_hooks', ())}
-        self._decorated_hooks = [item for item in self._decorated_hooks if id(item) not in hooks]
+        identities = {id(item) for item in getattr(context, "_registered_modules", ())}
+        self._decorated_modules = {
+            phase: [item for item in values if id(item) not in identities]
+            for phase, values in self._decorated_modules.items()
+        }
+        hooks = {id(item) for item in getattr(context, "_registered_hooks", ())}
+        self._decorated_hooks = [
+            item for item in self._decorated_hooks if id(item) not in hooks
+        ]
         await self._deactivate_plugin(record.plugin_id)
         try:
             await context.scope.close()
@@ -944,13 +752,25 @@ class PluginManager:
         published: List[str] = []
         pending = list(self.active)
         while pending:
-            ready = [record for record in pending if all(
-                self.services.contains(key) or key in record.instance.context._provided
-                for key in record.instance.context.required_services)]
+            ready = [
+                record
+                for record in pending
+                if all(
+                    self.services.contains(key)
+                    or key in record.instance.context._provided
+                    for key in record.instance.context.required_services
+                )
+            ]
             if not ready:
                 for record in pending:
-                    self.errors[record.plugin_id] = 'missing or cyclic capability dependencies: ' + ', '.join(
-                        key.name for key in record.instance.context.required_services if not self.services.contains(key))
+                    self.errors[record.plugin_id] = (
+                        "missing or cyclic capability dependencies: "
+                        + ", ".join(
+                            key.name
+                            for key in record.instance.context.required_services
+                            if not self.services.contains(key)
+                        )
+                    )
                     await self._reject_unpublished(record)
                 break
             for record in ready:
@@ -958,12 +778,17 @@ class PluginManager:
                 try:
                     generation = await self.build_generation(record)
                     if not generation.gate_result.passed:
-                        raise ValueError('semantic gate failed: ' + generation.gate_result.failure_reason)
+                        raise ValueError(
+                            "semantic gate failed: "
+                            + generation.gate_result.failure_reason
+                        )
                     self._publish_generation_transaction(generation)
                     published.append(generation.generation_id)
                 except Exception as exc:
                     self.errors[record.plugin_id] = str(exc)
-                    logger.exception('plugin generation publication failed: %s', record.plugin_id)
+                    logger.exception(
+                        "plugin generation publication failed: %s", record.plugin_id
+                    )
                     await self._reject_unpublished(record)
         return published
 
@@ -1027,7 +852,9 @@ class PluginManager:
                 continue
             for spec in record.instance.managed_services():
                 if not spec.command:
-                    raise ValueError("plugin managed service has no command: %s" % spec.id)
+                    raise ValueError(
+                        "plugin managed service has no command: %s" % spec.id
+                    )
                 plugin_services = merged.setdefault(record.plugin_id, {})
                 if spec.id in plugin_services:
                     logger.warning(
@@ -1074,7 +901,9 @@ class PluginManager:
         for record in self.active:
             if record.instance is None:
                 continue
-            roots.extend(resolve_skill_roots(record.root, record.instance.drift_skill_roots()))
+            roots.extend(
+                resolve_skill_roots(record.root, record.instance.drift_skill_roots())
+            )
         return roots
 
     async def semantic_checks(
@@ -1094,11 +923,11 @@ class PluginManager:
                 continue
             checks = list(record.instance.static_semantic_checks())
             try:
-                checks.extend(await record.instance.readiness_semantic_checks(readiness))
-            except Exception as exc:  # noqa: BLE001 - 检查自身失败也是一次失败结果
-                checks.append(
-                    PluginSemanticCheck.fail("readiness_error", str(exc))
+                checks.extend(
+                    await record.instance.readiness_semantic_checks(readiness)
                 )
+            except Exception as exc:  # noqa: BLE001 - 检查自身失败也是一次失败结果
+                checks.append(PluginSemanticCheck.fail("readiness_error", str(exc)))
             if checks:
                 report[record.plugin_id] = checks
         return report
@@ -1107,7 +936,8 @@ class PluginManager:
         # 能力声明在这里就校验，坏插件在自己的 try 内失败，不牵连其他插件。
         if getattr(plugin, "api_version", None) != 3:
             raise ValueError(
-                "plugin Runtime API version must be 3: %s" % getattr(plugin, "api_version", None)
+                "plugin Runtime API version must be 3: %s"
+                % getattr(plugin, "api_version", None)
             )
         self._validate_declarations(root, plugin)
         data_dir = self.plugin_data_dir(name)
@@ -1130,7 +960,10 @@ class PluginManager:
         try:
             plugin.register_tools(self.tool_registry)
             self._register_decorated(
-                name, plugin, pending_modules=pending_modules, pending_hooks=pending_hooks
+                name,
+                plugin,
+                pending_modules=pending_modules,
+                pending_hooks=pending_hooks,
             )
             await plugin.prepare()
             plugin.activate()
@@ -1146,7 +979,9 @@ class PluginManager:
                 logger.exception("plugin rollback terminate failed: %s", name)
             raise
         context._registered_tools = frozenset(set(self.tool_registry.names()) - before)
-        context._registered_modules = tuple(item for values in pending_modules.values() for item in values)
+        context._registered_modules = tuple(
+            item for values in pending_modules.values() for item in values
+        )
         context._registered_hooks = tuple(pending_hooks)
         self.instances.append(plugin)
         for phase, modules in pending_modules.items():
@@ -1240,7 +1075,9 @@ class PluginManager:
             if not roots and fallback.is_dir():
                 roots.append(fallback)
             for root in roots:
-                candidates = [root] if (root / "SKILL.md").is_file() else list(root.iterdir())
+                candidates = (
+                    [root] if (root / "SKILL.md").is_file() else list(root.iterdir())
+                )
                 for skill in sorted(candidates):
                     if not skill.is_dir() or not (skill / "SKILL.md").is_file():
                         continue
@@ -1252,7 +1089,9 @@ class PluginManager:
             if link.is_symlink() and link.resolve() == target:
                 continue
             if link.exists() or link.is_symlink():
-                logger.warning("plugin skill path collision, keeping existing path: %s", link)
+                logger.warning(
+                    "plugin skill path collision, keeping existing path: %s", link
+                )
                 continue
             link.symlink_to(target, target_is_directory=True)
         if not skills_dir.exists():
@@ -1262,7 +1101,9 @@ class PluginManager:
                 continue
             try:
                 target = link.resolve(strict=False)
-                managed = any(target == root or root in target.parents for root in plugin_roots)
+                managed = any(
+                    target == root or root in target.parents for root in plugin_roots
+                )
             except OSError:
                 managed = False
             if managed:
@@ -1284,7 +1125,11 @@ class PluginManager:
         if callable(factory):
             return factory()
         for value in module.__dict__.values():
-            if isinstance(value, type) and issubclass(value, Plugin) and value is not Plugin:
+            if (
+                isinstance(value, type)
+                and issubclass(value, Plugin)
+                and value is not Plugin
+            ):
                 return value()
         return None
 
@@ -1358,7 +1203,9 @@ class PluginManager:
         for plugin_id in sorted(manifest):
             # 插件 id 允许 . @ -，会破坏 TOML 裸键，统一用带引号的点号键段。
             lines.append("[plugins.%s]" % json.dumps(plugin_id))
-            lines.append("enabled = %s" % ("true" if manifest[plugin_id].enabled else "false"))
+            lines.append(
+                "enabled = %s" % ("true" if manifest[plugin_id].enabled else "false")
+            )
             lines.append("")
         tmp = path.with_name(path.name + ".tmp")
         tmp.write_text("\n".join(lines), encoding="utf-8")
@@ -1373,7 +1220,10 @@ class PluginManager:
         self._write_manifest(manifest)
         verb = "enabled" if enabled else "disabled"
         self._request_reload()
-        return "Plugin %r %s in manifest. Hot reload will apply it shortly." % (name, verb)
+        return "Plugin %r %s in manifest. Hot reload will apply it shortly." % (
+            name,
+            verb,
+        )
 
     def enable_plugin(self, name: str) -> str:
         return self._set_enabled(name, True)
@@ -1404,10 +1254,7 @@ class PluginManager:
         deadline = time.monotonic() + max(0.0, timeout)
         while True:
             self.generations.drain_quiescible()
-            pending = {
-                generation.plugin_id
-                for generation in self.generations.retired
-            }
+            pending = {generation.plugin_id for generation in self.generations.retired}
             if plugin_id not in pending:
                 return "插件已停用并排空: %s" % plugin_id
             if time.monotonic() >= deadline:
@@ -1447,7 +1294,9 @@ class PluginManager:
                         "skills": len(
                             resolve_skill_roots(
                                 record.root,
-                                record.instance.skill_roots() if record.instance else (),
+                                record.instance.skill_roots()
+                                if record.instance
+                                else (),
                             )
                         ),
                         "mcp_servers": sorted(
@@ -1587,15 +1436,18 @@ class PluginManager:
                     stderr=asyncio.subprocess.STDOUT,
                 )
                 try:
-                    output, _ = await asyncio.wait_for(process.communicate(), timeout=120)
+                    output, _ = await asyncio.wait_for(
+                        process.communicate(), timeout=120
+                    )
                 except asyncio.TimeoutError:
                     process.kill()
                     await process.wait()
                     return "Error: plugin clone timed out"
                 if process.returncode:
-                    return "Error: plugin clone failed: %s" % output.decode(
-                        "utf-8", errors="replace"
-                    )[-2000:]
+                    return (
+                        "Error: plugin clone failed: %s"
+                        % output.decode("utf-8", errors="replace")[-2000:]
+                    )
             # 插件身份来自来源目录名：安装期不导入 plugin.py，绝不热执行刚下载的代码。
             if not (staging / "plugin.py").is_file():
                 return "Error: plugin must contain plugin.py at its root"
@@ -1620,9 +1472,10 @@ class PluginManager:
             else:
                 os.replace(staging, target)
             self._request_reload()
-            return (
-                "%s plugin %r at %s. Hot reload will apply it shortly."
-                % ("Upgraded" if upgrading else "Installed", plugin_name, target)
+            return "%s plugin %r at %s. Hot reload will apply it shortly." % (
+                "Upgraded" if upgrading else "Installed",
+                plugin_name,
+                target,
             )
         finally:
             if staging.exists():

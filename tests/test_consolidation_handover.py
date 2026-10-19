@@ -54,11 +54,7 @@ def _pipeline(maintenance: Any) -> PassiveTurnPipeline:
     async def save_async(session):
         saved.append(session)
 
-    from agent.looping.ports import SessionServices
-
-    pipeline.session_services = SessionServices(
-        session_manager=SimpleNamespace(save_async=save_async)
-    )
+    pipeline.session_manager = SimpleNamespace(save_async=save_async)
     pipeline.saved = saved  # 便于断言
     return pipeline
 

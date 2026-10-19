@@ -33,7 +33,9 @@ class MessagePushTool:
         self._chat_lane = chat_lane
 
     @property
-    def channels(self) -> dict[str, Callable[[ChannelMessage], Awaitable[DeliveryReceipt]]]:
+    def channels(
+        self,
+    ) -> dict[str, Callable[[ChannelMessage], Awaitable[DeliveryReceipt]]]:
         return dict(self._adapters)
 
     def register_channel(

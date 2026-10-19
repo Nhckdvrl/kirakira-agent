@@ -28,7 +28,7 @@ from agent.core.contracts import RuntimeConfig
 from core.schema import ModelResponse
 from bus.events import OutboundMessage
 from session.manager import SessionManager
-from agent.tools import build_default_registry
+from bootstrap.tools import build_tool_registry
 
 
 class FakeModel:
@@ -52,7 +52,7 @@ def build_runtime(workdir, text):
     event_bus = EventBus()
     sessions = SessionManager(workdir)
     memory = MemoryRuntime(workdir, session_manager=sessions)
-    tools = build_default_registry(workdir, memory=memory, session_manager=sessions)
+    tools = build_tool_registry(workdir, memory=memory, session_manager=sessions)
     context = ContextBuilder(workdir, memory)
     config = RuntimeConfig(model="fake", max_iterations=3, max_tokens=1000, history_window=20)
     reasoner = DefaultReasoner(
@@ -206,7 +206,7 @@ class ChannelTests(unittest.TestCase):
                 event_bus = EventBus()
                 sessions = SessionManager(workdir)
                 memory = MemoryRuntime(workdir, session_manager=sessions)
-                tools = build_default_registry(workdir, memory=memory, session_manager=sessions)
+                tools = build_tool_registry(workdir, memory=memory, session_manager=sessions)
                 config = RuntimeConfig(model="fake", max_iterations=3)
                 reasoner = DefaultReasoner(
                     model_client=EchoModel(),

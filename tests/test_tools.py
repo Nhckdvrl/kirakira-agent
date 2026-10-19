@@ -22,7 +22,8 @@ from bus.queue import MessageBus
 from bus.events import OutboundMessage
 from core.schema import ToolCall, ToolSpec
 from agent.skills import SkillLoader
-from agent.tools.builtins import WorkspaceTools, build_default_registry, safe_path
+from agent.tools.builtins import WorkspaceTools, build_workspace_registry, safe_path
+from agent.tools.web import WebTools
 from agent.tools.registry import ToolRegistry
 from agent.tool_hooks import ToolExecutionRequest, ToolExecutor
 
@@ -228,7 +229,7 @@ class ToolTests(unittest.TestCase):
 
     def test_registry_has_passive_research_tools(self):
         with tempfile.TemporaryDirectory() as tmp:
-            registry = build_default_registry(Path(tmp))
+            registry = build_workspace_registry(Path(tmp))
             names = registry.names()
 
         self.assertIn("list_dir", names)
@@ -259,7 +260,7 @@ class ToolTests(unittest.TestCase):
         thread.start()
         try:
             with tempfile.TemporaryDirectory() as tmp:
-                tools = WorkspaceTools(Path(tmp), SkillLoader(Path(tmp) / "skills"))
+                tools = WebTools()
                 old_value = os.environ.get("KIRAKIRA_ALLOW_PRIVATE_WEB_FETCH")
                 os.environ["KIRAKIRA_ALLOW_PRIVATE_WEB_FETCH"] = "true"
                 try:
@@ -277,7 +278,7 @@ class ToolTests(unittest.TestCase):
 
     def test_web_fetch_blocks_local_http_by_default(self):
         with tempfile.TemporaryDirectory() as tmp:
-            tools = WorkspaceTools(Path(tmp), SkillLoader(Path(tmp) / "skills"))
+            tools = WebTools()
             text = tools.web_fetch("http://127.0.0.1:9/")
 
         self.assertIn("Refusing to fetch private/local address", text)
@@ -318,7 +319,7 @@ class ToolTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(
                 os.environ, {"KIRAKIRA_ALLOW_PRIVATE_WEB_FETCH": "true"}
             ):
-                tools = WorkspaceTools(Path(tmp), SkillLoader(Path(tmp) / "skills"))
+                tools = WebTools()
                 for path in ("gzip", "deflate"):
                     with self.subTest(path=path):
                         payload = json.loads(
@@ -370,7 +371,7 @@ class ToolTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(
                 os.environ, {"KIRAKIRA_ALLOW_PRIVATE_WEB_FETCH": "true"}
             ):
-                tools = WorkspaceTools(Path(tmp), SkillLoader(Path(tmp) / "skills"))
+                tools = WebTools()
                 decoded = json.loads(
                     tools.web_fetch("http://127.0.0.1:%d/encoded" % port)
                 )
@@ -403,7 +404,7 @@ class ToolTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(
                 os.environ, {"KIRAKIRA_ALLOW_PRIVATE_WEB_FETCH": "true"}
             ):
-                registry = build_default_registry(Path(tmp))
+                registry = build_workspace_registry(Path(tmp))
                 for path, code in (("forbidden", "403"), ("missing", "404")):
                     with self.subTest(path=path):
                         result = registry.execute(
@@ -424,7 +425,7 @@ class ToolTests(unittest.TestCase):
         # web_search 走 Exa MCP（参考 akashic-agent）：空结果与网络失败都必须是 tool error。
         empty_sse = _exa_sse({"result": {"content": []}})
         with tempfile.TemporaryDirectory() as tmp:
-            registry = build_default_registry(Path(tmp))
+            registry = build_workspace_registry(Path(tmp))
             with mock.patch(
                 "httpx.Client", return_value=_FakeHttpxClient(text=empty_sse)
             ):
@@ -453,7 +454,7 @@ class ToolTests(unittest.TestCase):
         body = _exa_sse({"result": {"content": [{"type": "text", "text": text}]}})
 
         with tempfile.TemporaryDirectory() as tmp:
-            tools = WorkspaceTools(Path(tmp), SkillLoader(Path(tmp) / "skills"))
+            tools = WebTools()
             with mock.patch("httpx.Client", return_value=_FakeHttpxClient(text=body)):
                 payload = json.loads(tools.web_search("market report"))
 
@@ -465,7 +466,7 @@ class ToolTests(unittest.TestCase):
         async def scenario():
             with tempfile.TemporaryDirectory() as tmp:
                 bus = MessageBus()
-                registry = build_default_registry(Path(tmp), bus=bus)
+                registry = build_workspace_registry(Path(tmp), bus=bus)
                 result = await registry.execute_async(
                     ToolCall(
                         "1",
@@ -484,7 +485,7 @@ class ToolTests(unittest.TestCase):
     def test_background_shell_can_be_polled_and_cleaned(self):
         async def scenario():
             with tempfile.TemporaryDirectory() as tmp:
-                registry = build_default_registry(Path(tmp))
+                registry = build_workspace_registry(Path(tmp))
                 started = await registry.execute_async(
                     ToolCall(
                         "1",
@@ -522,7 +523,7 @@ class ToolTests(unittest.TestCase):
     def test_registry_shutdown_kills_background_shell(self):
         async def scenario():
             with tempfile.TemporaryDirectory() as tmp:
-                registry = build_default_registry(Path(tmp))
+                registry = build_workspace_registry(Path(tmp))
                 started = await registry.execute_async(
                     ToolCall(
                         "1",
@@ -545,7 +546,7 @@ class ToolTests(unittest.TestCase):
     def test_shell_execution_is_isolated_by_session_owner(self):
         async def scenario():
             with tempfile.TemporaryDirectory() as tmp:
-                registry = build_default_registry(Path(tmp))
+                registry = build_workspace_registry(Path(tmp))
                 owner_a = registry.set_context(session_key="web:a")
                 try:
                     started = await registry.execute_async(
@@ -587,7 +588,7 @@ class ToolTests(unittest.TestCase):
     def test_tty_shell_accepts_write_stdin(self):
         async def scenario():
             with tempfile.TemporaryDirectory() as tmp:
-                registry = build_default_registry(Path(tmp))
+                registry = build_workspace_registry(Path(tmp))
                 token = registry.set_context(session_key="web:tty")
                 try:
                     started = await registry.execute_async(
@@ -624,7 +625,7 @@ class ToolTests(unittest.TestCase):
 
     def test_tool_search_returns_matching_tool(self):
         with tempfile.TemporaryDirectory() as tmp:
-            registry = build_default_registry(Path(tmp))
+            registry = build_workspace_registry(Path(tmp))
             result = registry.execute(ToolCall("1", "tool_search", {"query": "fetch"}))
             payload = json.loads(result.content)
 

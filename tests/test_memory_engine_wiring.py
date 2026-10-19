@@ -25,7 +25,7 @@ from core.memory.engine import (
 )
 from core.memory.plugin import DisabledMemoryEngine
 from plugins.default_memory.contract import MemoryServices
-from agent.tools.builtins import WorkspaceTools
+from plugins.memory_tools.tools import MemoryTools
 
 
 _LIVE_DESCRIPTOR = MemoryEngineDescriptor(
@@ -43,17 +43,9 @@ class _FakeEngine:
         self.query = AsyncMock()
 
 
-def _tools(engine: Any) -> WorkspaceTools:
+def _tools(engine: Any) -> MemoryTools:
     services = MemoryServices(engine=engine) if engine is not None else None
-    return WorkspaceTools(
-        __import__("pathlib").Path("."),
-        SimpleNamespace(descriptions=lambda: ""),
-        None,  # 旧 MemoryRuntime 不提供,证明确实走引擎
-        None,
-        None,
-        None,
-        memory_services=services,
-    )
+    return MemoryTools(memory_services=services)
 
 
 class MemoryToolsViaEngineTests(unittest.TestCase):
@@ -257,13 +249,13 @@ class LegacyMemoryKindCanonicalizationTests(unittest.TestCase):
     """
 
     def test_legacy_kinds_map_to_canonical(self) -> None:
-        from agent.tools.builtins import _canonical_memory_kind
+        from plugins.memory_tools.tools import _canonical_memory_kind
 
         for legacy in ("identity", "fact", "requested_memory"):
             self.assertEqual(_canonical_memory_kind(legacy), "profile")
 
     def test_canonical_and_blank_pass_through(self) -> None:
-        from agent.tools.builtins import _canonical_memory_kind
+        from plugins.memory_tools.tools import _canonical_memory_kind
 
         for kind in ("event", "profile", "preference", "procedure", ""):
             self.assertEqual(_canonical_memory_kind(kind), kind)

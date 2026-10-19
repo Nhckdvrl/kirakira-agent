@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, List
 
+from agent.composition import ResourceScope
 from agent.core.loop import AgentLoop
 from agent.core.pipeline import PassiveTurnPipeline
 from agent.core.reasoner import DefaultReasoner
@@ -52,6 +54,15 @@ class CoreRuntime:
     # supervisor 托管时非空;runtime_serve 等待它的 committed 事件并以 75 退出换代。
     restart_coordinator: Any | None = None
 
+    _shutdown_scope: ResourceScope = field(
+        default_factory=ResourceScope, init=False, repr=False
+    )
+    _shutdown_started: bool = field(default=False, init=False, repr=False)
+    _started: bool = field(default=False, init=False, repr=False)
+    _background_tasks: list[asyncio.Task[Any]] = field(
+        default_factory=list, init=False, repr=False
+    )
+
     def add_tool_hooks(self, hooks: List[ToolHook]) -> None:
         self.reasoner.add_tool_hooks(hooks)
 
@@ -67,6 +78,8 @@ class CoreRuntime:
         skip_memory_retrieval: bool = False,
         disabled_tools: List[str] | None = None,
     ) -> OutboundMessage:
+        if self._shutdown_started:
+            raise RuntimeError("runtime is shutting down")
         metadata: JsonDict = {
             "session_key_override": session_key,
             "omit_user_turn": omit_user_turn,
@@ -90,92 +103,141 @@ class CoreRuntime:
     async def start_background(
         self, *, start_channels: bool = True
     ) -> list[asyncio.Task[Any]]:
-        tasks = [
-            asyncio.create_task(self.loop.run(), name="agent_loop"),
-            asyncio.create_task(self.bus.dispatch_outbound(), name="bus_dispatch"),
-        ]
-        if self.memory_services is not None:
-            tasks.append(
-                asyncio.create_task(
-                    self.memory_services.run_maintenance(), name="memory_maintenance"
+        if self._started or self._shutdown_started:
+            raise RuntimeError("runtime can only be started once")
+        self._started = True
+        tasks = self._background_tasks
+        try:
+            tasks.extend(
+                [
+                    asyncio.create_task(self.loop.run(), name="agent_loop"),
+                    asyncio.create_task(
+                        self.bus.dispatch_outbound(), name="bus_dispatch"
+                    ),
+                ]
+            )
+            if self.memory_services is not None:
+                tasks.append(
+                    asyncio.create_task(
+                        self.memory_services.run_maintenance(),
+                        name="memory_maintenance",
+                    )
                 )
-            )
-        if start_channels and self.channel_host is not None:
-            await self.channel_host.start_all()
-        if self.scheduler is not None:
-            tasks.append(asyncio.create_task(self.scheduler.run(), name="scheduler"))
-        if self.proactive_loop is not None:
-            tasks.append(
-                asyncio.create_task(self.proactive_loop.run(), name="proactive_loop")
-            )
-        if self.mcp_watcher is not None:
-            tasks.append(
-                asyncio.create_task(
-                    self.mcp_watcher.run(), name="workspace_mcp_watcher"
+            if start_channels and self.channel_host is not None:
+                await self.channel_host.start_all()
+            if self.scheduler is not None:
+                tasks.append(
+                    asyncio.create_task(self.scheduler.run(), name="scheduler")
                 )
-            )
-        if self.plugin_watcher is not None:
-            tasks.append(
-                asyncio.create_task(self.plugin_watcher.run(), name="plugin_watcher")
-            )
-        if self.control_server is not None:
-            # 控制面自己管连接 task,不进 tasks 列表;失败不能拖垮主链路。
+            if self.proactive_loop is not None:
+                tasks.append(
+                    asyncio.create_task(
+                        self.proactive_loop.run(), name="proactive_loop"
+                    )
+                )
+            if self.mcp_watcher is not None:
+                tasks.append(
+                    asyncio.create_task(
+                        self.mcp_watcher.run(), name="workspace_mcp_watcher"
+                    )
+                )
+            if self.plugin_watcher is not None:
+                tasks.append(
+                    asyncio.create_task(
+                        self.plugin_watcher.run(), name="plugin_watcher"
+                    )
+                )
+            if self.control_server is not None:
+                # 控制面自己管连接 task,不进 tasks 列表;失败不能拖垮主链路。
+                try:
+                    await self.control_server.start()
+                except Exception:
+                    logger.exception(
+                        "control plane failed to start; continuing without it"
+                    )
+                    self.control_server = None
+            return tasks
+        except BaseException as exc:
             try:
-                await self.control_server.start()
-            except Exception:
-                logger.exception("control plane failed to start; continuing without it")
-                self.control_server = None
-        return tasks
+                await self.stop_background(tasks)
+            except BaseException as cleanup_error:
+                exc.add_note("startup rollback failed: " + repr(cleanup_error))
+            raise
 
     async def stop_background(self, tasks: list[asyncio.Task[Any]]) -> None:
-        # 先停控制面:不再接受新的 programmatic turn,在途 turn 由
-        # ConversationRuntime.shutdown 取消并写入终态。
-        if self.control_server is not None:
-            await self.control_server.stop()
-        if self.control_service is not None:
-            await self.control_service.shutdown()
-        if self.control_runtime is not None:
-            await self.control_runtime.shutdown()
-        if self.subagents is not None:
-            await self.subagents.shutdown()
-        await self.loop.shutdown()
-        if self.scheduler is not None:
-            self.scheduler.stop()
-        if self.proactive_loop is not None:
-            self.proactive_loop.stop()
-        if self.mcp_watcher is not None:
-            self.mcp_watcher.stop()
-        if self.plugin_watcher is not None:
-            self.plugin_watcher.stop()
-        drained = await self.bus.drain(timeout=10.0)
-        if not drained:
-            logger.warning("outbound queue did not drain before shutdown")
-        self.bus.stop()
-        await self.bus.shutdown()
-        if self.channel_host is not None:
-            await self.channel_host.stop_all()
-        await self.tools.shutdown()
-        for task in tasks:
-            task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
-        if self.plugin_manager is not None:
-            await self.plugin_manager.terminate_all()
-        if self.mcp_watcher is not None:
-            await self.mcp_watcher.shutdown()
-        if self.drift_runner is not None:
-            self.drift_runner.close()
-        if self.proactive_loop is not None:
-            self.proactive_loop.close()
-        await self.memory.shutdown()
-        # 引擎持有 coremem.db 与 embedder,必须在旧 MemoryRuntime 之后关闭。
-        if self.memory_services is not None:
+        """Close once, wait for physical disposal, and report all cleanup failures."""
+        if not self._shutdown_started:
+            self._shutdown_started = True
+            owned = tuple(dict.fromkeys([*self._background_tasks, *tasks]))
+            self._shutdown_scope.on_close(lambda: self._stop_background(owned))
+        await self._shutdown_scope.close()
+
+    async def _stop_background(self, tasks: tuple[asyncio.Task[Any], ...]) -> None:
+        errors = []
+
+        async def attempt(label, action):
+            if action is None:
+                return
             try:
-                await self.memory_services.aclose()
-            except Exception:
-                logger.exception("memory services shutdown failed")
-        await self.event_bus.shutdown()
-        if self.control_store is not None:
-            self.control_store.close()
-        self.session_manager.close()
-        if self.reasoner.execution_store is not None:
-            self.reasoner.execution_store.close()
+                result = action()
+                if inspect.isawaitable(result):
+                    await result
+            except asyncio.CancelledError:
+                errors.append(RuntimeError(label + " cancelled during shutdown"))
+            except Exception as exc:
+                exc.add_note("runtime cleanup: " + label)
+                errors.append(exc)
+
+        # Stop new work first, then settle users of the resources being closed.
+        for owner, method in (
+            (self.control_server, "stop"),
+            (self.scheduler, "stop"),
+            (self.proactive_loop, "stop"),
+            (self.mcp_watcher, "stop"),
+            (self.plugin_watcher, "stop"),
+            (self.control_service, "shutdown"),
+            (self.control_runtime, "shutdown"),
+            (self.subagents, "shutdown"),
+            (self.loop, "shutdown"),
+        ):
+            await attempt(method, getattr(owner, method) if owner is not None else None)
+
+        async def settle(selected):
+            for task in selected:
+                task.cancel()
+            await asyncio.gather(*selected, return_exceptions=True)
+
+        # Producers/maintenance must be gone before closing queues, tools or stores.
+        await attempt(
+            "background producers",
+            lambda: settle([t for t in tasks if t.get_name() != "bus_dispatch"]),
+        )
+
+        async def drain():
+            if not await self.bus.drain(timeout=10.0):
+                logger.warning("outbound queue did not drain before shutdown")
+
+        await attempt("outbound drain", drain)
+        for owner, method in (
+            (self.bus, "stop"),
+            (self.bus, "shutdown"),
+            (self.channel_host, "stop_all"),
+            (self.tools, "shutdown"),
+        ):
+            await attempt(method, getattr(owner, method) if owner is not None else None)
+        await attempt("background tasks", lambda: settle(tasks))
+        for owner, method in (
+            (self.plugin_manager, "terminate_all"),
+            (self.mcp_watcher, "shutdown"),
+            (self.drift_runner, "close"),
+            (self.proactive_loop, "close"),
+            (self.memory, "shutdown"),
+            (self.memory_services, "aclose"),
+            (self.event_bus, "shutdown"),
+            (self.control_store, "close"),
+            (self.session_manager, "close"),
+            (self.reasoner.execution_store, "close"),
+        ):
+            await attempt(method, getattr(owner, method) if owner is not None else None)
+        if errors:
+            raise ExceptionGroup("runtime cleanup failed", errors)

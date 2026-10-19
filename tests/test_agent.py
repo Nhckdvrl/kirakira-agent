@@ -6,7 +6,7 @@ from pathlib import Path
 
 from agent.core.runner import Agent
 from core.schema import ModelResponse, ToolCall
-from agent.tools import build_default_registry
+from bootstrap.tools import build_tool_registry
 
 
 class FakeModel:
@@ -38,7 +38,7 @@ class AgentTests(unittest.TestCase):
                     ModelResponse(text="Read it.", stop_reason="end_turn"),
                 ]
             )
-            agent = Agent(model, build_default_registry(workdir), "fake-model", workdir)
+            agent = Agent(model, build_tool_registry(workdir), "fake-model", workdir)
             messages = [{"role": "user", "content": "read README"}]
 
             response = agent.run(messages)
@@ -56,7 +56,7 @@ class AgentTests(unittest.TestCase):
                     ModelResponse(text="Handled.", stop_reason="end_turn"),
                 ]
             )
-            agent = Agent(model, build_default_registry(workdir), "fake-model", workdir)
+            agent = Agent(model, build_tool_registry(workdir), "fake-model", workdir)
             messages = [{"role": "user", "content": "call unknown"}]
 
             response = agent.run(messages)
@@ -68,7 +68,7 @@ class AgentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             workdir = Path(tmp)
             model = FakeModel([ModelResponse(text="done", stop_reason="end_turn")])
-            agent = Agent(model, build_default_registry(workdir), "fake-model", workdir)
+            agent = Agent(model, build_tool_registry(workdir), "fake-model", workdir)
 
             response = agent.run([{"role": "user", "content": "hi"}])
 

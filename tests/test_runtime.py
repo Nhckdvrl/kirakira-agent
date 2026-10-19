@@ -23,7 +23,7 @@ from session.manager import SessionManager
 from agent.plugins.snapshot import RuntimeSnapshotStore, compile_snapshot
 from agent.subagent import SubagentManager
 from agent.tool_hooks import HookOutcome
-from agent.tools import build_default_registry
+from bootstrap.tools import build_tool_registry
 from agent.tools.registry import Tool
 from bus.events_lifecycle import (
     ContextBudgetUpdated,
@@ -74,7 +74,7 @@ def build_test_runtime(workdir, model, *, snapshot_store=None):
     event_bus = EventBus()
     session_manager = SessionManager(workdir)
     memory = MemoryRuntime(workdir, session_manager=session_manager)
-    tools = build_default_registry(workdir, memory=memory, session_manager=session_manager)
+    tools = build_tool_registry(workdir, memory=memory, session_manager=session_manager)
     context = ContextBuilder(workdir, memory)
     config = RuntimeConfig(model="fake", max_iterations=5, max_tokens=1000, history_window=20)
     reasoner = DefaultReasoner(

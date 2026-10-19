@@ -29,8 +29,6 @@ def _make_manager(workspace: Path) -> PluginManager:
         event_bus=EventBus(),
         tool_registry=ToolRegistry(),
         workspace=workspace,
-        session_manager=None,
-        memory=None,
     )
 
 

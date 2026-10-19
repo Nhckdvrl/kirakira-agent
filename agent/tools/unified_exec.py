@@ -793,7 +793,7 @@ def format_execution_result(
     """把内部结果转换成稳定的工具 JSON。"""
 
     payload: dict[str, Any] = {
-        "chunk_id": f"{random.randrange(16 ** 6):06x}",
+        "chunk_id": f"{random.randrange(16**6):06x}",
         "wall_time_ms": result.wall_time_ms,
         "output": result.output.decode(errors="replace"),
         "original_token_count": result.original_token_count,

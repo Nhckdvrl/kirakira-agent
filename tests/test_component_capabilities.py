@@ -89,8 +89,6 @@ async def test_real_provider_and_consumer_dependency_publication(tmp_path):
         workspace=tmp_path,
         event_bus=EventBus(),
         tool_registry=ToolRegistry(),
-        session_manager=None,
-        memory=None,
     )
     await manager.load_all()
     published = await manager.publish_generations()
@@ -120,8 +118,6 @@ async def test_missing_capability_withdraws_unpublished_tools_and_resources(tmp_
         workspace=tmp_path,
         event_bus=EventBus(),
         tool_registry=registry,
-        session_manager=None,
-        memory=None,
     )
     await manager.load_all()
     assert await manager.publish_generations() == []

@@ -1,6 +1,6 @@
 """Drift runner：把"一轮 Drift"跑成一次 agent run。
 
-复用被动对话的 ``DefaultReasoner`` 与 ``build_default_registry`` 工具集，
+复用被动对话的 ``DefaultReasoner`` 与 ``build_workspace_registry`` 工具集，
 额外挂上 ``message_push`` / ``finish_drift`` 收尾工具。SKILL.md 正文作为
 system prompt，Drift Briefing 作为首条消息注入。跑完把结果落到 drift.db，
 并在主事件循环上投递草稿消息。
@@ -11,8 +11,8 @@ system prompt，Drift Briefing 作为首条消息注入。跑完把结果落到 
 from __future__ import annotations
 
 import asyncio
-import logging
 import hashlib
+import logging
 import math
 import random
 from datetime import datetime, timedelta, timezone
@@ -21,13 +21,9 @@ from typing import Any, Callable, List, Optional, Sequence
 from uuid import uuid4
 
 from agent.core.scoped import run_scoped
+from agent.model_runtime.types import ModelClient
+from agent.tools import build_workspace_registry
 from agent.turns.policy import ReasoningPolicy
-from bus.queue import MessageBus
-from plugins.drift_flow.skills import DriftSkill, discover_skills, ensure_example_skill
-from plugins.drift_flow.drive import sample_drift_delay_hours
-from plugins.drift_flow.state import DriftStateStore
-from plugins.drift_flow.tools import DriftRunContext, register_drift_tools
-from bus.events import OutboundMessage
 from agent.turns.result import (
     BusOutboundPort,
     CallableSideEffect,
@@ -36,10 +32,14 @@ from agent.turns.result import (
     TurnTrace,
     commit_turn_result,
 )
-from agent.model_runtime.types import ModelClient
+from bus.queue import MessageBus
+from plugins.drift_flow.drive import sample_drift_delay_hours
+from plugins.drift_flow.skills import DriftSkill, discover_skills, ensure_example_skill
+from plugins.drift_flow.state import DriftStateStore
+from plugins.drift_flow.tools import DriftRunContext, register_drift_tools
+from plugins.memory_tools.tools import register_memory_tools
 from proactive_v2.config import DriftConfig
 from session.manager import SessionManager
-from agent.tools.builtins import build_default_registry
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +55,7 @@ class DriftRunner:
         model_client: ModelClient,
         model: str,
         memory: Any | None = None,
+        memory_services: Any = None,
         target_channel: str = "",
         target_chat_id: str = "",
         max_tokens: int = 4000,
@@ -69,6 +70,7 @@ class DriftRunner:
         self._client = model_client
         self._model = model
         self._memory = memory
+        self._memory_services = memory_services
         self._channel = target_channel
         self._chat_id = target_chat_id
         self._max_tokens = max_tokens
@@ -110,24 +112,30 @@ class DriftRunner:
         skill = self._select_skill(skills)
         briefing = self._build_briefing(skill, session_key)
         digests = {s.name: hashlib.sha256(s.body.encode()).hexdigest() for s in skills}
-        self._state.propose(session_key=session_key, source_head=session_head,
-            skill=skill.name, skill_digest=digests[skill.name], briefing=briefing,
-            reason='idle schedule due; skill selected from explicit installed skills', now=now)
+        self._state.propose(
+            session_key=session_key,
+            source_head=session_head,
+            skill=skill.name,
+            skill_digest=digests[skill.name],
+            briefing=briefing,
+            reason="idle schedule due; skill selected from explicit installed skills",
+            now=now,
+        )
         proposal = self._state.claim_proposal(session_key, session_head, digests, now)
         if proposal is None:
             return False
-        skill = next(s for s in skills if s.name == proposal['skill'])
-        briefing = proposal['briefing']
-        ctx = DriftRunContext(skill=skill.name, proposal_id=proposal['proposal_id'])
+        skill = next(s for s in skills if s.name == proposal["skill"])
+        briefing = proposal["briefing"]
+        ctx = DriftRunContext(skill=skill.name, proposal_id=proposal["proposal_id"])
         logger.info("[drift] 开始 skill=%s", skill.name)
 
         try:
             await self._run_agent(skill, briefing, ctx, session_key)
         except asyncio.CancelledError:
-            self._state.settle_proposal(ctx.proposal_id, 'interrupted', now)
+            self._state.settle_proposal(ctx.proposal_id, "interrupted", now)
             raise
         except Exception:
-            self._state.settle_proposal(ctx.proposal_id, 'failed', now)
+            self._state.settle_proposal(ctx.proposal_id, "failed", now)
             logger.exception("[drift] agent run 失败 skill=%s", skill.name)
             self._state.record_run(
                 skill=skill.name,
@@ -138,28 +146,47 @@ class DriftRunner:
             )
             return True
 
-        superseded = (self._sessions.message_head(session_key) != session_head or
-                      (self._passive_busy_fn is not None and self._passive_busy_fn(session_key)))
+        superseded = self._sessions.message_head(session_key) != session_head or (
+            self._passive_busy_fn is not None and self._passive_busy_fn(session_key)
+        )
         if superseded or not ctx.finished:
-            message_result = 'silent'
-            self._state.settle_proposal(ctx.proposal_id, 'superseded' if superseded else 'paused', now)
+            message_result = "silent"
+            self._state.settle_proposal(
+                ctx.proposal_id, "superseded" if superseded else "paused", now
+            )
         else:
-            delivering = bool(ctx.message_pushed and ctx.draft_message and self._channel and self._chat_id)
+            delivering = bool(
+                ctx.message_pushed
+                and ctx.draft_message
+                and self._channel
+                and self._chat_id
+            )
             if delivering:
-                self._state.settle_proposal(ctx.proposal_id, 'delivering', now, {'draft': ctx.draft_message})
+                self._state.settle_proposal(
+                    ctx.proposal_id, "delivering", now, {"draft": ctx.draft_message}
+                )
             try:
                 message_result = await self._commit(ctx, session_key)
             except BaseException:
-                self._state.settle_proposal(ctx.proposal_id,
-                    'needs_reconciliation' if delivering else 'interrupted', now)
+                self._state.settle_proposal(
+                    ctx.proposal_id,
+                    "needs_reconciliation" if delivering else "interrupted",
+                    now,
+                )
                 raise
-            self._state.settle_proposal(ctx.proposal_id, ctx.status, now,
-                {'message_result': message_result, 'briefing': ctx.briefing})
+            self._state.settle_proposal(
+                ctx.proposal_id,
+                ctx.status,
+                now,
+                {"message_result": message_result, "briefing": ctx.briefing},
+            )
         self._state.record_run(
             skill=skill.name,
             now=now,
             status=ctx.status if ctx.finished and not superseded else "paused",
-            briefing="conversation superseded this run" if superseded else ctx.briefing or "(未填写)",
+            briefing="conversation superseded this run"
+            if superseded
+            else ctx.briefing or "(未填写)",
             message_result=message_result,
         )
         # run 期间只收集意图,这里统一落库:中途异常不会留下半条 journal。
@@ -277,28 +304,45 @@ class DriftRunner:
         session_key: str,
     ) -> None:
         """通过共享异步 reasoner 执行隔离的后台程序。"""
-        registry = build_default_registry(
+        registry = build_workspace_registry(
             self._workspace,
-            memory=self._memory,
-            session_manager=self._sessions,
             bus=self._bus,
+        )
+        register_memory_tools(
+            registry,
+            memory_services=self._memory_services,
+            session_manager=self._sessions,
+            read_only=True,
         )
         register_drift_tools(registry, ctx)
         try:
             await run_scoped(
-                model_client=self._client, registry=registry, model=self._model,
-                system=skill.body, prompt=briefing, session_key="drift:" + (ctx.proposal_id or uuid4().hex),
-                channel=self._channel, chat_id=self._chat_id,
-                max_steps=self._cfg.max_steps, max_tokens=self._max_tokens,
+                model_client=self._client,
+                registry=registry,
+                model=self._model,
+                system=skill.body,
+                prompt=briefing,
+                session_key="drift:" + (ctx.proposal_id or uuid4().hex),
+                channel=self._channel,
+                chat_id=self._chat_id,
+                max_steps=self._cfg.max_steps,
+                max_tokens=self._max_tokens,
                 execution_store=self._execution_store,
                 policy=ReasoningPolicy(
                     allowed_tools=frozenset(registry.names()),
                     terminal_tools=frozenset({"finish_drift"}),
                     tool_choice="required",
-                    final_tool_choice={"type": "function", "function": {"name": "finish_drift"}},
-                    summarize_on_exhaustion=False, exclusive_terminal=True,
-                    current_tools=lambda: frozenset({"finish_drift"}) if ctx.message_pushed
-                    else frozenset(registry.names()),
+                    final_tool_choice={
+                        "type": "function",
+                        "function": {"name": "finish_drift"},
+                    },
+                    summarize_on_exhaustion=False,
+                    exclusive_terminal=True,
+                    current_tools=lambda: (
+                        frozenset({"finish_drift"})
+                        if ctx.message_pushed
+                        else frozenset(registry.names())
+                    ),
                 ),
             )
         finally:
@@ -310,7 +354,9 @@ class DriftRunner:
         用 TurnResult 显式声明副作用:写 Session 只挂在 success 分支,
         所以"渠道没送到就不留痕"这条语义由提交器保证,不再依赖手写分支。
         """
-        if not (ctx.message_pushed and ctx.draft_message and self._channel and self._chat_id):
+        if not (
+            ctx.message_pushed and ctx.draft_message and self._channel and self._chat_id
+        ):
             return "silent"
         delivery_id = uuid4().hex
         message = ctx.draft_message
@@ -358,7 +404,8 @@ class DriftRunner:
         journal = self._state.load_journal(skill.name, limit=8)
         if journal:
             lines = [
-                "- [%s] %s" % (e["entry_type"], str(e["payload"].get("note") or "")[:200])
+                "- [%s] %s"
+                % (e["entry_type"], str(e["payload"].get("note") or "")[:200])
                 for e in journal
             ]
             sections.append("【本技能 journal】\n" + "\n".join(lines))

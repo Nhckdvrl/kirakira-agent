@@ -18,7 +18,7 @@ from typing import Any
 
 from agent.config import config_value, load_dotenv, load_toml_config
 from agent.model_runtime.usage import usage_from_mapping
-from bootstrap.app import build_runtime
+from bootstrap.runtime import build_runtime
 from core.memory.embeddings import EmbeddingClient
 from core.memory.engine import MemoryQuery, MemoryScope
 from core.schema import ToolSpec

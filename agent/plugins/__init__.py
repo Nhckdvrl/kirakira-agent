@@ -13,7 +13,8 @@ from agent.plugins.decorators import (
     on_tool_pre,
     tool,
 )
-from agent.plugins.manager import Plugin, PluginContext, PluginKVStore, PluginManager
+from agent.plugins.api import Plugin, PluginContext, PluginKVStore
+from agent.plugins.manager import PluginManager
 from agent.plugins.specs import (
     ManagedServiceSpec,
     McpServerSpec,

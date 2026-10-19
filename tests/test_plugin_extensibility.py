@@ -281,7 +281,7 @@ class PluginSourceRuntimeWiringTests(unittest.TestCase):
         import tempfile
         from pathlib import Path
 
-        from bootstrap.app import _build_source_registry
+        from bootstrap.proactive import build_source_registry
 
         tools = _FakeToolRegistry({"mcp_feed__pull": []})
         registered = [
@@ -290,7 +290,7 @@ class PluginSourceRuntimeWiringTests(unittest.TestCase):
             )
         ]
         with tempfile.TemporaryDirectory() as tmp:
-            registry = _build_source_registry(Path(tmp), registered, tools)
+            registry = build_source_registry(Path(tmp), registered, tools)
         ids = [source.id for source in registry.sources]
         self.assertIn("demo:feed", ids)
 
@@ -298,14 +298,14 @@ class PluginSourceRuntimeWiringTests(unittest.TestCase):
         import tempfile
         from pathlib import Path
 
-        from bootstrap.app import _build_source_registry
+        from bootstrap.proactive import build_source_registry
 
         tools = _FakeToolRegistry({"mcp_feed__pull": []})
         dup = _registered(
             id="feed", channels=("alert",), server="feed", fetch_tool="pull"
         )
         with tempfile.TemporaryDirectory() as tmp:
-            registry = _build_source_registry(Path(tmp), [dup, dup], tools)
+            registry = build_source_registry(Path(tmp), [dup, dup], tools)
         # 重复 id 只跳过冲突的那个,不影响整条链路
         self.assertEqual(
             len([s for s in registry.sources if s.id == "demo:feed"]), 1
@@ -315,10 +315,10 @@ class PluginSourceRuntimeWiringTests(unittest.TestCase):
         import tempfile
         from pathlib import Path
 
-        from bootstrap.app import _build_source_registry
+        from bootstrap.proactive import build_source_registry
 
         with tempfile.TemporaryDirectory() as tmp:
-            registry = _build_source_registry(Path(tmp), None, None)
+            registry = build_source_registry(Path(tmp), None, None)
             # 没有 *.jsonl 时源为空是既有语义;关键是 inbox 目录被准备好且不报错
             self.assertEqual(registry.sources, [])
             self.assertTrue((Path(tmp) / "proactive" / "inbox").is_dir())
@@ -327,14 +327,14 @@ class PluginSourceRuntimeWiringTests(unittest.TestCase):
         import tempfile
         from pathlib import Path
 
-        from bootstrap.app import _build_source_registry
+        from bootstrap.proactive import build_source_registry
 
         tools = _FakeToolRegistry({"mcp_feed__pull": []})
         with tempfile.TemporaryDirectory() as tmp:
             inbox = Path(tmp) / "proactive" / "inbox"
             inbox.mkdir(parents=True, exist_ok=True)
             (inbox / "local.jsonl").write_text("", encoding="utf-8")
-            registry = _build_source_registry(
+            registry = build_source_registry(
                 Path(tmp),
                 [_registered(id="feed", channels=("alert",), server="feed", fetch_tool="pull")],
                 tools,

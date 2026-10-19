@@ -48,6 +48,17 @@ Proactive tick → Deliver/Drift ────┴→ 使用相同 Runtime 边界�
 依赖方向是“外层装配依赖内层合同”：`bootstrap` 可以组合所有 owner；`core` 不应反向依赖
 `bootstrap` 或具体 Channel。具体 provider、Channel 和存储通过 `infra` adapter 接入。
 
+## 装配与工具提供者
+
+`bootstrap/runtime.py` 负责构造、失败回收和所有权交接；`bootstrap/app.py` 负责命令入口。
+渠道与主动链路有各自的装配模块。Runtime 与 ToolRegistry 共用 ResourceScope 的物理关闭边界，
+关闭失败在所有动作尝试后聚合报告。
+
+工作区、网页与记忆工具分别由 `agent/tools/builtins.py`、`agent/tools/web.py` 和
+`plugins/memory_tools/tools.py` 实现，完整对话工具面由 `bootstrap/tools.py` 组合。
+插件公共类型在 `agent/plugins/api.py`，管理器负责加载与代际操作。
+详见 [ADR0010](../decisions/0010-provider-ownership-and-runtime-disposal.md)。
+
 ## 主要持久状态
 
 | 文件 | owner | 作用 |

@@ -5,7 +5,7 @@
 ```toml
 [memory]
 enabled = true
-plugin = "default" # 或 akasha
+plugin = "default" # 或 akasha / akasha2
 
 [memory.embedding]
 model = "text-embedding-v3"
@@ -15,12 +15,13 @@ api_key = "${EMBEDDING_API_KEY}"
 
 聊天 completion 端点通常不提供 embedding，需要单独配置。
 
-## Default 和 Akasha 的区别
+## 引擎的工具面
 
 | 引擎 | 适合什么 | 写入方式 | 工具 |
 | --- | --- | --- | --- |
 | `default` | 稳定事实、偏好、流程、事件 | 从对话抽取结构化 item，也可显式写入 | memorize / recall / forget |
 | `akasha` | 保留完整对话关系和联想 | `TurnCommitted` 后自动摄入完整 turn | recall / reinforce |
+| `akasha2` | 图状态与消费绑定的快照恢复；显式 opt-in | 已提交原始 turn 的持久 publication | recall；当前不提供显式强化/遗忘 |
 
 Akasha v1 当前可用，已通过真实 embedding、turn 摄入、图/RAR 召回和模型消费验证。它没有
 `memorize` 是设计结果，不是工具漏注册。
@@ -92,3 +93,9 @@ uv run python -m scripts.replay_akasha2 \
 endpoint 只用于固定空间身份，不会发请求。缺失向量、维度混杂、内容不匹配或候选路径已存在会失败。
 检查候选后，停止 runtime，备份已有 `memory/akasha2.db`，再把候选放到该路径并显式切换 plugin。
 不能在 writer 运行时替换数据库。来源 stream 和原文必须保持一致。
+
+## 工具提供者
+
+记忆工具由 `plugins/memory_tools` 注册，完整对话工具由 `bootstrap/tools.py` 组合；
+引擎的 profile 决定模型可见工具，读写风险保留在注册元数据中。
+Drift 只获得检索与原文工具，不获得写入、强化、遗忘或归档。

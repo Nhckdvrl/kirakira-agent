@@ -53,7 +53,7 @@ class ToolProfileDrivesRegistrationTests(unittest.TestCase):
 
     def _registry_for(self, profile) -> set[str]:
         from core.memory.engine import MemoryCapability
-        from agent.tools.builtins import _register_memory_tools
+        from plugins.memory_tools.tools import _register_memory_tools
         from agent.tools.registry import ToolRegistry
 
         engine = SimpleNamespace(
@@ -75,11 +75,17 @@ class ToolProfileDrivesRegistrationTests(unittest.TestCase):
 
     def test_akasha_shaped_profile_registers_no_memorize(self) -> None:
         spec = lambda name="": SimpleNamespace(  # noqa: E731
-            name=name, description="d", parameters={"type": "object", "properties": {}}
+            name=name,
+            description="d",
+            parameters={"type": "object", "properties": {}},
+            risk="write",
+            search_hint="",
         )
         names = self._registry_for(
             SimpleNamespace(
-                recall=spec(), memorize=None, forget=None,
+                recall=spec(),
+                memorize=None,
+                forget=None,
                 tools=(spec("reinforce_memory"),),
             )
         )
@@ -107,16 +113,21 @@ class ToolProfileDrivesRegistrationTests(unittest.TestCase):
 
     def test_disabled_engine_keeps_legacy_trio(self) -> None:
         """kirakira 的显式偏离:引擎未承重时仍注册词法版三件套。"""
-        from agent.tools.builtins import _register_memory_tools
+        from plugins.memory_tools.tools import _register_memory_tools
         from agent.tools.registry import ToolRegistry
 
         handlers = SimpleNamespace(
             _live_memory_engine=lambda: None,
-            memorize=None, recall_memory=None, forget_memory=None, memory_signal=None,
+            memorize=None,
+            recall_memory=None,
+            forget_memory=None,
+            memory_signal=None,
         )
         registry = ToolRegistry()
         _register_memory_tools(registry, handlers)
-        self.assertEqual(set(registry.names()), {"recall_memory", "memorize", "forget_memory"})
+        self.assertEqual(
+            set(registry.names()), {"recall_memory", "memorize", "forget_memory"}
+        )
 
 
 class SessionMessagesProjectionTests(unittest.TestCase):

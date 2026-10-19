@@ -7,18 +7,16 @@ import json
 import logging
 import re
 import time
-from contextlib import asynccontextmanager, AsyncExitStack
+from contextlib import AsyncExitStack, asynccontextmanager
 from contextvars import ContextVar
 from datetime import datetime
 from typing import Any, List
 
-from agent.core.admission import TurnAdmission
 from agent.composition import ServiceRegistry
-from plugins.default_memory.contract import MEMORY_SERVICES
+from agent.core.admission import TurnAdmission
 from agent.core.contracts import RuntimeConfig
 from agent.core.phases import _run_plugin_modules
 from agent.core.reasoner import DefaultReasoner
-from agent.looping.ports import ContextServices, SessionServices
 from agent.model_runtime.context_policy import estimate_context_tokens
 from agent.plugins.snapshot import (
     RuntimeSnapshotStore,
@@ -48,7 +46,7 @@ from core.memory.engine import MemoryCapability as _CoreMemCapability
 from core.memory.engine import MemoryQuery as _CoreMemQuery
 from core.memory.engine import MemoryScope as _CoreMemScope
 from core.memory.legacy import MemoryRuntime
-from plugins.default_memory.contract import MemoryServices
+from plugins.default_memory.contract import MEMORY_SERVICES, MemoryServices
 from session.compaction_runtime import SessionCompactionRuntime
 from session.manager import SessionManager
 
@@ -76,8 +74,6 @@ class PassiveTurnPipeline:
         snapshot_store: RuntimeSnapshotStore | None = None,
         memory_services: "MemoryServices | None" = None,
         plugin_generations: Any = None,
-        session_services: "SessionServices | None" = None,
-        context_services: "ContextServices | None" = None,
         recall_inspector: Any = None,
         service_registry: ServiceRegistry | None = None,
     ) -> None:
@@ -85,17 +81,12 @@ class PassiveTurnPipeline:
         self.event_bus = event_bus
         # 检索回放记录器;未注入时不记录,主链路行为不变。
         self.recall_inspector = recall_inspector
-        # 服务包优先;未注入时用具体对象兜底,便于最小构造与测试。
-        # 两条路都收敛到同一个属性,pipeline 内部只认服务包。
-        self.session_services = session_services or SessionServices(
-            session_manager=session_manager
-        )
-        self.context_services = context_services
+        self.session_manager = session_manager
         self.memory = memory
         # 记忆 DI 缝:runtime 只认识 MemoryServices.engine,不认识具体实现。
         self._memory_services = memory_services
         self.service_registry = service_registry
-        self._turn_memory = ContextVar('conversation_memory_services', default=None)
+        self._turn_memory = ContextVar("conversation_memory_services", default=None)
         self.tools = tools
         self.reasoner = reasoner
         self.config = config
@@ -114,11 +105,6 @@ class PassiveTurnPipeline:
     def memory_services(self):
         bound = getattr(self, "_turn_memory", None)
         return (bound.get() if bound is not None else None) or self._memory_services
-
-    @property
-    def session_manager(self) -> SessionManager:
-        """pipeline 通过服务包拿 session,换实现不必改这里的调用点。"""
-        return self.session_services.session_manager
 
     def add_before_turn_plugin_modules(self, modules: List[object]) -> None:
         self._before_turn_modules.extend(modules)
@@ -148,7 +134,9 @@ class PassiveTurnPipeline:
         async with self.admission.hold(key), AsyncExitStack() as resources:
             memory_token = None
             if self.service_registry is not None:
-                bound = await resources.enter_async_context(self.service_registry.use(MEMORY_SERVICES))
+                bound = await resources.enter_async_context(
+                    self.service_registry.use(MEMORY_SERVICES)
+                )
                 memory_token = self._turn_memory.set(bound)
             try:
                 return await self._run_admitted(

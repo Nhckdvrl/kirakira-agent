@@ -12,13 +12,13 @@ from agent.control.models import TurnItemKind, TurnRequest
 from bus.events import OutboundMessage
 from core.schema import ToolCall, ToolResult
 from agent.tool_hooks import ToolExecutionRequest, ToolExecutor
-from agent.tools.builtins import build_default_registry
+from agent.tools.builtins import build_workspace_registry
 
 
 @pytest.fixture
 def registry():
     with tempfile.TemporaryDirectory() as raw:
-        yield build_default_registry(Path(raw))
+        yield build_workspace_registry(Path(raw))
 
 
 @pytest.mark.asyncio

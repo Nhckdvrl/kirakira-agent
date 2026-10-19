@@ -225,7 +225,7 @@ class CliTests(unittest.TestCase):
         self.assertIn("ONEBOT_ACCESS_TOKEN=onebot-secret", secrets)
 
     def test_proactive_target_auto_enables_builtin_channel(self):
-        from bootstrap.app import build_runtime
+        from bootstrap.runtime import build_runtime
 
         async def scenario():
             with tempfile.TemporaryDirectory() as tmp:

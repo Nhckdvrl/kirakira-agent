@@ -1,0 +1,86 @@
+{
+  "endpoint": "https://api.stepfun.com/step_plan/v1",
+  "model": "step-5-preview",
+  "reasoning_effort": "medium",
+  "billing_surface": "step_plan",
+  "embedding": "offline-hash-v1 (integration only)",
+  "cases": [
+    {
+      "name": "lexical_memorize",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "memorize"
+        ],
+        "reply": "I've memorized your preference exactly as stated: **\"For the verification fixture, my preferred deployment codename is KIRA_efa1289b585b.\"**\n\nThe memory was successfully written to long-term memory with the ID `mem_0001`."
+      },
+      "seconds": 5.69886720739305
+    },
+    {
+      "name": "lexical_recall_and_forget",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "recall_memory",
+          "forget_memory"
+        ],
+        "reply": "Done. The `recall_memory` call for \"deployment codename\" returned exactly one matching item, and it has been deleted:\n\n- **`mem_0001`** — \"For the verification fixture, my preferred deployment codename is KIRA_efa1289b585b.\" → **superseded/deleted**\n\nThe `forget_memory` response confirmed `{\"superseded_ids\": [\"mem_0001\"]}`, so no memory items matching \"deployment codename\" remain active. No new memory was created."
+      },
+      "seconds": 7.973447719588876
+    },
+    {
+      "name": "akasha_recall_fetch_live",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "recall_memory",
+          "fetch_messages"
+        ],
+        "reply": "FINAL_76207b1ec288\n\n§cited:[fixture:2:0]§",
+        "messages": 6
+      },
+      "seconds": 5.772747220471501
+    },
+    {
+      "name": "akasha_recall_fetch_restart",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "recall_memory",
+          "fetch_messages"
+        ],
+        "reply": "FINAL_76207b1ec288\n\n§cited:[fixture:2:0]§",
+        "messages": 6
+      },
+      "seconds": 8.909904884174466
+    },
+    {
+      "name": "akasha2_recall_fetch_live",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "recall_memory",
+          "fetch_messages"
+        ],
+        "reply": "FINAL_fe71d5acaf4e\n\n§cited:[277bf4e0e39445bab88957fe57336971]§",
+        "messages": 6
+      },
+      "seconds": 8.900000087916851
+    },
+    {
+      "name": "akasha2_recall_fetch_restart",
+      "status": "passed",
+      "evidence": {
+        "tools": [
+          "recall_memory",
+          "fetch_messages"
+        ],
+        "reply": "FINAL_fe71d5acaf4e\n\n§cited:[277bf4e0e39445bab88957fe57336971]§",
+        "messages": 6
+      },
+      "seconds": 5.623563459143043
+    }
+  ],
+  "passed": 6,
+  "total": 6
+}

@@ -8,7 +8,7 @@ Drift 是 Proactive 没有产生推送时可以运行的后台 agent task。任�
   → 检查开关、hazard 到期和最小间隔
   → 选择一个 skill
   → 注入记忆、近期上下文和上轮连续性
-  → 复用同步 Agent 与默认工具执行
+  → 共享异步 reasoner 与显式工具授权
   → 可选推送草稿
   → 保存 run、journal 和连续性
 ```
@@ -35,7 +35,7 @@ description: 抽查一条长期记忆是否仍然准确
 
 - system prompt：选中的 `SKILL.md`；
 - 首条消息：Drift Briefing，包含记忆、近期上下文、journal 和 continuation；
-- 工具：默认工具，加 `message_push` 与 `finish_drift`；
+- 工具：工作区工具、只读记忆与原文工具，加本轮 `message_push` 与 `finish_drift`；
 - 持久化：`drift/drift.db`。
 
 `message_push(message)` 只生成本轮草稿，runner 回到主事件循环后才通过 Channel 投递；每轮最多一次。
@@ -79,3 +79,9 @@ uv run pytest -q tests/test_drift.py
 重启把 running 标为 interrupted，把 delivering 标为 needs_reconciliation，不自动重新发送。
 后者可能已经交给渠道，需要结合实际回执核对。proposal 队列与技能 run 摘要用途不同；
 完整任务选择仍受空闲采样、技能配置和节流限制。
+
+## 记忆工具授权
+
+Drift 读取档案与调用检索使用不同依赖。承重引擎可提供 `recall_memory`，
+`search_messages` / `fetch_messages` 回源原始消息；不注册 memorize、reinforce、forget 或 compact。
+没有记忆引擎时，不给 Markdown 档案对象挂上无法执行的词法记忆工具。
