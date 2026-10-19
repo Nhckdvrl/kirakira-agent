@@ -1,0 +1,2331 @@
+{
+  "endpoint": "https://api.stepfun.com/step_plan/v1",
+  "model": "step-5-preview",
+  "billing_surface": "step_plan",
+  "reasoning_effort": "medium",
+  "python": "3.14.6",
+  "repeats": 4,
+  "concurrency": 3,
+  "streaming": true,
+  "fixture_type": "synthetic functional main-chain contracts",
+  "source_sha256": {
+    "scripts/verify_core_step_plan.py": "51b084330731277970636b02848f3c4923a1bedb6b1ab00a9909fc4e1f79f580",
+    "agent/core/__init__.py": "c4b25bcf4768cc3f1617d15d23583d1a1183c0474a697e687dd45a8ef8a6c3d8",
+    "agent/core/admission.py": "2cfafcacb22f0773b64ea773e66aa74db41b386d8d7447e85b68a5ff801c14bf",
+    "agent/core/compaction.py": "28014e549c0031b8d60853439c2e998d09614b5f8f61605797ac018a1a351c30",
+    "agent/core/contracts.py": "81fd98a03219eedc1337a371ad0a06479bf70287d6015db3c6acc90c1a6dec06",
+    "agent/core/conversation.py": "53c1f03bde56c5566f3cb4209bba743858e2d2a748389825ac247958f0d06a7e",
+    "agent/core/execution.py": "89e0a42c1b3e6f8dd6b1d88be19a070dead9eb8475b08c2e4f7bf314a8384110",
+    "agent/core/loop.py": "92d94450885527ddf5fdcb98051f89d9df74eaa4c451d540914617101cf5918e",
+    "agent/core/model_io.py": "23f9dd6c5fa71d1032ea0f1b66815970041f0ad685b4aff8f964f412ad1a17fb",
+    "agent/core/phases.py": "980358e6a39c6e26faa5889b0a717edf59c5212cccfb31ca45638e59bfa05d97",
+    "agent/core/pipeline.py": "b9f89a5b9d3816d5f1e37d0be468b469e66db368158b299d7c6950d2ff085020",
+    "agent/core/reasoner.py": "e62945eb888cc320b535ad120bdc22dd0697b8b373bbc177ba15c69b618aa070",
+    "agent/core/runtime.py": "da080aead970e22badf79f97aa1dc342212c65663d1ab8f678dbf35f7682a58e",
+    "agent/core/scoped.py": "b7fc76049580a38a359631857d4c04a1c94acadd1c1510135c51466248dca439",
+    "agent/core/tool_batch.py": "539f71b143fc9e7a8973623b1958152f20a90d4a2cff93315238b25e83b2b6d5",
+    "agent/core/tool_io.py": "5f204fc14931869ba2d0b4a05c75f8d6aceecba8d6e5628f7de0ddadc03ae6d5",
+    "agent/tools/registry.py": "143a563af6fa17160160ccad158cd7192ee9ca66a316465a94c48ffd3b381b30",
+    "utils/async_tasks.py": "77f447eeb3babde6047ed78449fde68eeb0e6181095e319ada6fcaf998349fca"
+  },
+  "limitations": [
+    "not an external task benchmark",
+    "small latency sample; no provider speedup claim",
+    "unknown external side effects are not automatically replayed",
+    "cancelled streams may have unreported provider usage"
+  ],
+  "cases": [
+    {
+      "category": "retry_after_effect",
+      "repeat": 0,
+      "status": "passed",
+      "evidence": {
+        "effect_count": 1,
+        "injected": true,
+        "recovery_statuses": [
+          "retrying",
+          "recovered"
+        ],
+        "reply": "已成功写入，committed identifier：`KIRA_ab60c1ac984c`",
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 3.767142103984952,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.8102104049175978,
+          "usage": {
+            "prompt_tokens": 841,
+            "completion_tokens": 57,
+            "total_tokens": 898,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "write_once"
+          ],
+          "seconds": 1.5676595270633698
+        },
+        {
+          "status": "RetryableModelError",
+          "streaming": true,
+          "http_status": null,
+          "injected": true,
+          "seconds": 2.0308420062065125e-05
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.5175115335732698,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 924,
+            "completion_tokens": 22,
+            "total_tokens": 946,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 1.7897944040596485
+        }
+      ]
+    },
+    {
+      "category": "deferred_search",
+      "repeat": 0,
+      "status": "passed",
+      "evidence": {
+        "calls": [
+          "search",
+          "lookup"
+        ],
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 7.709608305245638,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.9808688834309578,
+          "usage": {
+            "prompt_tokens": 809,
+            "completion_tokens": 62,
+            "total_tokens": 871,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "tool_search"
+          ],
+          "seconds": 2.6381579283624887
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "usage": {
+            "prompt_tokens": 976,
+            "completion_tokens": 34,
+            "total_tokens": 1010,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "secret_lookup"
+          ],
+          "seconds": 2.2651944644749165
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.8374195024371147,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 1037,
+            "completion_tokens": 55,
+            "total_tokens": 1092,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.4182162396609783
+        }
+      ]
+    },
+    {
+      "category": "parallel_reads",
+      "repeat": 0,
+      "status": "passed",
+      "evidence": {
+        "peak_active": 4,
+        "reads": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "writes": [
+          2596
+        ],
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 11.646460535004735,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.278960071504116,
+          "usage": {
+            "prompt_tokens": 900,
+            "completion_tokens": 231,
+            "total_tokens": 1131,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "lookup",
+            "lookup",
+            "lookup",
+            "lookup",
+            "lookup",
+            "lookup",
+            "lookup",
+            "lookup"
+          ],
+          "seconds": 4.55774661898613
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.0432994961738586,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 1255,
+            "completion_tokens": 162,
+            "total_tokens": 1417,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "save"
+          ],
+          "seconds": 3.701934276148677
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.99459364451468,
+          "usage": {
+            "cached_tokens": 768,
+            "prompt_tokens": 1436,
+            "completion_tokens": 102,
+            "total_tokens": 1538,
+            "prompt_tokens_details": {
+              "cached_tokens": 768
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 3.114367736503482
+        }
+      ]
+    },
+    {
+      "category": "tool_error_repair",
+      "repeat": 0,
+      "status": "passed",
+      "evidence": {
+        "calls": [
+          "v1",
+          "v2"
+        ],
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 8.738528983667493,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.5351208709180355,
+          "usage": {
+            "prompt_tokens": 805,
+            "completion_tokens": 39,
+            "total_tokens": 844,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_version"
+          ],
+          "seconds": 1.9267897736281157
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.9984818007797003,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 873,
+            "completion_tokens": 97,
+            "total_tokens": 970,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_version"
+          ],
+          "seconds": 3.176341747865081
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.167230127379298,
+          "usage": {
+            "prompt_tokens": 993,
+            "completion_tokens": 99,
+            "total_tokens": 1092,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 3.470081651583314
+        }
+      ]
+    },
+    {
+      "category": "stream_cancel",
+      "repeat": 0,
+      "status": "passed",
+      "evidence": {
+        "cancel_drain_ms": 3.1538736075162888,
+        "execution_statuses": [
+          "completed",
+          "interrupted"
+        ]
+      },
+      "seconds": 3.236327623948455,
+      "requests": [
+        {
+          "status": "CancelledError",
+          "streaming": true,
+          "first_delta_seconds": 1.1049807369709015,
+          "http_status": null,
+          "seconds": 1.1056046839803457
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.324329175055027,
+          "usage": {
+            "prompt_tokens": 675,
+            "completion_tokens": 44,
+            "total_tokens": 719,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 1.9691679198294878
+        }
+      ]
+    },
+    {
+      "category": "files_restart",
+      "repeat": 0,
+      "status": "passed",
+      "evidence": {
+        "first_reply": "The file was written and verified successfully.\n\n**Action summary:**\n1. **write_file**: Wrote 17 bytes to `probe.txt`\n2. **read_file**: Verified the contents\n\n**Exact content of `probe.txt`:**\n```\nKIRA_a3082792ad1d\n```\n\nThe file contains the string `KIRA_a3082792ad1d` exactly as requested, with no extra characters, whitespace, or line breaks.",
+        "execution_statuses": [
+          "completed"
+        ],
+        "restart_reply": "The exact contents of `probe.txt` are:\n\n```\nKIRA_a3082792ad1d\n```",
+        "persisted_messages": 4
+      },
+      "seconds": 23.384601825848222,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 5.210962472483516,
+          "usage": {
+            "prompt_tokens": 946,
+            "completion_tokens": 85,
+            "total_tokens": 1031,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "write_file"
+          ],
+          "seconds": 6.266134159639478
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 1053,
+            "completion_tokens": 26,
+            "total_tokens": 1079,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_file"
+          ],
+          "seconds": 3.5230727083981037
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 5.418742271140218,
+          "usage": {
+            "cached_tokens": 768,
+            "prompt_tokens": 1102,
+            "completion_tokens": 97,
+            "total_tokens": 1199,
+            "prompt_tokens_details": {
+              "cached_tokens": 768
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 6.717582119628787
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 4.321928611025214,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 1260,
+            "completion_tokens": 46,
+            "total_tokens": 1306,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_file"
+          ],
+          "seconds": 4.839165836572647
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.5201240088790655,
+          "usage": {
+            "cached_tokens": 768,
+            "prompt_tokens": 1329,
+            "completion_tokens": 25,
+            "total_tokens": 1354,
+            "prompt_tokens_details": {
+              "cached_tokens": 768
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 1.6734521519392729
+        }
+      ]
+    },
+    {
+      "category": "compaction_restart",
+      "repeat": 0,
+      "status": "passed",
+      "evidence": {
+        "generation": 1,
+        "source_messages_preserved": 80,
+        "summary_sha256": "0f45c66c450fc5612626968bb7546b8151994a2fb69551982cb42a129a88623b",
+        "summary": "## Goal\nReceive and record local read-only background observations for fixture units 25–29 under project verification code KIRA_7fa2bca8c760.\n\n## Constraints & Preferences\n- All observations are local, read-only, and have no pending external effects.\n- No external commands, file changes, or side effects are implied.\n\n## Progress\n### Done\n- Recorded project verification code KIRA_7fa2bca8c760.\n- Recorded background observations for fixture units 25, 26, 27, 28, and 29 (each with observations 0–59), all identical local read-only details with no external effect pending.\n\n### In Progress\n- None.\n\n### Blocked\n- None.\n\n## Key Decisions\n- Treat all received fixture observations as read-only context; no action required.\n\n## Next Steps\n- Await further instructions or new observations.\n\n## Critical Context\n- Project verification code: KIRA_7fa2bca8c760.\n- Observation scope: fixture units 25–29, observations 0–59 per unit.\n- No running shell executions, external effects, or pending actions.",
+        "execution_statuses": [
+          "completed"
+        ],
+        "restart_reply": "KIRA_7fa2bca8c760",
+        "persisted_messages": 84
+      },
+      "seconds": 19.732703622430563,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.4234123080968857,
+          "usage": {
+            "prompt_tokens": 6987,
+            "completion_tokens": 802,
+            "total_tokens": 7789,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 14.410074571147561
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.1308274548500776,
+          "usage": {
+            "prompt_tokens": 13857,
+            "completion_tokens": 52,
+            "total_tokens": 13909,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.7819317933171988
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.597287856042385,
+          "usage": {
+            "cached_tokens": 13312,
+            "prompt_tokens": 13927,
+            "completion_tokens": 55,
+            "total_tokens": 13982,
+            "prompt_tokens_details": {
+              "cached_tokens": 13312
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.201908016577363
+        }
+      ]
+    },
+    {
+      "category": "parallel_reads",
+      "repeat": 1,
+      "status": "passed",
+      "evidence": {
+        "peak_active": 4,
+        "reads": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "writes": [
+          3396
+        ],
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 18.851957604289055,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.8164059799164534,
+          "usage": {
+            "prompt_tokens": 900,
+            "completion_tokens": 224,
+            "total_tokens": 1124,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "lookup",
+            "lookup",
+            "lookup",
+            "lookup",
+            "lookup",
+            "lookup",
+            "lookup",
+            "lookup"
+          ],
+          "seconds": 5.059318069368601
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 8.160101791843772,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 1248,
+            "completion_tokens": 242,
+            "total_tokens": 1490,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "save"
+          ],
+          "seconds": 10.59985020197928
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.847870608791709,
+          "usage": {
+            "cached_tokens": 1024,
+            "prompt_tokens": 1509,
+            "completion_tokens": 92,
+            "total_tokens": 1601,
+            "prompt_tokens_details": {
+              "cached_tokens": 1024
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.9016514103859663
+        }
+      ]
+    },
+    {
+      "category": "retry_after_effect",
+      "repeat": 1,
+      "status": "passed",
+      "evidence": {
+        "effect_count": 1,
+        "injected": true,
+        "recovery_statuses": [
+          "retrying",
+          "recovered"
+        ],
+        "reply": "Committed identifier: `KIRA_3dc6a48c1feb`",
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 5.218631915748119,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.5092483423650265,
+          "usage": {
+            "prompt_tokens": 845,
+            "completion_tokens": 64,
+            "total_tokens": 909,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "write_once"
+          ],
+          "seconds": 2.171341711655259
+        },
+        {
+          "status": "RetryableModelError",
+          "streaming": true,
+          "http_status": null,
+          "injected": true,
+          "seconds": 1.702830195426941e-05
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.6828271225094795,
+          "usage": {
+            "prompt_tokens": 937,
+            "completion_tokens": 20,
+            "total_tokens": 957,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.8953318800777197
+        }
+      ]
+    },
+    {
+      "category": "tool_error_repair",
+      "repeat": 1,
+      "status": "passed",
+      "evidence": {
+        "calls": [
+          "v1",
+          "v2"
+        ],
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 6.071202239021659,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.3806611467152834,
+          "usage": {
+            "prompt_tokens": 805,
+            "completion_tokens": 39,
+            "total_tokens": 844,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_version"
+          ],
+          "seconds": 1.8338986169546843
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.6994806453585625,
+          "usage": {
+            "prompt_tokens": 873,
+            "completion_tokens": 43,
+            "total_tokens": 916,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_version"
+          ],
+          "seconds": 1.2311301529407501
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.1711093168705702,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 943,
+            "completion_tokens": 131,
+            "total_tokens": 1074,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.8507133927196264
+        }
+      ]
+    },
+    {
+      "category": "deferred_search",
+      "repeat": 1,
+      "status": "passed",
+      "evidence": {
+        "calls": [
+          "search",
+          "lookup"
+        ],
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 9.511259563267231,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.7758903298527002,
+          "usage": {
+            "prompt_tokens": 809,
+            "completion_tokens": 69,
+            "total_tokens": 878,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "tool_search"
+          ],
+          "seconds": 3.4505461156368256
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.205415789037943,
+          "usage": {
+            "prompt_tokens": 983,
+            "completion_tokens": 60,
+            "total_tokens": 1043,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "secret_lookup"
+          ],
+          "seconds": 2.8379663322120905
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.0862286649644375,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 1070,
+            "completion_tokens": 81,
+            "total_tokens": 1151,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 3.065879000350833
+        }
+      ]
+    },
+    {
+      "category": "stream_cancel",
+      "repeat": 1,
+      "status": "passed",
+      "evidence": {
+        "cancel_drain_ms": 3.3592786639928818,
+        "execution_statuses": [
+          "completed",
+          "interrupted"
+        ]
+      },
+      "seconds": 5.694523844867945,
+      "requests": [
+        {
+          "status": "CancelledError",
+          "streaming": true,
+          "first_delta_seconds": 2.3528719544410706,
+          "http_status": null,
+          "seconds": 2.353498000651598
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.473904026672244,
+          "usage": {
+            "prompt_tokens": 678,
+            "completion_tokens": 60,
+            "total_tokens": 738,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 3.1921167001128197
+        }
+      ]
+    },
+    {
+      "category": "files_restart",
+      "repeat": 1,
+      "status": "passed",
+      "evidence": {
+        "first_reply": "Done. I wrote the content and verified it by reading it back.\n\n**File:** `probe.txt` (17 bytes)\n\n**Exact content:**\n```\nKIRA_3be044ddd67f\n```\n\nThe read-back confirms the content is exactly `KIRA_3be044ddd67f` (16 characters, no trailing newline), matching what was written.",
+        "execution_statuses": [
+          "completed"
+        ],
+        "restart_reply": "**File:** `probe.txt` (17 bytes)\n\n**Exact content:**\n```\nKIRA_3be044ddd67f\n```\n\nThe file contains the string `KIRA_3be044ddd67f` (16 characters, no trailing newline).",
+        "persisted_messages": 4
+      },
+      "seconds": 14.651334997266531,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.8287937697023153,
+          "usage": {
+            "prompt_tokens": 946,
+            "completion_tokens": 76,
+            "total_tokens": 1022,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "write_file"
+          ],
+          "seconds": 2.617179060354829
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.0173136703670025,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 1044,
+            "completion_tokens": 49,
+            "total_tokens": 1093,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_file"
+          ],
+          "seconds": 1.624743215739727
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 3.8970488905906677,
+          "usage": {
+            "cached_tokens": 768,
+            "prompt_tokens": 1116,
+            "completion_tokens": 115,
+            "total_tokens": 1231,
+            "prompt_tokens_details": {
+              "cached_tokens": 768
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 5.348950143903494
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.9900740217417479,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 1251,
+            "completion_tokens": 45,
+            "total_tokens": 1296,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_file"
+          ],
+          "seconds": 2.420244747772813
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.7785658575594425,
+          "usage": {
+            "cached_tokens": 1024,
+            "prompt_tokens": 1319,
+            "completion_tokens": 57,
+            "total_tokens": 1376,
+            "prompt_tokens_details": {
+              "cached_tokens": 1024
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.3243960328400135
+        }
+      ]
+    },
+    {
+      "category": "retry_after_effect",
+      "repeat": 2,
+      "status": "passed",
+      "evidence": {
+        "effect_count": 1,
+        "injected": true,
+        "recovery_statuses": [
+          "retrying",
+          "recovered"
+        ],
+        "reply": "The identifier has been written exactly once.\n\nCommitted identifier: `KIRA_45622b5646ca`",
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 2.7793720085173845,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "usage": {
+            "prompt_tokens": 839,
+            "completion_tokens": 32,
+            "total_tokens": 871,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "write_once"
+          ],
+          "seconds": 1.0477138366550207
+        },
+        {
+          "status": "RetryableModelError",
+          "streaming": true,
+          "http_status": null,
+          "injected": true,
+          "seconds": 1.4727935194969177e-05
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.2845499534159899,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 896,
+            "completion_tokens": 25,
+            "total_tokens": 921,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 1.5780610889196396
+        }
+      ]
+    },
+    {
+      "category": "parallel_reads",
+      "repeat": 2,
+      "status": "passed",
+      "evidence": {
+        "peak_active": 4,
+        "reads": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "writes": [
+          4196
+        ],
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 9.054590968415141,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.7280811071395874,
+          "usage": {
+            "prompt_tokens": 900,
+            "completion_tokens": 230,
+            "total_tokens": 1130,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "lookup",
+            "lookup",
+            "lookup",
+            "lookup",
+            "lookup",
+            "lookup",
+            "lookup",
+            "lookup"
+          ],
+          "seconds": 4.002454709261656
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.0036626234650612,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 1254,
+            "completion_tokens": 149,
+            "total_tokens": 1403,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "save"
+          ],
+          "seconds": 2.647596128284931
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.0288508050143719,
+          "usage": {
+            "cached_tokens": 768,
+            "prompt_tokens": 1422,
+            "completion_tokens": 103,
+            "total_tokens": 1525,
+            "prompt_tokens_details": {
+              "cached_tokens": 768
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.1193583719432354
+        }
+      ]
+    },
+    {
+      "category": "deferred_search",
+      "repeat": 2,
+      "status": "passed",
+      "evidence": {
+        "calls": [
+          "search",
+          "lookup"
+        ],
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 4.912992998957634,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.8100660238415003,
+          "usage": {
+            "prompt_tokens": 809,
+            "completion_tokens": 78,
+            "total_tokens": 887,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "tool_search"
+          ],
+          "seconds": 1.941341234371066
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.7860753331333399,
+          "usage": {
+            "prompt_tokens": 992,
+            "completion_tokens": 58,
+            "total_tokens": 1050,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "secret_lookup"
+          ],
+          "seconds": 1.4098613932728767
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.8878982346504927,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 1077,
+            "completion_tokens": 49,
+            "total_tokens": 1126,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 1.4070292972028255
+        }
+      ]
+    },
+    {
+      "category": "tool_error_repair",
+      "repeat": 2,
+      "status": "passed",
+      "evidence": {
+        "calls": [
+          "v1",
+          "v2"
+        ],
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 6.974868394434452,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.9768795389682055,
+          "usage": {
+            "prompt_tokens": 805,
+            "completion_tokens": 38,
+            "total_tokens": 843,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_version"
+          ],
+          "seconds": 3.2006192971020937
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.4653334189206362,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 872,
+            "completion_tokens": 52,
+            "total_tokens": 924,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_version"
+          ],
+          "seconds": 2.0000625662505627
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.0800275783985853,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 950,
+            "completion_tokens": 45,
+            "total_tokens": 995,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 1.5882331393659115
+        }
+      ]
+    },
+    {
+      "category": "compaction_restart",
+      "repeat": 1,
+      "status": "passed",
+      "evidence": {
+        "generation": 1,
+        "source_messages_preserved": 80,
+        "summary_sha256": "51f9bdf371c3e6598e02027c983285f1af462c604f683a3d6c1f358a50ba6d7f",
+        "summary": "## Goal\nNo explicit task goal stated; session carries project verification code KIRA_bf27c2617e5c and repeated local read-only background observations.\n\n## Constraints & Preferences\n- Observations are local read-only background details.\n- No external effect is pending.\n\n## Progress\n### Done\n- Recorded project verification code KIRA_bf27c2617e5c.\n- Recorded fixture units 25–29, observations 0–59 for each unit (60 observations per unit); every observation is a local read-only background detail with no external effect pending.\n\n### In Progress\nNone.\n\n### Blocked\nNone.\n\n## Key Decisions\nNone.\n\n## Next Steps\nNone.\n\n## Critical Context\nProject verification code: KIRA_bf27c2617e5c. All fixture observations (units 25–29, indices 0–59) are local read-only background details with no pending external effects. No files, commands, shell executions, or errors are present in the consolidated history.",
+        "execution_statuses": [
+          "completed"
+        ],
+        "restart_reply": "KIRA_bf27c2617e5c",
+        "persisted_messages": 84
+      },
+      "seconds": 20.018540555611253,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.3439724203199148,
+          "usage": {
+            "prompt_tokens": 6987,
+            "completion_tokens": 979,
+            "total_tokens": 7966,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 13.446781067177653
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.624411001801491,
+          "usage": {
+            "prompt_tokens": 13823,
+            "completion_tokens": 44,
+            "total_tokens": 13867,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 3.211049111559987
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.2973835840821266,
+          "usage": {
+            "cached_tokens": 13056,
+            "prompt_tokens": 13885,
+            "completion_tokens": 50,
+            "total_tokens": 13935,
+            "prompt_tokens_details": {
+              "cached_tokens": 13056
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.936173314228654
+        }
+      ]
+    },
+    {
+      "category": "stream_cancel",
+      "repeat": 2,
+      "status": "passed",
+      "evidence": {
+        "cancel_drain_ms": 3.2192151993513107,
+        "execution_statuses": [
+          "completed",
+          "interrupted"
+        ]
+      },
+      "seconds": 6.180592032149434,
+      "requests": [
+        {
+          "status": "CancelledError",
+          "streaming": true,
+          "first_delta_seconds": 0.8838604260236025,
+          "http_status": null,
+          "seconds": 0.8844506703317165
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 4.512464923784137,
+          "usage": {
+            "prompt_tokens": 675,
+            "completion_tokens": 31,
+            "total_tokens": 706,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 4.951498122885823
+        }
+      ]
+    },
+    {
+      "category": "parallel_reads",
+      "repeat": 3,
+      "status": "passed",
+      "evidence": {
+        "peak_active": 4,
+        "reads": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "writes": [
+          4996
+        ],
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 11.932840393856168,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 3.266014762222767,
+          "usage": {
+            "prompt_tokens": 900,
+            "completion_tokens": 215,
+            "total_tokens": 1115,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "lookup",
+            "lookup",
+            "lookup",
+            "lookup",
+            "lookup",
+            "lookup",
+            "lookup",
+            "lookup"
+          ],
+          "seconds": 5.4792805425822735
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.833790473639965,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 1239,
+            "completion_tokens": 95,
+            "total_tokens": 1334,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "save"
+          ],
+          "seconds": 4.146122237667441
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.0231467131525278,
+          "usage": {
+            "cached_tokens": 1024,
+            "prompt_tokens": 1353,
+            "completion_tokens": 51,
+            "total_tokens": 1404,
+            "prompt_tokens_details": {
+              "cached_tokens": 1024
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 1.5945134479552507
+        }
+      ]
+    },
+    {
+      "category": "files_restart",
+      "repeat": 2,
+      "status": "passed",
+      "evidence": {
+        "first_reply": "已完成验证。\n\n- **写入操作**：`write_file` 成功写入 `probe.txt`，报告为 17 字节。\n- **读取验证**：`read_file` 返回内容为 `KIRA_db7a1bc476fb`。\n- **文件精确内容**：`KIRA_db7a1bc476fb`（无换行符，与写入内容一致）。",
+        "execution_statuses": [
+          "completed"
+        ],
+        "restart_reply": "已读取 `probe.txt`。\n\n**文件精确内容**：`KIRA_db7a1bc476fb`",
+        "persisted_messages": 4
+      },
+      "seconds": 21.222524762153625,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.315424956381321,
+          "usage": {
+            "prompt_tokens": 946,
+            "completion_tokens": 71,
+            "total_tokens": 1017,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "write_file"
+          ],
+          "seconds": 2.072787072509527
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 1039,
+            "completion_tokens": 26,
+            "total_tokens": 1065,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_file"
+          ],
+          "seconds": 3.990959659218788
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.446650817990303,
+          "usage": {
+            "cached_tokens": 768,
+            "prompt_tokens": 1088,
+            "completion_tokens": 86,
+            "total_tokens": 1174,
+            "prompt_tokens_details": {
+              "cached_tokens": 768
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 3.584771504625678
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.102809092029929,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 1221,
+            "completion_tokens": 45,
+            "total_tokens": 1266,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_file"
+          ],
+          "seconds": 2.6608330998569727
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 7.670674905180931,
+          "usage": {
+            "cached_tokens": 768,
+            "prompt_tokens": 1289,
+            "completion_tokens": 27,
+            "total_tokens": 1316,
+            "prompt_tokens_details": {
+              "cached_tokens": 768
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 7.872371185570955
+        }
+      ]
+    },
+    {
+      "category": "retry_after_effect",
+      "repeat": 3,
+      "status": "passed",
+      "evidence": {
+        "effect_count": 1,
+        "injected": true,
+        "recovery_statuses": [
+          "retrying",
+          "recovered"
+        ],
+        "reply": "已成功调用 write_once，写入的字面不透明标识符为：\n\n**KIRA_7ee425e4c32b**",
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 11.050854369997978,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.6981870625168085,
+          "usage": {
+            "prompt_tokens": 843,
+            "completion_tokens": 98,
+            "total_tokens": 941,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "write_once"
+          ],
+          "seconds": 6.020213443785906
+        },
+        {
+          "status": "RetryableModelError",
+          "streaming": true,
+          "http_status": null,
+          "injected": true,
+          "seconds": 1.6460195183753967e-05
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 4.145480740815401,
+          "usage": {
+            "prompt_tokens": 968,
+            "completion_tokens": 47,
+            "total_tokens": 1015,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 4.860045123845339
+        }
+      ]
+    },
+    {
+      "category": "deferred_search",
+      "repeat": 3,
+      "status": "passed",
+      "evidence": {
+        "calls": [
+          "search",
+          "lookup"
+        ],
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 10.875880172476172,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 4.048505716025829,
+          "usage": {
+            "prompt_tokens": 808,
+            "completion_tokens": 76,
+            "total_tokens": 884,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "tool_search"
+          ],
+          "seconds": 4.6428116001188755
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.4064474646002054,
+          "usage": {
+            "prompt_tokens": 988,
+            "completion_tokens": 49,
+            "total_tokens": 1037,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "secret_lookup"
+          ],
+          "seconds": 2.92122271284461
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.9964193273335695,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 1063,
+            "completion_tokens": 57,
+            "total_tokens": 1120,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 3.149844739586115
+        }
+      ]
+    },
+    {
+      "category": "compaction_restart",
+      "repeat": 2,
+      "status": "passed",
+      "evidence": {
+        "generation": 1,
+        "source_messages_preserved": 80,
+        "summary_sha256": "3ee2ef3211f56b40b9b4484eb8aaf547d56e063d4b5b795a2009a8bcb37354c6",
+        "summary": "## Goal\nRecord project verification code and process fixture unit observations.\n\n## Constraints & Preferences\n- Local read-only background details only\n- No external effect pending\n\n## Progress\n### Done\n- Recorded project verification code: KIRA_13fa09b8dbca\n- Processed fixture units 25, 26, 27, 28, and 29\n- Each fixture unit processed observations 0 through 59 (60 observations per unit)\n\n### In Progress\n- None\n\n### Blocked\n- None\n\n## Key Decisions\n- None\n\n## Next Steps\n- None\n\n## Critical Context\n- Project verification code: KIRA_13fa09b8dbca\n- Fixture units 25-29 completed; each unit yielded 60 local read-only background observations with no external effects pending",
+        "execution_statuses": [
+          "completed"
+        ],
+        "restart_reply": "KIRA_13fa09b8dbca",
+        "persisted_messages": 84
+      },
+      "seconds": 30.315654860809445,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.6404711529612541,
+          "usage": {
+            "prompt_tokens": 6982,
+            "completion_tokens": 1107,
+            "total_tokens": 8089,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 15.972763888537884
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 7.0101283229887486,
+          "usage": {
+            "prompt_tokens": 13777,
+            "completion_tokens": 92,
+            "total_tokens": 13869,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 8.72192438133061
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 5.169833540916443,
+          "usage": {
+            "cached_tokens": 13056,
+            "prompt_tokens": 13887,
+            "completion_tokens": 12,
+            "total_tokens": 13899,
+            "prompt_tokens_details": {
+              "cached_tokens": 13056
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 5.170460848137736
+        }
+      ]
+    },
+    {
+      "category": "stream_cancel",
+      "repeat": 3,
+      "status": "passed",
+      "evidence": {
+        "cancel_drain_ms": 3.244249150156975,
+        "execution_statuses": [
+          "completed",
+          "interrupted"
+        ]
+      },
+      "seconds": 4.413146872073412,
+      "requests": [
+        {
+          "status": "CancelledError",
+          "streaming": true,
+          "first_delta_seconds": 1.5282018277794123,
+          "http_status": null,
+          "seconds": 1.5290539525449276
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.116980792954564,
+          "usage": {
+            "prompt_tokens": 675,
+            "completion_tokens": 113,
+            "total_tokens": 788,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.6791339442133904
+        }
+      ]
+    },
+    {
+      "category": "tool_error_repair",
+      "repeat": 3,
+      "status": "passed",
+      "evidence": {
+        "calls": [
+          "v1",
+          "v2"
+        ],
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 6.772774647921324,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.2971683163195848,
+          "usage": {
+            "prompt_tokens": 805,
+            "completion_tokens": 38,
+            "total_tokens": 843,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_version"
+          ],
+          "seconds": 1.602605227380991
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.433979108929634,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 872,
+            "completion_tokens": 64,
+            "total_tokens": 936,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_version"
+          ],
+          "seconds": 2.306009167805314
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.1385526917874813,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 961,
+            "completion_tokens": 44,
+            "total_tokens": 1005,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.6665527410805225
+        }
+      ]
+    },
+    {
+      "category": "files_restart",
+      "repeat": 3,
+      "status": "passed",
+      "evidence": {
+        "first_reply": "Done.\n\n- **Wrote:** `probe.txt` — 17 bytes\n- **Verified via read_file:** the file contains exactly:\n  `KIRA_e3c12e3ceb6a`\n\nNote: the string is 17 characters long, matching the 17 bytes reported, so there was no trailing newline written (write_file did not append one). The read-back content matches the requested token exactly, with no leading or trailing whitespace.",
+        "execution_statuses": [
+          "completed"
+        ],
+        "restart_reply": "**File:** `probe.txt`\n\n**Exact contents (17 bytes, no trailing newline):**\n\n```\nKIRA_e3c12e3ceb6a\n```\n\nVerified by reading the file back just now — it contains the 17-character token `KIRA_e3c12e3ceb6a` with no leading or trailing whitespace or newline.",
+        "persisted_messages": 4
+      },
+      "seconds": 17.22690949961543,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.496688138693571,
+          "usage": {
+            "prompt_tokens": 949,
+            "completion_tokens": 57,
+            "total_tokens": 1006,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "write_file"
+          ],
+          "seconds": 2.0502514988183975
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "usage": {
+            "cached_tokens": 768,
+            "prompt_tokens": 1028,
+            "completion_tokens": 26,
+            "total_tokens": 1054,
+            "prompt_tokens_details": {
+              "cached_tokens": 768
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_file"
+          ],
+          "seconds": 1.7653917577117682
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 3.8888743594288826,
+          "usage": {
+            "cached_tokens": 768,
+            "prompt_tokens": 1080,
+            "completion_tokens": 97,
+            "total_tokens": 1177,
+            "prompt_tokens_details": {
+              "cached_tokens": 768
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 5.235983908176422
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 3.1337110437452793,
+          "usage": {
+            "prompt_tokens": 1197,
+            "completion_tokens": 54,
+            "total_tokens": 1251,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_file"
+          ],
+          "seconds": 3.838046545162797
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.8582788165658712,
+          "usage": {
+            "cached_tokens": 768,
+            "prompt_tokens": 1277,
+            "completion_tokens": 80,
+            "total_tokens": 1357,
+            "prompt_tokens_details": {
+              "cached_tokens": 768
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.851679414510727
+        }
+      ]
+    },
+    {
+      "category": "compaction_restart",
+      "repeat": 3,
+      "status": "passed",
+      "evidence": {
+        "generation": 1,
+        "source_messages_preserved": 80,
+        "summary_sha256": "8eecdf56373d3c2bcb09f49ce4ce081821b1dc760fdf50710b373f3368559dcb",
+        "summary": "## Goal\nNo explicit goal stated. Observed scope: receive project verification code and read-only fixture observations.\n\n## Constraints & Preferences\n- All fixture observations are local read-only background details; no external effect is pending.\n\n## Progress\n### Done\n- Recorded project verification code: KIRA_37d42d59b8d4.\n- Received fixture units 25, 26, 27, 28, and 29; each unit includes observations 0 through 59.\n\n### In Progress\n- None.\n\n### Blocked\n- None.\n\n## Key Decisions\n- None recorded.\n\n## Next Steps\n- None indicated.\n\n## Critical Context\n- Project verification code: KIRA_37d42d59b8d4.\n- No running shell executions, active tools, or pending external effects.",
+        "execution_statuses": [
+          "completed"
+        ],
+        "restart_reply": "The project verification code is `KIRA_37d42d59b8d4`.",
+        "persisted_messages": 84
+      },
+      "seconds": 26.639445956796408,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 5.567889057099819,
+          "usage": {
+            "prompt_tokens": 6992,
+            "completion_tokens": 853,
+            "total_tokens": 7845,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 16.85141925700009
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.300393456593156,
+          "usage": {
+            "prompt_tokens": 13796,
+            "completion_tokens": 50,
+            "total_tokens": 13846,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.9453867375850677
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 5.776987515389919,
+          "usage": {
+            "cached_tokens": 13056,
+            "prompt_tokens": 13864,
+            "completion_tokens": 21,
+            "total_tokens": 13885,
+            "prompt_tokens_details": {
+              "cached_tokens": 13056
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 5.977709788829088
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "passed": 28,
+    "total": 28,
+    "groups": {
+      "compaction_restart": {
+        "passed": 4,
+        "total": 4
+      },
+      "deferred_search": {
+        "passed": 4,
+        "total": 4
+      },
+      "files_restart": {
+        "passed": 4,
+        "total": 4
+      },
+      "parallel_reads": {
+        "passed": 4,
+        "total": 4
+      },
+      "retry_after_effect": {
+        "passed": 4,
+        "total": 4
+      },
+      "stream_cancel": {
+        "passed": 4,
+        "total": 4
+      },
+      "tool_error_repair": {
+        "passed": 4,
+        "total": 4
+      }
+    },
+    "model_requests": 88,
+    "completed_requests": 80,
+    "usage": {
+      "prompt_tokens": 207334,
+      "completion_tokens": 9273,
+      "total_tokens": 216607,
+      "cached_tokens": 74496
+    },
+    "case_latency_seconds": {
+      "p50": 9.054590968415141,
+      "p95": 26.639445956796408
+    },
+    "model_latency_seconds": {
+      "p50": 2.8379663322120905,
+      "p95": 10.59985020197928
+    }
+  }
+}

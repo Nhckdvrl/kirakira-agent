@@ -731,6 +731,7 @@ def build_workspace_registry(
             ),
         ),
         handlers.read_file,
+        parallel_safe=True,
     )
     registry.register(
         ToolSpec(
@@ -739,6 +740,7 @@ def build_workspace_registry(
             object_schema({"path": {"type": "string"}}, []),
         ),
         handlers.list_dir,
+        parallel_safe=True,
     )
     registry.register(
         ToolSpec(

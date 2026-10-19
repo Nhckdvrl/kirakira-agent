@@ -44,6 +44,7 @@ class ToolMeta:
     search_hint: str | None = None
     source_type: str = "builtin"
     source_name: str = ""
+    parallel_safe: bool = False
 
 
 class ToolRegistry:
@@ -69,11 +70,14 @@ class ToolRegistry:
         search_hint: str | None = None,
         source_type: str = "builtin",
         source_name: str = "",
+        parallel_safe: bool = False,
     ) -> None:
         if spec.name in self._tools:
             raise ValueError("Tool already registered: %s" % spec.name)
         if risk not in {"read-only", "write", "external-side-effect"}:
             raise ValueError("invalid tool risk: %s" % risk)
+        if type(parallel_safe) is not bool or (parallel_safe and risk != "read-only"):
+            raise ValueError("parallel_safe requires an explicitly read-only tool")
         resolved_always_on = not deferred if always_on is None else bool(always_on)
         resolved_deferred = bool(deferred or not resolved_always_on)
         self._tools[spec.name] = Tool(
@@ -88,6 +92,7 @@ class ToolRegistry:
                 search_hint=search_hint,
                 source_type=source_type,
                 source_name=source_name,
+                parallel_safe=parallel_safe,
             ),
         )
 
@@ -212,7 +217,9 @@ class ToolRegistry:
             if inspect.iscoroutinefunction(tool.handler):
                 output = await tool.handler(**call.arguments)
             else:
-                output = await asyncio.to_thread(tool.handler, **call.arguments)
+                from utils.async_tasks import run_sync_drained
+
+                output = await run_sync_drained(tool.handler, **call.arguments)
                 if inspect.isawaitable(output):
                     output = await output
             if isinstance(output, ToolResult):

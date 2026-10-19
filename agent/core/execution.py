@@ -12,7 +12,7 @@ import sqlite3
 import threading
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -51,6 +51,8 @@ class ExecutionStore:
                 run_id TEXT NOT NULL, seq INTEGER NOT NULL, kind TEXT NOT NULL,
                 payload TEXT NOT NULL, PRIMARY KEY(run_id,seq)
             );
+            CREATE INDEX IF NOT EXISTS execution_events_kind
+                ON execution_events(run_id, kind, seq);
         """)
 
     def start(self, *, session_key, scope, parent_id, inputs):
@@ -93,13 +95,21 @@ class ExecutionStore:
             ]
 
     def unresolved(self, run_id):
+        # Only intents need decoding; model context and result bodies can be huge.
+        # The original append-only facts remain authoritative, including old DBs.
         pending = {}
-        for event in self.events(run_id):
-            payload = event["payload"]
-            if event["kind"] == "tool_intent":
-                pending[payload["operation_id"]] = payload
-            elif event["kind"] == "tool_result":
-                pending.pop(payload["operation_id"], None)
+        with self._lock:
+            for kind, operation_id, payload in self.db.execute(
+                "SELECT kind,json_extract(payload,'$.operation_id'),"
+                "CASE WHEN kind='tool_intent' THEN payload END "
+                "FROM execution_events WHERE run_id=? "
+                "AND kind IN ('tool_intent','tool_result') ORDER BY seq",
+                (run_id,),
+            ):
+                if kind == "tool_intent":
+                    pending[operation_id] = json.loads(payload)
+                else:
+                    pending.pop(operation_id, None)
         return list(pending.values())
 
     def finish(self, run_id, status, *, result=None, error=None):
@@ -186,6 +196,21 @@ _current: ContextVar[ExecutionContext | None] = ContextVar(
 def current_execution():
     ctx = _current.get()
     return ctx if ctx is not None and ctx.task is asyncio.current_task() else None
+
+
+@contextmanager
+def borrow_execution(parent):
+    """Explicitly bind a parent's journal to one physically owned tool task."""
+    if parent is None:
+        yield
+        return
+    child = replace(parent, task=asyncio.current_task())
+    token = _current.set(child)
+    try:
+        yield
+    finally:
+        parent.tool_started |= child.tool_started
+        _current.reset(token)
 
 
 @contextmanager

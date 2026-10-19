@@ -1,0 +1,392 @@
+{
+  "endpoint": "https://api.stepfun.com/step_plan/v1",
+  "model": "step-5-preview",
+  "billing_surface": "step_plan",
+  "reasoning_effort": "medium",
+  "python": "3.14.6",
+  "repeats": 8,
+  "concurrency": 2,
+  "streaming": true,
+  "fixture_type": "synthetic functional main-chain contracts",
+  "source_sha256": {
+    "scripts/verify_core_step_plan.py": "51b084330731277970636b02848f3c4923a1bedb6b1ab00a9909fc4e1f79f580",
+    "agent/core/__init__.py": "c4b25bcf4768cc3f1617d15d23583d1a1183c0474a697e687dd45a8ef8a6c3d8",
+    "agent/core/admission.py": "2cfafcacb22f0773b64ea773e66aa74db41b386d8d7447e85b68a5ff801c14bf",
+    "agent/core/compaction.py": "28014e549c0031b8d60853439c2e998d09614b5f8f61605797ac018a1a351c30",
+    "agent/core/contracts.py": "81fd98a03219eedc1337a371ad0a06479bf70287d6015db3c6acc90c1a6dec06",
+    "agent/core/conversation.py": "53c1f03bde56c5566f3cb4209bba743858e2d2a748389825ac247958f0d06a7e",
+    "agent/core/execution.py": "89e0a42c1b3e6f8dd6b1d88be19a070dead9eb8475b08c2e4f7bf314a8384110",
+    "agent/core/loop.py": "92d94450885527ddf5fdcb98051f89d9df74eaa4c451d540914617101cf5918e",
+    "agent/core/model_io.py": "23f9dd6c5fa71d1032ea0f1b66815970041f0ad685b4aff8f964f412ad1a17fb",
+    "agent/core/phases.py": "980358e6a39c6e26faa5889b0a717edf59c5212cccfb31ca45638e59bfa05d97",
+    "agent/core/pipeline.py": "b9f89a5b9d3816d5f1e37d0be468b469e66db368158b299d7c6950d2ff085020",
+    "agent/core/reasoner.py": "afc41be3199b16a8a056c594eb632c44e2e0ab6d29c9be25c949ac88fc5db488",
+    "agent/core/runtime.py": "da080aead970e22badf79f97aa1dc342212c65663d1ab8f678dbf35f7682a58e",
+    "agent/core/scoped.py": "b7fc76049580a38a359631857d4c04a1c94acadd1c1510135c51466248dca439",
+    "agent/core/tool_batch.py": "539f71b143fc9e7a8973623b1958152f20a90d4a2cff93315238b25e83b2b6d5",
+    "agent/core/tool_io.py": "5f204fc14931869ba2d0b4a05c75f8d6aceecba8d6e5628f7de0ddadc03ae6d5",
+    "agent/tools/registry.py": "143a563af6fa17160160ccad158cd7192ee9ca66a316465a94c48ffd3b381b30",
+    "utils/async_tasks.py": "77f447eeb3babde6047ed78449fde68eeb0e6181095e319ada6fcaf998349fca"
+  },
+  "limitations": [
+    "not an external task benchmark",
+    "small latency sample; no provider speedup claim",
+    "unknown external side effects are not automatically replayed",
+    "cancelled streams may have unreported provider usage"
+  ],
+  "cases": [
+    {
+      "category": "stream_cancel",
+      "repeat": 0,
+      "status": "passed",
+      "evidence": {
+        "cancel_drain_ms": 4.52503003180027,
+        "execution_statuses": [
+          "completed",
+          "interrupted"
+        ]
+      },
+      "seconds": 6.979286652058363,
+      "requests": [
+        {
+          "status": "CancelledError",
+          "streaming": true,
+          "first_delta_seconds": 5.443655030801892,
+          "http_status": null,
+          "seconds": 5.44429243914783
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.8364939969033003,
+          "usage": {
+            "prompt_tokens": 678,
+            "completion_tokens": 32,
+            "total_tokens": 710,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 1.1797546986490488
+        }
+      ]
+    },
+    {
+      "category": "stream_cancel",
+      "repeat": 2,
+      "status": "passed",
+      "evidence": {
+        "cancel_drain_ms": 2.9470399022102356,
+        "execution_statuses": [
+          "completed",
+          "interrupted"
+        ]
+      },
+      "seconds": 3.5016700960695744,
+      "requests": [
+        {
+          "status": "CancelledError",
+          "streaming": true,
+          "first_delta_seconds": 1.4238472878932953,
+          "http_status": null,
+          "seconds": 1.4248544853180647
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.231180364266038,
+          "usage": {
+            "prompt_tokens": 676,
+            "completion_tokens": 46,
+            "total_tokens": 722,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 1.8834442999213934
+        }
+      ]
+    },
+    {
+      "category": "stream_cancel",
+      "repeat": 1,
+      "status": "passed",
+      "evidence": {
+        "cancel_drain_ms": 3.0953921377658844,
+        "execution_statuses": [
+          "completed",
+          "interrupted"
+        ]
+      },
+      "seconds": 10.927841868251562,
+      "requests": [
+        {
+          "status": "CancelledError",
+          "streaming": true,
+          "first_delta_seconds": 6.171822940930724,
+          "http_status": null,
+          "seconds": 6.172408934682608
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.312575750052929,
+          "usage": {
+            "prompt_tokens": 679,
+            "completion_tokens": 30,
+            "total_tokens": 709,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.725806575268507
+        }
+      ]
+    },
+    {
+      "category": "stream_cancel",
+      "repeat": 3,
+      "status": "passed",
+      "evidence": {
+        "cancel_drain_ms": 3.039548173546791,
+        "execution_statuses": [
+          "completed",
+          "interrupted"
+        ]
+      },
+      "seconds": 4.1596965584903955,
+      "requests": [
+        {
+          "status": "CancelledError",
+          "streaming": true,
+          "first_delta_seconds": 1.9155079126358032,
+          "http_status": null,
+          "seconds": 1.9160523153841496
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.7437715511769056,
+          "usage": {
+            "prompt_tokens": 678,
+            "completion_tokens": 32,
+            "total_tokens": 710,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.051070300862193
+        }
+      ]
+    },
+    {
+      "category": "stream_cancel",
+      "repeat": 4,
+      "status": "passed",
+      "evidence": {
+        "cancel_drain_ms": 2.991296350955963,
+        "execution_statuses": [
+          "completed",
+          "interrupted"
+        ]
+      },
+      "seconds": 6.6831606440246105,
+      "requests": [
+        {
+          "status": "CancelledError",
+          "streaming": true,
+          "first_delta_seconds": 3.984551291912794,
+          "http_status": null,
+          "seconds": 3.9851594883948565
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.100681995972991,
+          "usage": {
+            "prompt_tokens": 677,
+            "completion_tokens": 29,
+            "total_tokens": 706,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.4955939687788486
+        }
+      ]
+    },
+    {
+      "category": "stream_cancel",
+      "repeat": 6,
+      "status": "passed",
+      "evidence": {
+        "cancel_drain_ms": 2.922195941209793,
+        "execution_statuses": [
+          "completed",
+          "interrupted"
+        ]
+      },
+      "seconds": 3.601320257410407,
+      "requests": [
+        {
+          "status": "CancelledError",
+          "streaming": true,
+          "first_delta_seconds": 1.5436327420175076,
+          "http_status": null,
+          "seconds": 1.5441839955747128
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.3375027608126402,
+          "usage": {
+            "prompt_tokens": 677,
+            "completion_tokens": 40,
+            "total_tokens": 717,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 1.8454682566225529
+        }
+      ]
+    },
+    {
+      "category": "stream_cancel",
+      "repeat": 5,
+      "status": "passed",
+      "evidence": {
+        "cancel_drain_ms": 2.987917512655258,
+        "execution_statuses": [
+          "completed",
+          "interrupted"
+        ]
+      },
+      "seconds": 8.700195817276835,
+      "requests": [
+        {
+          "status": "CancelledError",
+          "streaming": true,
+          "first_delta_seconds": 2.5459300316870213,
+          "http_status": null,
+          "seconds": 2.546468745917082
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 5.369863726198673,
+          "usage": {
+            "prompt_tokens": 679,
+            "completion_tokens": 51,
+            "total_tokens": 730,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 5.952712846919894
+        }
+      ]
+    },
+    {
+      "category": "stream_cancel",
+      "repeat": 7,
+      "status": "passed",
+      "evidence": {
+        "cancel_drain_ms": 1.9632037729024887,
+        "execution_statuses": [
+          "completed",
+          "interrupted"
+        ]
+      },
+      "seconds": 4.363323122262955,
+      "requests": [
+        {
+          "status": "CancelledError",
+          "streaming": true,
+          "first_delta_seconds": 1.5066253524273634,
+          "http_status": null,
+          "seconds": 1.5069258604198694
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.1631540302187204,
+          "usage": {
+            "prompt_tokens": 678,
+            "completion_tokens": 42,
+            "total_tokens": 720,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.6702176723629236
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "passed": 8,
+    "total": 8,
+    "groups": {
+      "stream_cancel": {
+        "passed": 8,
+        "total": 8
+      }
+    },
+    "model_requests": 16,
+    "completed_requests": 8,
+    "usage": {
+      "prompt_tokens": 5422,
+      "completion_tokens": 302,
+      "total_tokens": 5724
+    },
+    "case_latency_seconds": {
+      "p50": 4.363323122262955,
+      "p95": 10.927841868251562
+    },
+    "model_latency_seconds": {
+      "p50": 2.051070300862193,
+      "p95": 6.172408934682608
+    }
+  }
+}

@@ -3,18 +3,19 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import asdict
 from copy import deepcopy
-from agent.model_runtime.types import (
-    RetryableModelError,
-    ModelRetriesExhausted,
-    ModelOutputTruncated,
-)
+from dataclasses import asdict
 from typing import Any, List, Tuple
 
 from agent.core.execution import current_execution
-from bus.events_lifecycle import StreamDeltaReady, ModelAttemptStatus
+from agent.model_runtime.types import (
+    ModelOutputTruncated,
+    ModelRetriesExhausted,
+    RetryableModelError,
+)
+from bus.events_lifecycle import ModelAttemptStatus, StreamDeltaReady
 from core.schema import JsonDict, ModelResponse
+from utils.async_tasks import cancel_and_drain
 
 
 class ModelInvoker:
@@ -143,8 +144,14 @@ class ModelInvoker:
                         self.config.max_tokens,
                         **options,
                     )
-                return await asyncio.wait_for(call, timeout=timeout)
-            queue: asyncio.Queue[Tuple[str, str]] = asyncio.Queue()
+                worker = asyncio.create_task(call)
+                try:
+                    return await asyncio.wait_for(
+                        asyncio.shield(worker), timeout=timeout
+                    )
+                finally:
+                    await cancel_and_drain(worker)
+            queue: asyncio.Queue[Tuple[str, str] | None] = asyncio.Queue()
             loop = asyncio.get_running_loop()
             accepting_deltas = True
 
@@ -184,19 +191,20 @@ class ModelInvoker:
                         **options,
                     )
                 )
+            # Completion wakes the consumer even for a content-free response;
+            # already scheduled deltas remain ahead of the completion sentinel.
+            worker.add_done_callback(lambda _: queue.put_nowait(None))
             try:
                 deadline = loop.time() + timeout
-                while not worker.done() or not queue.empty():
+                while True:
                     remaining = deadline - loop.time()
                     if remaining <= 0:
                         worker.cancel()
                         raise asyncio.TimeoutError
-                    try:
-                        content_delta, reasoning_delta = await asyncio.wait_for(
-                            queue.get(), timeout=min(0.1, remaining)
-                        )
-                    except asyncio.TimeoutError:
-                        continue
+                    delta = await asyncio.wait_for(queue.get(), timeout=remaining)
+                    if delta is None:
+                        break
+                    content_delta, reasoning_delta = delta
                     await self.event_bus.fanout(
                         StreamDeltaReady(
                             session_key=session_key,
@@ -210,8 +218,6 @@ class ModelInvoker:
                 return await worker
             finally:
                 accepting_deltas = False
-                if not worker.done():
-                    worker.cancel()
-                await asyncio.gather(worker, return_exceptions=True)
+                await cancel_and_drain(worker)
         except asyncio.TimeoutError as exc:
             raise RetryableModelError("LLM 请求超过 %.1f 秒。" % timeout) from exc

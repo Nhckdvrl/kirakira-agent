@@ -26,6 +26,10 @@ Proactive tick → scoped Wake/Drift → 共享 reasoner 与各自提交语义
 scoped Wake/Drift 与子任务都复用该循环。`execution.py` 保存执行事实和不确定结果，
 不把执行完成等同于渠道送达。恢复限制见 [ADR0008](../decisions/0008-core-execution-and-admission.md)。
 
+`tool_batch.py` 为提供者显式声明的独立读取提供有界并发，写操作与工具加载/终结操作保持屏障，
+结果按模型顺序进入上下文。准入层拥有全部入口的在途与等待任务；取消排空、关闭顺序与中断控制
+提示见 [ADR0014](../decisions/0014-main-chain-batches-and-physical-drain.md)。
+
 ## 目录 owner
 
 | 目录 | 负责什么 |

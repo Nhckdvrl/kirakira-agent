@@ -54,9 +54,10 @@ class ToolInvoker:
         registry = tools if tools is not None else self.tools
 
         execution_error = None
+        unsettled = False
 
         async def invoke(tool_name: str, arguments: JsonDict) -> ToolResult:
-            nonlocal execution_error
+            nonlocal execution_error, unsettled
             try:
                 ctx = current_execution()
                 if ctx:
@@ -80,6 +81,7 @@ class ToolInvoker:
                             "iteration": iteration,
                         },
                     )
+                    unsettled = ctx.store is not None
                 result = await registry.execute_async(
                     ToolCall(call.id, tool_name, arguments)
                 )
@@ -87,6 +89,7 @@ class ToolInvoker:
                     ctx.record(
                         "tool_result", {"operation_id": operation_id, **asdict(result)}
                     )
+                    unsettled = False
                 return result
             except Exception as exc:
                 execution_error = exc
@@ -95,8 +98,9 @@ class ToolInvoker:
         result = await self._tool_executor.execute(request, invoke)
         if execution_error is not None:
             raise execution_error
-        ctx = current_execution()
-        if ctx and ctx.store and ctx.store.unresolved(ctx.run_id):
+        # Concurrent siblings legitimately have pending intents. Only this call's
+        # failed/timeout outcome can block its completion; finish() checks the run.
+        if unsettled:
             raise RuntimeError(
                 "Tool outcome is uncertain; execution requires reconciliation"
             )

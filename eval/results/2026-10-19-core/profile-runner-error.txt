@@ -1,0 +1,41 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 203, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/xiang/.local/share/uv/python/cpython-3.14.6-linux-x86_64-gnu/lib/python3.14/cProfile.py", line 205, in <module>
+    main()
+    ~~~~^^
+  File "/home/xiang/.local/share/uv/python/cpython-3.14.6-linux-x86_64-gnu/lib/python3.14/cProfile.py", line 194, in main
+    runctx(code, globs, None, options.outfile, options.sort)
+    ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xiang/.local/share/uv/python/cpython-3.14.6-linux-x86_64-gnu/lib/python3.14/cProfile.py", line 20, in runctx
+    return _pyprofile._Utils(Profile).runctx(statement, globals, locals,
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                             filename, sort)
+                                             ^^^^^^^^^^^^^^^
+  File "/home/xiang/.local/share/uv/python/cpython-3.14.6-linux-x86_64-gnu/lib/python3.14/profile.py", line 63, in runctx
+    prof.runctx(statement, globals, locals)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xiang/.local/share/uv/python/cpython-3.14.6-linux-x86_64-gnu/lib/python3.14/cProfile.py", line 103, in runctx
+    exec(cmd, globals, locals)
+    ~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "scripts/stress_core.py", line 287, in <module>
+    main()
+    ~~~~^^
+  File "scripts/stress_core.py", line 283, in main
+    asyncio.run(verify(args))
+    ~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/home/xiang/.local/share/uv/python/cpython-3.14.6-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 205, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/home/xiang/.local/share/uv/python/cpython-3.14.6-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 128, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/xiang/.local/share/uv/python/cpython-3.14.6-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "scripts/stress_core.py", line 247, in verify
+    Path(__file__).relative_to(Path.cwd()),
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/home/xiang/.local/share/uv/python/cpython-3.14.6-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py", line 490, in relative_to
+    raise ValueError(f"{str(self)!r} is not in the subpath of {str(other)!r}")
+ValueError: 'scripts/stress_core.py' is not in the subpath of '/home/xiang/projects/kirakira-agent'

@@ -15,7 +15,7 @@ from agent.model_runtime.context_compaction import (
 from agent.model_runtime.context_policy import estimate_context_tokens
 from agent.model_runtime.types import ContentSafetyError, ContextLengthError
 from agent.plugins.snapshot import SnapshotToolView, get_current_runtime_snapshot
-from agent.prompting import DEFAULT_CONTEXT_TRIM_PLANS
+from agent.prompting import DEFAULT_CONTEXT_TRIM_PLANS, PromptSectionRender
 from bus.events import InboundMessage
 from bus.events_lifecycle import ContextPrepared, PromptRenderCtx
 from core.schema import JsonDict
@@ -113,6 +113,26 @@ class ConversationProgram:
                 disabled_sections=set(plan["disabled_sections"]),
                 turn_injection_prompt=self._build_deferred_tools_hint(tools, unlocked),
             )
+            # Persisted control state is authoritative; the literal text
+            # "[interrupted]" in a message alone must not create this instruction.
+            if (
+                session is not None
+                and session.messages
+                and session.messages[-1].get("role") == "assistant"
+                and session.messages[-1].get("interrupted") is True
+            ):
+                render_ctx.system_sections_bottom.append(
+                    PromptSectionRender(
+                        name="turn_control",
+                        content=(
+                            "The previous turn was interrupted and is closed. Follow the latest user request. "
+                            "Resume the earlier task only when the latest request explicitly asks to resume it. "
+                            "Previously completed tool effects remain real; an interruption does not roll them back. "
+                            "Do not repeat effects whose outcome is uncertain without checking their state."
+                        ),
+                        is_static=False,
+                    )
+                )
             render_ctx = await self.event_bus.emit(render_ctx)
             render_ctx = await _run_plugin_modules(
                 self._prompt_render_modules, render_ctx

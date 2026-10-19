@@ -14,6 +14,7 @@ from agent.core.contracts import ReasonerResult, RuntimeConfig
 from agent.core.execution import ExecutionStore, execution_scope, policy_inputs
 from agent.core.model_io import ModelInvoker
 from agent.core.phases import _run_plugin_modules
+from agent.core.tool_batch import ordered_tool_results
 from agent.core.tool_io import ToolInvoker
 from agent.model_runtime.context_compaction import (
     ContextCompactionError,
@@ -176,7 +177,8 @@ class DefaultReasoner:
         compactor: ContextCompactor | None = None
         compaction_head = compaction_projection.head if compaction_projection else None
         if (
-            session is not None
+            self.config.context_window > 0
+            and session is not None
             and compaction_runtime is not None
             and compaction_projection is not None
             and payload_segments is not None
@@ -395,7 +397,7 @@ class DefaultReasoner:
                     call.name in policy.terminal_tools for call in response.tool_calls
                 )
             )
-            for call in response.tool_calls:
+            async def invoke(call):
                 signature = "%s:%s" % (
                     call.name,
                     json.dumps(
@@ -452,6 +454,13 @@ class DefaultReasoner:
                         iteration,
                         tools,
                     )
+                return result
+
+            async for call, result in ordered_tool_results(
+                response.tool_calls, tools, invoke,
+                limit=self.config.max_parallel_tool_calls,
+                serial_names={"tool_search", *policy.terminal_tools},
+            ):
                 if call.name in policy.terminal_tools and result["status"] == "success":
                     terminal_succeeded = True
                 tools_used.append(call.name)

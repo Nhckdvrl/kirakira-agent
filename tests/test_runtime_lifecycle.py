@@ -134,6 +134,55 @@ async def test_shutdown_stops_producers_before_closing_tools(tmp_path, monkeypat
 
 
 @pytest.mark.asyncio
+async def test_shutdown_drains_direct_turns_and_waiters_before_closing_stores(
+    tmp_path, monkeypatch
+):
+    runtime = await runtime_at(tmp_path, monkeypatch)
+    entered, cancelling, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    model_calls = []
+
+    class Blocking:
+        async def acomplete(self, *args, **kwargs):
+            model_calls.append("started")
+            entered.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelling.set()
+                await release.wait()
+                model_calls.append("stopped")
+
+    runtime.reasoner._model_io.model_client = Blocking()
+    first = asyncio.create_task(runtime.process_direct("active", session_key="test:direct"))
+    await entered.wait()
+    waiter = asyncio.create_task(runtime.process_direct("queued", session_key="test:direct"))
+    await asyncio.sleep(0)
+    closing = asyncio.create_task(runtime.stop_background([]))
+    try:
+        await asyncio.wait_for(cancelling.wait(), 3)
+        closing.cancel()
+        await asyncio.sleep(0)
+        # Even a cancelled shutdown cannot close the database before turn finally.
+        assert not first.done() and not closing.done()
+        runtime.session_manager._index.execute("SELECT 1")
+        with pytest.raises(RuntimeError, match="shutting down"):
+            await runtime.process_direct("late")
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await closing
+        results = await asyncio.gather(first, waiter, return_exceptions=True)
+        assert all(isinstance(result, asyncio.CancelledError) for result in results)
+        assert model_calls == ["started", "stopped"]
+        assert not runtime.pipeline.admission.is_busy("test:direct")
+        assert_sessions_closed(runtime)
+        await runtime.stop_background([])
+    finally:
+        release.set()
+        await asyncio.gather(first, waiter, closing, return_exceptions=True)
+        await runtime.stop_background([])
+
+
+@pytest.mark.asyncio
 async def test_one_shot_disabled_or_failed_channel_still_closes_runtime(
     tmp_path, monkeypatch
 ):

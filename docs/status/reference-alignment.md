@@ -1,12 +1,13 @@
 # Reference 对齐状态
 
-参考日期：2026-10-19。固定 Akashic
+参考日期：2026-10-19。主链检查至 Akashic
+[`21b38f0e102d9e1bdc5576725635dce29f135c0c`](https://github.com/kachofugetsu09/akashic-agent/tree/21b38f0e102d9e1bdc5576725635dce29f135c0c)，记忆算法来源继续固定
 [`d85b00c233686b68b082052b1b20123905aeab13`](https://github.com/kachofugetsu09/akashic-agent/tree/d85b00c233686b68b082052b1b20123905aeab13)。
 Kirakira 按职责、运行合同和证据对齐，不按目录数量或功能名称判断整体 parity。
 
 | 领域 | Kirakira 当前落点 |
 | --- | --- |
-| Core | 共享 reasoner、授权、当前生成恢复、执行事实与未知结果；没有自动重放外部副作用 |
+| Core | 共享 reasoner、显式安全读取并发、授权、当前生成恢复、物理排空与中断控制提示；执行日志保留真实完成顺序，没有移植上游逐 Message 的提交事务 |
 | Composition | 有版本能力、显式依赖、代际借用与资源 scope；工具提供者与插件 API 已拆开，失败回收统一；部分内置业务仍由组合根装配 |
 | Wake | 持久兴趣评分、衰减池、多来源候选、share/skip 工具及修订/CAS 结算；不等同完整 Eventmail |
 | Drift | 技能、空闲采样、连续性及持久 proposal 状态；不是完整自主目标发现系统 |

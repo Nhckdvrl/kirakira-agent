@@ -189,6 +189,7 @@ class CoreRuntime:
                 errors.append(exc)
 
         # Stop new work first, then settle users of the resources being closed.
+        self.loop.stop()
         for owner, method in (
             (self.control_server, "stop"),
             (self.scheduler, "stop"),
@@ -199,6 +200,7 @@ class CoreRuntime:
             (self.control_runtime, "shutdown"),
             (self.subagents, "shutdown"),
             (self.scheduler, "shutdown"),
+            (self.pipeline.admission, "close"),
             (self.loop, "shutdown"),
         ):
             await attempt(method, getattr(owner, method) if owner is not None else None)

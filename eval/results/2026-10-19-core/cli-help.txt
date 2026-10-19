@@ -1,0 +1,45 @@
+usage: python3 -m kirakira_agent [-h] [--backup-id BACKUP_ID]
+                                 [--confirm CONFIRM] [--include-sessions]
+                                 [--clear-self] [--dry-run] [--serve] [--web]
+                                 [--telegram] [--qq] [--qqbot] [--proactive]
+                                 [--tui | --plain] [--session SESSION]
+                                 [--workspace WORKSPACE] [--config CONFIG]
+                                 [{memory}]
+                                 [{doctor,backup,migrate,verify,rollback,clear,repair-kinds}]
+
+Kirakira Agent
+
+positional arguments:
+  {memory}              Administrative command group (currently: memory).
+  {doctor,backup,migrate,verify,rollback,clear,repair-kinds}
+                        Memory administration action.
+
+options:
+  -h, --help            show this help message and exit
+  --backup-id BACKUP_ID
+                        Backup id for memory verify/rollback.
+  --confirm CONFIRM     Explicit confirmation token for destructive memory
+                        actions.
+  --include-sessions    Also delete all persisted sessions during memory
+                        clear.
+  --clear-self          Also reset memory/SELF.md during memory clear.
+  --dry-run             Report planned changes without writing (memory repair-
+                        kinds).
+  --serve               Run background agent loop and configured channels.
+  --web                 Enable stdlib web channel.
+  --telegram            Enable Telegram Bot API channel.
+  --qq                  Enable QQ OneBot webhook channel.
+  --qqbot               Enable official Tencent QQBot channel.
+  --proactive           Run one proactive tick now (demo/debug), print status,
+                        then exit.
+  --tui                 Force the full-screen Textual client for local
+                        interaction.
+  --plain               Use the line-oriented streaming client (also selected
+                        for pipes/CI).
+  --session SESSION     Named local conversation to resume. Without this flag,
+                        each launch starts a fresh empty conversation.
+  --workspace WORKSPACE
+                        Runtime state root (sessions, memory, plugin data,
+                        workspace MCP). Overrides KIRAKIRA_WORKSPACE and
+                        config [runtime].workspace.
+  --config CONFIG       Path to config.toml. Defaults to ./config.toml.

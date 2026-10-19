@@ -19,6 +19,7 @@ class RuntimeConfig:
     history_window: int = 40
     model_timeout_seconds: float = 120.0
     repeated_tool_call_limit: int = 3
+    max_parallel_tool_calls: int = 4
     stream: bool = True
     retry_policy: ModelRetryPolicy = field(default_factory=ModelRetryPolicy)
 

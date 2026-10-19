@@ -8,6 +8,11 @@
 模型通过 `tool_search(query="select:工具名")` 解锁 deferred 工具。每个 Session 只保留有限 LRU，
 避免工具 schema 长期占满上下文。
 
+提供者可在 `registry.register(..., risk="read-only", parallel_safe=True)` 显式声明独立读取可并发。
+默认并发上限为 4，通过 `AGENT_MAX_PARALLEL_TOOLS` 调整；设为 1 使用串行执行。
+read_file/list_dir 已启用，其他工具默认串行；写入、tool_search 和终结工具会等待前面的读取结算。
+模型下一次请求看到的工具结果仍按原调用顺序排列。取消同步工具时，会等线程实际结束再释放会话。
+
 ## Shell
 
 `bash` 使用统一执行管理器：

@@ -46,6 +46,7 @@
 | 文档 | 内容 |
 | --- | --- |
 | [验证记录](./operations/verification.md) | 当前离线、在线和 Reference 独立性结果 |
+| [主链功能与性能](./operations/evaluations/2026-10-19-core.md) | 工具并发、物理取消、Step5 矩阵、千轮压力与复现命令 |
 | [记忆评测](./operations/memory-evaluation.md) | 离线合同、Step5 实测和固定质量协议 |
 | [记忆机制与系统对照](./operations/evaluations/2026-10-19-memory-followup.md) | 72 个公开问题、双通道读出、真实 Mem0 对照及上游机制复测 |
 | [事件记忆专项与恢复](./operations/evaluations/2026-10-19-episodic.md) | 六类合同题、原文闭环、固定向量与源库独立重建 |
@@ -57,6 +58,7 @@
 
 ## 工程记录
 
+- [主链工具并发与物理排空](./decisions/0014-main-chain-batches-and-physical-drain.md)：读取并发、写入屏障、全部入口关闭与中断控制投影。
 - [Akasha2 双通道读出](./decisions/0012-akasha2-dual-lane-readout.md)：精确召回、联想召回与统一上下文预算。
 - [原文证据与恢复输入](./decisions/0013-original-message-evidence.md)：完整引用展开、单视图校验与固定向量缓存。
 - [记忆设计与项目表达](./engineering/memory-design-and-evidence.md)：事件记忆的定位、可解释设计点与实验依据。

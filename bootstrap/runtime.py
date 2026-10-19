@@ -335,6 +335,7 @@ async def _compose_runtime(
         ),
         model_timeout_seconds=float(os.getenv("AGENT_MODEL_TIMEOUT", "120")),
         repeated_tool_call_limit=int(os.getenv("AGENT_REPEATED_TOOL_LIMIT", "3")),
+        max_parallel_tool_calls=max(1, int(os.getenv("AGENT_MAX_PARALLEL_TOOLS", "4"))),
         stream=env_bool("AGENT_STREAM", True),
         retry_policy=ModelRetryPolicy(
             max_retries=int(
