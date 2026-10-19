@@ -18,7 +18,7 @@
 <p align="center">
   <a href="https://github.com/Nhckdvrl/kirakira-agent/stargazers"><img src="https://img.shields.io/github/stars/Nhckdvrl/kirakira-agent?style=flat&color=f29ab2" alt="GitHub Stars"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/Nhckdvrl/kirakira-agent?color=738bd7" alt="MIT License"></a>
-  <img src="https://img.shields.io/badge/Python-3.11%2B-64a8df" alt="Python 3.11+">
+  <img src="https://img.shields.io/badge/Python-3.14.6-64a8df" alt="Python 3.14.6">
   <img src="https://img.shields.io/badge/runtime-local--first-f2b84b" alt="Local-first runtime">
 </p>
 
@@ -68,9 +68,11 @@ Akasha v1 的线上学习和离线重建共用事务周期，并支持提交后�
 
 ## 快速开始
 
-要求 Python 3.11+ 与 [uv](https://docs.astral.sh/uv/)。
+统一使用 Python 3.14.6 与 [uv](https://docs.astral.sh/uv/)。版本由 `.python-version`
+固定，本地开发与 CI 共用同一 Python 版本和 `uv.lock`，所有项目命令使用项目内唯一的 `.venv`。
 
 ```bash
+uv sync --frozen --group dev
 uv run python main.py setup    # 交互式初始化
 uv run python main.py init     # 非交互初始化
 uv run python main.py          # supervisor -> gateway
@@ -80,9 +82,9 @@ uv run python main.py gateway  # 不经 supervisor 的调试入口
 没有 `config.toml` 时，默认入口会自动进入初始化向导。旧公开入口继续兼容：
 
 ```bash
-python -m kirakira_agent --tui
-python -m kirakira_agent --plain
-python -m kirakira_agent --session research
+uv run python -m kirakira_agent --tui
+uv run python -m kirakira_agent --plain
+uv run python -m kirakira_agent --session research
 ```
 
 DeepSeek 示例：

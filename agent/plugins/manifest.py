@@ -8,14 +8,10 @@ from __future__ import annotations
 
 import logging
 import re
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List
-
-try:
-    import tomllib
-except ImportError:  # pragma: no cover - Python 3.10 fallback
-    tomllib = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +33,6 @@ def load_manifest(path: Path) -> Dict[str, PluginEnablement]:
 
     if not path.exists():
         return {}
-    if tomllib is None:
-        raise RuntimeError("plugin manifest requires Python 3.11+")
     raw = tomllib.loads(path.read_text(encoding="utf-8"))
     if set(raw) - {"plugins"}:
         raise ValueError("plugin manifest has unknown top-level fields: %s" % path)

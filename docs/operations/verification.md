@@ -2,7 +2,18 @@
 
 本文只记录已经实际执行过的验证。功能现状见[当前状态](../status/current.md)，不要从测试数量反推能力范围。
 
-## 2026-10-19：提供者归属与 Runtime 回收（最新）
+## 2026-10-19：统一 Python 环境（最新）
+
+项目固定 Python 3.14.6，使用根目录 `.venv`。`.python-version` 与 CI 的
+`python-version-file` 共用同一版本来源，删除 3.11/3.14 矩阵；支持范围收敛为 3.14 系列。
+`uv.lock` 删除旧 Python 的解析分支和重复 numpy 版本，当前 3.14 环境的依赖版本保持。
+
+实际在原项目 `.venv` 执行 `uv sync --frozen --group dev`、`uv lock --check`、
+`uv run --frozen pytest -q`、构建与 CLI 帮助检查。全量结果：`662 passed, 22 warnings, 4 subtests passed in 50.32s`。
+首次原目录回归的两项失败来自旧包残留字节码目录；清理 147 个缓存文件后复验，未放宽目录约束。
+下方双版本记录为历史验证，不再作为当前环境要求。
+
+## 2026-10-19：提供者归属与 Runtime 回收（历史）
 
 Python 3.14.6 全量 **662 passed / 4 subtests**（49.39 秒），Python 3.11.15 全量同样通过（48.65 秒）。
 两版均有 22 条既有 Telegram 弃用警告。删除 10 个纯容器测试，新增 11 个真实组合与资源/工具边界测试；

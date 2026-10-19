@@ -18,7 +18,7 @@
 <p align="center">
   <a href="https://github.com/Nhckdvrl/kirakira-agent/stargazers"><img src="https://img.shields.io/github/stars/Nhckdvrl/kirakira-agent?style=flat&color=f29ab2" alt="GitHub Stars"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/Nhckdvrl/kirakira-agent?color=738bd7" alt="MIT License"></a>
-  <img src="https://img.shields.io/badge/Python-3.11%2B-64a8df" alt="Python 3.11+">
+  <img src="https://img.shields.io/badge/Python-3.14.6-64a8df" alt="Python 3.14.6">
   <img src="https://img.shields.io/badge/runtime-local--first-f2b84b" alt="Local-first runtime">
 </p>
 
@@ -61,9 +61,12 @@ The runtime has three connected execution paths:
 
 ## Start
 
-Python 3.11+ and [uv](https://docs.astral.sh/uv/) are required.
+Use Python 3.14.6 and [uv](https://docs.astral.sh/uv/). The version is pinned in
+`.python-version`; local development and CI use the same interpreter and `uv.lock`.
+Run all project commands through the single project `.venv`:
 
 ```bash
+uv sync --frozen --group dev
 uv run python main.py setup    # interactive setup
 uv run python main.py init     # non-interactive workspace initialization
 uv run python main.py          # supervisor -> gateway
@@ -74,9 +77,9 @@ Without `config.toml`, the default command opens setup. The public compatibility
 entry remains available:
 
 ```bash
-python -m kirakira_agent --tui
-python -m kirakira_agent --plain
-python -m kirakira_agent --session research
+uv run python -m kirakira_agent --tui
+uv run python -m kirakira_agent --plain
+uv run python -m kirakira_agent --session research
 ```
 
 Minimal model configuration:

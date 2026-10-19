@@ -2,13 +2,9 @@
 
 import os
 import re
+import tomllib
 from pathlib import Path
 from typing import Any, Dict
-
-try:
-    import tomllib
-except ImportError:  # pragma: no cover - Python 3.10 fallback
-    tomllib = None
 
 
 def load_dotenv(path: Path) -> Dict[str, str]:
@@ -37,8 +33,6 @@ def require_env(name: str) -> str:
 def load_toml_config(path: Path) -> Dict[str, Any]:
     if not path.exists():
         return {}
-    if tomllib is None:
-        raise RuntimeError("config.toml requires Python 3.11+")
     with path.open("rb") as handle:
         payload = tomllib.load(handle)
     return _expand_env(payload)

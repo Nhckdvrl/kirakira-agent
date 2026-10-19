@@ -7,7 +7,7 @@ name = "kirakira-agent"
 version = "0.1.0"
 description = "A multi-channel, extensible AI agent runtime with memory, plugins, and MCP."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.14,<3.15"
 dependencies = [
     "APScheduler>=3.11,<4",
     "click>=8.1,<9",

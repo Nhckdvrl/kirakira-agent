@@ -4,6 +4,9 @@
 实现合同见 [ADR0009](../decisions/0009-components-recovery-and-akasha2.md)，实际运行结果见
 [验证记录](../operations/verification.md)。本页只维护能力范围和剩余工作。
 
+项目统一使用 Python 3.14.6：`.python-version` 固定解释器，`uv.lock` 固定依赖，
+本地使用项目 `.venv`，CI 读取相同版本文件并只执行一个任务；不再维护多版本测试矩阵。
+
 ## 已落地
 
 - 被动对话、Wake、Drift、子任务和 Scheduler 共用 reasoner 与工具授权边界；渠道、直接和控制入口共用 admission。

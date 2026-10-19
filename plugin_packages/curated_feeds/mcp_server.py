@@ -15,16 +15,12 @@ from pathlib import Path
 import re
 import sys
 import time
+import tomllib
 from typing import Any
 import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
-
-try:
-    import tomllib
-except ImportError:  # pragma: no cover - runtime requires Python 3.11+
-    tomllib = None
 
 
 DATA_DIR = Path(os.environ.get("KIRAKIRA_PLUGIN_DATA_DIR") or ".").resolve()
@@ -56,8 +52,6 @@ class _TextExtractor(HTMLParser):
 def _read_toml(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
-    if tomllib is None:
-        raise RuntimeError("curated-feeds requires Python 3.11+")
     with path.open("rb") as handle:
         value = tomllib.load(handle)
     if not isinstance(value, dict):
