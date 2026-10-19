@@ -35,8 +35,8 @@ Kirakira 是一个本地优先、多渠道的 AI Agent Runtime。它把被动对
 跨会话经历。模型能沿 `source_ref` 展开原文上下文，核对人物、对象、关系和历史更正；学习只在
 对话提交后发生，显式召回不改写学习图。原子快照与固定向量重放支持长期运行后的恢复和重建。
 
-运行合同、部署范围与实际验证见[架构总览](./docs/architecture/overview.md)、
-[当前状态](./docs/status/current.md)和[验证记录](./docs/operations/verification.md)。
+运行合同、部署范围与实际验证见[架构总览](docs/architecture/overview.md)、
+[当前状态](docs/status/current.md)和[验证记录](docs/operations/verification.md)。
 
 ## 一分钟了解
 
@@ -124,7 +124,7 @@ api_key = "${EMBEDDING_API_KEY}"
 - 每轮保存所选计划、各 section 大小、近似 token 估算和模型实际 usage。
 - usage 覆盖状态明确区分 `exact`、`partial`、`unavailable`，缺遥测不能伪装成 0。
 
-详见[上下文治理手册](./docs/handbook/context.md)。
+详见[上下文治理手册](docs/handbook/context.md)。
 
 ### 工具、Shell 与子 Agent
 
@@ -149,7 +149,7 @@ api_key = "${EMBEDDING_API_KEY}"
 - Akasha v1 仍是正式可选引擎：以完整 turn 为真相，支持图扩散/RAR、持久化、证据、召回与强化。
 - 本阶段不强制升级 Akasha v2；其恢复/重建等更厚合同保留为后续扩展空间。
 
-详见[记忆架构](./docs/architecture/memory.md)和[记忆使用手册](./docs/handbook/memory.md)。
+详见[记忆架构](docs/architecture/memory.md)和[记忆使用手册](docs/handbook/memory.md)。
 
 ### Proactive / Drift 与运行轨迹
 
@@ -211,21 +211,21 @@ workspace 解析顺序为：`--workspace` → `KIRAKIRA_WORKSPACE` →
 
 ## 文档
 
-从[文档索引](./docs/INDEX.md)开始。当前完成情况和延期项见
-[当前状态](./docs/status/current.md)，整体设计见[架构总览](./docs/architecture/overview.md)，实际执行证据见
-[验证记录](./docs/operations/verification.md)。使用说明统一放在 `docs/handbook/`。
+从[文档索引](docs/INDEX.md)开始。当前完成情况和延期项见
+[当前状态](docs/status/current.md)，整体设计见[架构总览](docs/architecture/overview.md)，实际执行证据见
+[验证记录](docs/operations/verification.md)。使用说明统一放在 `docs/handbook/`。
 
 前端与移动端不在当前后端整理范围内；现有前端功能继续保持可用。
 
 ## License
 
-MIT，见 [LICENSE](./LICENSE)。
+MIT，见 [LICENSE](LICENSE)。
 
 ## Attribution
 
 Kirakira learns from [Akashic Agent](https://github.com/kachofugetsu09/akashic-agent).
 The optional Akasha2 algorithms are adapted from commit `d85b00c`; the vendored
-[MIT license](./plugins/akasha2/LICENSE) and [file provenance](./plugins/akasha2/UPSTREAM.json)
+[MIT license](plugins/akasha2/LICENSE) and [file provenance](plugins/akasha2/UPSTREAM.json)
 ship with the package. The runtime adapter and evaluation results are maintained here.
 项目与工作目录行为也参考当前上游设计；来源合同、本地实现与未覆盖的范围见
-[ADR0015](./docs/decisions/0015-projects-and-session-directories.md)。
+[ADR0015](docs/decisions/0015-projects-and-session-directories.md)。

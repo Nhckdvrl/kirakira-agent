@@ -52,23 +52,23 @@
 
 这 6 个场景使用 `offline-hash-v1` 本地固定向量，只证明工具、原文、权限和恢复链路，**不是语义检索质量评测**。
 本轮没有修改两代记忆算法，也没有重新跑公开数据集或改写此前结果。
-[上一轮公开样本实验](./2026-10-19-memory.md)的原生结果仍为 Dense 28/36、v1/v2 各 27/36；Akasha2 保持 opt-in。
+[上一轮公开样本实验](2026-10-19-memory.md)的原生结果仍为 Dense 28/36、v1/v2 各 27/36；Akasha2 保持 opt-in。
 
 ## 重跑
 
 `--key-file` 指向你自己的仓库外 Token Plan 密钥文件。每条命令使用新的工作目录，不能指向真实 workspace。
 
 ```bash
-uv run python -m scripts.verify_step_plan \
+uv run python -m eval.scenarios.decisions \
   --key-file /absolute/path/step-plan.key \
   --workspace /tmp/kirakira-core-new --output /tmp/kirakira-core.json
-uv run python -m scripts.verify_drift_step_plan \
+uv run python -m eval.scenarios.drift \
   --key-file /absolute/path/step-plan.key \
   --workspace /tmp/kirakira-drift-new --output /tmp/kirakira-drift.json
-uv run python -m scripts.verify_wake_step_plan \
+uv run python -m eval.scenarios.wake \
   --key-file /absolute/path/step-plan.key \
   --workspace /tmp/kirakira-wake-new --output /tmp/kirakira-wake.json
-uv run python -m scripts.verify_memory_step_plan \
+uv run python -m eval.scenarios.memory \
   --key-file /absolute/path/step-plan.key \
   --workspace /tmp/kirakira-memory-new --output /tmp/kirakira-memory.json
 ```

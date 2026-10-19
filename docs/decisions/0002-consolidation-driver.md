@@ -1,6 +1,6 @@
 # 0002 Consolidation 暂由 MemoryRuntime 驱动
 
-- 状态：superseded by [0003](./0003-consolidation-handover.md)
+- 状态：superseded by [0003](0003-consolidation-handover.md)
 
 ## 历史背景
 
@@ -15,4 +15,4 @@
 ## 后续
 
 上述职责已经完整移交给 `MarkdownMemoryMaintenance`，旧驱动路径已删除。当前合同以
-[0003](./0003-consolidation-handover.md) 和[记忆架构](../architecture/memory.md)为准。
+[0003](0003-consolidation-handover.md) 和[记忆架构](../architecture/memory.md)为准。

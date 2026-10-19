@@ -45,11 +45,11 @@ Proactive。当前配置面包括 Web Chat、Telegram、QQ 和 QQBot，实际启
 ## 控制面
 
 `main.py control` 通过本地 socket 连接 gateway 内的控制服务。它与具体 Channel 并列，不会为了执行
-命令再构造一份 Agent runtime。详细协议见[控制面架构](./control-plane.md)。
+命令再构造一份 Agent runtime。详细协议见[控制面架构](control-plane.md)。
 
 ## 关停
 
 关停按依赖逆序执行：停止接收新请求，等待或中断在途任务，关闭 Proactive/Channel/MCP/插件，释放
 数据库和 workspace lock。原生 Fiber 在释放资源前等待实际调用和自己的任务退出。
 失败的 owner 保留资源和依赖供显式重试，无关子分支继续尝试关闭。
-完整合同见[所有权与局部更新](./ownership-and-reload.md)。
+完整合同见[所有权与局部更新](ownership-and-reload.md)。

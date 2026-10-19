@@ -32,4 +32,4 @@ Skill、MCP、job 和托管服务。每个插件持有自己的 job/service host
 phase/hook 只在真正调用贡献者时保留许可，下一次 phase 枚举当前贡献者。
 
 安装、卸载与更新保留 plugin-data，禁止路径越界；当前代码失败时报告失败，资源清理失败保留责任。
-详细生命周期见[所有权与局部更新](./ownership-and-reload.md)，操作入口见[插件手册](../handbook/plugins.md)。
+详细生命周期见[所有权与局部更新](ownership-and-reload.md)，操作入口见[插件手册](../handbook/plugins.md)。

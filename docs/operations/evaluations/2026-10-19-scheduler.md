@@ -42,13 +42,13 @@ run 的原消息 ID 与渠道投递引用一致。来源检查确认任务对不
 
 另行回归 Core/Wake 12、Drift 4、Wake 整链 1、记忆工具 6，共 23 个真实模型场景。
 记忆工具使用固定向量，只验证工具调用、原文解析与重启链路。真实语义质量另见
-[记忆实验](./2026-10-19-memory-followup.md)。
+[记忆实验](2026-10-19-memory-followup.md)。
 
 ## 复现与原始证据
 
 ```bash
 uv sync --frozen --group dev --group eval
-uv run --frozen python -m scripts.verify_scheduler_step_plan \
+uv run --frozen python -m eval.scenarios.scheduler \
   --key-file /absolute/private/step-plan.key \
   --workspace /tmp/new-isolated-scheduler-run \
   --output /tmp/new-scheduler-results.json --repeats 4 --concurrency 4

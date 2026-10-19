@@ -14,7 +14,7 @@ read_file/list_dir 已启用，其他工具默认串行；写入、tool_search �
 模型下一次请求看到的工具结果仍按原调用顺序排列。取消同步工具时，会等线程实际结束再释放会话。
 
 `exclusive_batch` 工具必须单独调用，混合批次整体拒绝。当前 `set_working_directory` 使用此合同，
-避免同一批读写分散到切换前后的目录。项目和 cwd 的 Web/API 使用见[项目与会话工作目录](./projects-and-directories.md)。
+避免同一批读写分散到切换前后的目录。项目和 cwd 的 Web/API 使用见[项目与会话工作目录](projects-and-directories.md)。
 
 ## Shell
 

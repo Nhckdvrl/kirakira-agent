@@ -88,7 +88,7 @@ sdist/wheel 构建和 CLI 帮助通过；核对 28 个本轮代码模块与制�
 uv run --frozen python -m scripts.check_feature_alignment --reference /path/to/akashic-agent
 uv run --frozen pytest -q tests/test_workspace_features.py tests/test_control_plane.py
 uv run --frozen pytest -q
-uv run --frozen python -m scripts.verify_workspace_step_plan \
+uv run --frozen python -m eval.scenarios.workspace \
   --key-file /path/to/private-step-plan.key \
   --workspace /tmp/kirakira-workspace-functional-new \
   --output /tmp/kirakira-workspace-functional-new.json \
@@ -96,7 +96,7 @@ uv run --frozen python -m scripts.verify_workspace_step_plan \
 ```
 
 workspace 和 output 必须为新的测试路径。原始结果存放于
-[`eval/results/2026-10-19-workspace-functions`](../../../eval/results/2026-10-19-workspace-functions/)。
+[`eval/results/2026-10-19-workspace-functions`](../../../eval/results/2026-10-19-workspace-functions)。
 
 ## 证据边界
 

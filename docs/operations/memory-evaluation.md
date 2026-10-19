@@ -1,9 +1,9 @@
 # 记忆评测
 
 合同回归与回答质量分别验证。确定性 hash 向量只用于消费、重放、幂等与持久化测试，不能支持记忆质量结论。
-公开 QA、逐题文件与限制见[公开机制与系统对照](./evaluations/2026-10-19-memory-followup.md)，
-原文证据、丢图重建和专项合同见[事件记忆实验](./evaluations/2026-10-19-episodic.md)。
-早期 graph-only 读出与配置修正保留在[历史报告](./evaluations/2026-10-19-memory.md)，不作当前 adapter 成绩。
+公开 QA、逐题文件与限制见[公开机制与系统对照](evaluations/2026-10-19-memory-followup.md)，
+原文证据、丢图重建和专项合同见[事件记忆实验](evaluations/2026-10-19-episodic.md)。
+早期 graph-only 读出与配置修正保留在[历史报告](evaluations/2026-10-19-memory.md)，不作当前 adapter 成绩。
 
 ## 三层证据
 
@@ -35,17 +35,17 @@ Step5 使用官方 Token Plan 专用端点 `https://api.stepfun.com/step_plan/v1
 模型、工具、记忆客户端不能复用真实 workspace 的私有配置。
 
 ```bash
-uv run python -m scripts.verify_step_plan \
+uv run python -m eval.scenarios.decisions \
   --key-file /absolute/private/step-plan.key \
   --workspace /tmp/kirakira-core-new-run \
   --output /tmp/kirakira-core-result.json
 
-uv run python -m scripts.verify_drift_step_plan \
+uv run python -m eval.scenarios.drift \
   --key-file /absolute/private/step-plan.key \
   --workspace /tmp/kirakira-drift-new-run \
   --output /tmp/kirakira-drift-result.json
 
-uv run python -m scripts.verify_wake_step_plan \
+uv run python -m eval.scenarios.wake \
   --key-file /absolute/private/step-plan.key \
   --workspace /tmp/kirakira-wake-new-run \
   --output /tmp/kirakira-wake-result.json
@@ -108,7 +108,7 @@ uv run python -m eval.longmemeval.live_eval \
 Oracle 单独运行：
 
 ```bash
-uv run python -m scripts.prepare_memory_oracle \
+uv run python -m eval.longmemeval.prepare_oracle \
   --dataset /absolute/cache/longmemeval_s_cleaned.json --output /tmp/kirakira-oracle.jsonl
 uv run python -m eval.longmemeval.live_eval \
   --retrieval /tmp/kirakira-oracle.jsonl --output /tmp/kirakira-oracle-answers.jsonl \
@@ -142,8 +142,8 @@ Kirakira 同时保留公开任务质量和机制验证，不把上游私人语�
 ```bash
 PYTHONHASHSEED=0 uv run --frozen python -m eval.memory_cost --output /tmp/cost-seed0
 PYTHONHASHSEED=42 uv run --frozen python -m eval.memory_cost --output /tmp/cost-seed42
-uv run --frozen python -m scripts.check_akasha2_properties --output /tmp/upstream-properties
-uv run --frozen python -m scripts.check_akasha2_matvec --output /tmp/matvec-shapes.json
+uv run --frozen python -m eval.benchmarks.akasha2_properties --output /tmp/upstream-properties
+uv run --frozen python -m eval.benchmarks.akasha2_matvec --output /tmp/matvec-shapes.json
 
 uv run --frozen python -m eval.longmemeval.baselines \
   --dataset /absolute/cache/longmemeval_s_cleaned.json \
@@ -203,7 +203,7 @@ uv run --frozen python -m eval.longmemeval.requery_readout \
 只有模型 HTTP 传输改接受校验的 Step Token Plan。没有访问默认 OpenAI 计费端点。
 
 ```bash
-uv run --frozen --group eval --group comparison python -m scripts.compare_mem0_step_plan \
+uv run --frozen --group eval --group comparison python -m eval.longmemeval.compare_mem0 \
   --dataset /absolute/cache/longmemeval_s_cleaned.json \
   --selection eval/results/2026-10-19-scheduler/mem0-selection.json \
   --key-file /absolute/private/step-plan.key --cache /absolute/cache/models \
@@ -274,11 +274,11 @@ uv run --frozen python -m eval.episodic_eval \
 结果同时比较学习表与完整消费 JSON，并拦截网络连接：
 
 ```bash
-uv run --frozen python -m scripts.verify_episodic_recovery \
+uv run --frozen python -m eval.scenarios.episodic_recovery \
   --original-retrieval /tmp/episodic-new/graph-frozen.jsonl \
   --final-retrieval /tmp/episodic-new/graph-final.jsonl --cases /tmp/episodic-new/final-cases \
   --embeddings /tmp/episodic-new/vectors.npz --output /tmp/episodic-new/recovery.json
 ```
 
-旧/新源库 IO 对照使用 `scripts.benchmark_memory_source`，从有完整历史的本仓库加载固定旧版本。
+旧/新源库 IO 对照使用 `eval.benchmarks.memory_source`，从有完整历史的本仓库加载固定旧版本。
 同图比较 source connections、恢复/query 样本、原文/顺序及分数差；报告包含先后测量和缓存限制。

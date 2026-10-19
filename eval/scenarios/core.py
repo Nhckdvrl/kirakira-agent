@@ -20,7 +20,7 @@ from bus.events_lifecycle import ModelAttemptStatus
 from core.schema import ToolSpec
 from infra.providers.step_plan import STEP5_MODEL, STEP_PLAN_BASE_URL, StepPlanClient
 from plugins.models.types import RetryableModelError
-from scripts.verify_scheduler_step_plan import summary
+from eval.scenarios.scheduler import summary
 
 
 class ObservedClient:

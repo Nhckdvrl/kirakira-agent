@@ -15,7 +15,7 @@
 
 生产版本固定为 `bdf0aaf849e1b1c2081414d6b501d3ec52cab228`：全量 705 项及 4 项子测试通过，
 真实 Step Token Plan 最终代码 8/8 场景通过；接入期间三批合计 38/38，范围见
-[原生组合验证](./2026-10-20-native-composition.md)。
+[原生组合验证](2026-10-20-native-composition.md)。
 
 本轮最终压力对照每版本两次，每次 1,000 轮、64 个 Session、5,000 次工具调用。
 四次均为 1,000/1,000 completed；每个 ticket 的 counter 效果只发生一次，77 次当前生成重试不重复效果；
@@ -63,9 +63,9 @@ Session 数据库 COMMIT 由 **41 增至 321**；执行日志数据库均为 161
 
 ```bash
 uv run --frozen pytest --collect-only -q
-uv run --frozen python scripts/benchmark_core.py \
+uv run --frozen python eval/benchmarks/core.py \
   --implementation /path/to/checkout --repeats 30 --output /tmp/micro-new.json
-uv run --frozen python scripts/stress_core.py \
+uv run --frozen python eval/benchmarks/runtime.py \
   --implementation /path/to/checkout --without-extensions \
   --workspace /tmp/pressure-new --output /tmp/pressure-new.json \
   --turns 1000 --sessions 64

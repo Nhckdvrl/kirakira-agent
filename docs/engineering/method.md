@@ -3,8 +3,9 @@
 这份文档只保留适用于后续开发的规则。阶段历史交给 Git，当前状态写在 `docs/status/`，具体取舍写在
 `docs/decisions/`。
 
-上游工作流的现行规则与历史差异见 [Akashic 工作流修订](./akashic-workflow-2026-10-03.md)。
-该文区分上游事实与本项目建议，不自动引入上游的单测禁令或 PR 行数限制。
+参考手册见 [Akashic 工作流](./akashic-vibe-coding-workflow.md)，其依据版本标在文首。
+本项目使用根目录 `.venv` 和 `.python-version`，临时工作树共用该环境；需要额外评测依赖时使用同一环境的依赖组。
+当前架构与能力范围分别以 `architecture/overview.md` 和 `status/current.md` 为准。
 
 ## 先判断是功能缺口还是地基问题
 
@@ -51,7 +52,7 @@ Reference 可以提供开发期结构和合同依据，但最终实现必须成�
 测试、doctor 和文档都不能依赖 Reference checkout。
 
 复用纯算法、协议和数据结构时优先直接采用经过审计的实现；涉及本项目 owner、生命周期和持久层时，按
-同一合同接到本地架构中。任何有意差异都写进[对齐状态](../status/reference-alignment.md)。
+同一合同接到本地架构中。任何有意差异都写进[对齐状态](../status/current.md)。
 
 ## 文档维护
 

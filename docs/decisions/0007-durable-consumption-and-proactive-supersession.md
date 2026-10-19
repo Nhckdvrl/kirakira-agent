@@ -1,6 +1,6 @@
 # 0007：持久补消费与主动决策过期
 
-日期：2026-10-02。状态：accepted。承接 [0006](./0006-shared-reasoning-and-committed-memory.md)。
+日期：2026-10-02。状态：accepted。承接 [0006](0006-shared-reasoning-and-committed-memory.md)。
 
 最新审计点为 Akashic `7cf10136932d5fe0205727c803c00861272db0b8`。本轮继续对齐
 “消费来源与图一起前进”“读取集合变化后不再发布旧结果”的原则，不移植整套 v2/Message runtime。
@@ -48,7 +48,7 @@ Proactive state 是本地事件 owner：同一 item ID 的来源内容变化生�
 的版本排队。即使 source 在渠道发送期间更新，旧发送结果也不能消费或反馈新版本。
 
 外部 source ACK 协议仍只支持 event ID，没有远端 revision CAS；本轮保证的是本地版本结算。
-检查之后已经交给外部渠道的发送无法撤回，投递继续遵循 [0004](./0004-delivery-dedup.md) 的去重窗口语义。
+检查之后已经交给外部渠道的发送无法撤回，投递继续遵循 [0004](0004-delivery-dedup.md) 的去重窗口语义。
 这不是 exactly-once，也不是完整上游 Eventmail/质量衰减池。
 
 ## 验证

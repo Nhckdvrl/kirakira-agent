@@ -13,7 +13,7 @@ from eval.longmemeval.dataset import (
 )
 from eval.longmemeval.offline_ab import run_offline_ab
 from eval.longmemeval.protocol import select_fixed
-from scripts.compare_mem0_step_plan import conversation_inputs
+from eval.longmemeval.compare_mem0 import conversation_inputs
 
 
 class LongMemEvalLoaderTests(unittest.TestCase):

@@ -13,7 +13,7 @@ from plugins.wake_proactive.sources import SourceRegistry
 from plugins.wake_proactive.state import ProactiveStateStore
 from proactive_v2.config import ProactiveConfig
 from proactive_v2.loop import ProactiveLoop
-from scripts.verify_step_plan import ObservedClient
+from eval.scenarios.decisions import ObservedClient
 
 
 async def verify(a):

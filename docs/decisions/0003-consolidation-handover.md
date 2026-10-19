@@ -1,7 +1,7 @@
 # 0003 Consolidation 移交给 MarkdownMemoryMaintenance
 
 - 状态：accepted
-- supersedes：[0002](./0002-consolidation-driver.md)
+- supersedes：[0002](0002-consolidation-driver.md)
 
 ## 决定
 

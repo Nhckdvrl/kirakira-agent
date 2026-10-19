@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from bootstrap.runtime import build_runtime
 from infra.providers.step_plan import STEP5_MODEL, STEP_PLAN_BASE_URL, StepPlanClient
-from scripts.verify_core_step_plan import ObservedClient
+from eval.scenarios.core import ObservedClient
 
 
 async def verify(args):
@@ -61,7 +61,7 @@ async def verify(args):
                 Path("infra/channels/web_chat_channel.py"),
                 Path("frontend/web_ui.py"),
                 Path("frontend/workspace_ui.py"),
-                Path("scripts/verify_workspace_step_plan.py"),
+                Path("eval/scenarios/workspace.py"),
             ]
         },
     }

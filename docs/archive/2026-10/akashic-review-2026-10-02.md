@@ -1,10 +1,12 @@
 # Kirakira 重构审计：主动性、记忆与 Runtime
 
-审计日期：2026-10-02。本文是设计分析，不是质量 benchmark。测试证据集中在[验证记录](../operations/verification.md)。
+> 历史资料：保留当时的分析和固定版本依据。当前实现见[架构总览](../../architecture/overview.md)，当前进度见[项目状态](../../status/current.md)。
+
+审计日期：2026-10-02。本文是设计分析，不是质量 benchmark。测试证据集中在[验证记录](../../operations/verification.md)。
 
 后续实现更新：第二轮已继续审计至 `7cf10136932d5fe0205727c803c00861272db0b8`，增加持久补消费、
 主动输入过期检查和本地候选修订结算。下文比较表记录第一轮起点，当前实现以
-[状态页](../status/current.md)和[ADR0007](../decisions/0007-durable-consumption-and-proactive-supersession.md)为准。
+[状态页](../../status/current.md)和[ADR0007](../../decisions/0007-durable-consumption-and-proactive-supersession.md)为准。
 
 ## 结论
 
@@ -114,7 +116,7 @@ Akasha2 明确记录其算法源仓库与 commit，这种来源记录本身就�
 
 迁 v2 的进入条件：相同 embedding、原始历史、时间边界和输出预算下，dense-only、v1 dense+ripple、v2
 三组比较；跨会话间接召回和知识更新有稳定收益，噪声/延迟/维护代价可接受；持久化与回放故障测试同样通过。
-实验设计见[记忆评测](../operations/memory-evaluation.md)，目前没有可声称的质量提升数字。
+实验设计见[记忆评测](../../operations/memory-evaluation.md)，目前没有可声称的质量提升数字。
 
 ## 4. Akashic、Maka、DeepSeek Harness 各自做什么
 
@@ -153,7 +155,7 @@ share/skip 理由、最终 ACK 和后续反馈；重放同一输入能复查这�
 
 ## 本轮交付及简历表述
 
-执行与持久化的具体合同见 [ADR0006](../decisions/0006-shared-reasoning-and-committed-memory.md)。
+执行与持久化的具体合同见 [ADR0006](../../decisions/0006-shared-reasoning-and-committed-memory.md)。
 重构没有替换实际用户数据库；本轮验证使用模拟 provider，没有调用收费模型。
 
 可按实际完成情况把简历的两个亮点改成：

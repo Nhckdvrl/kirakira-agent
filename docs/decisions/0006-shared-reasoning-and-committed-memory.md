@@ -1,6 +1,6 @@
 # 0006：共享推理与提交后记忆学习
 
-日期：2026-10-02。状态：accepted。补消费与主动输入版本合同由 [0007](./0007-durable-consumption-and-proactive-supersession.md) 扩展。
+日期：2026-10-02。状态：accepted。补消费与主动输入版本合同由 [0007](0007-durable-consumption-and-proactive-supersession.md) 扩展。
 
 ## 背景
 

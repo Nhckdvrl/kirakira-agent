@@ -5,7 +5,7 @@
 实现合同见 [ADR0009](../decisions/0009-components-recovery-and-akasha2.md) 和
 [ADR0015](../decisions/0015-projects-and-session-directories.md)，实际运行结果见
 [验证记录](../operations/verification.md)。本页维护阶段和能力范围，逐项验收来自
-[完整功能清单](./akashic-features.md)及其 JSON 数据源。
+[完整功能清单](akashic-features.md)及其 JSON 数据源。
 
 项目统一使用 Python 3.14.6：`.python-version` 固定解释器，`uv.lock` 固定依赖，
 本地使用项目 `.venv`，CI 读取相同版本文件并只执行一个任务；不再维护多版本测试矩阵。

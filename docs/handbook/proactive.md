@@ -55,7 +55,7 @@ uv run pytest -q tests/test_proactive.py tests/test_proactive_lifecycle.py
 ```
 
 完整拓扑和提交边界见[主动执行架构](../architecture/proactive.md)。Drift 的使用方式见
-[Drift 手册](./drift.md)。
+[Drift 手册](drift.md)。
 
 ## 兴趣衰减池
 

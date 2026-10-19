@@ -2,7 +2,7 @@
 
 版本日期：2026-10-07。依据 Akashic 主分支 `50b93c7e778cfc301fbd75f9df9ec1a3041447ed`。
 
-这份手册描述 Akashic 当前的开发流程，可用于指导维护者与 Coding Agent 协作。维护者确定产品意图和关键设计，Agent 在明确授权与项目约束内自主完成实现，并提供能够检查实际结果的证据。
+这份手册描述上述固定版本的 Akashic 开发流程，可用于指导维护者与 Coding Agent 协作。维护者确定产品意图和关键设计，Agent 在明确授权与项目约束内自主完成实现，并提供能够检查实际结果的证据。
 
 整个流程按 **理解边界 → 实现并验证 → 交付评审** 推进。[工作流原文](https://github.com/kachofugetsu09/akashic-agent/blob/50b93c7e778cfc301fbd75f9df9ec1a3041447ed/docs/WORKFLOW.md)。
 

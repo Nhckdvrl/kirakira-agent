@@ -44,8 +44,8 @@ Plugin services use generation-scoped leases. Model recovery preserves completed
 tool results, while proactive decisions and Drift proposals keep durable state.
 Akasha2 uses pinned upstream algorithms with Kirakira's source-consumption and
 atomic checkpoint adapter; v1 remains available. See the
-[architecture](./docs/architecture/overview.md), [current scope](./docs/status/current.md),
-and [verification record](./docs/operations/verification.md).
+[architecture](docs/architecture/overview.md), [current scope](docs/status/current.md),
+and [verification record](docs/operations/verification.md).
 
 ## At a glance
 
@@ -184,8 +184,8 @@ MIT. See [LICENSE](LICENSE).
 
 Kirakira learns from [Akashic Agent](https://github.com/kachofugetsu09/akashic-agent).
 The optional Akasha2 algorithms are adapted from commit `d85b00c`; the vendored
-[MIT license](./plugins/akasha2/LICENSE) and [file provenance](./plugins/akasha2/UPSTREAM.json)
+[MIT license](plugins/akasha2/LICENSE) and [file provenance](plugins/akasha2/UPSTREAM.json)
 ship with the package. The runtime adapter and evaluation results are maintained here.
 Project and working-directory behavior also follows the current upstream design;
 its source contracts and local implementation boundary are recorded in
-[ADR0015](./docs/decisions/0015-projects-and-session-directories.md).
+[ADR0015](docs/decisions/0015-projects-and-session-directories.md).
