@@ -26,6 +26,7 @@ from plugins.context.context_builder import ContextBuilder
 from plugins.conversation.service import ConversationService
 from plugins.delivery.service import DeliveryService
 from plugins.ledger.manager import SessionManager
+from plugins.jobs.service import JobNotices
 from plugins.models.types import ContextLengthError
 from plugins.react.contract import ReactConfig
 from plugins.react.reasoner import ReactProgram
@@ -255,7 +256,7 @@ class RuntimeTests(unittest.TestCase):
                     tools=loop.pipeline.tools,
                     sessions=sessions,
                     memory=memory,
-                    bus=_bus,
+                    jobs=JobNotices(sessions),
                 )
                 manager.register_tool()
 
@@ -288,7 +289,7 @@ class RuntimeTests(unittest.TestCase):
                     tools=loop.pipeline.tools,
                     sessions=sessions,
                     memory=memory,
-                    bus=bus,
+                    jobs=JobNotices(sessions),
                 )
                 manager.register_tool()
                 token = loop.pipeline.tools.set_context(
@@ -305,12 +306,14 @@ class RuntimeTests(unittest.TestCase):
 
                 self.assertEqual(accepted["status"], "running")
                 self.assertTrue(await manager.wait(timeout=2.0))
-                completion = await asyncio.wait_for(bus.consume_inbound(), timeout=1.0)
-                self.assertEqual(completion.session_key, "web:parent")
-                self.assertTrue(completion.metadata["omit_user_turn"])
-                self.assertTrue(completion.metadata["subagent_completion"])
-                self.assertIn("background result", completion.content)
-                await bus.complete_inbound(completion)
+                completion = manager.jobs.read(
+                    accepted["task_id"], session_key="web:parent"
+                )
+                self.assertEqual(completion["status"], "pending")
+                self.assertEqual(
+                    completion["fact"]["result"]["result"], "background result"
+                )
+                self.assertTrue(bus._inbound.empty())
                 await manager.shutdown()
 
         asyncio.run(scenario())
@@ -325,7 +328,7 @@ class RuntimeTests(unittest.TestCase):
                     tools=loop.pipeline.tools,
                     sessions=sessions,
                     memory=memory,
-                    bus=bus,
+                    jobs=JobNotices(sessions),
                 )
                 manager.register_tool()
                 release = asyncio.Event()
@@ -363,9 +366,9 @@ class RuntimeTests(unittest.TestCase):
                 self.assertEqual(listing["running_count"], 3)
                 self.assertIn("limit 3", rejected)
                 self.assertTrue(await manager.cancel(accepted[0]["task_id"]))
-                cancelled = await asyncio.wait_for(bus.consume_inbound(), timeout=1.0)
-                self.assertIn('status="cancelled"', cancelled.content)
-                await bus.complete_inbound(cancelled)
+                cancelled = manager.jobs.read(accepted[0]["task_id"])
+                self.assertEqual(cancelled["fact"]["result"]["status"], "cancelled")
+                self.assertTrue(bus._inbound.empty())
 
                 release.set()
                 self.assertTrue(await manager.wait(timeout=2.0))

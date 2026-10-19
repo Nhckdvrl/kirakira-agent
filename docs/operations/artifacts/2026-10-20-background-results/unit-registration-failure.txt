@@ -1,0 +1,93 @@
+......F......................................                            [100%]
+=================================== FAILURES ===================================
+__ test_jobs_owner_can_be_replaced_without_recreating_ledger_or_losing_result __
+
+tmp_path = PosixPath('/tmp/pytest-of-xiang/pytest-248/test_jobs_owner_can_be_replace0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x151eb3d40b90>
+
+    @pytest.mark.asyncio
+    async def test_jobs_owner_can_be_replaced_without_recreating_ledger_or_losing_result(
+        tmp_path, monkeypatch
+    ):
+        runtime = await runtime_at(tmp_path, monkeypatch)
+        publish_job(runtime)
+        prior_jobs, sessions = runtime.pipeline.jobs, runtime.session_manager
+        assert runtime.subagents.jobs is prior_jobs
+        try:
+            await runtime.composition.replace("jobs", runtime.composition._modules["jobs"])
+            assert runtime.session_manager is sessions
+            assert runtime.pipeline.jobs is not prior_jobs
+>           assert runtime.subagents.jobs is runtime.pipeline.jobs
+                   ^^^^^^^^^^^^^^^^^
+
+tests/test_reply_programs.py:261:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+bootstrap/application.py:76: in __getattribute__
+    value = root.services.resolve(key)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <agent.composition.services.ServiceRegistry object at 0x151eb43d9950>
+key = ServiceKey(name='subagent.tasks.v1', binding_names=())
+
+    def resolve(self, key):
+        values = self.root.provided_services()
+        if key not in values:
+>           raise ServiceUnavailable("missing capability: " + key.name)
+E           agent.composition.services.ServiceUnavailable: missing capability: subagent.tasks.v1
+
+agent/composition/services.py:21: ServiceUnavailable
+------------------------------ Captured log call -------------------------------
+ERROR    akashic.plugin.diagnostics:diagnostic_log.py:220 plugin.operation.error
+Traceback (most recent call last):
+  File "/home/xiang/projects/kirakira-agent/agent/plugin_composition/context.py", line 1316, in _load
+    await result
+  File "/home/xiang/projects/kirakira-agent/agent/composition/root.py", line 184, in apply
+    await module.apply(native)
+  File "/home/xiang/projects/kirakira-agent/plugins/subagent/provider.py", line 31, in apply
+    subagents.register_tool()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/xiang/projects/kirakira-agent/plugins/subagent/service.py", line 58, in register_tool
+    self.tools.register(
+    ~~~~~~~~~~~~~~~~~~~^
+        ToolSpec(
+        ^^^^^^^^^
+    ...<22 lines>...
+        self.spawn,
+        ^^^^^^^^^^^
+    )
+    ^
+  File "/home/xiang/projects/kirakira-agent/plugins/tools/registry.py", line 80, in register
+    raise ValueError("Tool already registered: %s" % spec.name)
+ValueError: Tool already registered: spawn
+ERROR    akashic.plugin.diagnostics:diagnostic_log.py:220 plugin.operation.error
+Traceback (most recent call last):
+  File "/home/xiang/projects/kirakira-agent/agent/plugin_composition/context.py", line 1316, in _load
+    await result
+  File "/home/xiang/projects/kirakira-agent/agent/composition/root.py", line 184, in apply
+    await module.apply(native)
+  File "/home/xiang/projects/kirakira-agent/plugins/scheduler/provider.py", line 25, in apply
+    scheduler = SchedulerService(
+        workdir / ".kirakira" / "schedules.json",
+    ...<4 lines>...
+        executions=execution_store,
+    )
+  File "/home/xiang/projects/kirakira-agent/plugins/scheduler/service.py", line 47, in __init__
+    self._register_tools()
+    ~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/xiang/projects/kirakira-agent/plugins/scheduler/service.py", line 441, in _register_tools
+    self.tools.register(
+    ~~~~~~~~~~~~~~~~~~~^
+        ToolSpec(
+        ^^^^^^^^^
+    ...<20 lines>...
+        **common,
+        ^^^^^^^^^
+    )
+    ^
+  File "/home/xiang/projects/kirakira-agent/plugins/tools/registry.py", line 80, in register
+    raise ValueError("Tool already registered: %s" % spec.name)
+ValueError: Tool already registered: schedule
+=========================== short test summary info ============================
+FAILED tests/test_reply_programs.py::test_jobs_owner_can_be_replaced_without_recreating_ledger_or_losing_result
+1 failed, 44 passed in 32.82s

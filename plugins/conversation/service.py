@@ -8,8 +8,9 @@ from bus.events import InboundMessage, OutboundMessage
 
 
 class ConversationService:
-    def __init__(self, *, program, admission, programs=None):
+    def __init__(self, *, program, admission, programs=None, jobs=None):
         self.program, self.admission, self.programs = program, admission, programs
+        self.jobs = jobs
         self._closing, self._callers = False, set()
         self.bus, self.event_bus = program.bus, program.event_bus
 
@@ -35,22 +36,38 @@ class ConversationService:
 
     async def _run(
         self,
-        msg: InboundMessage,
+        msg: InboundMessage | None,
         key: str,
         *,
         dispatch_outbound: bool = True,
         admitted=None,
         supersede=False,
-    ) -> OutboundMessage:
+        job_notice_id=None,
+    ) -> OutboundMessage | None:
         identity = None
-        resume = msg.metadata.get("resume_program_id")
-        if self.programs is not None:
+        resume = msg.metadata.get("resume_program_id") if msg is not None else None
+        if msg is not None and self.programs is not None:
             if resume:
                 identity = str(resume)
                 msg = self.programs.resume_request(identity, key)
             else:
                 identity, _ = self.programs.accept(msg, key, supersede=supersede)
-        async with self.admission.hold(key), AsyncExitStack() as resources:
+        async with AsyncExitStack() as resources:
+            await resources.enter_async_context(self.admission.hold(key))
+            if msg is None:
+                if self.jobs is None or job_notice_id is None:
+                    raise ValueError("a pending job notice is required")
+                # Decide after admission: the active turn may already have claimed
+                # the result at its next model boundary. No empty program is created.
+                msg = self.jobs.wake_request(job_notice_id, key)
+                if msg is None:
+                    return None
+                identity, value = self.programs.accept(msg, key)
+                if value["status"] in {"paused", "failed"}:
+                    # A crash may have accepted the wake before its first material
+                    # claim. Reuse that program, including its effects/head guards.
+                    msg = self.programs.resume_request(identity, key)
+                    resume = identity
             if identity is not None:
                 row = self.programs.store.read(identity, key)
                 if row["status"] == "completed":

@@ -156,6 +156,7 @@ class ReactProgram:
         compaction_projection: CompactionProjection | None = None,
         payload_segments: ContextPayloadSegments | None = None,
         policy: ReasoningPolicy | None = None,
+        prepare_step=None,
     ) -> ReactResult:
         policy = policy or ReasoningPolicy()
         program = current_program(session_key)
@@ -278,6 +279,10 @@ class ReactProgram:
         while iteration_limit <= 0 or iteration < iteration_limit:
             if program is not None:
                 program.ensure_current()
+            if prepare_step is not None:
+                for material in await prepare_step():
+                    if material not in messages:
+                        messages.append(material)
             tools = ToolMenu(self.tools)
             directories = self.tools.directory_provider
             if directories is not None:

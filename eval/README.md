@@ -21,6 +21,8 @@ uv run --frozen python -m eval.benchmarks.runtime \
 ```
 
 真实 Step 场景使用 `python -m eval.scenarios.core --help` 等模块入口。
+Core 默认覆盖后台结果；可用 `--categories job_busy job_idle job_restart background_spawn job_resume job_failed jobs_reload`
+单独复测领取、唤醒、恢复、真实子代理和失败回传，`--repeats` 控制重复次数。
 凭据只从仓库外 `--key-file` 读取，Token Plan 路由与模型要求由验证器固定；不会默认在 CI 调用。
 可选 CPU embedding 和对照依赖通过同一 `.venv` 的 `eval` / `comparison` 依赖组安装。
 

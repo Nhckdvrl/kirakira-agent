@@ -24,6 +24,7 @@
 ## 验证与运维
 
 - [当前验证结果与历史入口](operations/verification.md)
+- [后台结果与最新 main 的 Step5 验证](operations/evaluations/2026-10-20-background-results.md)
 - [原生组合与主链接线](operations/evaluations/2026-10-20-native-composition.md)
 - [重构后的性能回退](operations/evaluations/2026-10-20-runtime-parity.md)
 - [评测方法](operations/memory-evaluation.md)、[评测程序与结果目录](../eval/README.md)

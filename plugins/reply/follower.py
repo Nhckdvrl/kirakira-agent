@@ -14,14 +14,30 @@ logger = logging.getLogger(__name__)
 
 
 class ReplyFollower:
-    def __init__(self, *, bus: MessageBus, pipeline: ConversationService) -> None:
+    def __init__(
+        self, *, bus: MessageBus, pipeline: ConversationService, jobs=None
+    ) -> None:
         self.bus = bus
         self.pipeline = pipeline
+        self.jobs = jobs
         self._running = False
         self._tasks: set[asyncio.Task[Any]] = set()
 
     async def run(self) -> None:
         self._running = True
+        notices = None
+        if self.jobs is not None:
+            notices = asyncio.create_task(self._follow_jobs(), name="job-notices")
+            self._tasks.add(notices)
+            notices.add_done_callback(self._tasks.discard)
+        try:
+            await self._follow_inputs()
+        finally:
+            if notices is not None:
+                notices.cancel()
+                await asyncio.gather(notices, return_exceptions=True)
+
+    async def _follow_inputs(self):
         while self._running:
             try:
                 item = await asyncio.wait_for(self.bus.consume_inbound(), timeout=1.0)
@@ -33,6 +49,25 @@ class ReplyFollower:
             )
             self._tasks.add(task)
             task.add_done_callback(self._tasks.discard)
+
+    async def _follow_jobs(self):
+        async for identity, fact in self.jobs.follow():
+            if not self.bus.has_outbound_subscribers(fact["channel"]):
+                continue  # Direct callers can consume the result on their next input.
+            task = asyncio.create_task(
+                self._process_notice(identity, fact["session_key"]),
+                name="job-notice:" + identity,
+            )
+            self._tasks.add(task)
+            task.add_done_callback(self._tasks.discard)
+
+    async def _process_notice(self, identity, session_key):
+        try:
+            await self.pipeline.run(None, session_key, job_notice_id=identity)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("background result wake failed job=%s", identity)
 
     async def _process_item(self, item: InboundMessage, key: str) -> None:
         # Pipeline admission is the single queue for channel, direct, control

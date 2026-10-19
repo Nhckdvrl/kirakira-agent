@@ -173,8 +173,8 @@ async def run(args):
                     p: hashlib.sha256(Path(p).read_bytes()).hexdigest()
                     for p in [
                         "plugins/akasha2/engine.py",
-                        "session/turn_source.py",
-                        "session/manager.py",
+                        "plugins/ledger/turn_source.py",
+                        "plugins/ledger/manager.py",
                         "scripts/replay_akasha2.py",
                     ]
                 },

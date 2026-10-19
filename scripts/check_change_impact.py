@@ -12,6 +12,22 @@ ROOT = Path(__file__).resolve().parents[1]
 IMPACT_RULES: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
     (
         (
+            "plugins/jobs/",
+            "plugins/conversation/",
+            "plugins/reply/",
+            "plugins/reply_program/",
+            "plugins/delivery/",
+            "plugins/react/",
+            "plugins/context/conversation.py",
+        ),
+        (
+            "tests/test_reply_programs.py",
+            "tests/test_runtime.py",
+            "tests/test_runtime_lifecycle.py",
+        ),
+    ),
+    (
+        (
             "plugins/projects/factory.py",
             "plugins/ledger/owner_store.py",
             "plugins/ledger/manager.py",

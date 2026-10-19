@@ -251,6 +251,11 @@ async def verify(args):
         "implementation": subprocess.check_output(
             ["git", "rev-parse", "HEAD"], cwd=implementation, text=True
         ).strip(),
+        "implementation_worktree_dirty": bool(
+            subprocess.check_output(
+                ["git", "status", "--porcelain"], cwd=implementation, text=True
+            ).strip()
+        ),
         "runner_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         "without_extensions": args.without_extensions,
         "python": platform.python_version(),
@@ -291,6 +296,10 @@ async def verify(args):
                         "plugins/reply_program",
                         "plugins/sources",
                         "plugins/ledger",
+                        "plugins/jobs",
+                        "plugins/delivery",
+                        "plugins/reply",
+                        "plugins/subagent",
                         "plugins/react",
                         "plugins/models",
                         "plugins/execution",

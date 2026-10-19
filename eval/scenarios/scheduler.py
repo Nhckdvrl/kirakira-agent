@@ -124,15 +124,15 @@ async def verify(args):
         "fixture_type": "synthetic functional contracts",
         "limitations": [
             "not a semantic retrieval benchmark",
-            "no automatic resume of interrupted programs",
+            "unknown external outcomes are not automatically replayed",
         ],
         "source_sha256": {
             str(path): hashlib.sha256(path.read_bytes()).hexdigest()
             for path in [
                 Path(__file__).relative_to(Path.cwd()),
                 *sorted(Path("plugins/scheduler").glob("*.py")),
-                Path("agent/core/pipeline.py"),
-                Path("session/turn_source.py"),
+                Path("plugins/reply_program/service.py"),
+                Path("plugins/ledger/turn_source.py"),
             ]
         },
         "cases": [],
@@ -262,7 +262,7 @@ async def verify(args):
                                 "deliveries": len(r.received),
                                 "verbatim": True,
                             }
-                    elif category == "channel_passive_turns":
+                    elif category == "channel_input_supersession":
                         async with rig(work, observed, background=True) as r:
                             for i in range(3):
                                 await r.runtime.bus.publish_inbound(
@@ -270,17 +270,29 @@ async def verify(args):
                                         "verify",
                                         "fixture-user",
                                         "origin",
-                                        f"Write exactly {nonce}_{i} to channel{i}.txt using write_file. Confirm the code.",
+                                        "Cancel and replace all earlier pending requests. "
+                                        f"Only write exactly {nonce}_{i} to channel{i}.txt using write_file. "
+                                        "Do not execute earlier requested writes. Confirm the code.",
                                     )
                                 )
-                            await wait_for(lambda: len(r.received) == 3)
-                            assert all(
-                                (work / f"channel{i}.txt").read_text().strip()
-                                == f"{nonce}_{i}"
-                                for i in range(3)
+                            await wait_for(lambda: bool(r.received))
+                            assert len(r.received) == 1
+                            assert (
+                                work / "channel2.txt"
+                            ).read_text().strip() == f"{nonce}_2"
+                            assert not any(
+                                (work / f"channel{i}.txt").exists() for i in range(2)
                             )
-                            assert len({m.session_message_id for m in r.received}) == 3
-                            evidence = {"delivered_turns": 3, "files_verified": 3}
+                            programs = r.runtime.pipeline.programs.store.list(r.key)
+                            statuses = [program["status"] for program in programs]
+                            assert statuses.count("superseded") == 2
+                            assert statuses.count("completed") == 1
+                            evidence = {
+                                "delivered_turns": 1,
+                                "files_verified": 1,
+                                "superseded_inputs": 2,
+                                "obsolete_effects": 0,
+                            }
                     elif category == "parallel_passive_turns":
                         async with rig(work, observed) as r:
                             replies = await asyncio.gather(
@@ -521,7 +533,7 @@ async def verify(args):
         "delivery_failure_restart",
         "cancel_unknown_tool",
         "parallel_passive_turns",
-        "channel_passive_turns",
+        "channel_input_supersession",
         "memory_source",
         "cancel_queued",
         "notify_receipt",

@@ -1,0 +1,2238 @@
+{
+  "endpoint": "https://api.stepfun.com/step_plan/v1",
+  "model": "step-5-preview",
+  "billing_surface": "step_plan",
+  "reasoning_effort": "medium",
+  "python": "3.14.6",
+  "repeats": 2,
+  "concurrency": 1,
+  "streaming": true,
+  "fixture_type": "synthetic functional main-chain contracts",
+  "source_sha256": {
+    "eval/scenarios/core.py": "a04500faee367f4aace1d8258d6e1132bd8b20543fa8444a17fbde2fb78a0201",
+    "agent/plugin_composition/__init__.py": "71afa64cc67c60956ec6383396ea61fe0febcb2d567e7039fde32186bccfbeda",
+    "agent/plugin_composition/config_input.py": "ffd823aac104cdef16b4948d017bcd83fab60fe4c383b2e3e39e59e5629f2e10",
+    "agent/plugin_composition/context.py": "f3c50d07969cd57a3f0bfffa7325c0729c2a496336aa23962d8d1958ee3db42f",
+    "agent/plugin_composition/credentials.py": "897dab5b4b32fa13af0df1cd37c885d11c97ca848693772b191490e51399ab09",
+    "agent/plugin_composition/diagnostics.py": "189dbebb245436d175e9a8cf7a7914aff85a3a69264966628c6bdce2c4f8ef98",
+    "agent/plugin_composition/effect.py": "0a10aa889694fced7006c295ec951ce5871783a54e542a867e5c6733a33a699c",
+    "agent/plugin_composition/endpoints.py": "2b11464b4db8b1e93fbe6e4f2266c716ae16e5403106df92e6d80d106f90ce31",
+    "agent/plugin_composition/events.py": "c67b14331d1bc17d50e8e838cf6d41860e53139797939ac30cb0842bf083ca8f",
+    "agent/plugin_composition/execution.py": "36abdd5cb5a6d7084b755064a41f9e31ed18336041f1aa0e840220f67b42f2ce",
+    "agent/plugin_composition/executor.py": "19cb557a33b0b528228efd13405bdc5ee7257b9dfa2a0718e820508ad5f6226c",
+    "agent/plugin_composition/host.py": "50a5d4fbf7b9465ef54262ec3e5bb056d6da1e113596b8eb8be894f331855ca8",
+    "agent/plugin_composition/model.py": "248be826cc8556668d8caf3377ea46d913f12781321a7dcf18ac245c8209a352",
+    "agent/plugin_composition/plugin_config.py": "7a6cf88539742cdabfcfe284cd89220a0802046b47decf22dbaf2bf04b49ca93",
+    "agent/plugin_composition/plugin_updates.py": "8a613d384809207701bc8aab7920848a29681677f8e50ca5d706c9532c5d8a94",
+    "agent/plugin_composition/requests.py": "f5a2b76e1c90ce0295397421ec7eb667dc688adb122e83292be1bcd115a6127b",
+    "agent/plugin_composition/runtime_catalog.py": "9dd3065a66f884f998ce6a804618d7a38a64556e8d99e1ce4874d2f7e8112e47",
+    "agent/plugin_composition/runtime_lifecycle.py": "a4076bbf81849b53b181dfaec6d98f8cff78e027cd7599d6fffadec86ba4cd8a",
+    "agent/plugin_composition/tasks.py": "622dd36270b31467d9702ef8862d7cddc47641b6a670e6ad1685f0ef93839fb7",
+    "agent/composition/__init__.py": "3f811dbb3c817cb92b1eb30f8a635ef6e1a05a54e0dfbdce3763acf1ec3e8e89",
+    "agent/composition/lifecycle.py": "d07502e61efd20a52d68fed68dbfdd5e219f9e00e48d2c42829f76a2ad1dfa23",
+    "agent/composition/root.py": "165ec862df469a0ada69e88c62b12b65f873cba0e802e84c7e031dc59d13dcef",
+    "agent/composition/scope.py": "e06f3ebe6a076ee991070b2ba00f1592ac0e5a270b27c909d911c1041426ebbe",
+    "agent/composition/services.py": "b60ca8445ca3d7aa06f365bc30828479aea4a55bc29ab82afda6c8446e9f6f57",
+    "bootstrap/__init__.py": "4ec62039094e52868eaa6e904eb440659fe1b846a1770d5aa0524944840c4e7d",
+    "bootstrap/app.py": "7c80eb393e0b8d553ee7bec419505ac3a85656ead24545c3cb49ef31e831e6b4",
+    "bootstrap/application.py": "dcad932372593cbefe17bcc14f9ae5780f288f0d7135a100de02e41357c7c54f",
+    "bootstrap/control_cli.py": "b2b95f11baf14fc2a66b82e4834e43cde606adc1d6b1a0b19d0fa20f863f8512",
+    "bootstrap/distribution.py": "4ca9813433018fb811a3530aa11585779245923e128b26d5887380d8ace859cb",
+    "bootstrap/main.py": "a13229b5d2fdcb7274031153c5616ba863383713035901241c22f7c243a43b79",
+    "bootstrap/runtime.py": "78f7384226e126564306480f9340e7e1d0f548385fe5362a28efd4634a188d07",
+    "bootstrap/runtime_readiness.py": "ae012bfcd538a15f4aea98602df6f58e2ecb847e49bef5e42bb230d4a6130358",
+    "bootstrap/setup_wizard.py": "e83d0bf9e56b564173bed25a32f2c03ac5ec135a43a0d306944c636552fd224f",
+    "plugins/reply_program/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "plugins/reply_program/contract.py": "c45ab194a419e0cc2479b6ec18a66bb5d032f0c1a4e9aa1a3117f5f3968db0c9",
+    "plugins/reply_program/default_provider.py": "1714ff460eed7f46aef3e188e63eb45b38c23d17af204a6db29acfdba305d826",
+    "plugins/reply_program/program.py": "8176cadf41ffa23e19ccc2f2eced438873119e16d7c504cf972fbce5ebe32b3c",
+    "plugins/reply_program/provider.py": "b8675ea77d3384709419273f73f89ed4053474fd32c4536bbd871a2135edc999",
+    "plugins/reply_program/scoped.py": "dc613a204c47912e7cba04beda694836326b2ea5073b36c39fe6e673b17e365e",
+    "plugins/reply_program/service.py": "e364dec4290851de2ff44ae0156ff73add5df7e3113d99e43c8baf8cdfbba04c",
+    "plugins/reply_program/store.py": "745cc7a8068e94bc009374c34b734fa6eee92b558d5547fad71e646137632234",
+    "plugins/react/__init__.py": "17b98bcee93a83aff56f6d77c7b822e6fa0fdadbc4eca27b890d31d0393bb4cd",
+    "plugins/react/contract.py": "f89028396a9655b99bed00fd383fd4c0e77e31e780263193719e895ba867e013",
+    "plugins/react/policy.py": "0fa79857c067979e739c599326011f66c48d687c4a33a433a8c7f8b7ab94064c",
+    "plugins/react/provider.py": "29cd78df822dc2f6373716a50e115233055496d34f03f4bed8142da21b1c0d95",
+    "plugins/react/reasoner.py": "c71ef66d5ae91c12e0dd6b57587cac5365fa969b155b5dc5d2d917770caf0ca8",
+    "plugins/react/result.py": "35d986871067d77250f649c55b79f4d5819212fad60f0fd1f4f121f95a36a047",
+    "plugins/models/__init__.py": "360a72a086a1c3c420807068e95bf72b708356f204fd9404966418726b58ca44",
+    "plugins/models/context_compaction.py": "5b604579cc2efa2a290a12a02a0b993a62f252a42031d91303412720d9313e5a",
+    "plugins/models/context_policy.py": "99d8ef2a6a7bb2bd95da0983ca266a435afaf96ebea048a1a12d4657d34842bb",
+    "plugins/models/contract.py": "7764fab37f2e3b487ceaeb535af2f545ff8f52f78fd45e11d9e5aabccd9c1035",
+    "plugins/models/execution_history.py": "7a2a5ad16017875180db9ef4682985abc645c42b438a21e7feaa1f1eb2552d68",
+    "plugins/models/fallback.py": "68aadc34057fc9b3a7e0a41f47b3e86c8f46816070d8984b0226b413c9555d40",
+    "plugins/models/invoker.py": "a63b1f88f32266003a497febf8291588fb14c827ebf9c1e8c2d07df2ceb4de7e",
+    "plugins/models/json_utils.py": "3cfddd1217e314d8dd5103fcab60cb7d757b394fe12d23f2b8b8e63f96890727",
+    "plugins/models/provider.py": "ca79ed740e3751038b610939761c5251c4ea6398d73220f95ab358b095f74b4a",
+    "plugins/models/query_compaction.py": "68ebc32044d78e92bad74725c1540e8656944768bbc150f3c7a9b2b366f23372",
+    "plugins/models/retry.py": "52d8ab8be3d489ac6ee109d5664a50606d19d106a8dde2b5afac207fe13b9c66",
+    "plugins/models/types.py": "8c1f204ca7dd89bea6d90096a15615cecd4dd60847baccf3bffeb21eb0b40537",
+    "plugins/models/usage.py": "b0ffe33275a37825204283f151c090d3377a33facfdef3eed1b99314927a5eba",
+    "plugins/sources/__init__.py": "b330bb54c4e9c1fba91f625a86e22cc8c57128857d43d6bffc6b6e2162e01aa3",
+    "plugins/sources/admission.py": "2cfafcacb22f0773b64ea773e66aa74db41b386d8d7447e85b68a5ff801c14bf",
+    "plugins/sources/contract.py": "61028a25e4ca325cc5380ba96d332b91efe2c4cd547a3b47cccf58f4c38970f1",
+    "plugins/sources/interrupt.py": "facbf8812eab250a179d35e265962aa3993fe889b32637978e42fa9f04890bdc",
+    "plugins/sources/provider.py": "e38f4287b46f7899d9e79779dbc9bff663b032aeb85a487bda785ec2b457502a",
+    "plugins/sources/service.py": "db6b1e3f5ddd97f19012424d910c6754c731348267253ab7276449f29be3a8c8",
+    "plugins/conversation/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "plugins/conversation/contract.py": "a233e1c44bcc07f9c37588829fe4a6ca7738da9fa6b0980638b88354b3b77a61",
+    "plugins/conversation/provider.py": "9c4da8ea2ae25142e5a8134f571fb694bdfd7c9deaea139f57daf11b1127d223",
+    "plugins/conversation/service.py": "246af4ce58b4fb166d6a077b3c91f6c9c0cae12f0ca36ac2b2bf3144c5a93a5e",
+    "plugins/delivery/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "plugins/delivery/contract.py": "e2be1a74f1863a2c496c42f01707c7fa45906c113bfecaa20fa3081d9744ed88",
+    "plugins/delivery/provider.py": "2d2451074b4b9f7d7780c9ee3b9c281980462a54a5b136bf4ed20cc5f78406be",
+    "plugins/delivery/service.py": "e6a7345f76746fd2852f286e7f796f6d13b5c80d49f8d19bf32a2a678a7d4997",
+    "plugins/ledger/__init__.py": "d7e97de1784f61a5bd25672e61c697da826a3a51b84840165772e6ce9c4673a2",
+    "plugins/ledger/compaction_runtime.py": "c714117e459eac6d1917dbdc50cb3877efc820469a7e5f9e9e04e5f35a6d41ef",
+    "plugins/ledger/contract.py": "8a16b14ed5a6de622747166978afdfa8c15120def4cc790cb1223e628d350b0e",
+    "plugins/ledger/embedding_store.py": "462d4822633728ed98aaaf1db2e8c83ad836e3ae31e88c5e187aa7bd6684cf7f",
+    "plugins/ledger/inputs.py": "4127741115976e78c60b42a3a433b8e7940236779f46a499cc2661e25196ca5f",
+    "plugins/ledger/manager.py": "f4f880ec100ba9ecfa8a56480ae43228b7790567b12a01252c56e0d0cfc3bc72",
+    "plugins/ledger/owner_store.py": "4463d99a849650e6a23f55da193e7a57505115204be99f8147fe06c7b176093a",
+    "plugins/ledger/provider.py": "d7c7995914ab81151d123029fd52904f22c8c13b2bbd40e88ea6210956d57848",
+    "plugins/ledger/publications.py": "de42ee42c460577f3ac4d436f84962cb05f0b318e9d1ec2b5cd9a5318a7c3e0a",
+    "plugins/ledger/turn_source.py": "2946ca0179795813603fe48e08a4ab3e38dd891d2847cd97b2d86e2422d2648b",
+    "plugins/jobs/__init__.py": "4eceb7b6f558e22b26effd12c7d6d54b993d6d43f204dd96eab49aaff82fbbb1",
+    "plugins/jobs/contract.py": "888585cdc2b71f488245b24d53f07d87ce736e582a6b2b1c0e2d4edd80c4b9ca",
+    "plugins/jobs/provider.py": "50ed285e2eb62ff96b7c47915647e9c09eb7cb4929b6b740fa3399b595dd149b",
+    "plugins/jobs/service.py": "212e38944088f4b892ece40d7beb1ad3502d1ba40b79dc2a827ed7614d403efa",
+    "plugins/subagent/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "plugins/subagent/contract.py": "085c18d2255ec4721826b27b830a3384fb3f516a31d6557e1c7cdab952ec8f21",
+    "plugins/subagent/provider.py": "0031c23c23ec10b8e2d7cb69ef9edd9eb7265f1af129adfea2b2b8365b35e28a",
+    "plugins/subagent/service.py": "20d9c943122d82e0d9534033716530e084ae6a2240a1312211d80c4b8a178ee0",
+    "plugins/tools/registry.py": "9de263a8e46149fa84129e2da5a3a9bf9347cca7e5fd932af4edd75a5015ea3e",
+    "utils/async_tasks.py": "77f447eeb3babde6047ed78449fde68eeb0e6181095e319ada6fcaf998349fca"
+  },
+  "limitations": [
+    "not an external task benchmark",
+    "small latency sample; no provider speedup claim",
+    "unknown external side effects are not automatically replayed",
+    "cancelled streams may have unreported provider usage"
+  ],
+  "cases": [
+    {
+      "category": "parallel_reads",
+      "repeat": 0,
+      "status": "passed",
+      "evidence": {
+        "peak_active": 4,
+        "reads": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "writes": [
+          2596
+        ],
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 14.94960437528789,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 5.02568693459034,
+          "usage": {
+            "prompt_tokens": 825,
+            "completion_tokens": 229,
+            "total_tokens": 1054,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "lookup",
+            "lookup",
+            "lookup",
+            "lookup",
+            "lookup",
+            "lookup",
+            "lookup",
+            "lookup"
+          ],
+          "seconds": 7.1587656158953905
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.6104412619024515,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 1178,
+            "completion_tokens": 143,
+            "total_tokens": 1321,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "save"
+          ],
+          "seconds": 4.064557712525129
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.2793023101985455,
+          "usage": {
+            "cached_tokens": 768,
+            "prompt_tokens": 1340,
+            "completion_tokens": 86,
+            "total_tokens": 1426,
+            "prompt_tokens_details": {
+              "cached_tokens": 768
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 3.203144645318389
+        }
+      ]
+    },
+    {
+      "category": "retry_after_effect",
+      "repeat": 0,
+      "status": "passed",
+      "evidence": {
+        "effect_count": 1,
+        "injected": true,
+        "recovery_statuses": [
+          "retrying",
+          "recovered"
+        ],
+        "reply": "已成功提交标识符：`KIRA_c1bf5c38e8ea`",
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 3.7887719068676233,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "usage": {
+            "prompt_tokens": 768,
+            "completion_tokens": 34,
+            "total_tokens": 802,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "write_once"
+          ],
+          "seconds": 1.332144083455205
+        },
+        {
+          "status": "RetryableModelError",
+          "streaming": true,
+          "http_status": null,
+          "injected": true,
+          "seconds": 1.3399869203567505e-05
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.838535651564598,
+          "usage": {
+            "cached_tokens": 256,
+            "prompt_tokens": 829,
+            "completion_tokens": 21,
+            "total_tokens": 850,
+            "prompt_tokens_details": {
+              "cached_tokens": 256
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.1025402769446373
+        }
+      ]
+    },
+    {
+      "category": "deferred_search",
+      "repeat": 0,
+      "status": "passed",
+      "evidence": {
+        "calls": [
+          "search",
+          "lookup"
+        ],
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 11.38980727083981,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.959794856607914,
+          "usage": {
+            "prompt_tokens": 785,
+            "completion_tokens": 65,
+            "total_tokens": 850,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "tool_search"
+          ],
+          "seconds": 3.7130840476602316
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "usage": {
+            "prompt_tokens": 957,
+            "completion_tokens": 36,
+            "total_tokens": 993,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "secret_lookup"
+          ],
+          "seconds": 6.007172450423241
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.9659916888922453,
+          "usage": {
+            "prompt_tokens": 1022,
+            "completion_tokens": 36,
+            "total_tokens": 1058,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 1.311286909505725
+        }
+      ]
+    },
+    {
+      "category": "tool_error_repair",
+      "repeat": 0,
+      "status": "passed",
+      "evidence": {
+        "calls": [
+          "v1",
+          "v2"
+        ],
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 14.012131419032812,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.439888583496213,
+          "usage": {
+            "prompt_tokens": 730,
+            "completion_tokens": 39,
+            "total_tokens": 769,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_version"
+          ],
+          "seconds": 1.8325977995991707
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.9059881642460823,
+          "usage": {
+            "cached_tokens": 256,
+            "prompt_tokens": 798,
+            "completion_tokens": 76,
+            "total_tokens": 874,
+            "prompt_tokens_details": {
+              "cached_tokens": 256
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_version"
+          ],
+          "seconds": 1.7207732424139977
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 8.102343181148171,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 901,
+            "completion_tokens": 161,
+            "total_tokens": 1062,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 10.129260724410415
+        }
+      ]
+    },
+    {
+      "category": "files_restart",
+      "repeat": 0,
+      "status": "passed",
+      "evidence": {
+        "first_reply": "完成。probe.txt 中写入的内容经读回验证为：\n\n**KIRA_a0f4b08ff0fd**\n\n写入文件共 17 字节，读回结果与写入内容完全一致（无多余换行或空白字符差异）。",
+        "execution_statuses": [
+          "completed"
+        ],
+        "restart_reply": "probe.txt 的内容为：\n\n**KIRA_a0f4b08ff0fd**",
+        "persisted_messages": 4
+      },
+      "seconds": 12.29100857488811,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.8439772520214319,
+          "usage": {
+            "prompt_tokens": 873,
+            "completion_tokens": 84,
+            "total_tokens": 957,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "write_file"
+          ],
+          "seconds": 1.6857662238180637
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 979,
+            "completion_tokens": 26,
+            "total_tokens": 1005,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_file"
+          ],
+          "seconds": 1.3200670164078474
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.585848106071353,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 1030,
+            "completion_tokens": 56,
+            "total_tokens": 1086,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 3.3906802739948034
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.9767251685261726,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 1144,
+            "completion_tokens": 46,
+            "total_tokens": 1190,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_file"
+          ],
+          "seconds": 1.4550227671861649
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.295709514990449,
+          "usage": {
+            "cached_tokens": 768,
+            "prompt_tokens": 1215,
+            "completion_tokens": 42,
+            "total_tokens": 1257,
+            "prompt_tokens_details": {
+              "cached_tokens": 768
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 1.7691626492887735
+        }
+      ]
+    },
+    {
+      "category": "stream_cancel",
+      "repeat": 0,
+      "status": "passed",
+      "evidence": {
+        "cancel_drain_ms": 10.754453018307686,
+        "execution_statuses": [
+          "completed",
+          "interrupted"
+        ]
+      },
+      "seconds": 3.5432188883423805,
+      "requests": [
+        {
+          "status": "CancelledError",
+          "streaming": true,
+          "first_delta_seconds": 1.2636663261801004,
+          "http_status": null,
+          "seconds": 1.2712463978677988
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.0137269515544176,
+          "usage": {
+            "prompt_tokens": 602,
+            "completion_tokens": 43,
+            "total_tokens": 645,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 1.5107231959700584
+        }
+      ]
+    },
+    {
+      "category": "compaction_restart",
+      "repeat": 0,
+      "status": "passed",
+      "evidence": {
+        "generation": 1,
+        "source_messages_preserved": 80,
+        "summary_sha256": "5308271f9a261c8d1b4e955277b0ced329d1b88df3f50eead3d646cd89369069",
+        "summary": "## Goal\nProcess the provided project verification fixture data under project verification code `KIRA_58afe810e56f`.\n\n## Constraints & Preferences\n- All received fixture observations are local read-only background details.\n- No external effect is pending.\n- No new assumptions or planned work should be treated as completed.\n\n## Progress\n### Done\n- Recorded project verification code `KIRA_58afe810e56f`.\n- Recorded background observations for fixture units 25, 26, 27, 28, and 29.\n- Each recorded fixture unit contained observations 0 through 59, all classified as local read-only background details with no external effect pending.\n\n### In Progress\n- No active processing task is described beyond recording the provided fixture observations.\n\n### Blocked\n- None reported.\n\n## Key Decisions\n- Treat all listed fixture observations as background details only, with no external effect and no state-changing action.\n\n## Next Steps\n- Await further instructions or additional fixture units/tasks.\n- Take action only if a future instruction specifies verification, analysis, or an external effect.\n\n## Critical Context\n- Project verification code: `KIRA_58afe810e56f`.\n- Consolidated fixture units: 25–29.\n- Observation range per unit: 0–59.\n- All observations: local read-only background detail; no external effect pending.\n- No shell execution is currently running.",
+        "execution_statuses": [
+          "completed"
+        ],
+        "restart_reply": "The project verification code is `KIRA_58afe810e56f`.",
+        "persisted_messages": 84
+      },
+      "seconds": 15.825757240876555,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.8052107617259026,
+          "usage": {
+            "prompt_tokens": 6977,
+            "completion_tokens": 463,
+            "total_tokens": 7440,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 8.637106681242585
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.9284458812326193,
+          "usage": {
+            "prompt_tokens": 13809,
+            "completion_tokens": 47,
+            "total_tokens": 13856,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.4926452320069075
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.599246248602867,
+          "usage": {
+            "cached_tokens": 13312,
+            "prompt_tokens": 13874,
+            "completion_tokens": 35,
+            "total_tokens": 13909,
+            "prompt_tokens_details": {
+              "cached_tokens": 13312
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 3.0061161760240793
+        }
+      ]
+    },
+    {
+      "category": "provider_reload",
+      "repeat": 0,
+      "status": "passed",
+      "evidence": {
+        "ledger_preserved": true,
+        "admission_preserved": true,
+        "conversation_replaced": true,
+        "original_messages": 4,
+        "execution_statuses": [
+          "completed",
+          "completed"
+        ]
+      },
+      "seconds": 6.758705735206604,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.9059670493006706,
+          "usage": {
+            "prompt_tokens": 506,
+            "completion_tokens": 51,
+            "total_tokens": 557,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 3.518272504210472
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.430000664666295,
+          "usage": {
+            "cached_tokens": 256,
+            "prompt_tokens": 3300,
+            "completion_tokens": 14,
+            "total_tokens": 3314,
+            "prompt_tokens_details": {
+              "cached_tokens": 256
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.5668290704488754
+        }
+      ]
+    },
+    {
+      "category": "job_busy",
+      "repeat": 0,
+      "status": "passed",
+      "evidence": {
+        "same_program": true,
+        "duplicate_wake_requests": 0,
+        "reply": "The background probe settled with status **completed**. The exact verification code is:\n\n**KIRA_a0cbf7ee7863**\n\nDetails from the result payload:\n- channel: direct\n- chat_id: local\n- job_id: probe-KIRA_a0cbf7ee7863\n- label: background probe\n- result: KIRA_a0cbf7ee7863\n- status: completed",
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 5.474571071565151,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.626903474330902,
+          "usage": {
+            "prompt_tokens": 701,
+            "completion_tokens": 61,
+            "total_tokens": 762,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "settle_background"
+          ],
+          "seconds": 2.4432089179754257
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.0039539318531752,
+          "usage": {
+            "cached_tokens": 256,
+            "prompt_tokens": 939,
+            "completion_tokens": 157,
+            "total_tokens": 1096,
+            "prompt_tokens_details": {
+              "cached_tokens": 256
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.7656037006527185
+        }
+      ]
+    },
+    {
+      "category": "job_idle",
+      "repeat": 0,
+      "status": "passed",
+      "evidence": {
+        "deliveries": 1,
+        "synthetic_user_messages": 0,
+        "reply": "The background task has completed:\n\n- **Task ID:** `probe-KIRA_3c61d3c33ec8`\n- **Label:** background probe\n- **Profile:** research\n- **Status:** completed\n- **Result:** `KIRA_3c61d3c33ec8`\n\nThe task finished successfully with the result value shown above.",
+        "execution_statuses": [
+          "completed",
+          "completed"
+        ]
+      },
+      "seconds": 9.945495849475265,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.9705579988658428,
+          "usage": {
+            "prompt_tokens": 498,
+            "completion_tokens": 387,
+            "total_tokens": 885,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 6.036869619041681
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.9833813589066267,
+          "usage": {
+            "prompt_tokens": 1062,
+            "completion_tokens": 237,
+            "total_tokens": 1299,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 3.5251280795782804
+        }
+      ]
+    },
+    {
+      "category": "job_restart",
+      "repeat": 0,
+      "status": "passed",
+      "evidence": {
+        "pending_before_restart": "pending",
+        "accepted_program_before_restart": "pr_176c0e0565f14d049edad858143cf0d6",
+        "execution_statuses": [],
+        "restart_reply": "**Background Task Result**\n\n- **Job ID:** `probe-KIRA_8ecd24dccf14`\n- **Label:** background probe\n- **Channel:** direct (chat: local)\n- **Session:** `verify:main`\n- **Status:** completed\n- **Result:** `KIRA_8ecd24dccf14`\n\nThe background probe task has finished successfully.",
+        "consumed": true,
+        "duplicate_publish": false,
+        "same_accepted_program": true
+      },
+      "seconds": 3.285261267796159,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.749777514487505,
+          "usage": {
+            "prompt_tokens": 717,
+            "completion_tokens": 152,
+            "total_tokens": 869,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.6361940633505583
+        }
+      ]
+    },
+    {
+      "category": "background_spawn",
+      "repeat": 0,
+      "status": "passed",
+      "evidence": {
+        "real_child_model": true,
+        "notice": {
+          "created_at": "2026-10-19T17:47:36.780997+00:00",
+          "fact": {
+            "channel": "direct",
+            "chat_id": "local",
+            "job_id": "sub_0b4c3f61aad6",
+            "label": "read-code",
+            "profile": "research",
+            "result": {
+              "result": "The file `/tmp/kirakira-step-mainchain-20261020-direct/background_spawn-0/child-code.txt` contains exactly:\n\n```\nKIRA_fb6596536ddf\n```\n\n**Result:** The exact, unaltered content is a single line: `KIRA_fb6596536ddf` (17 characters, likely with a trailing newline). The file was read using the `read_file` tool and was not modified.",
+              "session_key": "verify:main:sub_0b4c3f61aad6",
+              "status": "completed",
+              "task_id": "sub_0b4c3f61aad6",
+              "tools_used": [
+                "read_file"
+              ]
+            },
+            "session_key": "verify:main"
+          },
+          "message_id": "4d3c8d5031274f9da7d5125f0e381b8a",
+          "program_id": "pr_63051d9d1ef54743b430d071bab2d545",
+          "status": "consumed"
+        },
+        "reply": "The background task has completed. Here's the result from the background child:\n\n**Status:** `completed`\n**Tools used:** `read_file`\n**Task ID:** `sub_0b4c3f61aad6`\n\n**The exact code from `child-code.txt`:**\n\n```\nKIRA_fb6596536ddf\n```\n\nThe background research child read the file and reported its content verbatim as a single line: `KIRA_fb6596536ddf` (17 characters, likely with a trailing newline). The file was read using the `read_file` tool and was not modified.",
+        "execution_statuses": [
+          "completed",
+          "completed"
+        ]
+      },
+      "seconds": 16.892863992601633,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 3.868434887379408,
+          "usage": {
+            "prompt_tokens": 1124,
+            "completion_tokens": 170,
+            "total_tokens": 1294,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "spawn"
+          ],
+          "seconds": 5.899563603103161
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.7566860411316156,
+          "usage": {
+            "cached_tokens": 768,
+            "prompt_tokens": 1363,
+            "completion_tokens": 47,
+            "total_tokens": 1410,
+            "prompt_tokens_details": {
+              "cached_tokens": 768
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "await_background"
+          ],
+          "seconds": 2.20857054553926
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.9747676253318787,
+          "usage": {
+            "prompt_tokens": 996,
+            "completion_tokens": 70,
+            "total_tokens": 1066,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_file"
+          ],
+          "seconds": 1.6807021256536245
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.245206631720066,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 1089,
+            "completion_tokens": 309,
+            "total_tokens": 1398,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 5.09962079487741
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.75808559730649,
+          "usage": {
+            "cached_tokens": 1024,
+            "prompt_tokens": 1725,
+            "completion_tokens": 166,
+            "total_tokens": 1891,
+            "prompt_tokens_details": {
+              "cached_tokens": 1024
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 3.8395864870399237
+        }
+      ]
+    },
+    {
+      "category": "job_resume",
+      "repeat": 0,
+      "status": "passed",
+      "evidence": {
+        "program_id": "pr_39c7ebce236d4fcd8211a5f9d0f14328",
+        "claimed_before_restart": true,
+        "execution_statuses": [
+          "interrupted"
+        ],
+        "resume_reply": "**Background verification code: `KIRA_4f107ada9318`**\n\n**Supporting evidence from the recorded task result:**\n\nThe settled background task (job `probe-KIRA_4f107ada9318`, label \"background probe\") returned this result payload:\n\n```json\n{\n  \"result\": \"KIRA_4f107ada9318\",\n  \"status\": \"completed\"\n}\n```\n\nThis supports the reported code in two ways:\n\n1. **The code is stated directly in the result field.** The task's actual recorded result value is the string `KIRA_4f107ada9318`, matching the verification code exactly.\n2. **The task is confirmed complete.** The `status` field is `completed`, meaning the probe ran to conclusion and its output is a settled, final result rather than a pending or failed run.\n\nNote that this is task result data from the background system, not a claim I verified independently through external tools — the code comes straight from the recorded task output itself.",
+        "same_program_after_restart": true
+      },
+      "seconds": 11.086696913465858,
+      "requests": [
+        {
+          "status": "CancelledError",
+          "streaming": true,
+          "first_delta_seconds": 0.8233101833611727,
+          "http_status": null,
+          "seconds": 0.8267417997121811
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 3.7290579956024885,
+          "usage": {
+            "prompt_tokens": 719,
+            "completion_tokens": 339,
+            "total_tokens": 1058,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 7.954772096127272
+        }
+      ]
+    },
+    {
+      "category": "job_failed",
+      "repeat": 0,
+      "status": "passed",
+      "evidence": {
+        "failed_result_reported": true,
+        "reply": "## Background Task Report\n\n**Task:** `probe-KIRA_f4f049682ea1` — label \"background probe\", profile `research`\n- Channel: `direct` / chat `local`\n- Session key: `verify:main`\n\n**Status:** `failed`\n\n**Exact diagnostic (verbatim result field):**\n```\nFAILURE_KIRA_f4f049682ea1\n```\n\n**Notes:**\n- This task did **not** succeed — the settled result is a failure, and the only recorded diagnostic is the identifier string above.\n- No error message, exit code, stack trace, or cause is present in the task result, so no further diagnosis can be inferred from the data on hand.\n- No claim of completion should be attributed to this job; it must be treated as failed and, if needed, re-run or investigated with additional logging.",
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 11.009269578382373,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 3.495290834456682,
+          "usage": {
+            "prompt_tokens": 661,
+            "completion_tokens": 506,
+            "total_tokens": 1167,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 10.259759932756424
+        }
+      ]
+    },
+    {
+      "category": "jobs_reload",
+      "repeat": 0,
+      "status": "passed",
+      "evidence": {
+        "ledger_preserved": true,
+        "jobs_replaced": true,
+        "tool_contributions_owned": true,
+        "reply": "The recorded background task result:\n\n- **Verification code:** `KIRA_4c549ab71103`\n- **Job ID:** `probe-KIRA_4c549ab71103`\n- **Label:** background probe\n- **Status:** completed\n- **Session key:** verify:main\n- **Channel/Chat ID:** direct / local\n\nThe verification code comes directly from the task's recorded `result` field (`\"result\": \"KIRA_4c549ab71103\"`), reported exactly as stored.",
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 6.063248347491026,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 3.664156360551715,
+          "usage": {
+            "prompt_tokens": 1342,
+            "completion_tokens": 185,
+            "total_tokens": 1527,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 5.709052074700594
+        }
+      ]
+    },
+    {
+      "category": "parallel_reads",
+      "repeat": 1,
+      "status": "passed",
+      "evidence": {
+        "peak_active": 4,
+        "reads": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "writes": [
+          3396
+        ],
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 9.419753283262253,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.8849436603486538,
+          "usage": {
+            "prompt_tokens": 825,
+            "completion_tokens": 203,
+            "total_tokens": 1028,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "lookup",
+            "lookup",
+            "lookup",
+            "lookup",
+            "lookup",
+            "lookup",
+            "lookup",
+            "lookup"
+          ],
+          "seconds": 2.730449855327606
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 3.686450196430087,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 1152,
+            "completion_tokens": 77,
+            "total_tokens": 1229,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "save"
+          ],
+          "seconds": 4.520687449723482
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.0053000543266535,
+          "usage": {
+            "cached_tokens": 768,
+            "prompt_tokens": 1248,
+            "completion_tokens": 43,
+            "total_tokens": 1291,
+            "prompt_tokens_details": {
+              "cached_tokens": 768
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 1.711319051682949
+        }
+      ]
+    },
+    {
+      "category": "retry_after_effect",
+      "repeat": 1,
+      "status": "passed",
+      "evidence": {
+        "effect_count": 1,
+        "injected": true,
+        "recovery_statuses": [
+          "retrying",
+          "recovered"
+        ],
+        "reply": "Committed identifier: `KIRA_b8d2bf70f0fd`",
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 3.0692513696849346,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.8299540020525455,
+          "usage": {
+            "prompt_tokens": 768,
+            "completion_tokens": 55,
+            "total_tokens": 823,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "write_once"
+          ],
+          "seconds": 1.4143574964255095
+        },
+        {
+          "status": "RetryableModelError",
+          "streaming": true,
+          "http_status": null,
+          "injected": true,
+          "seconds": 1.086108386516571e-05
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.010291948914528,
+          "usage": {
+            "cached_tokens": 256,
+            "prompt_tokens": 850,
+            "completion_tokens": 19,
+            "total_tokens": 869,
+            "prompt_tokens_details": {
+              "cached_tokens": 256
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 1.2848449759185314
+        }
+      ]
+    },
+    {
+      "category": "deferred_search",
+      "repeat": 1,
+      "status": "passed",
+      "evidence": {
+        "calls": [
+          "search",
+          "lookup"
+        ],
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 8.345024472102523,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.9148099087178707,
+          "usage": {
+            "prompt_tokens": 784,
+            "completion_tokens": 75,
+            "total_tokens": 859,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "tool_search"
+          ],
+          "seconds": 1.6666708160191774
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "usage": {
+            "prompt_tokens": 965,
+            "completion_tokens": 35,
+            "total_tokens": 1000,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "secret_lookup"
+          ],
+          "seconds": 2.4301869738847017
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 3.5545997507870197,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 1028,
+            "completion_tokens": 38,
+            "total_tokens": 1066,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 3.9360561594367027
+        }
+      ]
+    },
+    {
+      "category": "tool_error_repair",
+      "repeat": 1,
+      "status": "passed",
+      "evidence": {
+        "calls": [
+          "v1",
+          "v2"
+        ],
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 7.194277657195926,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.9094488676637411,
+          "usage": {
+            "prompt_tokens": 730,
+            "completion_tokens": 49,
+            "total_tokens": 779,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_version"
+          ],
+          "seconds": 1.4965611528605223
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.0352548025548458,
+          "usage": {
+            "cached_tokens": 256,
+            "prompt_tokens": 808,
+            "completion_tokens": 63,
+            "total_tokens": 871,
+            "prompt_tokens_details": {
+              "cached_tokens": 256
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_version"
+          ],
+          "seconds": 1.7190704811364412
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.1890884693711996,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 895,
+            "completion_tokens": 125,
+            "total_tokens": 1020,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 3.5859414413571358
+        }
+      ]
+    },
+    {
+      "category": "files_restart",
+      "repeat": 1,
+      "status": "passed",
+      "evidence": {
+        "first_reply": "Done.\n\n- **Action:** Wrote to `probe.txt` (17 bytes)\n- **Verified content:** `KIRA_eb79379f1360`\n\nThe `read_file` result matches exactly what was written — no extra characters, trailing newline, or whitespace.",
+        "execution_statuses": [
+          "completed"
+        ],
+        "restart_reply": "The exact contents of `probe.txt`:\n\n```\nKIRA_eb79379f1360\n```\n\nThe file contains the single string `KIRA_eb79379f1360` (17 bytes), unchanged from what was written earlier.",
+        "persisted_messages": 4
+      },
+      "seconds": 9.002301532775164,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.1046092212200165,
+          "usage": {
+            "prompt_tokens": 871,
+            "completion_tokens": 85,
+            "total_tokens": 956,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "write_file"
+          ],
+          "seconds": 1.9647780060768127
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.819233737885952,
+          "usage": {
+            "prompt_tokens": 978,
+            "completion_tokens": 35,
+            "total_tokens": 1013,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_file"
+          ],
+          "seconds": 1.1630318984389305
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.8292499221861362,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 1036,
+            "completion_tokens": 60,
+            "total_tokens": 1096,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 1.5248249750584364
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.7529606726020575,
+          "usage": {
+            "cached_tokens": 256,
+            "prompt_tokens": 1125,
+            "completion_tokens": 45,
+            "total_tokens": 1170,
+            "prompt_tokens_details": {
+              "cached_tokens": 256
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_file"
+          ],
+          "seconds": 1.1807774566113949
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.340880785137415,
+          "usage": {
+            "cached_tokens": 768,
+            "prompt_tokens": 1193,
+            "completion_tokens": 52,
+            "total_tokens": 1245,
+            "prompt_tokens_details": {
+              "cached_tokens": 768
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 1.9321653507649899
+        }
+      ]
+    },
+    {
+      "category": "stream_cancel",
+      "repeat": 1,
+      "status": "passed",
+      "evidence": {
+        "cancel_drain_ms": 4.0580108761787415,
+        "execution_statuses": [
+          "completed",
+          "interrupted"
+        ]
+      },
+      "seconds": 2.8266339153051376,
+      "requests": [
+        {
+          "status": "CancelledError",
+          "streaming": true,
+          "first_delta_seconds": 1.2130919117480516,
+          "http_status": null,
+          "seconds": 1.2141700834035873
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.7544984724372625,
+          "usage": {
+            "prompt_tokens": 599,
+            "completion_tokens": 40,
+            "total_tokens": 639,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 1.2412712797522545
+        }
+      ]
+    },
+    {
+      "category": "compaction_restart",
+      "repeat": 1,
+      "status": "passed",
+      "evidence": {
+        "generation": 1,
+        "source_messages_preserved": 80,
+        "summary_sha256": "9bf508615f7c2bc80dce22907f3488b94397b0128cda81d7acc45e4c6082e62b",
+        "summary": "## Goal\nNone explicitly stated in the provided closed history.\n\n## Constraints & Preferences\nNone specified.\n\n## Progress\n### Done\nRecorded project verification code KIRA_a9c8ba4207a4. Recorded local read-only background observations for fixture units 25, 26, 27, 28, and 29 (observations 0–59 per unit); no external effects were pending.\n\n### In Progress\nNone.\n\n### Blocked\nNone.\n\n## Key Decisions\nNone.\n\n## Next Steps\nNone.\n\n## Critical Context\nProject verification code: KIRA_a9c8ba4207a4. All received fixture observations are local read-only background details with no external effect pending.",
+        "execution_statuses": [
+          "completed"
+        ],
+        "restart_reply": "KIRA_a9c8ba4207a4",
+        "persisted_messages": 84
+      },
+      "seconds": 26.307574024423957,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 4.9131769593805075,
+          "usage": {
+            "prompt_tokens": 6987,
+            "completion_tokens": 1054,
+            "total_tokens": 8041,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 17.428575491532683
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.797209495678544,
+          "usage": {
+            "prompt_tokens": 13691,
+            "completion_tokens": 84,
+            "total_tokens": 13775,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 4.0328214056789875
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.9518505297601223,
+          "usage": {
+            "cached_tokens": 13056,
+            "prompt_tokens": 13793,
+            "completion_tokens": 78,
+            "total_tokens": 13871,
+            "prompt_tokens_details": {
+              "cached_tokens": 13056
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 4.097289903089404
+        }
+      ]
+    },
+    {
+      "category": "provider_reload",
+      "repeat": 1,
+      "status": "passed",
+      "evidence": {
+        "ledger_preserved": true,
+        "admission_preserved": true,
+        "conversation_replaced": true,
+        "original_messages": 4,
+        "execution_statuses": [
+          "completed",
+          "completed"
+        ]
+      },
+      "seconds": 5.420840792357922,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.7439510803669691,
+          "usage": {
+            "prompt_tokens": 505,
+            "completion_tokens": 36,
+            "total_tokens": 541,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 1.2256960719823837
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.8913112338632345,
+          "usage": {
+            "cached_tokens": 256,
+            "prompt_tokens": 3283,
+            "completion_tokens": 44,
+            "total_tokens": 3327,
+            "prompt_tokens_details": {
+              "cached_tokens": 256
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 3.3889383114874363
+        }
+      ]
+    },
+    {
+      "category": "job_busy",
+      "repeat": 1,
+      "status": "passed",
+      "evidence": {
+        "same_program": true,
+        "duplicate_wake_requests": 0,
+        "reply": "Background task settled: **job_id** `probe-KIRA_ee4550c1289b`, status **completed**, verification code **KIRA_ee4550c1289b**.",
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 5.167071180418134,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.683128599077463,
+          "usage": {
+            "prompt_tokens": 701,
+            "completion_tokens": 42,
+            "total_tokens": 743,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "settle_background"
+          ],
+          "seconds": 3.114341387525201
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.8006463907659054,
+          "usage": {
+            "prompt_tokens": 920,
+            "completion_tokens": 68,
+            "total_tokens": 988,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 1.692297801375389
+        }
+      ]
+    },
+    {
+      "category": "job_idle",
+      "repeat": 1,
+      "status": "passed",
+      "evidence": {
+        "deliveries": 1,
+        "synthetic_user_messages": 0,
+        "reply": "后台任务已完成：\n\n- **任务标签**：background probe\n- **Job ID**：`probe-KIRA_a3cde56e8527`\n- **结果标识**：`KIRA_a3cde56e8527`\n- **状态**：completed\n\n任务已正常结束，无需进一步处理。",
+        "execution_statuses": [
+          "completed",
+          "completed"
+        ]
+      },
+      "seconds": 9.162785897031426,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 3.6723327599465847,
+          "usage": {
+            "prompt_tokens": 498,
+            "completion_tokens": 163,
+            "total_tokens": 661,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 6.298610538244247
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.8614415358752012,
+          "usage": {
+            "prompt_tokens": 834,
+            "completion_tokens": 132,
+            "total_tokens": 966,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.5175398364663124
+        }
+      ]
+    },
+    {
+      "category": "job_restart",
+      "repeat": 1,
+      "status": "passed",
+      "evidence": {
+        "pending_before_restart": "pending",
+        "accepted_program_before_restart": "pr_59d2372716d44efe904919f9b5a3c88b",
+        "execution_statuses": [],
+        "restart_reply": "后台任务结果如下：\n\n- **任务 ID**：probe-KIRA_2d7aad06f2ed\n- **标签**：background probe\n- **Profile**：research\n- **频道 / 会话**：direct / local\n- **状态**：completed\n- **结果内容**：`KIRA_2d7aad06f2ed`\n\n该后台探测任务已正常结束，返回结果为对应的任务标识 `KIRA_2d7aad06f2ed`，无错误信息。",
+        "consumed": true,
+        "duplicate_publish": false,
+        "same_accepted_program": true
+      },
+      "seconds": 4.884707804769278,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.7938684467226267,
+          "usage": {
+            "prompt_tokens": 721,
+            "completion_tokens": 181,
+            "total_tokens": 902,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 4.2664998304098845
+        }
+      ]
+    },
+    {
+      "category": "background_spawn",
+      "repeat": 1,
+      "status": "passed",
+      "evidence": {
+        "real_child_model": true,
+        "notice": {
+          "created_at": "2026-10-19T17:49:48.637174+00:00",
+          "fact": {
+            "channel": "direct",
+            "chat_id": "local",
+            "job_id": "sub_f87c5cefb49c",
+            "label": "read-child-code",
+            "profile": "research",
+            "result": {
+              "result": "The file `child-code.txt` exists in the workspace. Its exact, verbatim contents:\n\n```\nKIRA_f878bd3f9db8\n```\n\n**Details:**\n- File path: `child-code.txt` (in workspace root `/tmp/kirakira-step-mainchain-20261020-direct/background_spawn-1`)\n- Total length: 17 characters\n- Contents: the string `KIRA_f878bd3f9db8` on a single line\n- No leading/trailing whitespace or additional line breaks were observed beyond the single line returned by the tool",
+              "session_key": "verify:main:sub_f87c5cefb49c",
+              "status": "completed",
+              "task_id": "sub_f87c5cefb49c",
+              "tools_used": [
+                "read_file"
+              ]
+            },
+            "session_key": "verify:main"
+          },
+          "message_id": "5f5791d0436d42d7842f4968474b1731",
+          "program_id": "pr_972e285b17e344bd9e9f76e63ad5bb08",
+          "status": "consumed"
+        },
+        "reply": "The background child completed successfully. Here's the code it returned from `child-code.txt`:\n\n```\nKIRA_f878bd3f9db8\n```\n\n**Background task details:**\n- **Label:** read-child-code\n- **Profile:** research\n- **Status:** completed\n- **Tools used by child:** read_file\n- **File location:** `child-code.txt` in the workspace root\n\nThe child read the file (I did not open it myself) and reported the exact contents as the single-line string `KIRA_f878bd3f9db8` (17 characters), with no leading/trailing whitespace or additional line breaks.",
+        "execution_statuses": [
+          "completed",
+          "completed"
+        ]
+      },
+      "seconds": 13.64547911286354,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.9912203159183264,
+          "usage": {
+            "prompt_tokens": 1124,
+            "completion_tokens": 147,
+            "total_tokens": 1271,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "spawn"
+          ],
+          "seconds": 2.687201162800193
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.9116703122854233,
+          "usage": {
+            "cached_tokens": 768,
+            "prompt_tokens": 1338,
+            "completion_tokens": 42,
+            "total_tokens": 1380,
+            "prompt_tokens_details": {
+              "cached_tokens": 768
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "await_background"
+          ],
+          "seconds": 2.3571325205266476
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.0193947311490774,
+          "usage": {
+            "prompt_tokens": 995,
+            "completion_tokens": 33,
+            "total_tokens": 1028,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_file"
+          ],
+          "seconds": 1.204248946160078
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.759680977091193,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 1052,
+            "completion_tokens": 167,
+            "total_tokens": 1219,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 4.832322355359793
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.005814053118229,
+          "usage": {
+            "cached_tokens": 1024,
+            "prompt_tokens": 1718,
+            "completion_tokens": 281,
+            "total_tokens": 1999,
+            "prompt_tokens_details": {
+              "cached_tokens": 1024
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 4.604938738048077
+        }
+      ]
+    },
+    {
+      "category": "job_resume",
+      "repeat": 1,
+      "status": "passed",
+      "evidence": {
+        "program_id": "pr_0eb9069551d2434d96a73c24ad65ebc3",
+        "claimed_before_restart": true,
+        "execution_statuses": [
+          "interrupted"
+        ],
+        "resume_reply": "**Background Verification Code: `KIRA_c4dd834c6b21`**\n\n**How the recorded task result supports it:**\n\nThe task result for the background probe (`job_id: probe-KIRA_c4dd834c6b21`, label: \"background probe\", profile: \"research\") contains a `result` object with two fields:\n\n- `status`: **\"completed\"** — the probe ran to completion without failure or interruption.\n- `result`: **\"KIRA_c4dd834c6b21\"** — the probe echoed back this exact string as its output.\n\nThe verification code `KIRA_c4dd834c6b21` is confirmed on two levels:\n\n1. **Identity match**: The `result` payload value is exactly `KIRA_c4dd834c6b21`, matching the code embedded in the job ID (`probe-KIRA_c4dd834c6b21`). The probe returned the token it was issued.\n2. **Completion status**: The status `completed` means the probe was not aborted mid-run; the echoed code is a genuine, final result rather than a partial or simulated one.\n\nIn short, the probe was issued the code `KIRA_c4dd834c6b21`, ran as a research-profile background task on channel `direct` (session `verify:main`), and returned that same code as its result with a completed status — verifying the background verification pipeline end-to-end.",
+        "same_program_after_restart": true
+      },
+      "seconds": 9.492992224171758,
+      "requests": [
+        {
+          "status": "CancelledError",
+          "streaming": true,
+          "first_delta_seconds": 1.0422528441995382,
+          "http_status": null,
+          "seconds": 1.0434375368058681
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.9683967009186745,
+          "usage": {
+            "prompt_tokens": 721,
+            "completion_tokens": 466,
+            "total_tokens": 1187,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 7.235414799302816
+        }
+      ]
+    },
+    {
+      "category": "job_failed",
+      "repeat": 1,
+      "status": "passed",
+      "evidence": {
+        "failed_result_reported": true,
+        "reply": "Background task report:\n\n- **Job ID:** probe-KIRA_8a6d2be27668\n- **Label:** background probe\n- **Profile:** research\n- **Session key:** verify:main\n- **Status:** failed\n\n**Exact diagnostic / result:**\n```\nFAILURE_KIRA_8a6d2be27668\n```\n\nThe task did **not** succeed — its settled status is `failed`, with the diagnostic string above as the exact result payload. No additional details beyond these fields were returned by the task.",
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 4.102615779265761,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.9856276530772448,
+          "usage": {
+            "prompt_tokens": 665,
+            "completion_tokens": 236,
+            "total_tokens": 901,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 3.7807187158614397
+        }
+      ]
+    },
+    {
+      "category": "jobs_reload",
+      "repeat": 1,
+      "status": "passed",
+      "evidence": {
+        "ledger_preserved": true,
+        "jobs_replaced": true,
+        "tool_contributions_owned": true,
+        "reply": "The recorded background task (`job_id: probe-KIRA_16f309bfcb79`, label \"background probe\") finished with:\n\n- **status:** completed\n- **verification code / result:** `KIRA_16f309bfcb79`",
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 2.981457883492112,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.4800114091485739,
+          "usage": {
+            "prompt_tokens": 1342,
+            "completion_tokens": 96,
+            "total_tokens": 1438,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.59550504013896
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "passed": 30,
+    "total": 30,
+    "groups": {
+      "background_spawn": {
+        "passed": 2,
+        "total": 2
+      },
+      "compaction_restart": {
+        "passed": 2,
+        "total": 2
+      },
+      "deferred_search": {
+        "passed": 2,
+        "total": 2
+      },
+      "files_restart": {
+        "passed": 2,
+        "total": 2
+      },
+      "job_busy": {
+        "passed": 2,
+        "total": 2
+      },
+      "job_failed": {
+        "passed": 2,
+        "total": 2
+      },
+      "job_idle": {
+        "passed": 2,
+        "total": 2
+      },
+      "job_restart": {
+        "passed": 2,
+        "total": 2
+      },
+      "job_resume": {
+        "passed": 2,
+        "total": 2
+      },
+      "jobs_reload": {
+        "passed": 2,
+        "total": 2
+      },
+      "parallel_reads": {
+        "passed": 2,
+        "total": 2
+      },
+      "provider_reload": {
+        "passed": 2,
+        "total": 2
+      },
+      "retry_after_effect": {
+        "passed": 2,
+        "total": 2
+      },
+      "stream_cancel": {
+        "passed": 2,
+        "total": 2
+      },
+      "tool_error_repair": {
+        "passed": 2,
+        "total": 2
+      }
+    },
+    "model_requests": 76,
+    "completed_requests": 70,
+    "usage": {
+      "prompt_tokens": 134121,
+      "completion_tokens": 9068,
+      "total_tokens": 143189,
+      "cached_tokens": 40704
+    },
+    "case_latency_seconds": {
+      "p50": 8.345024472102523,
+      "p95": 16.892863992601633
+    },
+    "model_latency_seconds": {
+      "p50": 2.5175398364663124,
+      "p95": 8.637106681242585
+    }
+  }
+}

@@ -10,6 +10,7 @@ from plugins.ledger.contract import SESSIONS
 from plugins.scheduler.contract import SCHEDULER
 from plugins.scheduler.service import SchedulerService
 from plugins.tools.contract import TOOLS
+from plugins.tools.registry import ToolRegistry
 
 inject = (BUS, TOOLS, CONVERSATION, SESSIONS, EXECUTIONS)
 provides = (SCHEDULER,)
@@ -22,15 +23,18 @@ async def apply(ctx):
     pipeline = ctx.get(CONVERSATION)
     session_manager = ctx.get(SESSIONS)
     execution_store = ctx.get(EXECUTIONS)
+    staging = ToolRegistry()
     scheduler = SchedulerService(
         workdir / ".kirakira" / "schedules.json",
         bus=bus,
-        tools=registry,
+        tools=staging,
         pipeline=pipeline,
         sessions=session_manager,
         executions=execution_store,
     )
+    scheduler.tools = registry
     await on_close(ctx, lambda: scheduler.shutdown())
+    await registry.install_owned(ctx, staging)
 
     await ctx.provide(SCHEDULER, scheduler)
 

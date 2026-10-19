@@ -12,6 +12,7 @@ from plugins.delivery import provider as delivery_provider
 from plugins.execution import provider as execution_provider
 from plugins.extensions import provider as extensions
 from plugins.ledger import provider as ledger_provider
+from plugins.jobs import provider as jobs_provider
 from plugins.mcp import provider as mcp_provider
 from plugins.models import provider as model_provider
 from plugins.proactive_flow import provider as proactive_provider
@@ -29,6 +30,7 @@ from plugins.tools import provider as tool_provider
 PROVIDERS = (
     ("transport", transport),
     ("ledger", ledger_provider),
+    ("jobs", jobs_provider),
     ("projects", project_provider),
     ("models", model_provider),
     ("memory", memory_provider),

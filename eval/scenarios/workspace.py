@@ -43,21 +43,21 @@ async def verify(args):
             for p in [
                 *Path("plugins/projects").glob("*.py"),
                 *Path("plugins/working_directory").glob("*.py"),
-                Path("bootstrap/workspace.py"),
-                Path("session/owner_store.py"),
-                Path("session/manager.py"),
-                Path("agent/core/reasoner.py"),
-                Path("agent/core/tool_io.py"),
-                Path("agent/core/pipeline.py"),
-                Path("agent/control/service.py"),
-                Path("agent/control/protocol/models.py"),
-                Path("agent/tools/builtins.py"),
-                Path("agent/tools/registry.py"),
-                Path("agent/model_runtime/context_compaction.py"),
-                Path("agent/subagent.py"),
+                Path("plugins/projects/factory.py"),
+                Path("plugins/ledger/owner_store.py"),
+                Path("plugins/ledger/manager.py"),
+                Path("plugins/react/reasoner.py"),
+                Path("plugins/tools/invoker.py"),
+                Path("plugins/reply_program/service.py"),
+                Path("plugins/control/service.py"),
+                Path("plugins/control/protocol/models.py"),
+                Path("plugins/tools/builtins.py"),
+                Path("plugins/tools/registry.py"),
+                Path("plugins/models/context_compaction.py"),
+                Path("plugins/subagent/service.py"),
                 Path("bootstrap/runtime.py"),
-                Path("bootstrap/control.py"),
-                Path("bootstrap/tools.py"),
+                Path("plugins/control/provider.py"),
+                Path("plugins/tools/provider.py"),
                 Path("infra/channels/web_chat_channel.py"),
                 Path("frontend/web_ui.py"),
                 Path("frontend/workspace_ui.py"),
@@ -182,7 +182,7 @@ async def verify(args):
                     )
                     assert runtime.working_directories.snapshot(key).path == str(a)
                     recreated = await runtime.process_direct(
-                        "Read relative path created.txt and report its exact contents.",
+                        "Call read_file with path exactly created.txt (a relative path), then report its exact contents.",
                         session_key=key,
                         skip_memory_retrieval=True,
                         skip_post_memory=True,
@@ -190,6 +190,7 @@ async def verify(args):
                     row["delete_recreate_tool_results"] = completed_tools(runtime)
                     assert any(
                         t["name"] == "read_file"
+                        and t["arguments"].get("path") == "created.txt"
                         and not t["is_error"]
                         and nonce in t["content"]
                         for t in row["delete_recreate_tool_results"]

@@ -1,0 +1,1279 @@
+{
+  "endpoint": "https://api.stepfun.com/step_plan/v1",
+  "model": "step-5-preview",
+  "billing_surface": "step_plan",
+  "reasoning_effort": "medium",
+  "python": "3.14.6",
+  "repeats": 3,
+  "concurrency": 3,
+  "streaming": true,
+  "fixture_type": "synthetic functional main-chain contracts",
+  "source_sha256": {
+    "eval/scenarios/core.py": "d3e34d600ca28e152aa8c3ba7c534f7fa1f235d17f1a45dfdae8bdfddf7e9dd6",
+    "agent/plugin_composition/__init__.py": "71afa64cc67c60956ec6383396ea61fe0febcb2d567e7039fde32186bccfbeda",
+    "agent/plugin_composition/config_input.py": "ffd823aac104cdef16b4948d017bcd83fab60fe4c383b2e3e39e59e5629f2e10",
+    "agent/plugin_composition/context.py": "f3c50d07969cd57a3f0bfffa7325c0729c2a496336aa23962d8d1958ee3db42f",
+    "agent/plugin_composition/credentials.py": "897dab5b4b32fa13af0df1cd37c885d11c97ca848693772b191490e51399ab09",
+    "agent/plugin_composition/diagnostics.py": "189dbebb245436d175e9a8cf7a7914aff85a3a69264966628c6bdce2c4f8ef98",
+    "agent/plugin_composition/effect.py": "0a10aa889694fced7006c295ec951ce5871783a54e542a867e5c6733a33a699c",
+    "agent/plugin_composition/endpoints.py": "2b11464b4db8b1e93fbe6e4f2266c716ae16e5403106df92e6d80d106f90ce31",
+    "agent/plugin_composition/events.py": "c67b14331d1bc17d50e8e838cf6d41860e53139797939ac30cb0842bf083ca8f",
+    "agent/plugin_composition/execution.py": "36abdd5cb5a6d7084b755064a41f9e31ed18336041f1aa0e840220f67b42f2ce",
+    "agent/plugin_composition/executor.py": "19cb557a33b0b528228efd13405bdc5ee7257b9dfa2a0718e820508ad5f6226c",
+    "agent/plugin_composition/host.py": "50a5d4fbf7b9465ef54262ec3e5bb056d6da1e113596b8eb8be894f331855ca8",
+    "agent/plugin_composition/model.py": "248be826cc8556668d8caf3377ea46d913f12781321a7dcf18ac245c8209a352",
+    "agent/plugin_composition/plugin_config.py": "7a6cf88539742cdabfcfe284cd89220a0802046b47decf22dbaf2bf04b49ca93",
+    "agent/plugin_composition/plugin_updates.py": "8a613d384809207701bc8aab7920848a29681677f8e50ca5d706c9532c5d8a94",
+    "agent/plugin_composition/requests.py": "f5a2b76e1c90ce0295397421ec7eb667dc688adb122e83292be1bcd115a6127b",
+    "agent/plugin_composition/runtime_catalog.py": "9dd3065a66f884f998ce6a804618d7a38a64556e8d99e1ce4874d2f7e8112e47",
+    "agent/plugin_composition/runtime_lifecycle.py": "a4076bbf81849b53b181dfaec6d98f8cff78e027cd7599d6fffadec86ba4cd8a",
+    "agent/plugin_composition/tasks.py": "622dd36270b31467d9702ef8862d7cddc47641b6a670e6ad1685f0ef93839fb7",
+    "agent/composition/__init__.py": "3f811dbb3c817cb92b1eb30f8a635ef6e1a05a54e0dfbdce3763acf1ec3e8e89",
+    "agent/composition/lifecycle.py": "d07502e61efd20a52d68fed68dbfdd5e219f9e00e48d2c42829f76a2ad1dfa23",
+    "agent/composition/root.py": "165ec862df469a0ada69e88c62b12b65f873cba0e802e84c7e031dc59d13dcef",
+    "agent/composition/scope.py": "e06f3ebe6a076ee991070b2ba00f1592ac0e5a270b27c909d911c1041426ebbe",
+    "agent/composition/services.py": "b60ca8445ca3d7aa06f365bc30828479aea4a55bc29ab82afda6c8446e9f6f57",
+    "bootstrap/__init__.py": "4ec62039094e52868eaa6e904eb440659fe1b846a1770d5aa0524944840c4e7d",
+    "bootstrap/app.py": "7c80eb393e0b8d553ee7bec419505ac3a85656ead24545c3cb49ef31e831e6b4",
+    "bootstrap/application.py": "dcad932372593cbefe17bcc14f9ae5780f288f0d7135a100de02e41357c7c54f",
+    "bootstrap/control_cli.py": "b2b95f11baf14fc2a66b82e4834e43cde606adc1d6b1a0b19d0fa20f863f8512",
+    "bootstrap/distribution.py": "4ca9813433018fb811a3530aa11585779245923e128b26d5887380d8ace859cb",
+    "bootstrap/main.py": "a13229b5d2fdcb7274031153c5616ba863383713035901241c22f7c243a43b79",
+    "bootstrap/runtime.py": "78f7384226e126564306480f9340e7e1d0f548385fe5362a28efd4634a188d07",
+    "bootstrap/runtime_readiness.py": "ae012bfcd538a15f4aea98602df6f58e2ecb847e49bef5e42bb230d4a6130358",
+    "bootstrap/setup_wizard.py": "e83d0bf9e56b564173bed25a32f2c03ac5ec135a43a0d306944c636552fd224f",
+    "plugins/reply_program/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "plugins/reply_program/contract.py": "c45ab194a419e0cc2479b6ec18a66bb5d032f0c1a4e9aa1a3117f5f3968db0c9",
+    "plugins/reply_program/default_provider.py": "1714ff460eed7f46aef3e188e63eb45b38c23d17af204a6db29acfdba305d826",
+    "plugins/reply_program/program.py": "8176cadf41ffa23e19ccc2f2eced438873119e16d7c504cf972fbce5ebe32b3c",
+    "plugins/reply_program/provider.py": "b8675ea77d3384709419273f73f89ed4053474fd32c4536bbd871a2135edc999",
+    "plugins/reply_program/scoped.py": "dc613a204c47912e7cba04beda694836326b2ea5073b36c39fe6e673b17e365e",
+    "plugins/reply_program/service.py": "e364dec4290851de2ff44ae0156ff73add5df7e3113d99e43c8baf8cdfbba04c",
+    "plugins/reply_program/store.py": "745cc7a8068e94bc009374c34b734fa6eee92b558d5547fad71e646137632234",
+    "plugins/react/__init__.py": "17b98bcee93a83aff56f6d77c7b822e6fa0fdadbc4eca27b890d31d0393bb4cd",
+    "plugins/react/contract.py": "f89028396a9655b99bed00fd383fd4c0e77e31e780263193719e895ba867e013",
+    "plugins/react/policy.py": "0fa79857c067979e739c599326011f66c48d687c4a33a433a8c7f8b7ab94064c",
+    "plugins/react/provider.py": "29cd78df822dc2f6373716a50e115233055496d34f03f4bed8142da21b1c0d95",
+    "plugins/react/reasoner.py": "c71ef66d5ae91c12e0dd6b57587cac5365fa969b155b5dc5d2d917770caf0ca8",
+    "plugins/react/result.py": "35d986871067d77250f649c55b79f4d5819212fad60f0fd1f4f121f95a36a047",
+    "plugins/models/__init__.py": "360a72a086a1c3c420807068e95bf72b708356f204fd9404966418726b58ca44",
+    "plugins/models/context_compaction.py": "5b604579cc2efa2a290a12a02a0b993a62f252a42031d91303412720d9313e5a",
+    "plugins/models/context_policy.py": "99d8ef2a6a7bb2bd95da0983ca266a435afaf96ebea048a1a12d4657d34842bb",
+    "plugins/models/contract.py": "7764fab37f2e3b487ceaeb535af2f545ff8f52f78fd45e11d9e5aabccd9c1035",
+    "plugins/models/execution_history.py": "7a2a5ad16017875180db9ef4682985abc645c42b438a21e7feaa1f1eb2552d68",
+    "plugins/models/fallback.py": "68aadc34057fc9b3a7e0a41f47b3e86c8f46816070d8984b0226b413c9555d40",
+    "plugins/models/invoker.py": "a63b1f88f32266003a497febf8291588fb14c827ebf9c1e8c2d07df2ceb4de7e",
+    "plugins/models/json_utils.py": "3cfddd1217e314d8dd5103fcab60cb7d757b394fe12d23f2b8b8e63f96890727",
+    "plugins/models/provider.py": "ca79ed740e3751038b610939761c5251c4ea6398d73220f95ab358b095f74b4a",
+    "plugins/models/query_compaction.py": "68ebc32044d78e92bad74725c1540e8656944768bbc150f3c7a9b2b366f23372",
+    "plugins/models/retry.py": "52d8ab8be3d489ac6ee109d5664a50606d19d106a8dde2b5afac207fe13b9c66",
+    "plugins/models/types.py": "8c1f204ca7dd89bea6d90096a15615cecd4dd60847baccf3bffeb21eb0b40537",
+    "plugins/models/usage.py": "b0ffe33275a37825204283f151c090d3377a33facfdef3eed1b99314927a5eba",
+    "plugins/sources/__init__.py": "b330bb54c4e9c1fba91f625a86e22cc8c57128857d43d6bffc6b6e2162e01aa3",
+    "plugins/sources/admission.py": "2cfafcacb22f0773b64ea773e66aa74db41b386d8d7447e85b68a5ff801c14bf",
+    "plugins/sources/contract.py": "61028a25e4ca325cc5380ba96d332b91efe2c4cd547a3b47cccf58f4c38970f1",
+    "plugins/sources/interrupt.py": "facbf8812eab250a179d35e265962aa3993fe889b32637978e42fa9f04890bdc",
+    "plugins/sources/provider.py": "e38f4287b46f7899d9e79779dbc9bff663b032aeb85a487bda785ec2b457502a",
+    "plugins/sources/service.py": "db6b1e3f5ddd97f19012424d910c6754c731348267253ab7276449f29be3a8c8",
+    "plugins/conversation/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "plugins/conversation/contract.py": "a233e1c44bcc07f9c37588829fe4a6ca7738da9fa6b0980638b88354b3b77a61",
+    "plugins/conversation/provider.py": "9c4da8ea2ae25142e5a8134f571fb694bdfd7c9deaea139f57daf11b1127d223",
+    "plugins/conversation/service.py": "02dbe107806bce0234a74a60dd6c66c37a1adb74e31d9b2b2dd5d0c112c84f4a",
+    "plugins/delivery/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "plugins/delivery/contract.py": "e2be1a74f1863a2c496c42f01707c7fa45906c113bfecaa20fa3081d9744ed88",
+    "plugins/delivery/provider.py": "2d2451074b4b9f7d7780c9ee3b9c281980462a54a5b136bf4ed20cc5f78406be",
+    "plugins/delivery/service.py": "e6a7345f76746fd2852f286e7f796f6d13b5c80d49f8d19bf32a2a678a7d4997",
+    "plugins/ledger/__init__.py": "d7e97de1784f61a5bd25672e61c697da826a3a51b84840165772e6ce9c4673a2",
+    "plugins/ledger/compaction_runtime.py": "c714117e459eac6d1917dbdc50cb3877efc820469a7e5f9e9e04e5f35a6d41ef",
+    "plugins/ledger/contract.py": "8a16b14ed5a6de622747166978afdfa8c15120def4cc790cb1223e628d350b0e",
+    "plugins/ledger/embedding_store.py": "462d4822633728ed98aaaf1db2e8c83ad836e3ae31e88c5e187aa7bd6684cf7f",
+    "plugins/ledger/inputs.py": "4127741115976e78c60b42a3a433b8e7940236779f46a499cc2661e25196ca5f",
+    "plugins/ledger/manager.py": "eee43da8d5c45a3e6e01a29edf85510070c0a09a5e152345c30f4e8f59138fd8",
+    "plugins/ledger/owner_store.py": "4463d99a849650e6a23f55da193e7a57505115204be99f8147fe06c7b176093a",
+    "plugins/ledger/provider.py": "d7c7995914ab81151d123029fd52904f22c8c13b2bbd40e88ea6210956d57848",
+    "plugins/ledger/publications.py": "de42ee42c460577f3ac4d436f84962cb05f0b318e9d1ec2b5cd9a5318a7c3e0a",
+    "plugins/ledger/turn_source.py": "2946ca0179795813603fe48e08a4ab3e38dd891d2847cd97b2d86e2422d2648b",
+    "plugins/jobs/__init__.py": "4eceb7b6f558e22b26effd12c7d6d54b993d6d43f204dd96eab49aaff82fbbb1",
+    "plugins/jobs/contract.py": "888585cdc2b71f488245b24d53f07d87ce736e582a6b2b1c0e2d4edd80c4b9ca",
+    "plugins/jobs/provider.py": "bf0d7d2546ea6c3b04ea3510124a42bb4618d7fa3747a6f93d02b52ef5b78ba5",
+    "plugins/jobs/service.py": "9bf03acffafa062db560615365f9a9d90d6c17f1dff4e208943f7f75d2753b3a",
+    "plugins/subagent/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "plugins/subagent/contract.py": "085c18d2255ec4721826b27b830a3384fb3f516a31d6557e1c7cdab952ec8f21",
+    "plugins/subagent/provider.py": "8c364fc150143ca247ab08fe2608645f7547745f14fcb79178be3453b9556028",
+    "plugins/subagent/service.py": "9589bd9d4b732658ca9c8e3fe2c488496886c42c869cd0f1bfb57711e3786225",
+    "plugins/tools/registry.py": "920b9d486c3248dd4c38bf4f7b147c1d32c2fe374f672d57d418828c9de06eaa",
+    "utils/async_tasks.py": "77f447eeb3babde6047ed78449fde68eeb0e6181095e319ada6fcaf998349fca"
+  },
+  "limitations": [
+    "not an external task benchmark",
+    "small latency sample; no provider speedup claim",
+    "unknown external side effects are not automatically replayed",
+    "cancelled streams may have unreported provider usage"
+  ],
+  "cases": [
+    {
+      "category": "job_restart",
+      "repeat": 0,
+      "status": "passed",
+      "evidence": {
+        "pending_before_restart": "pending",
+        "execution_statuses": [],
+        "restart_reply": "The background task (job_id: `probe-KIRA_4a3c34f10fab`, label \"background probe\") settled with status **completed**, and the exact code in its result is:\n\n**`KIRA_4a3c34f10fab`**",
+        "consumed": true,
+        "duplicate_publish": false
+      },
+      "seconds": 3.596922781318426,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.7180504240095615,
+          "usage": {
+            "prompt_tokens": 614,
+            "completion_tokens": 112,
+            "total_tokens": 726,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.7866075709462166
+        }
+      ]
+    },
+    {
+      "category": "job_busy",
+      "repeat": 0,
+      "status": "passed",
+      "evidence": {
+        "same_program": true,
+        "duplicate_wake_requests": 0,
+        "reply": "The background probe has settled. From the task result data, the verification code is:\n\n**`KIRA_37ae398e096b`**\n\nFor reference, the full background result showed:\n- job_id: `probe-KIRA_37ae398e096b`\n- result: `KIRA_37ae398e096b`\n- status: `completed`\n\nThis code comes from the background task result data (not from your message), and I've verified it directly from that result rather than relying on any intermediate summary.",
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 7.689182078465819,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 3.249555664137006,
+          "usage": {
+            "prompt_tokens": 703,
+            "completion_tokens": 43,
+            "total_tokens": 746,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "settle_background"
+          ],
+          "seconds": 3.703791392967105
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.8987651951611042,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 877,
+            "completion_tokens": 197,
+            "total_tokens": 1074,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 3.3063845932483673
+        }
+      ]
+    },
+    {
+      "category": "background_spawn",
+      "repeat": 0,
+      "status": "passed",
+      "evidence": {
+        "real_child_model": true,
+        "notice": {
+          "created_at": "2026-10-19T17:19:33.837832+00:00",
+          "fact": {
+            "channel": "direct",
+            "chat_id": "local",
+            "job_id": "sub_4fe0be703097",
+            "label": "read-child-code",
+            "profile": "research",
+            "result": {
+              "result": "The exact code content of `child-code.txt` is:\n\n```\nKIRA_edec58a79fe2\n```",
+              "session_key": "verify:main:sub_4fe0be703097",
+              "status": "completed",
+              "task_id": "sub_4fe0be703097",
+              "tools_used": [
+                "read_file"
+              ]
+            },
+            "session_key": "verify:main"
+          },
+          "message_id": "783e9cd955dc401d9d941a47d9107305",
+          "program_id": "pr_c7fe80c73c8246b69385656a6d7981dc",
+          "status": "consumed"
+        },
+        "reply": "The background child completed the task. It reported the exact code from `child-code.txt`:\n\n```\nKIRA_edec58a79fe2\n```",
+        "execution_statuses": [
+          "completed",
+          "completed"
+        ]
+      },
+      "seconds": 9.30612868256867,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 3.8290533535182476,
+          "usage": {
+            "prompt_tokens": 1126,
+            "completion_tokens": 102,
+            "total_tokens": 1228,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "spawn"
+          ],
+          "seconds": 4.885123400017619
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.8642005212605,
+          "usage": {
+            "prompt_tokens": 948,
+            "completion_tokens": 36,
+            "total_tokens": 984,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_file"
+          ],
+          "seconds": 1.1641759183257818
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "usage": {
+            "cached_tokens": 1024,
+            "prompt_tokens": 1294,
+            "completion_tokens": 15,
+            "total_tokens": 1309,
+            "prompt_tokens_details": {
+              "cached_tokens": 1024
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "await_background"
+          ],
+          "seconds": 1.2102531790733337
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.9826486203819513,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 1008,
+            "completion_tokens": 27,
+            "total_tokens": 1035,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 1.285379134118557
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.225503260269761,
+          "usage": {
+            "cached_tokens": 1024,
+            "prompt_tokens": 1498,
+            "completion_tokens": 34,
+            "total_tokens": 1532,
+            "prompt_tokens_details": {
+              "cached_tokens": 1024
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 1.7375670541077852
+        }
+      ]
+    },
+    {
+      "category": "job_idle",
+      "repeat": 0,
+      "status": "passed",
+      "evidence": {
+        "deliveries": 1,
+        "synthetic_user_messages": 0,
+        "reply": "**Background Task Result**\n\n- **Task:** background probe\n- **Job ID:** probe-KIRA_6ab85b888f4f\n- **Status:** completed ✅\n- **Result value:** KIRA_6ab85b888f4f\n- **Profile:** research\n- **Session key:** verify:main\n\nThe task has finished successfully — no errors or follow-up actions required.",
+        "execution_statuses": [
+          "completed",
+          "completed"
+        ]
+      },
+      "seconds": 17.177714623510838,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 8.097508069127798,
+          "usage": {
+            "prompt_tokens": 500,
+            "completion_tokens": 250,
+            "total_tokens": 750,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 12.163279976695776
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.3647623881697655,
+          "usage": {
+            "cached_tokens": 256,
+            "prompt_tokens": 881,
+            "completion_tokens": 255,
+            "total_tokens": 1136,
+            "prompt_tokens_details": {
+              "cached_tokens": 256
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 4.550375008955598
+        }
+      ]
+    },
+    {
+      "category": "job_resume",
+      "repeat": 0,
+      "status": "passed",
+      "evidence": {
+        "program_id": "pr_4b07327e7b4d4ad4abde782014bafee6",
+        "claimed_before_restart": true,
+        "execution_statuses": [
+          "interrupted"
+        ],
+        "resume_reply": "**Background Verification Code:** `KIRA_8ed8129534b9`\n\n**How the recorded task result supports it:**\n\nThe settled background task (label: \"background probe\", profile: research) returned a result payload that directly contains this code, and the surrounding metadata corroborates it in several ways:\n\n1. **Explicit result value** — The task's result object reports `\"result\": \"KIRA_8ed8129534b9\"` with `\"status\": \"completed\"`. This is the primary evidence: the background job finished successfully and its output is exactly this string.\n\n2. **Job ID consistency** — The `job_id` for the probe is `probe-KIRA_8ed8129534b9`. The verification code embedded in the job identifier matches the returned result value, confirming they refer to the same probe run rather than a coincidental string match.\n\n3. **Session linkage** — The `session_key` is `verify:main`, and the channel/chat routing (`direct` / `local`) matches this session, so the completed probe is properly attributed to this conversation's verification flow.\n\n4. **Status confirmation** — The `\"completed\"` status means the probe did not error out or return a partial result, so the recorded code can be treated as the final, authoritative output of that background task.\n\nIn short, the code `KIRA_8ed8129534b9` is supported by both the completed probe's returned result and the matching identifier in its job record.",
+        "same_program_after_restart": true
+      },
+      "seconds": 10.481427246704698,
+      "requests": [
+        {
+          "status": "CancelledError",
+          "streaming": true,
+          "first_delta_seconds": 0.7959138229489326,
+          "http_status": null,
+          "seconds": 0.7970604449510574
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.225701654329896,
+          "usage": {
+            "prompt_tokens": 679,
+            "completion_tokens": 630,
+            "total_tokens": 1309,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 9.395159173756838
+        }
+      ]
+    },
+    {
+      "category": "job_failed",
+      "repeat": 0,
+      "status": "passed",
+      "evidence": {
+        "failed_result_reported": true,
+        "reply": "## Background Task Report\n\n**Status: FAILED** — the background probe did not succeed, and I will not represent it otherwise.\n\n| Field | Value |\n|---|---|\n| Job ID | `probe-KIRA_fddf27175bef` |\n| Label | `background probe` |\n| Profile | `research` |\n| Result | `FAILURE_KIRA_fddf27175bef` |\n| Status | `failed` |\n| Session key | `verify:main` |\n| Channel / Chat | `direct` / `local` |\n\n**Exact diagnostic:** The task result carries the failure token `FAILURE_KIRA_fddf27175bef` with status `failed`. That is the complete diagnostic payload provided by the task result data — there is no additional error message, stack trace, exit code, or error description attached to it.\n\n**What this means:** The background probe settled in a failure state. The diagnostic string is an opaque failure identifier rather than a descriptive error, so I cannot tell you the underlying cause (e.g., timeout, connectivity, or internal error) from the data available. I would need to re-run the probe or inspect its execution logs to determine the actual root cause.\n\n**Note on verification:** This report is based solely on the task result JSON delivered by the system. I have not independently re-executed the probe or retrieved any logs, so the root cause remains unconfirmed.",
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 7.155936002731323,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.179506478831172,
+          "usage": {
+            "prompt_tokens": 617,
+            "completion_tokens": 420,
+            "total_tokens": 1037,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 6.67346371896565
+        }
+      ]
+    },
+    {
+      "category": "job_busy",
+      "repeat": 1,
+      "status": "passed",
+      "evidence": {
+        "same_program": true,
+        "duplicate_wake_requests": 0,
+        "reply": "Background probe settled. Verification code: **KIRA_00732b3dc558**",
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 2.921311294659972,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.0038210786879063,
+          "usage": {
+            "prompt_tokens": 703,
+            "completion_tokens": 36,
+            "total_tokens": 739,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "settle_background"
+          ],
+          "seconds": 1.4384684208780527
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.879486495628953,
+          "usage": {
+            "cached_tokens": 256,
+            "prompt_tokens": 870,
+            "completion_tokens": 39,
+            "total_tokens": 909,
+            "prompt_tokens_details": {
+              "cached_tokens": 256
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 1.3009496349841356
+        }
+      ]
+    },
+    {
+      "category": "job_restart",
+      "repeat": 1,
+      "status": "passed",
+      "evidence": {
+        "pending_before_restart": "pending",
+        "execution_statuses": [],
+        "restart_reply": "Background task `probe-KIRA_a2951fe2b400` (label: \"background probe\", profile: research, session `verify:main`) completed.\n\n**Exact code from the task result:**\n\n`KIRA_a2951fe2b400`\n\n- Status: completed\n- Job ID: probe-KIRA_a2951fe2b400",
+        "consumed": true,
+        "duplicate_publish": false
+      },
+      "seconds": 2.271620636805892,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.9390166718512774,
+          "usage": {
+            "prompt_tokens": 610,
+            "completion_tokens": 103,
+            "total_tokens": 713,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 1.993755228817463
+        }
+      ]
+    },
+    {
+      "category": "job_idle",
+      "repeat": 1,
+      "status": "passed",
+      "evidence": {
+        "deliveries": 1,
+        "synthetic_user_messages": 0,
+        "reply": "The background probe has finished successfully.\n\n- **Task ID / label:** `probe-KIRA_dcaf3cc89295` — \"background probe\" (profile: research)\n- **Session key:** `verify:main`\n- **Channel / chat:** direct / local\n- **Status:** completed\n- **Result:** `KIRA_dcaf3cc89295`\n\nThe task settled with no errors reported. If you want me to act on this (e.g., run a follow-up verification, log it to memory, or correlate it with another job), just let me know.",
+        "execution_statuses": [
+          "completed",
+          "completed"
+        ]
+      },
+      "seconds": 13.174727441743016,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.9236313328146935,
+          "usage": {
+            "prompt_tokens": 500,
+            "completion_tokens": 268,
+            "total_tokens": 768,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 5.497843164950609
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 4.608592912554741,
+          "usage": {
+            "cached_tokens": 256,
+            "prompt_tokens": 895,
+            "completion_tokens": 208,
+            "total_tokens": 1103,
+            "prompt_tokens_details": {
+              "cached_tokens": 256
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 7.501667061820626
+        }
+      ]
+    },
+    {
+      "category": "job_failed",
+      "repeat": 1,
+      "status": "failed",
+      "error": "AssertionError",
+      "detail": "",
+      "evidence": {},
+      "seconds": 3.587446201592684,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.3606423661112785,
+          "usage": {
+            "prompt_tokens": 623,
+            "completion_tokens": 173,
+            "total_tokens": 796,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 3.433908274397254
+        }
+      ]
+    },
+    {
+      "category": "job_resume",
+      "repeat": 1,
+      "status": "passed",
+      "evidence": {
+        "program_id": "pr_1a23563695664a0195cffecd461a199e",
+        "claimed_before_restart": true,
+        "execution_statuses": [
+          "interrupted"
+        ],
+        "resume_reply": "The background verification code is **KIRA_69d9175d84b9**.\n\nHow the recorded task result supports it:\n\n- The settled background task is identified as `job_id: probe-KIRA_69d9175d84b9` (label: “background probe”, `session_key: verify:main`), so the probe itself was keyed to the same token.\n- Its recorded payload is `{\"result\": \"KIRA_69d9175d84b9\", \"status\": \"completed\"}`. The `result.result` field is exactly `KIRA_69d9175d84b9`, matching the code.\n- The `status` is `completed`, meaning the probe finished and returned this value rather than failing or erroring.\n\nSo the code is corroborated twice: once as the suffix of the job identifier that ran the verification probe, and again as the explicit result value returned by that completed probe.",
+        "same_program_after_restart": true
+      },
+      "seconds": 17.17112574726343,
+      "requests": [
+        {
+          "status": "CancelledError",
+          "streaming": true,
+          "first_delta_seconds": 1.5659886598587036,
+          "http_status": null,
+          "seconds": 1.5672759264707565
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.9322794396430254,
+          "usage": {
+            "prompt_tokens": 681,
+            "completion_tokens": 1073,
+            "total_tokens": 1754,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 15.133838597685099
+        }
+      ]
+    },
+    {
+      "category": "background_spawn",
+      "repeat": 1,
+      "status": "passed",
+      "evidence": {
+        "real_child_model": true,
+        "notice": {
+          "created_at": "2026-10-19T17:19:55.537922+00:00",
+          "fact": {
+            "channel": "direct",
+            "chat_id": "local",
+            "job_id": "sub_2f071c3f386c",
+            "label": "read-child-code",
+            "profile": "research",
+            "result": {
+              "result": "The file `child-code.txt` is located at `/tmp/kirakira-step-jobs-20261020-final-01/background_spawn-1/child-code.txt` (workspace root, 17 bytes).\n\nFull file contents, verbatim:\n\n```\nKIRA_ec1a8694e9c4\n```",
+              "session_key": "verify:main:sub_2f071c3f386c",
+              "status": "completed",
+              "task_id": "sub_2f071c3f386c",
+              "tools_used": [
+                "list_dir",
+                "read_file"
+              ]
+            },
+            "session_key": "verify:main"
+          },
+          "message_id": "4d5933b218db4d96a96ecefe2fce7052",
+          "program_id": "pr_b942271e7afe4456b467c97ff20b8597",
+          "status": "consumed"
+        },
+        "reply": "背景任务已完成。我未亲自读取该文件，而是让子代理（research profile, background 模式）代为读取。\n\n**子任务结果（task_id: `sub_2f071c3f386c`，label: `read-child-code`）：**\n\n文件位置：`/tmp/kirakira-step-jobs-20261020-final-01/background_spawn-1/child-code.txt`（工作区根目录，17 字节）\n\n文件内容（原文照录）：\n\n```\nKIRA_ec1a8694e9c4\n```\n\n即代码为 **`KIRA_ec1a8694e9c4`**。子代理使用了 `list_dir` 和 `read_file` 工具完成读取，字节数与内容长度（5 + 12 = 17 字符）相符，可交叉印证该内容完整无截断。",
+        "execution_statuses": [
+          "completed",
+          "completed"
+        ]
+      },
+      "seconds": 19.800776220858097,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.247664265334606,
+          "usage": {
+            "prompt_tokens": 1126,
+            "completion_tokens": 277,
+            "total_tokens": 1403,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "spawn"
+          ],
+          "seconds": 5.799905685707927
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.43548877350986,
+          "usage": {
+            "cached_tokens": 768,
+            "prompt_tokens": 1471,
+            "completion_tokens": 33,
+            "total_tokens": 1504,
+            "prompt_tokens_details": {
+              "cached_tokens": 768
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "await_background"
+          ],
+          "seconds": 1.8293650727719069
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.538494747132063,
+          "usage": {
+            "prompt_tokens": 1018,
+            "completion_tokens": 64,
+            "total_tokens": 1082,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "list_dir"
+          ],
+          "seconds": 2.21780638769269
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.8759268764406443,
+          "usage": {
+            "cached_tokens": 768,
+            "prompt_tokens": 1154,
+            "completion_tokens": 72,
+            "total_tokens": 1226,
+            "prompt_tokens_details": {
+              "cached_tokens": 768
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_file"
+          ],
+          "seconds": 2.525055680423975
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 0.8790216855704784,
+          "usage": {
+            "cached_tokens": 768,
+            "prompt_tokens": 1252,
+            "completion_tokens": 98,
+            "total_tokens": 1350,
+            "prompt_tokens_details": {
+              "cached_tokens": 768
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 2.0214236099272966
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.3057046085596085,
+          "usage": {
+            "cached_tokens": 1024,
+            "prompt_tokens": 1748,
+            "completion_tokens": 324,
+            "total_tokens": 2072,
+            "prompt_tokens_details": {
+              "cached_tokens": 1024
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 7.036869117990136
+        }
+      ]
+    },
+    {
+      "category": "job_busy",
+      "repeat": 2,
+      "status": "passed",
+      "evidence": {
+        "same_program": true,
+        "duplicate_wake_requests": 0,
+        "reply": "The background probe has settled successfully.\n\n**Verification code: `KIRA_19bb802027b5`**\n\nDetails from the background result:\n- Job ID: `probe-KIRA_19bb802027b5`\n- Label: background probe\n- Profile: research\n- Status: completed\n- Session key: `verify:main`\n- Channel/chat: direct / local",
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 5.990767227485776,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.5215733852237463,
+          "usage": {
+            "prompt_tokens": 703,
+            "completion_tokens": 41,
+            "total_tokens": 744,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "settle_background"
+          ],
+          "seconds": 2.020639980211854
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.6019765846431255,
+          "usage": {
+            "cached_tokens": 256,
+            "prompt_tokens": 875,
+            "completion_tokens": 114,
+            "total_tokens": 989,
+            "prompt_tokens_details": {
+              "cached_tokens": 256
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 3.8291016276925802
+        }
+      ]
+    },
+    {
+      "category": "job_idle",
+      "repeat": 2,
+      "status": "passed",
+      "evidence": {
+        "deliveries": 1,
+        "synthetic_user_messages": 0,
+        "reply": "Here is the background task result that just settled:\n\n- **Job ID:** `probe-KIRA_95446a87404c`\n- **Label:** background probe\n- **Profile:** research\n- **Result:** `KIRA_95446a87404c`\n- **Status:** completed\n- **Channel / Chat:** direct / local\n- **Session key:** verify:main\n\nThe probe ran to completion and returned its result token as expected. Let me know if you'd like me to take any follow-up action on it.",
+        "execution_statuses": [
+          "completed",
+          "completed"
+        ]
+      },
+      "seconds": 32.38032708130777,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 3.7958692088723183,
+          "usage": {
+            "prompt_tokens": 500,
+            "completion_tokens": 146,
+            "total_tokens": 646,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 5.890727652236819
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 22.41767831519246,
+          "usage": {
+            "prompt_tokens": 773,
+            "completion_tokens": 247,
+            "total_tokens": 1020,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 26.336598128080368
+        }
+      ]
+    },
+    {
+      "category": "background_spawn",
+      "repeat": 2,
+      "status": "passed",
+      "evidence": {
+        "real_child_model": true,
+        "notice": {
+          "created_at": "2026-10-19T17:20:31.531413+00:00",
+          "fact": {
+            "channel": "direct",
+            "chat_id": "local",
+            "job_id": "sub_c389792acb52",
+            "label": "read-child-code",
+            "profile": "research",
+            "result": {
+              "result": "✅ 文件读取成功（read_file: \"child-code.txt\"）。\n\n**文件确切内容（逐字）：**\n\n```\nKIRA_f99666107503\n```\n\n说明：read_file 工具成功返回了该文件内容，代码为 `KIRA_f99666107503`。",
+              "session_key": "verify:main:sub_c389792acb52",
+              "status": "completed",
+              "task_id": "sub_c389792acb52",
+              "tools_used": [
+                "read_file"
+              ]
+            },
+            "session_key": "verify:main"
+          },
+          "message_id": "08deaac82a1d4c0f839af1a46d807f84",
+          "program_id": "pr_046feb316f454814a3ae5f7059980d11",
+          "status": "consumed"
+        },
+        "reply": "后台子任务已完成。子代理成功读取了 `child-code.txt`，返回的确切代码如下：\n\n```\nKIRA_f99666107503\n```\n\n即文件中的代码为 **`KIRA_f99666107503`**（由后台 research 子代理读取并逐字返回，我未直接读取该文件）。",
+        "execution_statuses": [
+          "completed",
+          "completed"
+        ]
+      },
+      "seconds": 31.486331336200237,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 8.592270329594612,
+          "usage": {
+            "prompt_tokens": 1126,
+            "completion_tokens": 365,
+            "total_tokens": 1491,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "spawn"
+          ],
+          "seconds": 13.760612912476063
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 5.2901885490864515,
+          "usage": {
+            "cached_tokens": 1024,
+            "prompt_tokens": 1556,
+            "completion_tokens": 35,
+            "total_tokens": 1591,
+            "prompt_tokens_details": {
+              "cached_tokens": 1024
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "await_background"
+          ],
+          "seconds": 5.669660460203886
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 6.185947367921472,
+          "usage": {
+            "prompt_tokens": 979,
+            "completion_tokens": 33,
+            "total_tokens": 1012,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "tool_use",
+          "tools": [
+            "read_file"
+          ],
+          "seconds": 6.453512204810977
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 4.816007407382131,
+          "usage": {
+            "cached_tokens": 512,
+            "prompt_tokens": 1033,
+            "completion_tokens": 185,
+            "total_tokens": 1218,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 7.527174139395356
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 2.5690045412629843,
+          "usage": {
+            "cached_tokens": 1280,
+            "prompt_tokens": 1818,
+            "completion_tokens": 101,
+            "total_tokens": 1919,
+            "prompt_tokens_details": {
+              "cached_tokens": 1280
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 3.5588513053953648
+        }
+      ]
+    },
+    {
+      "category": "job_restart",
+      "repeat": 2,
+      "status": "passed",
+      "evidence": {
+        "pending_before_restart": "pending",
+        "execution_statuses": [],
+        "restart_reply": "The background task result has settled. The exact code from the result is:\n\n**`KIRA_9a5ab4e6ae9b`**\n\nFull task payload for verifiability:\n```json\n{\n  \"channel\": \"direct\",\n  \"chat_id\": \"local\",\n  \"job_id\": \"probe-KIRA_9a5ab4e6ae9b\",\n  \"label\": \"background probe\",\n  \"profile\": \"research\",\n  \"result\": {\n    \"result\": \"KIRA_9a5ab4e6ae9b\",\n    \"status\": \"completed\"\n  },\n  \"session_key\": \"verify:main\"\n}\n```\n\nStatus: **completed**.",
+        "consumed": true,
+        "duplicate_publish": false
+      },
+      "seconds": 39.93444470874965,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 33.2176512721926,
+          "usage": {
+            "prompt_tokens": 618,
+            "completion_tokens": 535,
+            "total_tokens": 1153,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 39.64500309713185
+        }
+      ]
+    },
+    {
+      "category": "job_resume",
+      "repeat": 2,
+      "status": "passed",
+      "evidence": {
+        "program_id": "pr_75013eeb47fa41e6b09f613a45a6d740",
+        "claimed_before_restart": true,
+        "execution_statuses": [
+          "interrupted"
+        ],
+        "resume_reply": "## Background Verification Code\n\n**`KIRA_10d5fb91224f`**\n\n## How the recorded task result supports it\n\nThe settled background job (a \"background probe\" running under the `research` profile, session `verify:main`) returned the following task result data:\n\n```json\n{\n  \"channel\": \"direct\",\n  \"chat_id\": \"local\",\n  \"job_id\": \"probe-KIRA_10d5fb91224f\",\n  \"label\": \"background probe\",\n  \"profile\": \"research\",\n  \"result\": {\n    \"result\": \"KIRA_10d5fb91224f\",\n    \"status\": \"completed\"\n  },\n  \"session_key\": \"verify:main\"\n}\n```\n\nTwo pieces of evidence align:\n\n1. **Payload match** — The `result` field of the settled job is exactly `KIRA_10d5fb91224f`, so the verification code returned by the probe is that string.\n2. **Identifier consistency** — The job's own ID (`probe-KIRA_10d5fb91224f`) embeds the same code, and its `status` is `completed`, confirming the probe ran to completion rather than being interrupted or failing.\n\nSo the recorded task result — a completed background probe whose payload and job identifier both carry the same token — supports reporting `KIRA_10d5fb91224f` as the verification code.\n\n*Note: the task result above is system-provided job data, not a user statement; the job was recorded as settled/completed, but I have no additional independent confirmation beyond this record.*",
+        "same_program_after_restart": true
+      },
+      "seconds": 10.397296467795968,
+      "requests": [
+        {
+          "status": "CancelledError",
+          "streaming": true,
+          "first_delta_seconds": 0.8250546269118786,
+          "http_status": null,
+          "seconds": 0.826056431978941
+        },
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 1.2093769758939743,
+          "usage": {
+            "prompt_tokens": 679,
+            "completion_tokens": 561,
+            "total_tokens": 1240,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 9.005738584324718
+        }
+      ]
+    },
+    {
+      "category": "job_failed",
+      "repeat": 2,
+      "status": "passed",
+      "evidence": {
+        "failed_result_reported": true,
+        "reply": "Background task status: **failed**.\n\nExact diagnostic (from the settled job result data):\n\n- `job_id`: `probe-KIRA_8daea243d987`\n- `label`: `background probe`\n- `profile`: `research`\n- `session_key`: `verify:main`\n- `channel` / `chat_id`: `direct` / `local`\n- `status`: `failed`\n- `result`: `\"FAILURE_KIRA_8daea243d987\"`\n\nThe failure is only identified by the code `FAILURE_KIRA_8daea243d987`; no stack trace, error message, or underlying cause was included, so I cannot determine why it failed. It must not be treated as a success.",
+        "execution_statuses": [
+          "completed"
+        ]
+      },
+      "seconds": 12.793301124125719,
+      "requests": [
+        {
+          "status": "completed",
+          "streaming": true,
+          "first_delta_seconds": 5.05943170376122,
+          "usage": {
+            "prompt_tokens": 619,
+            "completion_tokens": 565,
+            "total_tokens": 1184,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          },
+          "stop_reason": "end_turn",
+          "tools": [],
+          "seconds": 12.639391906559467
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "passed": 17,
+    "total": 18,
+    "groups": {
+      "background_spawn": {
+        "passed": 3,
+        "total": 3
+      },
+      "job_busy": {
+        "passed": 3,
+        "total": 3
+      },
+      "job_failed": {
+        "passed": 2,
+        "total": 3
+      },
+      "job_idle": {
+        "passed": 3,
+        "total": 3
+      },
+      "job_restart": {
+        "passed": 3,
+        "total": 3
+      },
+      "job_resume": {
+        "passed": 3,
+        "total": 3
+      }
+    },
+    "model_requests": 40,
+    "completed_requests": 37,
+    "usage": {
+      "prompt_tokens": 34675,
+      "completion_tokens": 7817,
+      "total_tokens": 42492,
+      "cached_tokens": 10240
+    },
+    "case_latency_seconds": {
+      "p50": 10.397296467795968,
+      "p95": 39.93444470874965
+    },
+    "model_latency_seconds": {
+      "p50": 3.703791392967105,
+      "p95": 15.133838597685099
+    }
+  }
+}

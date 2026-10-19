@@ -52,6 +52,7 @@ class ConversationProgram:
         max_iterations_override: Optional[int] = None,
         session: Any | None = None,
         compaction_runtime: SessionCompactionRuntime | None = None,
+        prepare_step=None,
     ) -> ReactResult:
         if self.context is None:
             raise RuntimeError(
@@ -263,6 +264,7 @@ class ConversationProgram:
                     )
                 result = await self.reasoner.run(
                     rendered.messages,
+                    prepare_step=prepare_step,
                     session_key=session_key,
                     channel=msg.channel,
                     chat_id=msg.chat_id,

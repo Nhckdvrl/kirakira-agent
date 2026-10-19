@@ -63,6 +63,7 @@ class DefaultReplyProgram:
         memory_services: "MemoryServices | None" = None,
         recall_inspector: Any = None,
         programs=None,
+        jobs=None,
     ) -> None:
         self.delivery = delivery
         self.bus = bus
@@ -74,6 +75,7 @@ class DefaultReplyProgram:
         # 记忆 DI 缝:runtime 只认识 MemoryServices.engine,不认识具体实现。
         self._memory_services = memory_services
         self.programs = programs
+        self.jobs = jobs
         self.tools = tools
         self.reasoner = reasoner
         self.config = config
@@ -376,6 +378,16 @@ class DefaultReplyProgram:
                     state, before_reasoning.abort_reply
                 )
 
+            async def prepare_step():
+                if self.jobs is None or binding is None:
+                    return []
+                return [
+                    self.jobs.material(fact)
+                    for fact in self.jobs.claim(
+                        key, binding.identity, binding.value["source"]
+                    )
+                ]
+
             turn = await self.reasoner.run_turn(
                 msg=msg,
                 session_key=key,
@@ -388,9 +400,11 @@ class DefaultReplyProgram:
                 compaction_runtime=None
                 if own_history
                 else SessionCompactionRuntime(self.session_manager),
+                prepare_step=prepare_step,
             )
             state.extra_metadata["context_trace"] = dict(turn.context_trace)
             state.extra_metadata["execution_status"] = turn.stop_reason
+            state.extra_metadata["background_jobs_read"] = bool(turn.execution_id)
         finally:
             self.tools.reset_context(context_token)
         # 入站 metadata 里的 mobile_attention 一律丢弃,只认本轮工具自己声明的

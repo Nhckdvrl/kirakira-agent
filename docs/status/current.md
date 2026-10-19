@@ -1,6 +1,6 @@
 # 当前状态
 
-更新日期：2026-10-20。主链参考核对至 Akashic `21b38f0e102d9e1bdc5576725635dce29f135c0c`。
+更新日期：2026-10-20。主链参考核对至 Akashic `6016befc682a037fbfc61180d39f17c219572ed6`。
 记忆移植继续固定 `d85b00c233686b68b082052b1b20123905aeab13`；算法、双通道与公开 cost 协议未变。
 实现合同见 [ADR0009](../decisions/0009-components-recovery-and-akasha2.md) 和
 [ADR0015](../decisions/0015-projects-and-session-directories.md)，实际运行结果见
@@ -25,6 +25,9 @@ Reply Program / Context / ReAct / Models / Tools / MCP / Delivery 分为普通 o
 
 ## 已落地
 
+- 独立 Jobs owner：后台结果持久发布、逐模型步领取、空闲原会话唤醒；消费与最终消息/程序同事务，取消与重启可回放。
+- 子代理不再直接排入合成用户消息，结果按原会话查询；移除重复的 `subagent-runs/result.json` 写入。
+- 当前主链、Jobs、Scheduler、项目/目录、Wake/Drift 最终 Step5 场景 64/64；中间失败及量化结果见[报告](../operations/evaluations/2026-10-20-background-results.md)。
 - Projects 与 Session cwd 接入：稳定项目 ID、改名/归档、一次性目录默认值、创建事务快照、独立切换与回执/CAS。
 - 文件、Shell、子任务与实时 AGENTS 共用目录 owner；独占切换批次、现有进程 cwd 固定、旧会话不回填。
 - Web 项目/目录页面、项目聊天和控制协议共用同一服务及 admission；目录丢失不回退或自动重建。
@@ -63,7 +66,7 @@ Session SQLite append-only、上下文投影与 compaction ledger、Shell/PTY/st
 
 | 顺序 | 功能链 | 完成要求 |
 | --- | --- | --- |
-| 1 | 消息、来源与回复程序 | 持久 Message/附件、同轮输入、后台结果注入、程序停止与重启续跑；已完成副作用不重放 |
+| 1 | 消息、来源与回复程序 | 在已接入的后台结果步间注入之上，补统一持久 Message/附件、steer 暂存/撤回、latest 输入重试及完整程序合同 |
 | 2 | 项目与执行宿主 | 在已接入的本地 Project/cwd 之上，补 prepared 目标、HostBridge、进程/Workload 生命周期 |
 | 3 | 双主动与投递 | Eventmail、Wake/Drift 完整状态链，Scheduler 工具边界让出，按固定来源投递和核对 |
 | 4 | 扩展与模型 | 插件发布/更新回执、资源提供方、UI 与检查能力；模型目录、角色、启停、引导及全部列出的驱动 |
@@ -85,7 +88,7 @@ Session SQLite append-only、上下文投影与 compaction ledger、Shell/PTY/st
 | 主动体验 | 兴趣池已接入；显式规则与证据估计仍需标注 | 实际来源上的有用率、打扰率、静默正确率及日预算 |
 | Scheduler 续跑 | 来源会话、notify/run、历史隔离、触发结算已接入；仍是整轮排队 | 工具边界让出用户、保存并恢复同一持久程序；已完成副作用不重放 |
 | 自主目标发现 | 提案队列已有持久生命周期，候选仍来自显式技能 | 有证据的 proposal planner、过期与用户意图修正 |
-| 扩展功能补齐 | 原生内核和普通业务 owner 已接入；旧类式 SDK 集中适配 | 原生 Task 服务、后台结果注入及完整执行宿主按功能清单继续补齐 |
+| 扩展功能补齐 | 原生内核、普通业务 owner 与 Jobs 已接入；旧类式 SDK 集中适配 | 原生 Task 服务、Shell 等全部后台 producer、材料协议及完整执行宿主按功能清单继续补齐 |
 | 项目与目录 | 本地端到端功能已接入，不等于整个上游执行宿主或工作台 | prepared 目标与恢复、宿主路径能力、终端和改动视图 |
 | Session/Ledger | 沿用当前 append-only 消息与多份业务状态 | 不宣称已移植上游全部 Ledger 消息程序与跨业务事务 |
 | 多租户隔离 | 当前是单用户跨会话记忆；不把 MemoryScope 当租户安全边界 | 显式 isolated/global/off 图路由与独立授权 |

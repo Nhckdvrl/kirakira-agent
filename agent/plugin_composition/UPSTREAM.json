@@ -1,6 +1,6 @@
 {
   "repository": "https://github.com/kachofugetsu09/akashic-agent",
-  "commit": "21b38f0e102d9e1bdc5576725635dce29f135c0c",
+  "commit": "6016befc682a037fbfc61180d39f17c219572ed6",
   "files": {
     "agent/plugin_composition/__init__.py": "71afa64cc67c60956ec6383396ea61fe0febcb2d567e7039fde32186bccfbeda",
     "agent/plugin_composition/config_input.py": "ffd823aac104cdef16b4948d017bcd83fab60fe4c383b2e3e39e59e5629f2e10",

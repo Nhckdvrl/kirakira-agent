@@ -6,15 +6,14 @@ import asyncio
 import json
 from dataclasses import asdict, dataclass
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from bus.events import InboundMessage
-from bus.queue import MessageBus
 from core.memory.legacy import MemoryRuntime
 from core.schema import ToolSpec
 from plugins.ledger.manager import SessionManager
+from plugins.jobs.service import JobNotices
 from plugins.react.reasoner import ReactProgram
 from plugins.tools.registry import ToolRegistry, object_schema
 
@@ -31,7 +30,6 @@ class RunningSubagentJob:
     parent_session: str
     parent_channel: str
     parent_chat_id: str
-    task_dir: str
     started_at: str
     status: str = "running"
 
@@ -44,21 +42,21 @@ class SubagentManager:
         tools: ToolRegistry,
         sessions: SessionManager,
         memory: MemoryRuntime,
-        bus: MessageBus,
+        jobs: JobNotices,
     ) -> None:
         self.reasoner = reasoner
         self.tools = tools
         self.sessions = sessions
         self.memory = memory
-        self.bus = bus
+        self.jobs = jobs
         self._tasks: set[asyncio.Task[None]] = set()
         self._task_by_id: dict[str, asyncio.Task[None]] = {}
         self._jobs: dict[str, RunningSubagentJob] = {}
         self._admission: set[str] = set()
-        self._runs_dir = self.sessions.workspace / ".kirakira" / "subagent-runs"
 
-    def register_tool(self) -> None:
-        self.tools.register(
+    def register_tool(self, registry=None) -> None:
+        registry = self.tools if registry is None else registry
+        registry.register(
             ToolSpec(
                 "spawn",
                 "Delegate a bounded task to an isolated inline or background subagent.",
@@ -84,15 +82,15 @@ class SubagentManager:
             ),
             self.spawn,
         )
-        self.tools.register(
+        registry.register(
             ToolSpec(
                 "spawn_manage",
-                "List or cancel running background subagent tasks.",
+                "List or cancel running tasks, or read durable background task results.",
                 object_schema(
                     {
                         "action": {
                             "type": "string",
-                            "enum": ["list", "cancel"],
+                            "enum": ["list", "cancel", "results"],
                         },
                         "task_id": {"type": "string"},
                     },
@@ -131,9 +129,8 @@ class SubagentManager:
             if not parent_channel or not parent_chat_id:
                 self._release_admission(task_id)
                 return "Error: channel/chat context is required for background mode"
-            task_dir = self._runs_dir / task_id
             try:
-                task_dir.mkdir(parents=True, exist_ok=False)
+                self.sessions.get_or_create(parent_session)
                 self.sessions.get_or_create(
                     f"{parent_session}:{task_id}",
                     metadata={"parent_session_key": parent_session},
@@ -149,7 +146,6 @@ class SubagentManager:
                 parent_session=parent_session,
                 parent_channel=parent_channel,
                 parent_chat_id=parent_chat_id,
-                task_dir=str(task_dir),
                 started_at=datetime.now().astimezone().isoformat(),
             )
             try:
@@ -160,7 +156,6 @@ class SubagentManager:
                         max_iterations,
                         label=display_label,
                         profile=profile,
-                        task_dir=task_dir,
                         parent_session=parent_session,
                         parent_channel=parent_channel,
                         parent_chat_id=parent_chat_id,
@@ -213,11 +208,25 @@ class SubagentManager:
         return json.dumps(result, ensure_ascii=False)
 
     async def manage(self, action: str, task_id: str = "") -> str:
+        session_key = self.tools.context.get("session_key")
+        if action == "results":
+            if not session_key:
+                return "Error: parent Session context is required"
+            if task_id:
+                return json.dumps(
+                    self.jobs.read(task_id, session_key=session_key), ensure_ascii=False
+                )
+            return json.dumps(self.jobs.list(session_key), ensure_ascii=False)
         if action == "list":
+            jobs = [
+                job
+                for job in self._jobs.values()
+                if not session_key or job.parent_session == session_key
+            ]
             return json.dumps(
                 {
-                    "running_count": len(self._task_by_id),
-                    "jobs": [asdict(job) for job in self._jobs.values()],
+                    "running_count": len(jobs),
+                    "jobs": [asdict(job) for job in jobs],
                 },
                 ensure_ascii=False,
             )
@@ -225,6 +234,9 @@ class SubagentManager:
             target = task_id.strip()
             if not target:
                 return 'Error: task_id is required for action="cancel"'
+            job = self._jobs.get(target)
+            if job is not None and session_key and job.parent_session != session_key:
+                return "Error: task does not belong to this Session"
             cancelled = await self.cancel(target)
             return json.dumps(
                 {
@@ -233,7 +245,7 @@ class SubagentManager:
                 },
                 ensure_ascii=False,
             )
-        return "Error: action must be list or cancel"
+        return "Error: action must be list, cancel or results"
 
     async def cancel(self, task_id: str) -> bool:
         task = self._task_by_id.get(task_id)
@@ -248,8 +260,6 @@ class SubagentManager:
                 "status": "cancelled",
                 "result": "后台子任务已由用户取消。",
             }
-            task_dir = Path(job.task_dir)
-            self._write_result(task_dir, result)
             await self._publish_completion(
                 task_id=task_id,
                 label=job.label,
@@ -352,7 +362,6 @@ class SubagentManager:
         *,
         label: str,
         profile: str,
-        task_dir: Path,
         parent_session: str,
         parent_channel: str,
         parent_chat_id: str,
@@ -377,7 +386,6 @@ class SubagentManager:
         if len(result_text) > _RESULT_LIMIT:
             result_text = result_text[:_RESULT_LIMIT] + "\n...[result truncated]"
             result["result"] = result_text
-        self._write_result(task_dir, result)
         await self._publish_completion(
             task_id=task_id,
             label=label,
@@ -399,26 +407,14 @@ class SubagentManager:
         parent_chat_id: str,
         result: dict[str, Any],
     ) -> None:
-        result_text = str(result.get("result") or "")
-        await self.bus.publish_inbound(
-            InboundMessage(
-                channel=parent_channel,
-                sender="subagent:%s" % task_id,
-                chat_id=parent_chat_id,
-                content=(
-                    '<subagent-completion task_id="%s" status="%s">\n%s\n'
-                    "</subagent-completion>\n请根据这个子任务结果继续回复用户。"
-                    % (task_id, result["status"], result_text)
-                ),
-                metadata={
-                    "session_key_override": parent_session,
-                    "omit_user_turn": True,
-                    "subagent_completion": True,
-                    "subagent_task_id": task_id,
-                    "subagent_label": label,
-                    "subagent_profile": profile,
-                },
-            )
+        self.jobs.publish(
+            task_id,
+            session_key=parent_session,
+            channel=parent_channel,
+            chat_id=parent_chat_id,
+            label=label,
+            profile=profile,
+            result=result,
         )
 
     @staticmethod
@@ -443,15 +439,6 @@ class SubagentManager:
         if profile == "scripting":
             return common | {"web_fetch", "web_search", "vision"}
         return common
-
-    @staticmethod
-    def _write_result(task_dir: Path, result: dict[str, Any]) -> None:
-        temp = task_dir / ".result.json.tmp"
-        target = task_dir / "result.json"
-        temp.write_text(
-            json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-        temp.replace(target)
 
     async def wait(self, timeout: float = 30.0) -> bool:
         """Wait for currently running background children without stopping them."""

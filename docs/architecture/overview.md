@@ -1,7 +1,7 @@
 # Runtime 架构
 
 Kirakira 使用 Akashic 的原生 Context / Fiber / Effect 内核。参考提交固定为
-[`21b38f0e102d9e1bdc5576725635dce29f135c0c`](https://github.com/kachofugetsu09/akashic-agent/tree/21b38f0e102d9e1bdc5576725635dce29f135c0c)。
+[`6016befc682a037fbfc61180d39f17c219572ed6`](https://github.com/kachofugetsu09/akashic-agent/tree/6016befc682a037fbfc61180d39f17c219572ed6)。
 `agent/plugin_composition/UPSTREAM.json` 逐文件记录来源和 SHA-256，包含原样移植的内核及其直接依赖；
 许可证随源码保留。`scripts/check_upstream_kernel.py` 在本地和 CI 检查字节一致性。
 
@@ -49,6 +49,7 @@ flowchart TD
 | `plugins/conversation` | 接受请求、获取准入、激活程序、处理中断与终态 |
 | `plugins/reply_program` | 默认回复程序、稳定请求回执、工具效果记录、暂停和显式续跑 |
 | `plugins/reply` | 渠道入站 follower、可投递的恢复工作 |
+| `plugins/jobs` | 后台结果的不可变事实、逐步领取与回复同事务消费；生产者不直接发起用户消息 |
 | `plugins/context` | 对话上下文、AGENTS/Skill、历史投影和压缩 |
 | `plugins/react` | 共享模型/工具循环、终结策略、批次和执行结果 |
 | `plugins/models` | 客户端构造、当前生成的重试和流式取消 |
@@ -63,6 +64,11 @@ flowchart TD
 `agent/core` 和顶层 `session` 已移除。模型、工具、回复、MCP、记忆和控制业务都由各自插件包提供。
 `agent/plugins/__init__.py` 只保留已有插件的公共导入入口。
 
+Jobs 的 Session 钩子返回该次注册的撤销句柄，由原生 Effect 释放；旧句柄无法删除新激活的钩子。
+子代理只注入 Jobs，不持有消息总线。子代理与 Scheduler 先暂存工具声明，再通过 `install_owned`
+发布到确切 activation，撤销时移除该 owner 的贡献并排空实际调用。局部替换 Jobs 会重新激活依赖分支，
+Ledger 与未读结果保持原身份，不会因遗留工具注册而激活失败。
+
 ## 持久事实与恢复
 
 接受输入时，原始消息、来源 head 和回复程序在 `sessions.db` 同一 owner 事务中提交。
@@ -72,6 +78,13 @@ Session 最终消息和程序结算也在同一事务中完成；来源 epoch �
 已保存结果的工具调用在续跑时复用结果。已开始但结果未知的操作进入 `needs_reconciliation`，
 要求显式核实及依据；不会因为重启自动重放。管理入口在同一 Session 准入下执行。
 渠道恢复需要已有投递订阅；直接请求保持暂停，等待明确的续跑操作。
+
+后台子任务通过 `jobs.notices.v1` 发布结果。当前回复在每次模型请求前准备材料，领取同一 Session 的未读
+结果；传输重试使用已冻结的请求，后来的结果留给下一步。空闲唤醒也先取得 Session admission，再检查
+结果是否仍未领取，避免生成第二条重复回复。通知的 consumed、最终消息和程序完成在同一个 SQLite
+事务提交；取消、模型拒绝或提交失败不能提前消费。重启后的 paused 程序按原身份重新取得材料。
+独立 `job:<id>` 来源不伪造用户输入，默认不触发记忆学习。`spawn_manage(action="results")` 按原会话
+读取结果和消费回执。旧的 `subagent-runs/result.json` 写入已移除，运行期以结果 owner 为准。
 
 上下文压缩是历史投影，不能删除原始消息。Akasha2 算法继续固定在独立的
 `d85b00c233686b68b082052b1b20123905aeab13`，本轮没有改动记忆算法或迁移旧库。
@@ -83,6 +96,18 @@ Session 最终消息和程序结算也在同一事务中完成；来源 epoch �
 工具菜单只在一次模型生成内固定具体工具对象，下一次生成重新读取当前可用工具。
 详见[所有权与局部更新](ownership-and-reload.md)。
 
-内核字节一致性、业务拆分和全部上游功能完成是不同的验收项。完整功能范围仍是
-[70 个生产插件及 3 个跨目录面](../status/akashic-features.md)；其中后台结果注入、完整执行宿主、
-全部模型/资源提供方和产品客户端仍需继续补齐。不能从固定内核或测试数量推导功能全部完成。
+## 与当前上游的架构范围
+
+2026-10-20 核对最新 main `6016bef`：原生组合内核的 23 个固定文件及直接依赖全部逐字节一致，
+该次 main 的核心内核没有变化。另 10 个 Akasha2 固定文件仍按记忆自身版本检查。
+
+| 层 | 当前情况 | 尚未一致的合同 |
+| --- | --- | --- |
+| Context/Fiber/Effect | 原生内核一致，单一 Root 和 activation 负责依赖、实际调用和资源关闭 | 不由此推出整套宿主能力一致 |
+| 业务组合 | Ledger、Sources、Conversation、Reply Program、Context、ReAct、Models、Tools、MCP、Delivery 独立 owner；新增 Jobs | 材料服务和模型/内容等完整上游公共协议仍需逐步接入 |
+| 持久事实 | 不可变输入、消息、程序效果和 Jobs 结果在同一 Session 数据库；回复和结果消费原子提交 | 尚未全面移植上游统一 Message 的 Input/Output/Control/ToolResult 日志与投影 |
+| 同轮控制 | 程序停止、已知工具效果恢复、后台结果步间注入已接入 | 最新 main 的 steer 暂存/撤回/步间输入、latest 输入重试协议，Scheduler 工具边界让出 |
+| 执行宿主 | 本地目录、Shell/PTY、MCP、子代理及资源排空已有 | 原生 Task、prepared 执行目标、HostBridge、Workload 与进程服务 |
+
+整体架构尚未完全对齐。完整功能范围仍是[70 个生产插件及 3 个跨目录面](../status/akashic-features.md)，
+全部模型/资源提供方和产品客户端也需继续补齐。固定内核、同名 owner 和测试数量都不是整项完成证据。

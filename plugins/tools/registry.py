@@ -159,6 +159,18 @@ class ToolRegistry:
             {name: replace(tool, owner=owner) for name, tool in staging._tools.items()}
         )
 
+    async def install_owned(self, context, staging):
+        """Publish a staged menu under the exact native activation's Effect."""
+        from agent.composition.root import Activation
+
+        owner = Activation(context)
+
+        def setup():
+            self.install_owner(owner, staging)
+            return lambda: self.remove_owner(owner)
+
+        await context.effect(setup, label="tool-contributions")
+
     def remove_owner(self, owner):
         self._tools = {
             name: tool for name, tool in self._tools.items() if tool.owner is not owner

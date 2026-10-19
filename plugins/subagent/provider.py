@@ -3,15 +3,16 @@ from agent.composition.lifecycle import on_close, on_stopping
 """Declare this owner's dependencies, capabilities and resource lifetime."""
 
 
-from bus.contract import BUS
 from plugins.default_memory.contract import MEMORY
 from plugins.ledger.contract import SESSIONS
+from plugins.jobs.contract import JOBS
 from plugins.react.contract import REACT
 from plugins.subagent.contract import SUBAGENTS
 from plugins.subagent.service import SubagentManager
 from plugins.tools.contract import TOOLS
+from plugins.tools.registry import ToolRegistry
 
-inject = (REACT, TOOLS, SESSIONS, MEMORY, BUS)
+inject = (REACT, TOOLS, SESSIONS, MEMORY, JOBS)
 provides = (SUBAGENTS,)
 
 
@@ -20,16 +21,17 @@ async def apply(ctx):
     registry = ctx.get(TOOLS)
     session_manager = ctx.get(SESSIONS)
     memory = ctx.get(MEMORY)
-    bus = ctx.get(BUS)
     subagents = SubagentManager(
         reasoner=reasoner,
         tools=registry,
         sessions=session_manager,
         memory=memory,
-        bus=bus,
+        jobs=ctx.get(JOBS),
     )
     await on_close(ctx, lambda: subagents.shutdown())
-    subagents.register_tool()
+    staging = ToolRegistry()
+    subagents.register_tool(staging)
+    await registry.install_owned(ctx, staging)
 
     await ctx.provide(SUBAGENTS, subagents)
 

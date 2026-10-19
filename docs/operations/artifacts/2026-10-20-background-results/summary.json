@@ -1,0 +1,57 @@
+{
+  "model": "step-5-preview",
+  "endpoint": "https://api.stepfun.com/step_plan/v1",
+  "billing_surface": "step_plan",
+  "final_reports": [
+    {
+      "file": "core-final.json",
+      "passed": 30,
+      "total": 30
+    },
+    {
+      "file": "readout-final.json",
+      "passed": 10,
+      "total": 10
+    },
+    {
+      "file": "scheduler-final.json",
+      "passed": 13,
+      "total": 13
+    },
+    {
+      "file": "workspace-final.json",
+      "passed": 6,
+      "total": 6
+    },
+    {
+      "file": "wake.json",
+      "passed": 1,
+      "total": 1
+    },
+    {
+      "file": "drift.json",
+      "passed": 4,
+      "total": 4
+    }
+  ],
+  "passed": 64,
+  "total": 64,
+  "observed_attempts": 150,
+  "completed_model_responses": 139,
+  "reported_usage": {
+    "prompt_tokens": 234605,
+    "completion_tokens": 17850,
+    "total_tokens": 252455
+  },
+  "completed_request_latency_seconds": {
+    "p50": 2.584923580288887,
+    "p95": 7.954772096127272
+  },
+  "recorded_source_mismatches": [],
+  "limitations": [
+    "synthetic functional fixtures, not external task success or memory quality",
+    "controlled cancellation/retry attempts may not have provider usage",
+    "consumed means material was included and a reply saved, not semantic correctness or external delivery ACK",
+    "intermediate model, validator, registration and I/O failures retained separately; final pass rate does not erase them"
+  ]
+}

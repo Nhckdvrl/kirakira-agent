@@ -125,6 +125,8 @@ async def verify(args):
                         "plugins/conversation",
                         "plugins/delivery",
                         "plugins/ledger",
+                        "plugins/jobs",
+                        "plugins/subagent",
                     )
                     for path in sorted(Path(owner).glob("*.py"))
                 ],
@@ -178,7 +180,9 @@ async def verify(args):
             evidence = {}
             try:
                 async with rig(
-                    work, observed, keep_files=category == "files_restart"
+                    work,
+                    observed,
+                    keep_files=category in {"files_restart", "background_spawn"},
                 ) as runtime:
 
                     async def ask(prompt, key="verify:main"):
@@ -468,6 +472,218 @@ async def verify(args):
                             summary=active.summary,
                         )
 
+                    elif category in {
+                        "job_busy",
+                        "job_idle",
+                        "job_restart",
+                        "background_spawn",
+                        "job_resume",
+                        "job_failed",
+                        "jobs_reload",
+                    }:
+                        jobs = runtime.pipeline.jobs
+
+                        def publish_job():
+                            runtime.session_manager.get_or_create("verify:main")
+                            return jobs.publish(
+                                "probe-" + nonce,
+                                session_key="verify:main",
+                                channel="direct",
+                                chat_id="local",
+                                label="background probe",
+                                profile="research",
+                                result={
+                                    "status": "failed"
+                                    if category == "job_failed"
+                                    else "completed",
+                                    "result": "FAILURE_" + nonce
+                                    if category == "job_failed"
+                                    else nonce,
+                                },
+                            )
+
+                        if category == "jobs_reload":
+                            publish_job()
+                            ledger, previous = runtime.session_manager, jobs
+                            await runtime.composition.replace(
+                                "jobs", runtime.composition._modules["jobs"]
+                            )
+                            jobs = runtime.pipeline.jobs
+                            assert (
+                                jobs is not previous
+                                and runtime.session_manager is ledger
+                            )
+                            assert runtime.subagents.jobs is jobs
+                            previous.close()
+                            assert all(
+                                runtime.tools.get_tool(name).owner is not None
+                                for name in [
+                                    "spawn",
+                                    "spawn_manage",
+                                    "schedule",
+                                    "list_schedules",
+                                    "cancel_schedule",
+                                ]
+                            )
+                            result = await ask(
+                                "Report the exact verification code from the recorded background task result."
+                            )
+                            assert nonce in result.content
+                            assert jobs.read("probe-" + nonce)["status"] == "consumed"
+                            evidence.update(
+                                ledger_preserved=True,
+                                jobs_replaced=True,
+                                tool_contributions_owned=True,
+                                reply=result.content,
+                            )
+                        elif category == "job_busy":
+
+                            def settle_background():
+                                publish_job()
+                                return "The background result was recorded; incorporate its verification code."
+
+                            register(
+                                "settle_background",
+                                "Complete the pending background probe.",
+                                {},
+                                [],
+                                settle_background,
+                            )
+                            result = await ask(
+                                "Call settle_background, then report the exact verification code from the background result."
+                            )
+                            notice = jobs.read("probe-" + nonce)
+                            assert nonce in result.content
+                            assert notice["status"] == "consumed"
+                            assert notice["program_id"] == result.metadata["program_id"]
+                            count = len(observed.requests)
+                            assert (
+                                await runtime.pipeline.run(
+                                    None, "verify:main", job_notice_id="probe-" + nonce
+                                )
+                                is None
+                            )
+                            assert len(observed.requests) == count
+                            assert (
+                                len(runtime.pipeline.programs.store.list("verify:main"))
+                                == 1
+                            )
+                            evidence.update(
+                                same_program=True,
+                                duplicate_wake_requests=0,
+                                reply=result.content,
+                            )
+                        elif category == "job_idle":
+                            await ask("Reply ready for background task results.")
+                            delivered = asyncio.Event()
+                            received = []
+
+                            async def receive(message):
+                                received.append(message)
+                                delivered.set()
+
+                            runtime.bus.subscribe_outbound("direct", receive)
+                            await runtime.start_background(start_channels=False)
+                            publish_job()
+                            await asyncio.wait_for(delivered.wait(), 180)
+                            assert len(received) == 1 and nonce in received[0].content
+                            messages = runtime.session_manager.get_or_create(
+                                "verify:main"
+                            ).messages
+                            assert (
+                                len([m for m in messages if m["role"] == "user"]) == 1
+                            )
+                            assert messages[-1]["source"] == "job:probe-" + nonce
+                            assert jobs.read("probe-" + nonce)["status"] == "consumed"
+                            evidence.update(
+                                deliveries=1,
+                                synthetic_user_messages=0,
+                                reply=received[0].content,
+                            )
+                        elif category == "job_restart":
+                            publish_job()
+                            evidence["pending_before_restart"] = jobs.read(
+                                "probe-" + nonce
+                            )["status"]
+                            request = jobs.wake_request("probe-" + nonce, "verify:main")
+                            identity, _ = runtime.pipeline.programs.accept(
+                                request, "verify:main"
+                            )
+                            evidence["accepted_program_before_restart"] = identity
+                        elif category == "job_failed":
+                            publish_job()
+                            result = await ask(
+                                "Report the background task status and its exact diagnostic. Do not claim a failed task succeeded."
+                            )
+                            assert "FAILURE_" + nonce in result.content
+                            assert jobs.read("probe-" + nonce)["status"] == "consumed"
+                            evidence.update(
+                                failed_result_reported=True, reply=result.content
+                            )
+                        elif category == "job_resume":
+                            publish_job()
+                            task = asyncio.create_task(
+                                ask(
+                                    "Report the background verification code and explain how the recorded task result supports it."
+                                )
+                            )
+                            try:
+                                await asyncio.wait_for(observed.first_delta.wait(), 120)
+                                task.cancel()
+                                try:
+                                    await task
+                                except asyncio.CancelledError:
+                                    pass
+                                else:
+                                    raise AssertionError(
+                                        "stream finished before cancellation"
+                                    )
+                                notice = jobs.read("probe-" + nonce)
+                                assert notice["status"] == "claimed"
+                                evidence.update(
+                                    program_id=notice["program_id"],
+                                    claimed_before_restart=True,
+                                )
+                            finally:
+                                task.cancel()
+                                await asyncio.gather(task, return_exceptions=True)
+                        else:
+                            runtime.subagents.register_tool()
+                            (work / "child-code.txt").write_text(nonce)
+
+                            async def await_background():
+                                assert await runtime.subagents.wait(timeout=180)
+                                return (
+                                    "Background task settled; use its recorded result."
+                                )
+
+                            register(
+                                "await_background",
+                                "Wait for the background child to finish before responding.",
+                                {},
+                                [],
+                                await_background,
+                            )
+                            result = await ask(
+                                "Use spawn with mode=background and profile=research to ask a child to read child-code.txt "
+                                "and return its exact code. Do not read the file yourself. Then call await_background "
+                                "and report the code from the background result."
+                            )
+                            notices = jobs.list("verify:main")
+                            assert (
+                                len(notices) == 1 and notices[0]["status"] == "consumed"
+                            )
+                            assert "spawn" in result.metadata["tools_used"]
+                            assert "await_background" in result.metadata["tools_used"]
+                            assert "read_file" not in result.metadata["tools_used"]
+                            assert nonce in result.content
+                            assert nonce in notices[0]["fact"]["result"]["result"]
+                            evidence.update(
+                                real_child_model=True,
+                                notice=notices[0],
+                                reply=result.content,
+                            )
+
                     elif category == "stream_cancel":
                         task = asyncio.create_task(
                             ask(
@@ -510,7 +726,56 @@ async def verify(args):
                         for item in rows
                     )
                     evidence["execution_statuses"] = [item["status"] for item in rows]
-                if category == "files_restart":
+                if category == "job_resume":
+                    async with rig(work, observed) as restarted:
+                        result = await restarted.process_direct(
+                            "",
+                            session_key="verify:main",
+                            resume_program_id=evidence["program_id"],
+                        )
+                        assert nonce in result.content
+                        notice = restarted.pipeline.jobs.read("probe-" + nonce)
+                        assert notice["status"] == "consumed"
+                        assert notice["program_id"] == evidence["program_id"]
+                        evidence.update(
+                            resume_reply=result.content, same_program_after_restart=True
+                        )
+                elif category == "job_restart":
+                    async with rig(work, observed) as restarted:
+                        delivered = asyncio.Event()
+                        received = []
+
+                        async def receive_recovered(message):
+                            received.append(message)
+                            delivered.set()
+
+                        restarted.bus.subscribe_outbound("direct", receive_recovered)
+                        await restarted.start_background(start_channels=False)
+                        await asyncio.wait_for(delivered.wait(), 180)
+                        assert len(received) == 1 and nonce in received[0].content
+                        jobs = restarted.pipeline.jobs
+                        notice = jobs.read("probe-" + nonce)
+                        assert notice["status"] == "consumed"
+                        assert (
+                            notice["program_id"]
+                            == evidence["accepted_program_before_restart"]
+                        )
+                        assert not jobs.publish(
+                            "probe-" + nonce,
+                            session_key="verify:main",
+                            channel="direct",
+                            chat_id="local",
+                            label="background probe",
+                            profile="research",
+                            result={"status": "completed", "result": nonce},
+                        )
+                        evidence.update(
+                            restart_reply=received[0].content,
+                            consumed=True,
+                            duplicate_publish=False,
+                            same_accepted_program=True,
+                        )
+                elif category == "files_restart":
                     async with rig(work, observed, keep_files=True) as restarted:
                         result = await restarted.process_direct(
                             "Read probe.txt and report its exact contents.",
@@ -587,6 +852,13 @@ async def verify(args):
         "stream_cancel",
         "compaction_restart",
         "provider_reload",
+        "job_busy",
+        "job_idle",
+        "job_restart",
+        "background_spawn",
+        "job_resume",
+        "job_failed",
+        "jobs_reload",
     )
     await asyncio.gather(
         *(
@@ -620,6 +892,13 @@ def main():
             "stream_cancel",
             "compaction_restart",
             "provider_reload",
+            "job_busy",
+            "job_idle",
+            "job_restart",
+            "background_spawn",
+            "job_resume",
+            "job_failed",
+            "jobs_reload",
         ),
     )
     args = parser.parse_args()

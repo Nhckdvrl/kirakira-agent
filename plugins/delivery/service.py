@@ -31,9 +31,10 @@ def _engine_can_retrieve(engine: object) -> bool:
 class DeliveryService:
     """Commit canonical output and program settlement together, then notify delivery."""
 
-    def __init__(self, sessions, bus, event_bus, programs=None):
+    def __init__(self, sessions, bus, event_bus, programs=None, *, jobs=None):
         self.session_manager, self.bus, self.event_bus = sessions, bus, event_bus
         self.programs = programs
+        self.jobs = jobs
 
     async def complete(
         self, state: TurnState, result: AfterReasoningResult, *, after_turn_modules=()
@@ -125,15 +126,23 @@ class DeliveryService:
         binding = current_program(state.session_key)
         if binding is not None:
             result.outbound.metadata["program_id"] = binding.identity
-            self.session_manager.save(
-                session,
-                transaction_hook=lambda tx: self.programs.store.settle(
+
+            def settle(tx):
+                self.programs.store.settle(
                     binding.identity,
                     binding.lease,
                     "completed",
                     result=asdict(result.outbound),
                     transaction=tx,
-                ),
+                )
+                if self.jobs is not None and state.extra_metadata.get(
+                    "background_jobs_read"
+                ):
+                    self.jobs.finish(binding.identity, committed_assistant["id"], tx)
+
+            self.session_manager.save(
+                session,
+                transaction_hook=settle,
             )
         else:
             self.session_manager.save(session)

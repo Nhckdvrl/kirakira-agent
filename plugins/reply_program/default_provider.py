@@ -8,6 +8,7 @@ from plugins.default_memory.contract import MEMORY, MEMORY_SERVICES, RECALL_INSP
 from plugins.delivery.contract import DELIVERY
 from plugins.extensions.contract import EXTENSIONS
 from plugins.ledger.contract import SESSIONS
+from plugins.jobs.contract import JOBS
 from plugins.react.contract import REACT, REACT_CONFIG
 from plugins.reply_program.contract import DEFAULT_REPLY, PROGRAMS
 from plugins.reply_program.service import DefaultReplyProgram
@@ -26,6 +27,7 @@ inject = (
     EXTENSIONS,
     PROGRAMS,
     DELIVERY,
+    JOBS,
 )
 provides = (DEFAULT_REPLY,)
 
@@ -53,6 +55,7 @@ async def apply(ctx):
         memory_services=memory_services,
         recall_inspector=recall_inspector,
         programs=ctx.get(PROGRAMS),
+        jobs=ctx.get(JOBS),
     )
     pipeline._before_turn_modules.provider = lambda: plugin_manager.before_turn_modules
     pipeline._before_reasoning_modules.provider = lambda: (

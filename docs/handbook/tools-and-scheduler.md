@@ -42,6 +42,15 @@ read_file/list_dir 已启用，其他工具默认串行；写入、tool_search �
 
 权限 profile 控制 child 可用工具。新注册工具不会自动绕过 profile；高风险工具仍需显式开放。
 
+background 完成后，结果先保存到 Session 数据库中的 Jobs owner。原会话仍在运行时，下一次模型请求
+会读到结果并合并回复；原会话空闲且渠道可投递时，自动唤醒并按原来源回复。结果已被当前轮领取时
+不会再额外唤醒。后台回传不增加用户消息，也不作为新的用户意图学习。
+
+`spawn_manage(action="results")` 列出当前会话的持久结果，传入 `task_id` 可读取单项结果、消费程序
+和最终消息回执。`list` 查看运行中任务，`cancel` 取消本会话任务；这些工具需要先通过 tool_search
+加载。结果在成功回复提交后才标记 consumed；取消或重启后的未完成程序保留领取，显式恢复时继续
+使用原结果。已结束进程不会因为重启自动重新运行；运行中的子代理本身尚不支持跨重启续跑。
+
 ## Scheduler
 
 `schedule(text, trigger, when, action="notify", context="none", timezone="", name="")`：

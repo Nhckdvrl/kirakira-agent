@@ -15,7 +15,7 @@ from plugins.extensions.service_host import PluginServiceHost
 
 def _sleep_spec(seconds: float = 30) -> dict:
     return {
-        "command": [sys.executable, "-c", f"import time; time.sleep({seconds})"],
+        "command": [sys.executable, "-S", "-c", f"import time; time.sleep({seconds})"],
         "cwd": ".",
         "env": {},
         "readiness_url": "",
@@ -25,7 +25,12 @@ def _sleep_spec(seconds: float = 30) -> dict:
 
 def _instant_exit_spec() -> dict:
     return {
-        "command": [sys.executable, "-c", "raise SystemExit(3)"],
+        # Keep interpreter loading on NFS out of the short process-survival probe.
+        "command": (
+            [sys.executable, "-S", "-c", "raise SystemExit(3)"]
+            if sys.platform == "win32"
+            else ["/bin/sh", "-c", "exit 3"]
+        ),
         "cwd": ".",
         "env": {},
         "readiness_url": "",

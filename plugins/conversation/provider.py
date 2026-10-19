@@ -4,11 +4,12 @@ from agent.composition.lifecycle import on_stopping
 
 from plugins.reply_program.contract import DEFAULT_REPLY, PROGRAMS
 from plugins.sources.contract import ADMISSION
+from plugins.jobs.contract import JOBS
 
 from .contract import CONVERSATION
 from .service import ConversationService
 
-inject = (ADMISSION, DEFAULT_REPLY, PROGRAMS)
+inject = (ADMISSION, DEFAULT_REPLY, PROGRAMS, JOBS)
 provides = (CONVERSATION,)
 
 
@@ -16,7 +17,7 @@ async def apply(ctx):
     program, state = ctx.get(DEFAULT_REPLY), ctx.get(PROGRAMS)
     admission = ctx.get(ADMISSION)
     conversation = ConversationService(
-        program=program, admission=admission, programs=state
+        program=program, admission=admission, programs=state, jobs=ctx.get(JOBS)
     )
     execute = conversation.run
 

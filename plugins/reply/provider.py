@@ -8,8 +8,9 @@ from plugins.conversation.contract import CONVERSATION
 from plugins.reply.contract import FOLLOWER
 from plugins.reply.follower import ReplyFollower
 from plugins.reply_program.contract import PROGRAMS
+from plugins.jobs.contract import JOBS
 
-inject = (BUS, CONVERSATION, PROGRAMS)
+inject = (BUS, CONVERSATION, PROGRAMS, JOBS)
 provides = (FOLLOWER,)
 
 
@@ -18,7 +19,7 @@ async def apply(ctx):
     pipeline = ctx.get(CONVERSATION)
     programs = ctx.get(PROGRAMS)
     bus.inbound_acceptor = programs.accept_channel
-    loop = ReplyFollower(bus=bus, pipeline=pipeline)
+    loop = ReplyFollower(bus=bus, pipeline=pipeline, jobs=ctx.get(JOBS))
     await on_close(ctx, lambda: loop.shutdown())
 
     await ctx.provide(FOLLOWER, loop)

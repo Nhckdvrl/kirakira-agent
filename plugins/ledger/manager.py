@@ -408,12 +408,22 @@ class SessionManager:
         return (int(row[0]), str(row[1])) if row else None
 
     def register_initializer(self, name, callback, *, on_delete=None):
-        """Register synchronous owner hooks using only the supplied transaction."""
-        if name in self._initializers:
-            raise ValueError("session initializer already registered: " + name)
-        self._initializers[name] = callback
-        if on_delete is not None:
-            self._owner_deleters[name] = on_delete
+        """Register transactional owner hooks and return their activation's disposer."""
+        with self._index_lock:
+            if name in self._initializers:
+                raise ValueError("session initializer already registered: " + name)
+            self._initializers[name] = callback
+            if on_delete is not None:
+                self._owner_deleters[name] = on_delete
+
+        def unregister():
+            with self._index_lock:
+                if self._initializers.get(name) is callback:
+                    del self._initializers[name]
+                    if self._owner_deleters.get(name) is on_delete:
+                        self._owner_deleters.pop(name, None)
+
+        return unregister
 
     def get_or_create(self, key: str, *, metadata: JsonDict | None = None) -> Session:
         def check_scope(session):
