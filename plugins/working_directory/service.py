@@ -67,6 +67,15 @@ class WorkingDirectories:
             base = self.legacy_base
         return (base / candidate).resolve(), current.path
 
+    def delete_session(self, session_key, tx):
+        key = "directory:" + session_key
+        current = tx.read(OWNER, key)
+        if current is not None:
+            tx.delete(OWNER, key, expected_version=current.version)
+        for key, record in tx.scan(OWNER, "switch:"):
+            if record.value["session_key"] == session_key:
+                tx.delete(OWNER, key, expected_version=record.version)
+
     def switch(self, session_key, path, *, receipt_key, expected_version=_CURRENT):
         if not session_key or not receipt_key:
             raise ValueError(

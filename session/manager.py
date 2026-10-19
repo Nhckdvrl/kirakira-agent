@@ -350,6 +350,7 @@ class SessionManager:
         self.session_dir.mkdir(parents=True, exist_ok=True)
         self._cache: Dict[str, Session] = {}
         self._initializers = {}
+        self._owner_deleters = {}
         self._delete_callbacks: List[Callable[[str], None]] = []
         self._index_lock = threading.Lock()
         # SQLite 是会话与消息的唯一权威状态。sessions/*.json 只作为旧版一次性
@@ -384,10 +385,13 @@ class SessionManager:
             ).fetchone()
         return (int(row[0]), str(row[1])) if row else None
 
-    def register_initializer(self, name, callback):
+    def register_initializer(self, name, callback, *, on_delete=None):
+        """Register synchronous owner hooks using only the supplied transaction."""
         if name in self._initializers:
             raise ValueError("session initializer already registered: " + name)
         self._initializers[name] = callback
+        if on_delete is not None:
+            self._owner_deleters[name] = on_delete
 
     def get_or_create(self, key: str, *, metadata: JsonDict | None = None) -> Session:
         def check_scope(session):
@@ -766,6 +770,12 @@ class SessionManager:
         with self._index_lock:
             self._index.execute("BEGIN IMMEDIATE")
             try:
+                if self._owner_deleters:
+                    from session.owner_store import OwnerTransaction
+
+                    transaction = OwnerTransaction(self._index)
+                    for delete in self._owner_deleters.values():
+                        delete(key, transaction)
                 self._index.execute("DELETE FROM messages WHERE session_key = ?", (key,))
                 self._index.execute(
                     "DELETE FROM session_compactions WHERE session_key = ?", (key,)

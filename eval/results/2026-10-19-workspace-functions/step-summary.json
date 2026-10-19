@@ -21,6 +21,16 @@
       "returned_total_tokens": 65795
     },
     {
+      "file": "step-lifecycle.json",
+      "passed": 9,
+      "total": 9,
+      "requests": 40,
+      "statuses": {
+        "completed": 40
+      },
+      "returned_total_tokens": 79712
+    },
+    {
       "file": "step-release.json",
       "passed": 9,
       "total": 9,
@@ -41,6 +51,6 @@
       "returned_total_tokens": 65856
     }
   ],
-  "scenario_executions": 36,
-  "returned_total_tokens": 267141
+  "scenario_executions": 45,
+  "returned_total_tokens": 346853
 }

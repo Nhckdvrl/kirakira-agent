@@ -15,6 +15,7 @@
 - Projects 与 Session cwd 接入：稳定项目 ID、改名/归档、一次性目录默认值、创建事务快照、独立切换与回执/CAS。
 - 文件、Shell、子任务与实时 AGENTS 共用目录 owner；独占切换批次、现有进程 cwd 固定、旧会话不回填。
 - Web 项目/目录页面、项目聊天和控制协议共用同一服务及 admission；目录丢失不回退或自动重建。
+- 显式 Session 删除与目录/回执同事务清理；删除失败回滚，重新创建路由重新继承默认值。
 - 被动对话、Wake、Drift、子任务和 Scheduler 共用 reasoner 与工具授权边界；渠道、直接和控制入口共用 admission。
 - Scheduler 提供者使用来源会话、notify/run、none/session 历史与持久 fire；投递回执后完成，未知结果停止自动重放。
 - 删除未接线的旧同步 Agent、手工压缩入口和图快照代码；渠道排队与中断统一归 admission。

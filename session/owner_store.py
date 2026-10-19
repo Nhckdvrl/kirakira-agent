@@ -53,6 +53,14 @@ class OwnerTransaction:
         )
         return [(row[0], Record(row[1], json.loads(row[2]))) for row in rows]
 
+    def delete(self, owner, key, *, expected_version):
+        current = self.read(owner, key)
+        if (None if current is None else current.version) != expected_version:
+            raise StateConflict(f"state changed: {owner}/{key}")
+        self.db.execute(
+            "DELETE FROM owner_records WHERE owner=? AND key=?", (owner, key)
+        )
+
 
 class OwnerStore:
     def __init__(self, sessions):

@@ -23,7 +23,9 @@ def build_workspace_services(sessions):
         default = projects.initialize_session(session, tx)
         directories.initialize(session, tx, default)
 
-    sessions.register_initializer("workspace", initialize)
+    sessions.register_initializer(
+        "workspace", initialize, on_delete=directories.delete_session
+    )
     return WorkspaceServices(projects, directories)
 
 

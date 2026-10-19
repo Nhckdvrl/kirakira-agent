@@ -1,17 +1,43 @@
 {
   "wheel": {
-    "sha256": "6d60e1093465880b9e14ce53952a39f3dee7992a47f3b403b7d0ec076beff20c"
+    "sha256": "20e74b33414e1bbb25a9a4bafa9bbd90bbf42bf9bae1c72d6e1dd147da5f3a92"
   },
   "sdist": {
-    "sha256": "d550f93706a05012c6edd793853c128cc770a6611814770d952749fd32a17334"
+    "sha256": "1b71697ddc3a9e9965bf3527e399929fd08750b887d36c075a48780617777ded"
   },
-  "new_modules_match_source": [
-    "session/owner_store.py",
+  "modules_match_source": [
+    "agent/control/protocol/models.py",
+    "agent/control/protocol/router.py",
+    "agent/control/service.py",
+    "agent/core/pipeline.py",
+    "agent/core/reasoner.py",
+    "agent/core/runtime.py",
+    "agent/core/tool_io.py",
+    "agent/model_runtime/context_compaction.py",
+    "agent/subagent.py",
+    "agent/tools/builtins.py",
+    "agent/tools/registry.py",
+    "bootstrap/control.py",
+    "bootstrap/runtime.py",
+    "bootstrap/tools.py",
     "bootstrap/workspace.py",
-    "plugins/projects/service.py",
-    "plugins/working_directory/service.py",
+    "frontend/web_ui.py",
     "frontend/workspace_ui.py",
-    "migrations/yoyo/20261019_02_workspace_owners.py"
+    "infra/channels/web_chat_channel.py",
+    "migrations/yoyo/20261019_02_workspace_owners.py",
+    "plugins/projects/__init__.py",
+    "plugins/projects/service.py",
+    "plugins/working_directory/__init__.py",
+    "plugins/working_directory/service.py",
+    "scripts/check_change_impact.py",
+    "scripts/check_feature_alignment.py",
+    "scripts/verify_workspace_step_plan.py",
+    "session/manager.py",
+    "session/owner_store.py"
+  ],
+  "sdist_tests_match_source": [
+    "tests/test_migration_runner.py",
+    "tests/test_workspace_features.py"
   ],
   "runtime_databases_packaged": false
 }

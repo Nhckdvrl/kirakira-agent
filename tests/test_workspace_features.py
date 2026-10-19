@@ -169,6 +169,56 @@ def test_switch_receipt_cas_independent_sessions_and_missing_directory(
     assert services.directories.current_info("a")["status"] == "unavailable"
 
 
+def test_deleted_session_can_recreate_without_old_directory_or_receipts(
+    workspace, tmp_path
+):
+    _, sessions, services = workspace
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.mkdir()
+    b.mkdir()
+    project = identity()
+    services.projects.create(project, "Kept project", str(a))
+    sessions.get_or_create("deleted", metadata={"project_id": project})
+    sessions.get_or_create("other", metadata={"project_id": project})
+    services.directories.switch("deleted", str(b), receipt_key="deleted-effect")
+    services.directories.switch("other", str(b), receipt_key="other-effect")
+    assert sessions.delete_session("deleted")
+    assert services.directories.snapshot("deleted").revision is None
+    assert (
+        services.directories.store.read("working_directory", "switch:deleted-effect")
+        is None
+    )
+    assert services.directories.snapshot("other").path == str(b)
+    assert (
+        services.directories.store.read("working_directory", "switch:other-effect")
+        is not None
+    )
+    assert services.projects.list()[0]["id"] == project
+    sessions.get_or_create("deleted", metadata={"project_id": project})
+    assert services.directories.snapshot("deleted").path == str(a)
+
+
+def test_later_delete_owner_failure_rolls_back_session_messages_and_directory(
+    workspace,
+):
+    _, sessions, services = workspace
+    session = sessions.get_or_create("delete-rollback")
+    session.add_message("user", "retained original")
+    sessions.save(session)
+
+    def fail(key, tx):
+        raise RuntimeError("delete owner failed")
+
+    sessions.register_initializer(
+        "late-owner", lambda session, tx: None, on_delete=fail
+    )
+    with pytest.raises(RuntimeError, match="delete owner failed"):
+        sessions.delete_session(session.key)
+    restored = sessions.get_or_create(session.key)
+    assert restored.messages[0]["content"] == "retained original"
+    assert services.directories.snapshot(session.key).revision == 0
+
+
 def test_repository_rules_are_live_nearest_root_override_bounded_and_all_or_nothing(
     tmp_path,
 ):
@@ -517,6 +567,21 @@ async def test_web_project_entry_uses_the_same_owner_and_routes_chat_to_project_
                 runtime.session_manager.get_or_create(key).metadata["project_id"]
                 == project
             )
+            deleted = await client.delete("/api/session", params={"key": key})
+            assert deleted.status_code == 200
+            assert runtime.working_directories.snapshot(key).revision is None
+            recreated = await client.post(
+                "/message",
+                json={
+                    "session_id": "project-chat",
+                    "project_id": project,
+                    "text": "write again after deleting the previous session",
+                },
+            )
+            assert (
+                recreated.status_code == 200 and recreated.json()["content"] == "saved"
+            )
+            assert runtime.working_directories.snapshot(key).path == str(code)
     finally:
         await web.stop()
         await runtime.stop_background(tasks)

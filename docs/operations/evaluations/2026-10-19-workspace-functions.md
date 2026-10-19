@@ -11,6 +11,7 @@
 | --- | --- |
 | 项目生命周期 | 稳定创建回执、改名、归档、一次性绑定、并发绑定唯一成功；归档阻止新会话而不破坏旧会话 |
 | 同库创建 | Session 和目录在同一事务内；后续 initializer 失败全部回滚；并发创建只发布一个缓存对象 |
+| 删除与重建 | Session、目录及切换回执同事务删除；保留项目和其他会话，失败回滚；同一路由可按项目默认值重新创建 |
 | 升级 | 旧会话不回填默认目录，原消息 ID/内容不变，新迁移加入 Yoyo 正式目录 |
 | 切换 | 当前修订 CAS、显式 null 不绕过检查、回执重试、不同会话互不影响 |
 | 丢失目录 | 相对路径失败且不重建目录；显式绝对目标仍可访问；状态显示 unavailable |
@@ -25,13 +26,17 @@
 
 ## 离线回归
 
-单一项目 `.venv` / Python 3.14.6。最终全量 **736 passed、4 subtests passed**（58.06 秒），22 条既有 Telegram 弃用警告。
-新增的 15 项（含参数化）使用真实 SQLite、文件系统、Socket、HTTP 和进程组件；确定性模型只控制工具序列。
-最后代码检查后的目录/控制专项为 **32 passed**。
+单一项目 `.venv` / Python 3.14.6。最终全量 **738 passed、4 subtests passed**（58.02 秒），22 条既有 Telegram 弃用警告。
+新增的 17 项（含参数化）使用真实 SQLite、文件系统、Socket、HTTP 和进程组件；确定性模型只控制工具序列。
+最后代码检查后的目录/控制专项为 **34 passed**。
 
 首次全量为 **717 passed / 4 failed**。三项是迁移期望列表未加入新 ID，一项是迁移测试的
 旧 `sessions.db` 只是 opaque 字节夹具。已补齐正式目录并在新迁移中识别 SQLite 文件头，
 不改旧迁移，不重写历史库，不放松原消息断言；后续全量通过。
+
+发布后再次复查发现删除会话会遗留新增目录行，导致同一路由重建时发生 owner CAS 冲突。
+已补齐事务内 owner 删除钩子、目录/回执清理，以及删除失败整事务回滚；增补两项回归，
+并在最后 Step 轮中实际删除、重建项目会话，再调用文件工具验证默认目录。
 
 ## Step5 真实功能
 
@@ -48,9 +53,10 @@
 | 代码复核轮 | 9/9 | 33 | 65,856 |
 | 发布前轮 | 9/9 | 34 | 68,097 |
 | 工具回执证据轮 | 9/9 | 33 | 67,393 |
+| 删除/重建生命周期轮 | 9/9 | 40 | 79,712 |
 
-共 36 次场景执行、133 个成功模型响应，返回 usage 合计 267,141 tokens，未观察到模型 I/O 错误。
-这是三类场景的重复验证，不是 36 类不同功能。最后一轮额外保存真实 tool_result 和逐场景检查，
+共 45 次场景执行、173 个成功模型响应，返回 usage 合计 346,853 tokens，未观察到模型 I/O 错误。
+这是三类场景的重复验证，不是 45 类不同功能。最后两轮额外保存真实 tool_result 和逐场景检查，
 要求目录/读取/Shell（或项目写入/回读）实际成功；重启后也必须再次成功调用读取工具。
 最终生产源码和验证器的摘要与该轮报告一致。此前结果全部保留。
 这些是功能验证，不是整体性能评测或模型能力榜单。
@@ -60,15 +66,17 @@
 全量清单与固定上游插件集合一致，本地落点、生成 Markdown、附加范围路径均通过检查，已加入 CI。
 新增模块 Ruff F/I、修改的已有模块 Ruff F、Web 脚本 Node 语法检查、383 个本地 Markdown 链接检查通过。
 既有迁移未改变，10 个 Akasha2 固定算法文件仍逐字节匹配 pin。
-sdist/wheel 构建和 CLI 帮助通过；核对六个新增运行模块与制品一致，制品没有运行时数据库。
+sdist/wheel 构建和 CLI 帮助通过；核对 28 个本轮代码模块与制品一致，sdist 的两份修改测试也与源码一致，
+制品没有运行时数据库。
 没有声称执行了全项目类型检查或真实浏览器 UI 测试。
 
 | 原始文件 | 内容 |
 | --- | --- |
-| `pytest-initial-failures.txt` / `pytest-final.txt` | 首次迁移失败和最终全量结果 |
-| `pytest-workspace-control.txt` | 最后代码复核的目录与控制专项 |
+| `pytest-initial-failures.txt` / `pytest-final.txt` | 首次迁移失败和删除补漏前的 736 项结果 |
+| `pytest-lifecycle.txt` / `pytest-workspace-lifecycle.txt` | 最终 738 项全量及补充 Web 删除后重建的 34 项专项 |
+| `pytest-workspace-control.txt` | 删除补漏前的目录与控制专项 |
 | `step-first.json` / `step-review.json` / `step-release.json` | 前三轮逐场景及原生 usage |
-| `step-evidence.json` / `step-summary.json` | 最后生产工具回执、规则检查、源码摘要和跨轮汇总 |
+| `step-evidence.json` / `step-lifecycle.json` / `step-summary.json` | 生产工具回执、规则与生命周期检查、源码摘要和跨轮汇总 |
 | `feature-catalog.json` / `change-impact.json` | 全量范围及变更影响选择 |
 | `package-check.json` / `verification.json` | 制品校验与最终源码/结果摘要 |
 

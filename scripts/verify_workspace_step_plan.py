@@ -172,6 +172,30 @@ async def verify(args):
                         "exact_file_content": nonce,
                         "independent_session_default": str(a),
                     }
+                    runtime.working_directories.switch(
+                        key, str(b), receipt_key="before-delete"
+                    )
+                    runtime.control_service.delete_thread(key)
+                    assert runtime.working_directories.snapshot(key).revision is None
+                    runtime.session_manager.get_or_create(
+                        key, metadata={"project_id": project}
+                    )
+                    assert runtime.working_directories.snapshot(key).path == str(a)
+                    recreated = await runtime.process_direct(
+                        "Read relative path created.txt and report its exact contents.",
+                        session_key=key,
+                        skip_memory_retrieval=True,
+                        skip_post_memory=True,
+                    )
+                    row["delete_recreate_tool_results"] = completed_tools(runtime)
+                    assert any(
+                        t["name"] == "read_file"
+                        and not t["is_error"]
+                        and nonce in t["content"]
+                        for t in row["delete_recreate_tool_results"]
+                    )
+                    assert nonce in recreated.content
+                    row["checks"]["deleted_session_recreated_default"] = str(a)
                 else:
                     key = "verify:directory"
                     runtime.session_manager.get_or_create(key)

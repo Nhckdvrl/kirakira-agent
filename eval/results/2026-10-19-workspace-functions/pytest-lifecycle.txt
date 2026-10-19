@@ -1,0 +1,18 @@
+........................................................................ [  9%]
+........................................................................ [ 19%]
+........................................................................ [ 29%]
+........................................................................ [ 39%]
+........................................................................ [ 48%]
+........................................................................ [ 58%]
+........................................................................ [ 68%]
+........................................................................ [ 78%]
+........................................................................ [ 87%]
+.................................................................... [ 97%]
+......................                                                   [100%]
+=============================== warnings summary ===============================
+tests/test_telegram_utils.py: 22 warnings
+  /home/xiang/projects/kirakira-agent/.venv/lib/python3.14/site-packages/telegram/error.py:243: PTBDeprecationWarning: Deprecated since version v22.2: In a future major version attribute `retry_after` will be of type `datetime.timedelta`. You can opt-in early by setting `PTB_TIMEDELTA=true` or ``PTB_TIMEDELTA=1`` as an environment variable.
+    return get_timedelta_value(  # type: ignore[return-value]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+738 passed, 22 warnings, 4 subtests passed in 58.02s
