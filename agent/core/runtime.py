@@ -39,6 +39,7 @@ class CoreRuntime:
     plugin_manager: Any | None = None
     mcp_watcher: Any | None = None
     plugin_watcher: Any | None = None
+    service_registry: Any = None
     memory_services: Any = None
     scheduler: Any | None = None
     subagents: Any | None = None

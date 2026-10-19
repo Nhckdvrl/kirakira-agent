@@ -293,10 +293,24 @@ class StreamDeltaReady:
     iteration: int
     content_delta: str = ""
     reasoning_delta: str = ""
+    reset: bool = False
 
     @property
     def thinking_delta(self) -> str:
         return self.reasoning_delta
+
+
+@dataclass(frozen=True)
+class ModelAttemptStatus:
+    session_key: str
+    channel: str
+    chat_id: str
+    iteration: int
+    attempt: int
+    max_attempts: int
+    phase: str
+    delay_seconds: float = 0.0
+    reason: str = ""
 
 
 @dataclass(frozen=True)

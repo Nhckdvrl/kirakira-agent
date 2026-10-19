@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import unittest
 
-from core.memory.services import MemoryServices
+from plugins.default_memory.contract import MemoryServices
 
 
 class _Closeable:

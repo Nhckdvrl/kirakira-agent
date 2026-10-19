@@ -42,6 +42,8 @@ def rebuild(source: Path, output: Path, model: str, *, config: AkashaConfig | No
         keys: dict[str, str] = {}
         with closing(sqlite3.connect(f"{snapshot.as_uri()}?mode=ro", uri=True)) as db:
             db.row_factory = sqlite3.Row
+            has_publications = db.execute("SELECT 1 FROM sqlite_master WHERE name='message_publications'").fetchone()
+            positions = dict(db.execute('SELECT message_id,position FROM message_publications')) if has_publications else {}
             rows = db.execute("SELECT * FROM messages WHERE role='assistant' ORDER BY session_key,seq").fetchall()
             for row in rows:
                 extra = json.loads(row["extra_json"] or "{}")
@@ -70,21 +72,24 @@ def rebuild(source: Path, output: Path, model: str, *, config: AkashaConfig | No
                     vectors[message.id] = dense
                     keys[message.id] = turn_key(message.session_key, message.seq, message.role)[2]
                 validate_turn(items)
-                turns.append((items, _reinforce_boost_for_turn(event.extra, event.tool_chain_raw)))
-        if len({len(item.embedding) for items, _ in turns for item in items}) > 1:
+                turns.append((items, _reinforce_boost_for_turn(event.extra, event.tool_chain_raw), positions.get(row["id"])))
+        if len({len(item.embedding) for items, _, _ in turns for item in items}) > 1:
             raise ValueError("source mixes embedding dimensions")
-        turns.sort(key=lambda pair: (datetime.fromisoformat(pair[0][1].message.ts),
-                                    keys[pair[0][0].message.id]))
+        if turns and all(position is not None for _, _, position in turns):
+            turns.sort(key=lambda pair: pair[2])
+        else:
+            turns.sort(key=lambda pair: (datetime.fromisoformat(pair[0][1].message.ts),
+                                        keys[pair[0][0].message.id]))
         # Publish only after complete replay, on the destination filesystem.
         output.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix=".akasha-replay-", dir=output.parent) as staging:
             candidate = Path(staging) / "akasha.db"
             store = AkashaStore(candidate)
             try:
-                for items, boost in turns:
+                for items, boost, position in turns:
                     apply_committed_turn(store=store, config=config, source_db_path=snapshot,
                         items=items, model=model, message_embeddings=vectors,
-                        message_turn_keys=keys, reinforce_boost=boost)
+                        message_turn_keys=keys, reinforce_boost=boost, source_position=position)
                 # Preserve the snapshot's cutover so messages arriving between
                 # backup and activation are still consumed after activation.
                 from plugins.akasha.consumption import initialize_cursor

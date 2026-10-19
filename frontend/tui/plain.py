@@ -9,6 +9,7 @@ from bus.events import InboundMessage, OutboundMessage
 from bus.events_lifecycle import (
     ContextBudgetUpdated,
     ContextPrepared,
+    ModelAttemptStatus,
     StreamDeltaReady,
     ToolCallCompleted,
     ToolCallStarted,
@@ -49,12 +50,21 @@ async def runtime_plain_repl(
         nonlocal line_open
         if not state.apply(event):
             return
+        if event.reset:
+            printed_by_iteration.pop(event.iteration, None)
+            if line_open:
+                print('\n  · 上次生成已中断，重新生成', flush=True)
+                line_open = False
         if event.content_delta:
             print(event.content_delta, end="", flush=True)
             printed_by_iteration[event.iteration] = (
                 printed_by_iteration.get(event.iteration, "") + event.content_delta
             )
             line_open = True
+
+    async def on_attempt(event: ModelAttemptStatus) -> None:
+        if state.apply(event) and event.phase == 'retrying':
+            print(f'  · 上游不稳定 · {event.attempt}/{event.max_attempts} 次尝试 · {event.delay_seconds:.1f}s 后重试', flush=True)
 
     async def on_context(event: ContextPrepared) -> None:
         if not state.apply(event):
@@ -130,6 +140,7 @@ async def runtime_plain_repl(
     runtime.bus.subscribe_outbound("cli", on_outbound)
     runtime.event_bus.on(TurnStarted, on_started)
     runtime.event_bus.on(StreamDeltaReady, on_delta)
+    runtime.event_bus.on(ModelAttemptStatus, on_attempt)
     runtime.event_bus.on(ContextPrepared, on_context)
     runtime.event_bus.on(ContextBudgetUpdated, on_context_budget)
     runtime.event_bus.on(ToolCallStarted, on_tool_started)
@@ -165,6 +176,7 @@ async def runtime_plain_repl(
         runtime.bus.unsubscribe_outbound("cli", on_outbound)
         runtime.event_bus.off(TurnStarted, on_started)
         runtime.event_bus.off(StreamDeltaReady, on_delta)
+        runtime.event_bus.off(ModelAttemptStatus, on_attempt)
         runtime.event_bus.off(ContextPrepared, on_context)
         runtime.event_bus.off(ContextBudgetUpdated, on_context_budget)
         runtime.event_bus.off(ToolCallStarted, on_tool_started)

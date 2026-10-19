@@ -16,7 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Optional
 
-from core.memory.services import MemoryServices
+from plugins.default_memory.contract import MemoryServices
 
 if TYPE_CHECKING:
     from agent.prompting.context_builder import ContextBuilder

@@ -4,10 +4,16 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import asdict
+from copy import deepcopy
+from agent.model_runtime.types import (
+    RetryableModelError,
+    ModelRetriesExhausted,
+    ModelOutputTruncated,
+)
 from typing import Any, List, Tuple
 
 from agent.core.execution import current_execution
-from bus.events_lifecycle import StreamDeltaReady
+from bus.events_lifecycle import StreamDeltaReady, ModelAttemptStatus
 from core.schema import JsonDict, ModelResponse
 
 
@@ -34,7 +40,66 @@ class ModelInvoker:
                     **kwargs,
                 },
             )
-        result = await self._call(messages, specs, **kwargs)
+        frozen_messages, frozen_specs, frozen_options = deepcopy(
+            (messages, specs, kwargs)
+        )
+        policy = self.config.retry_policy
+        for attempt in range(1, policy.max_retries + 2):
+            if ctx:
+                ctx.check()
+            try:
+                result = await self._call(
+                    deepcopy(frozen_messages),
+                    deepcopy(frozen_specs),
+                    **deepcopy(frozen_options),
+                )
+                if result.stop_reason in {"length", "max_tokens", "max_output_tokens"}:
+                    raise ModelOutputTruncated(
+                        "Model output was truncated; tool calls were not executed"
+                    )
+            except (RetryableModelError, TimeoutError) as exc:
+                delay = policy.delay(attempt, getattr(exc, "retry_after", None))
+                exhausted = attempt > policy.max_retries
+                status = ModelAttemptStatus(
+                    **{
+                        k: kwargs[k]
+                        for k in ("session_key", "channel", "chat_id", "iteration")
+                    },
+                    attempt=attempt,
+                    max_attempts=policy.max_retries + 1,
+                    phase="exhausted" if exhausted else "retrying",
+                    delay_seconds=0 if exhausted else delay,
+                    reason=str(exc),
+                )
+                if ctx:
+                    ctx.record("model_attempt_failed", asdict(status))
+                await self.event_bus.fanout(
+                    StreamDeltaReady(
+                        **{
+                            k: kwargs[k]
+                            for k in ("session_key", "channel", "chat_id", "iteration")
+                        },
+                        reset=True,
+                    )
+                )
+                await self.event_bus.fanout(status)
+                if exhausted:
+                    raise ModelRetriesExhausted(attempt, exc) from exc
+                await asyncio.sleep(delay)
+                continue
+            if attempt > 1:
+                await self.event_bus.fanout(
+                    ModelAttemptStatus(
+                        **{
+                            k: kwargs[k]
+                            for k in ("session_key", "channel", "chat_id", "iteration")
+                        },
+                        attempt=attempt,
+                        max_attempts=policy.max_retries + 1,
+                        phase="recovered",
+                    )
+                )
+            break
         if ctx:
             ctx.record("model_response", asdict(result))
             ctx.check()
@@ -148,4 +213,4 @@ class ModelInvoker:
                     worker.cancel()
                 await asyncio.gather(worker, return_exceptions=True)
         except asyncio.TimeoutError as exc:
-            raise RuntimeError("LLM 请求超过 %.1f 秒，已停止本轮。" % timeout) from exc
+            raise RetryableModelError("LLM 请求超过 %.1f 秒。" % timeout) from exc

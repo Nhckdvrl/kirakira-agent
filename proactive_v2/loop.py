@@ -342,6 +342,38 @@ class ProactiveLoop:
         self._state.consume_snapshot([alert_event], now, acknowledge=True)
         await self._flush_pending_acknowledgements()
 
+    async def _content_pool(self, pending, now, context):
+        from plugins.wake_proactive.pool import mass, shortlist
+        # Recent conversation changes frequently. Explicit rules and durable memory
+        # define the score identity; exact source revision defines candidate identity.
+        fingerprint = hashlib.sha256((self._cfg.model + "\n" + context).encode()).hexdigest()
+        unread = self._state.unread('content')
+        missing = [item for item in unread if self._state.interest_score(item, fingerprint) is None]
+        for offset in range(0, len(missing), 8):
+            batch = missing[offset:offset + 8]
+            estimates = await self._judge.score_content(batch, context)
+            for item in batch:
+                self._state.save_interest_score(item, fingerprint, estimates[item['item_id']], now)
+        candidates = []
+        for item in unread:
+            row = self._state.interest_score(item, fingerprint)
+            if row is None: continue  # revision changed while model was scoring
+            score = mass(row['initial'], datetime.fromisoformat(item['first_seen_at']), now,
+                         half_life_hours=self._cfg.pool_half_life_hours)
+            if score >= .02:
+                candidates.append({**item, '_pool_mass': score})
+        total = sum(item['_pool_mass'] for item in candidates)
+        self._state.record_decision(now, 'pool_scored', f'mass={total:.6f}; candidates={len(candidates)}')
+        if total < self._cfg.pool_threshold:
+            self._state.record_content_check(self._cfg.session_key, pending,
+                {'status': 'pool_wait', 'mass': total}, now)
+            return []
+        # One arrival may wake one pool judgement. Unselected arrivals must also
+        # be settled, or the same high-ranked old page would wake every tick.
+        self._state.record_content_check(self._cfg.session_key, pending,
+            {'status': 'pool_reviewed', 'mass': total}, now)
+        return shortlist(candidates, limit=self._cfg.content_limit)
+
     async def _push_content(
         self,
         content_events: List[dict],
@@ -354,7 +386,7 @@ class ProactiveLoop:
         *, admission: AdmissionStamp | None = None,
     ) -> bool:
         # 新内容优先，避免总在最旧的候选上打转
-        page = rank_content(content_events)[: self._cfg.content_limit]
+        page = (content_events if self._cfg.pool_enabled else rank_content(content_events))[: self._cfg.content_limit]
         admission = admission or self._capture_admission()
         self._validate_admission(admission, page)
         contracts = [normalize_content(event) for event in page]

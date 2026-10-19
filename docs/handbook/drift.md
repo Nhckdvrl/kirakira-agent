@@ -69,3 +69,13 @@ uv run pytest -q tests/test_drift.py
 
 若没有运行，依次检查：开关、skill 是否存在、最小间隔、hazard 到期时间，以及本轮 Proactive 是否
 已经投递消息。
+
+## 持久提案与中断
+
+`drift/drift.db` 的 proposals 记录任务依据、原会话 head、skill 内容摘要、briefing 和状态。
+排队提案只有在来源版本匹配时才能 claim；当前技能和会话已变化的提案会 supersede。
+执行使用 proposal ID 关联 shared reasoner 日志。
+
+重启把 running 标为 interrupted，把 delivering 标为 needs_reconciliation，不自动重新发送。
+后者可能已经交给渠道，需要结合实际回执核对。proposal 队列与技能 run 摘要用途不同；
+完整任务选择仍受空闲采样、技能配置和节流限制。

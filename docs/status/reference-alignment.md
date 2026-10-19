@@ -1,33 +1,24 @@
 # Reference 对齐状态
 
-审计日期：2026-10-02。原对齐点 `ac6f7652` 是 2026-08-15 的历史记录。
-第一轮对照 Akashic `0be132326ee6c410d1b2eaa85c09e1b50dcc5a9e`，第二轮更新至 `7cf10136932d5fe0205727c803c00861272db0b8`，不能再用“最新已对齐”概括全项目。
+参考日期：2026-10-19。固定 Akashic
+[`d85b00c233686b68b082052b1b20123905aeab13`](https://github.com/kachofugetsu09/akashic-agent/tree/d85b00c233686b68b082052b1b20123905aeab13)。
+Kirakira 按职责、运行合同和证据对齐，不按目录数量或功能名称判断整体 parity。
 
-## 对齐口径
+| 领域 | Kirakira 当前落点 |
+| --- | --- |
+| Core | 共享 reasoner、授权、当前生成恢复、执行事实与未知结果；没有自动重放外部副作用 |
+| Composition | 有版本能力、显式依赖、代际借用与资源 scope；部分内置业务仍由组合根装配 |
+| Wake | 持久兴趣评分、衰减池、多来源候选、share/skip 工具及修订/CAS 结算；不等同完整 Eventmail |
+| Drift | 技能、空闲采样、连续性及持久 proposal 状态；不是完整自主目标发现系统 |
+| Akasha2 | 固定上游 MemoryCycle/domain/persistence，Kirakira 自有消费 adapter 与快照合同；显式 opt-in |
+| Memory evidence | 原始消息回源、提交后学习、恢复/重放回归与公开样本实验；不继承上游质量结论 |
+| Session/Context | append-only 消息、compaction ledger、预算投影；未全面迁移最新上游 Ledger |
+| 产品面 | TUI/Web、渠道、MCP、Scheduler 保留；不宣称移动端或完整部署能力对齐 |
 
-对齐是同一职责有明确 owner、关键行为有合同与证据，且运行不依赖本地 `Reference/`。
-不要求相同目录/行数，不意味着继承上游未验证的质量结论。详细源码比较见[审计报告](../engineering/akashic-review-2026-10-02.md)。
+来源、实现与合同见 [ADR0009](../decisions/0009-components-recovery-and-akasha2.md)。
+未完成事项只在[当前状态](./current.md)维护，实际结果只在[验证记录](../operations/verification.md)维护。
 
-| 领域 | Kirakira 当前落点 | 与本次上游 pin 的关系 |
-| --- | --- | --- |
-| 执行内核 | DefaultReasoner + scoped 调用 + ReasoningPolicy | 共用循环与授权原则；不是上游 OrderedReact 消息程序系统 |
-| 主动决策 | share/skip 工具、候选身份检查、持久检查/重试、版本结算与过期判断 | 对齐决策边界；没有完整 Eventmail 和质量衰减池 |
-| Drift | 共享异步执行、收窄工具、finish 后提交 | 保留旧 Skill 产品语义；尚非最新持久 proposal 服务 |
-| Akasha | v1 数学 + 原子提交收据/消费位置 + 同 cycle 重建 + cutover 后补消费 | 对齐部分可恢复性原则；不是 v2 算法或 scope 路由 |
-| Session/Context | 原始消息、compaction ledger、预算投影 | 既有合同保留；不宣称完整上游消息绑定/归档模型 |
-| Plugin/MCP | 代际、快照、准入、热更新、owner cleanup | 既有实现；未移植当前 plugin_composition 内核 |
-| Workspace/工具/调度 | 锁、Yoyo、Shell/PTY、子任务、cron | 本轮保留的基础能力，不能凭功能同名推断完全 parity |
-| 产品/质量 | 当前 TUI/Web/dashboard 与离线合同测试 | 移动产品面、质量 benchmark、完整运维体系不在本轮 |
+## 独立分发
 
-延期事项的唯一维护位置是[当前状态](./current.md)。
-
-## 独立性
-
-生产代码不得 import 或读取 Reference。测试、构建、CLI 在没有 Reference 的隔离源码副本中执行。
-固定上游 commit 只是来源文本，运行不能从审计 checkout 导入代码。
-
-```bash
-uv run pytest -q
-uv build
-uv run python -m kirakira_agent --help
-```
+生产包包含移植的算法代码、MIT 许可证与 `UPSTREAM.json` 摘要；不读取或导入 Reference checkout。
+测试、构建与 CLI 均应能在没有上游目录的环境运行。固定 commit 是来源，不是运行依赖。

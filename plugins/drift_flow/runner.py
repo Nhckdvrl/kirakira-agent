@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import hashlib
 import math
 import random
 from datetime import datetime, timedelta, timezone
@@ -76,11 +77,17 @@ class DriftRunner:
         self._execution_store = execution_store
         self._state = DriftStateStore(self._workspace / "drift" / "drift.db")
         self._rng = random.Random()
+        self._run_lock = asyncio.Lock()
 
     def close(self) -> None:
         self._state.close()
 
     async def maybe_run(self, now: datetime, session_key: str) -> bool:
+        """Serialize proposal selection and execution for this workspace."""
+        async with self._run_lock:
+            return await self._maybe_run_admitted(now, session_key)
+
+    async def _maybe_run_admitted(self, now: datetime, session_key: str) -> bool:
         """满足条件则跑一轮 Drift，返回是否真的跑了。"""
         if not self._cfg.enabled:
             return False
@@ -101,13 +108,26 @@ class DriftRunner:
             return False
 
         skill = self._select_skill(skills)
-        ctx = DriftRunContext(skill=skill.name)
         briefing = self._build_briefing(skill, session_key)
+        digests = {s.name: hashlib.sha256(s.body.encode()).hexdigest() for s in skills}
+        self._state.propose(session_key=session_key, source_head=session_head,
+            skill=skill.name, skill_digest=digests[skill.name], briefing=briefing,
+            reason='idle schedule due; skill selected from explicit installed skills', now=now)
+        proposal = self._state.claim_proposal(session_key, session_head, digests, now)
+        if proposal is None:
+            return False
+        skill = next(s for s in skills if s.name == proposal['skill'])
+        briefing = proposal['briefing']
+        ctx = DriftRunContext(skill=skill.name, proposal_id=proposal['proposal_id'])
         logger.info("[drift] 开始 skill=%s", skill.name)
 
         try:
             await self._run_agent(skill, briefing, ctx, session_key)
+        except asyncio.CancelledError:
+            self._state.settle_proposal(ctx.proposal_id, 'interrupted', now)
+            raise
         except Exception:
+            self._state.settle_proposal(ctx.proposal_id, 'failed', now)
             logger.exception("[drift] agent run 失败 skill=%s", skill.name)
             self._state.record_run(
                 skill=skill.name,
@@ -120,7 +140,21 @@ class DriftRunner:
 
         superseded = (self._sessions.message_head(session_key) != session_head or
                       (self._passive_busy_fn is not None and self._passive_busy_fn(session_key)))
-        message_result = await self._commit(ctx, session_key) if ctx.finished and not superseded else "silent"
+        if superseded or not ctx.finished:
+            message_result = 'silent'
+            self._state.settle_proposal(ctx.proposal_id, 'superseded' if superseded else 'paused', now)
+        else:
+            delivering = bool(ctx.message_pushed and ctx.draft_message and self._channel and self._chat_id)
+            if delivering:
+                self._state.settle_proposal(ctx.proposal_id, 'delivering', now, {'draft': ctx.draft_message})
+            try:
+                message_result = await self._commit(ctx, session_key)
+            except BaseException:
+                self._state.settle_proposal(ctx.proposal_id,
+                    'needs_reconciliation' if delivering else 'interrupted', now)
+                raise
+            self._state.settle_proposal(ctx.proposal_id, ctx.status, now,
+                {'message_result': message_result, 'briefing': ctx.briefing})
         self._state.record_run(
             skill=skill.name,
             now=now,
@@ -129,21 +163,22 @@ class DriftRunner:
             message_result=message_result,
         )
         # run 期间只收集意图,这里统一落库:中途异常不会留下半条 journal。
-        for entry in ctx.journal_entries:
-            self._state.append_journal(
-                skill.name,
-                entry.get("entry_type", ""),
-                {"note": entry.get("note", "")},
-                now,
-                key=entry.get("key", ""),
-            )
-        if ctx.scratchpad_update or ctx.next_tendency:
-            self._state.save_continuum(
-                skill=skill.name,
-                now=now,
-                scratchpad=ctx.scratchpad_update,
-                next_tendency=ctx.next_tendency,
-            )
+        if ctx.finished and not superseded:
+            for entry in ctx.journal_entries:
+                self._state.append_journal(
+                    skill.name,
+                    entry.get("entry_type", ""),
+                    {"note": entry.get("note", "")},
+                    now,
+                    key=entry.get("key", ""),
+                )
+            if ctx.scratchpad_update or ctx.next_tendency:
+                self._state.save_continuum(
+                    skill=skill.name,
+                    now=now,
+                    scratchpad=ctx.scratchpad_update,
+                    next_tendency=ctx.next_tendency,
+                )
         logger.info(
             "[drift] 结束 skill=%s status=%s message=%s",
             skill.name,
@@ -252,7 +287,7 @@ class DriftRunner:
         try:
             await run_scoped(
                 model_client=self._client, registry=registry, model=self._model,
-                system=skill.body, prompt=briefing, session_key="drift:" + uuid4().hex,
+                system=skill.body, prompt=briefing, session_key="drift:" + (ctx.proposal_id or uuid4().hex),
                 channel=self._channel, chat_id=self._chat_id,
                 max_steps=self._cfg.max_steps, max_tokens=self._max_tokens,
                 execution_store=self._execution_store,

@@ -578,6 +578,13 @@ class TelegramChannel:
     async def _on_stream_delta(self, event: StreamDeltaReady) -> None:
         if event.channel != self._channel:
             return
+        if event.reset:
+            await self._cancel_live_tasks(event.session_key)
+            await self._delete_live_message(event.session_key)
+            self._reply_buffers.pop(event.session_key, None)
+            self._thinking_buffers.pop(event.session_key, None)
+            self._live_last_lengths.pop(event.session_key, None)
+            self._thinking_live_next_at.pop(event.session_key, None)
         if not event.content_delta and not event.thinking_delta:
             return
         cid = int(self._resolve_chat_id(event.chat_id))

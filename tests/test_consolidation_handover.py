@@ -13,7 +13,7 @@ import unittest
 from types import SimpleNamespace
 from typing import Any
 
-from core.memory.services import MemoryServices
+from plugins.default_memory.contract import MemoryServices
 from agent.core.pipeline import PassiveTurnPipeline
 from agent.core.contracts import RuntimeConfig
 
@@ -44,7 +44,7 @@ class _Maintenance:
 def _pipeline(maintenance: Any) -> PassiveTurnPipeline:
     pipeline = PassiveTurnPipeline.__new__(PassiveTurnPipeline)
     pipeline.config = RuntimeConfig(model="m", history_window=10)
-    pipeline.memory_services = (
+    pipeline._memory_services = (
         MemoryServices(markdown=SimpleNamespace(maintenance=maintenance))
         if maintenance is not None
         else None

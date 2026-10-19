@@ -113,3 +113,36 @@ class DemoPlugin(Plugin):
 - manifest 非法：整体失败，因为启用集合不再可信；
 - 新一代 MCP 连接失败：候选代际作废，旧代际继续服务；
 - terminate 按加载逆序执行，并要求幂等。
+
+## API 3 的服务依赖与资源
+
+API 3 不再通过 `context.memory` / `context.session_manager` 取得任意业务对象。
+提供者使用稳定的版本合同发布能力，消费者显式声明并借用：
+
+```python
+from agent.plugins import Plugin, ServiceKey
+
+COUNTER = ServiceKey('example.counter.v1', int)
+
+class Provider(Plugin):
+    name = 'provider'
+    async def prepare(self):
+        self.context.provide(COUNTER, 42)
+
+class Consumer(Plugin):
+    name = 'consumer'
+    @classmethod
+    def requires(cls):
+        return (COUNTER,)
+    async def handle_request(self):
+        async with self.context.use(COUNTER) as number:
+            return number
+```
+
+两个类分别放在各自插件包；真实对象合同放在提供者可稳定导入的 contract 模块。
+同名 key 必须保持同一合同类型；改变 ABI 需要 `.v2`，不能在热重载时偷偷替换合同类。
+prepare 只构造贡献，不应借用尚未发布的依赖。宿主不会隐式安装缺失提供者。
+
+用 `context.spawn(coroutine)` 登记任务，用 `context.on_close(closer)` 登记资源。
+卸载与换代等待旧借用结束，再取消任务、等待 finally、逆序关闭资源并 terminate。
+`use` 的作用域应覆盖整个实际使用过程，不能把对象泄露到租约外长期保存。

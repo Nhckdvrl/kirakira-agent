@@ -14,11 +14,9 @@ from pathlib import Path
 from infra.providers.model_client_adapter import ModelClientProvider
 from plugins.default_memory.engine import DefaultMemoryEngine
 from core.memory.plugin import DisabledMemoryEngine
-from core.memory.services import (
-    MemoryServices,
-    build_memory_engine,
-    memory_engine_enabled,
-)
+from plugins.default_memory.contract import MemoryServices
+from bootstrap.memory import build_memory_engine
+from bootstrap.memory import memory_engine_enabled
 from agent.config_models import build_config
 from agent.core.pipeline import _engine_can_retrieve
 

@@ -20,6 +20,7 @@ from bus.events import InboundMessage, OutboundMessage
 from bus.events_lifecycle import (
     ContextBudgetUpdated,
     ContextPrepared,
+    ModelAttemptStatus,
     StreamDeltaReady,
     ToolCallCompleted,
     ToolCallStarted,
@@ -322,6 +323,7 @@ class KirakiraTui(App[None]):
         self.runtime.bus.subscribe_outbound("cli", self._on_outbound)
         self.runtime.event_bus.on(TurnStarted, self._on_turn_started)
         self.runtime.event_bus.on(StreamDeltaReady, self._on_stream_delta)
+        self.runtime.event_bus.on(ModelAttemptStatus, self._on_model_attempt)
         self.runtime.event_bus.on(ContextPrepared, self._on_context_prepared)
         self.runtime.event_bus.on(ContextBudgetUpdated, self._on_context_budget_updated)
         self.runtime.event_bus.on(ToolCallStarted, self._on_tool_started)
@@ -335,6 +337,7 @@ class KirakiraTui(App[None]):
         self.runtime.bus.unsubscribe_outbound("cli", self._on_outbound)
         self.runtime.event_bus.off(TurnStarted, self._on_turn_started)
         self.runtime.event_bus.off(StreamDeltaReady, self._on_stream_delta)
+        self.runtime.event_bus.off(ModelAttemptStatus, self._on_model_attempt)
         self.runtime.event_bus.off(ContextPrepared, self._on_context_prepared)
         self.runtime.event_bus.off(ContextBudgetUpdated, self._on_context_budget_updated)
         self.runtime.event_bus.off(ToolCallStarted, self._on_tool_started)
@@ -434,6 +437,13 @@ class KirakiraTui(App[None]):
             self.query_one("#turn-status", Static).update(
                 "◌ Streaming · iteration %d" % (event.iteration + 1)
             )
+            self._render_turn()
+
+    async def _on_model_attempt(self, event: ModelAttemptStatus) -> None:
+        if self.state.apply(event):
+            label = (f'上游不稳定 · 第 {event.attempt}/{event.max_attempts} 次尝试 · {event.delay_seconds:.1f} 秒后重试'
+                     if event.phase == 'retrying' else '上游连接已恢复' if event.phase == 'recovered' else '已达到重试上限')
+            self.query_one('#turn-status', Static).update(label)
             self._render_turn()
 
     async def _on_context_prepared(self, event: ContextPrepared) -> None:

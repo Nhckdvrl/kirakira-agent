@@ -21,6 +21,9 @@ IMPACT_RULES: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
         "tests/test_memory_recovery.py",
         "tests/test_proactive_admission.py",
     )),
+    (("agent/composition/",), ("tests/test_component_capabilities.py",)),
+    (("plugins/akasha2/",), ("tests/test_akasha2_runtime.py",)),
+    (("infra/providers/",), ("tests/test_model_recovery_transport.py",)),
     (("agent/tools/", "agent/subagent.py"), (
         "tests/test_tools.py",
         "tests/test_runtime.py",
@@ -29,6 +32,7 @@ IMPACT_RULES: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
     (("proactive_v2/", "plugins/proactive_flow/", "plugins/wake_proactive/"), (
         "tests/test_proactive.py",
         "tests/test_proactive_lifecycle.py",
+        "tests/test_interest_pool.py",
         "tests/test_proactive_decisions.py",
         "tests/test_proactive_admission.py",
     )),
@@ -39,7 +43,7 @@ IMPACT_RULES: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
         "tests/test_memory_engine_wiring.py",
     )),
     (("plugins/drift_flow/", "agent/turns/policy.py"), (
-        "tests/test_drift.py", "tests/test_drift_journal.py", "tests/test_proactive_decisions.py",
+        "tests/test_drift.py", "tests/test_drift_journal.py", "tests/test_drift_proposals.py", "tests/test_proactive_decisions.py",
     )),
     (("agent/migrations/", "migrations/", "bootstrap/workspace_lock.py"), (
         "tests/test_migration_runner.py",

@@ -21,6 +21,7 @@ from agent.tools.registry import ToolRegistry, object_schema
 @dataclass
 class DriftRunContext:
     skill: str
+    proposal_id: str = ""
     draft_message: str = ""
     message_pushed: bool = False
     finished: bool = False

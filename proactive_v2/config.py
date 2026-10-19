@@ -29,6 +29,9 @@ class ProactiveConfig:
     channel: str = ""
     chat_id: str = ""
     content_limit: int = 5
+    pool_enabled: bool = False
+    pool_threshold: float = 1.5
+    pool_half_life_hours: float = 18.0
     delivery_cooldown_hours: float = 1.0
     # 未读 content 超过该龄期（天）淘汰，防止队列无界增长；<=0 关闭
     content_max_age_days: float = 14.0
@@ -76,6 +79,9 @@ class ProactiveConfig:
             chat_id=str(
                 config_value(app_config, "proactive", "target", "chat_id", default="")
             ).strip(),
+            pool_enabled=bool(config_value(app_config, "proactive", "pool", "enabled", default=False)),
+            pool_threshold=float(config_value(app_config, "proactive", "pool", "threshold", default=1.5)),
+            pool_half_life_hours=float(config_value(app_config, "proactive", "pool", "half_life_hours", default=18.0)),
             content_limit=int(
                 config_value(app_config, "proactive", "agent", "content_limit", default=5)
             ),

@@ -21,7 +21,7 @@ Context compaction 只为当前 session 续跑生成投影；Default Memory 和 
 ## 服务边界
 
 `core/memory/` 定义 engine seam、事件、Markdown maintenance、embedding 和 store。Agent runtime 只依赖
-统一的 MemoryServices，不理解 HyDE、RRF、图遍历等引擎内部算法。
+由提供者定义的 MemoryServices，持有本轮能力租约；工厂位于 bootstrap/memory.py，不理解 HyDE、RRF、图遍历等引擎内部算法。
 
 ```text
 TurnCommitted
@@ -37,11 +37,11 @@ TurnCommitted
 
 ## Default 与 Akasha
 
-`[memory].engine = "default"` 使用 DefaultMemoryEngine；`"akasha"` 使用现有 Akasha v1。两者通过同一
+`[memory].plugin = "default"` 使用 DefaultMemoryEngine；`"akasha"` 使用现有 Akasha v1。两者通过同一
 engine protocol 接入，operator 可以切换，但数据不会假装自动互通。
 
-当前 Akasha v1 可用，暂不为了追随新版实现而强制升级。架构已留出独立 adapter、store 和 migration
-空间，未来升级不需要改 AgentLoop。
+Akasha v1 与可选的 Akasha2 使用独立持久化。新引擎不会自动迁移旧图；配置与固定向量重建见
+[记忆手册](../handbook/memory.md)。Akasha2 的 checkpoint、原文校验和重放合同见 [ADR0009](../decisions/0009-components-recovery-and-akasha2.md)。
 
 ## Akasha 提交与重建（2026-10）
 

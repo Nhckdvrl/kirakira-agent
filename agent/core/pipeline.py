@@ -7,11 +7,14 @@ import json
 import logging
 import re
 import time
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, AsyncExitStack
+from contextvars import ContextVar
 from datetime import datetime
 from typing import Any, List
 
 from agent.core.admission import TurnAdmission
+from agent.composition import ServiceRegistry
+from plugins.default_memory.contract import MEMORY_SERVICES
 from agent.core.contracts import RuntimeConfig
 from agent.core.phases import _run_plugin_modules
 from agent.core.reasoner import DefaultReasoner
@@ -45,7 +48,7 @@ from core.memory.engine import MemoryCapability as _CoreMemCapability
 from core.memory.engine import MemoryQuery as _CoreMemQuery
 from core.memory.engine import MemoryScope as _CoreMemScope
 from core.memory.legacy import MemoryRuntime
-from core.memory.services import MemoryServices
+from plugins.default_memory.contract import MemoryServices
 from session.compaction_runtime import SessionCompactionRuntime
 from session.manager import SessionManager
 
@@ -76,6 +79,7 @@ class PassiveTurnPipeline:
         session_services: "SessionServices | None" = None,
         context_services: "ContextServices | None" = None,
         recall_inspector: Any = None,
+        service_registry: ServiceRegistry | None = None,
     ) -> None:
         self.bus = bus
         self.event_bus = event_bus
@@ -89,7 +93,9 @@ class PassiveTurnPipeline:
         self.context_services = context_services
         self.memory = memory
         # 记忆 DI 缝:runtime 只认识 MemoryServices.engine,不认识具体实现。
-        self.memory_services = memory_services
+        self._memory_services = memory_services
+        self.service_registry = service_registry
+        self._turn_memory = ContextVar('conversation_memory_services', default=None)
         self.tools = tools
         self.reasoner = reasoner
         self.config = config
@@ -103,6 +109,11 @@ class PassiveTurnPipeline:
         self.admission = TurnAdmission(self.session_manager)
         self._turn_snapshots = {}
         self.event_bus.on(AfterStepCtx, self._capture_after_step)
+
+    @property
+    def memory_services(self):
+        bound = getattr(self, "_turn_memory", None)
+        return (bound.get() if bound is not None else None) or self._memory_services
 
     @property
     def session_manager(self) -> SessionManager:
@@ -134,7 +145,11 @@ class PassiveTurnPipeline:
     async def run(
         self, msg: InboundMessage, key: str, *, dispatch_outbound: bool = True
     ) -> OutboundMessage:
-        async with self.admission.hold(key):
+        async with self.admission.hold(key), AsyncExitStack() as resources:
+            memory_token = None
+            if self.service_registry is not None:
+                bound = await resources.enter_async_context(self.service_registry.use(MEMORY_SERVICES))
+                memory_token = self._turn_memory.set(bound)
             try:
                 return await self._run_admitted(
                     msg, key, dispatch_outbound=dispatch_outbound
@@ -144,6 +159,8 @@ class PassiveTurnPipeline:
                 raise
             finally:
                 self._turn_snapshots.pop(key, None)
+                if memory_token is not None:
+                    self._turn_memory.reset(memory_token)
 
     async def _run_admitted(
         self, msg: InboundMessage, key: str, *, dispatch_outbound: bool = True

@@ -26,6 +26,11 @@
   <img src="./docs/assets/readme/kirakira-agent-hero.png" alt="Kirakira Agent：空舞台、乐器、星光与三条运行链" width="100%">
 </p>
 
+2026-10-19 重构加入组件能力与代际租约、保留工具结果的生成恢复、持久兴趣衰减池、
+Drift 提案状态，以及可选 Akasha2 引擎。算法来源固定，原文消费和原子快照由 Kirakira adapter 负责；
+v1 继续可用，旧图不自动迁移。详见[实现合同](./docs/decisions/0009-components-recovery-and-akasha2.md)和
+[当前范围](./docs/status/current.md)。
+
 ## Kirakira 是什么
 
 Kirakira 是一个本地优先、多渠道的 AI Agent Runtime。它把被动对话、主动执行、长期记忆和空闲任务
@@ -210,3 +215,10 @@ workspace 解析顺序为：`--workspace` → `KIRAKIRA_WORKSPACE` →
 ## License
 
 MIT，见 [LICENSE](./LICENSE)。
+
+## Attribution
+
+Kirakira learns from [Akashic Agent](https://github.com/kachofugetsu09/akashic-agent).
+The optional Akasha2 algorithms are adapted from commit `d85b00c`; the vendored
+[MIT license](./plugins/akasha2/LICENSE) and [file provenance](./plugins/akasha2/UPSTREAM.json)
+ship with the package. The runtime adapter and evaluation results are maintained here.

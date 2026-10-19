@@ -14,7 +14,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from core.memory.services import resolve_memory_plugin
+from bootstrap.memory import resolve_memory_plugin
 
 
 class EngineRoutingTests(unittest.TestCase):

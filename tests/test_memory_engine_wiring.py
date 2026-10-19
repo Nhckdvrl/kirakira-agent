@@ -24,7 +24,7 @@ from core.memory.engine import (
     MemoryRecord,
 )
 from core.memory.plugin import DisabledMemoryEngine
-from core.memory.services import MemoryServices
+from plugins.default_memory.contract import MemoryServices
 from agent.tools.builtins import WorkspaceTools
 
 

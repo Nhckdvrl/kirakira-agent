@@ -52,6 +52,8 @@
 
 ## 工程记录
 
+- [组件、恢复与 Akasha2](./decisions/0009-components-recovery-and-akasha2.md)：2026-10-19 的实现合同、来源与验证边界。
+
 - [Akashic Vibe Coding 工作流](./engineering/akashic-vibe-coding-workflow.md)：截至 2026-10-07 的完整工作流与可复制任务说明。
 - [Akashic 工作流修订](./engineering/akashic-workflow-2026-10-03.md)：当前三步流程、旧稿勘误、源码证据和 Kirakira 的轻量实践。
 - [共享执行器与运行日志](./decisions/0008-core-execution-and-admission.md)：入口统一、排队取消、工具不确定结果与恢复边界。

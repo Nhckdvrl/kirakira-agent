@@ -29,6 +29,7 @@ Proactive tick → Deliver/Drift ────┴→ 使用相同 Runtime 边界�
 
 | 目录 | 负责什么 |
 | --- | --- |
+| `agent/composition/` | 有版本能力、代际借用与资源 scope |
 | `agent/` | 推理循环、上下文、工具、MCP、插件、调度、子 Agent、控制协议 |
 | `bootstrap/` | 组合根、CLI/setup、supervisor、控制面和 dashboard 装配 |
 | `bus/` | 入站/出站队列和 lifecycle 事件 |
@@ -53,9 +54,10 @@ Proactive tick → Deliver/Drift ────┴→ 使用相同 Runtime 边界�
 | --- | --- | --- |
 | `sessions.db` | `SessionManager` | Session、消息真相和只追加的 context compaction ledger |
 | `memory/coremem.db` | Default Memory | 结构化长期记忆 |
-| `memory/akasha.db` | Akasha | 图、激活和查询状态 |
+| `memory/akasha.db` | Akasha | v1 图、激活和查询状态 |
+| `memory/akasha2.db` | Akasha2 | 图、消费位置、向量空间与原始消息绑定的原子快照 |
 | `proactive.db` | Proactive state | 事件、决策、ACK、feedback、tick trace |
-| `drift/drift.db` | Drift state | run、journal、continuity、hazard schedule |
+| `drift/drift.db` | Drift state | proposal、run、journal、continuity、hazard schedule |
 | `.kirakira/executions.db` | `ExecutionStore` | 模型/工具事实、终态与待核对调用；不自动重放 |
 | `.kirakira/control.db` | ControlStore | programmatic turn 状态 |
 | `migrations.sqlite3` | Yoyo | workspace migration ledger |

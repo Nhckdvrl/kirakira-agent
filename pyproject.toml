@@ -20,6 +20,7 @@ dependencies = [
     "Pillow>=11.0.0",
     "python-telegram-bot>=22.7",
     "numpy>=1.26",
+    "pydantic>=2.11,<3",
     "PyYAML>=6.0",
     "sqlite-vec>=0.1.6",
     "telegramify-markdown>=0.5",
@@ -60,6 +61,8 @@ include = [
 ]
 
 [tool.setuptools.package-data]
+"eval.longmemeval" = ["LICENSE"]
+"plugins.akasha2" = ["LICENSE", "UPSTREAM.json"]
 "migrations" = ["yoyo/*.py"]
 "plugin_packages.curated_feeds" = [
     "README.md",

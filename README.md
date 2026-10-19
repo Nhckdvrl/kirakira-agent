@@ -33,13 +33,12 @@ conversation, proactive execution, long-term memory, and idle background work in
 one observable, extensible runtime. Sessions and runtime state stay in the selected
 local workspace by default.
 
-The October refactor focuses on auditable proactive decisions and commit-only
-memory learning: all three paths share one reasoner, decision tools have explicit
-grants, and Akasha v1 uses the same transactional cycle online and during rebuild.
-Durable publication cursors recover missed learning notifications; proactive
-decisions are invalidated when conversation, rules, or candidate revisions change.
-See the [source-pinned architecture review](./docs/engineering/akashic-review-2026-10-02.md)
-for upstream attribution, tradeoffs, and remaining gaps.
+The October 19 refactor adds generation-scoped service capabilities, bounded model
+recovery without replaying completed tools, a persistent interest-decay pool, and
+durable Drift proposals. An optional Akasha2 engine uses pinned upstream algorithms
+with Kirakira's original-message consumption and atomic checkpoint adapter; v1 remains
+available. See the [implementation contract](./docs/decisions/0009-components-recovery-and-akasha2.md),
+[current scope](./docs/status/current.md), and [evaluation protocol](./docs/operations/memory-evaluation.md).
 
 ## At a glance
 
@@ -162,3 +161,10 @@ guides live under `docs/handbook/`.
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+## Attribution
+
+Kirakira learns from [Akashic Agent](https://github.com/kachofugetsu09/akashic-agent).
+The optional Akasha2 algorithms are adapted from commit `d85b00c`; the vendored
+[MIT license](./plugins/akasha2/LICENSE) and [file provenance](./plugins/akasha2/UPSTREAM.json)
+ship with the package. The runtime adapter and evaluation results are maintained here.

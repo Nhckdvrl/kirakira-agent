@@ -8,6 +8,8 @@ model = "deepseek-v4-flash"
 api_key = "${DEEPSEEK_API_KEY}"
 base_url = "https://api.deepseek.com/v1"
 enable_thinking = false
+# 单个模型生成最多重试 10 次；已完成的工具结果保留。
+max_retries = 10
 # 模型真实上下文容量。memory_window 与 max_tokens 未显式配置时按它等比例派生。
 context_window = 128000
 
@@ -22,6 +24,8 @@ system_prompt = "你是 Kirakira。使用与用户相同的语言回答；执行
 
 [memory]
 enabled = true
+# 语义引擎：default / akasha / akasha2；不同引擎各自持久化，不自动迁移历史。
+plugin = "default"
 # auto 读取 memory/structured-owner.json；迁移成功后使用 memory2，回滚后使用 legacy。
 engine = "auto"
 
@@ -98,3 +102,9 @@ content_max_age_days = 14   # 未读 content 超过该龄期(天)淘汰,防止�
 enabled = false
 min_interval_hours = 3
 max_steps = 20
+
+# 可选：先估计兴趣，再按衰减池决定是否进入 share/skip 判断。
+[proactive.pool]
+enabled = true
+threshold = 1.5
+half_life_hours = 18.0

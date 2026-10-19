@@ -87,6 +87,15 @@ CREATE TABLE IF NOT EXISTS event_revisions (
     seen_at TEXT NOT NULL,
     PRIMARY KEY(item_id, revision)
 );
+CREATE TABLE IF NOT EXISTS interest_scores (
+    item_id TEXT NOT NULL,
+    revision INTEGER NOT NULL,
+    context_digest TEXT NOT NULL,
+    score_json TEXT NOT NULL,
+    initial REAL NOT NULL,
+    scored_at TEXT NOT NULL,
+    PRIMARY KEY(item_id, revision, context_digest)
+);
 CREATE TABLE IF NOT EXISTS content_checks (
     item_id TEXT PRIMARY KEY,
     checked_at TEXT NOT NULL,
@@ -226,6 +235,24 @@ class ProactiveStateStore:
                     checks[item["item_id"]]["retry_at"] is not None
                     and datetime.fromisoformat(checks[item["item_id"]]["retry_at"]) <= now
                 )]
+
+    def interest_score(self, item, context_digest):
+        row = self._db.execute('SELECT score_json, initial, scored_at FROM interest_scores '
+            'WHERE item_id=? AND revision=? AND context_digest=?',
+            (item['item_id'], item['_revision'], context_digest)).fetchone()
+        return dict(row) if row else None
+
+    def save_interest_score(self, item, context_digest, score, now):
+        from dataclasses import asdict
+        if not self._current_candidate(item):
+            return False
+        with self._db:
+            self._db.execute('INSERT INTO interest_scores VALUES (?, ?, ?, ?, ?, ?) '
+                'ON CONFLICT(item_id,revision,context_digest) DO NOTHING',
+                (item['item_id'], item['_revision'], context_digest,
+                 json.dumps(asdict(score), ensure_ascii=False),
+                 score.initial(timestamp_present=bool(item.get('published_at'))), now.isoformat()))
+        return True
 
     def record_content_check(
         self, session_key: str, candidates: Sequence[Dict[str, Any]],

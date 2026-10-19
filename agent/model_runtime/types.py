@@ -20,7 +20,23 @@ class ContentSafetyError(ModelRequestError):
 
 
 class RetryableModelError(ModelRequestError):
-    """Transport/rate-limit/server failure safe for a fresh provider attempt."""
+    """A provider transport failure, never an arbitrary internal exception."""
+
+    def __init__(self, message: str, *, retry_after: float | None = None, status_code: int | None = None):
+        super().__init__(message)
+        self.retry_after = retry_after
+        self.status_code = status_code
+
+
+class ModelRetriesExhausted(RetryableModelError):
+    def __init__(self, attempts: int, last_error: Exception):
+        super().__init__(f"Upstream failed after {attempts} attempts; completed tool results are retained: {last_error}")
+        self.attempts = attempts
+        self.last_error = last_error
+
+
+class ModelOutputTruncated(ModelRequestError):
+    """An incomplete output cannot authorize any requested tools."""
 
 
 class ModelClient(Protocol):
@@ -44,6 +60,8 @@ __all__ = [
     "ContextLengthError",
     "ModelClient",
     "ModelRequestError",
+    "ModelRetriesExhausted",
+    "ModelOutputTruncated",
     "ModelUsage",
     "RetryableModelError",
     "UsageCoverage",

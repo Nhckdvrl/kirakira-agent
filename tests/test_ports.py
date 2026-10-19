@@ -9,7 +9,7 @@ from __future__ import annotations
 import unittest
 from types import SimpleNamespace
 
-from core.memory.services import memory_keep_count
+from bootstrap.memory import memory_keep_count
 from agent.looping.ports import (
     ContextServices,
     LLMConfig,

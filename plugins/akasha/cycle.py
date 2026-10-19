@@ -110,8 +110,12 @@ def apply_committed_turn(
         latest = store.db.execute(
             "SELECT committed_at, turn_key FROM akasha_commits ORDER BY rowid DESC LIMIT 1"
         ).fetchone()
-        if latest and (datetime.fromisoformat(assistant.ts), key) <= (datetime.fromisoformat(latest[0]), latest[1]):
-            raise ValueError("out-of-order learning requires explicit replay")
+        if latest:
+            current_time, latest_time = datetime.fromisoformat(assistant.ts), datetime.fromisoformat(latest[0])
+            if current_time < latest_time or (current_time == latest_time and source_position is None and key <= latest[1]):
+                raise ValueError("out-of-order learning requires explicit replay")
+            # Tied wall clocks are common in imports. The durable publication
+            # position, rather than lexicographic seq text, owns live order.
         # Only the already-published prefix is visible to the shared algorithm.
         # Cached embeddings for future source messages must not become seeds.
         nodes = {node.key for node in store.list_nodes()}

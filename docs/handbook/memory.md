@@ -59,3 +59,36 @@ uv run python main.py memory repair-kinds --dry-run
 
 内部结构见 [记忆架构](../architecture/memory.md)，评测边界见
 [记忆评测](../operations/memory-evaluation.md)。
+
+## 显式选择 Akasha2
+
+```toml
+[memory]
+enabled = true
+plugin = "akasha2"
+
+[memory.embedding]
+model = "your-exact-embedding-model"
+base_url = "https://your-embedding-endpoint/v1"
+api_key = "${EMBEDDING_API_KEY}"
+output_dimensionality = 1024 # 必须填写实际维度
+```
+
+选择项是 `plugin`；`engine` 是旧结构化记忆 owner 的迁移配置，不应混用。
+Akasha2 使用 `memory/akasha2.db`，v1 仍使用原配置数据库。首次启用从 cutover 后开始，
+不会自动复制旧图。查询只读，事实从原始消息回源；不提供未实现的 memorize/forget 工具。
+这是单用户跨会话图，不能把它当多租户隔离服务。
+
+已有原文和固定消息向量时，可以离线生成候选：
+
+```bash
+uv run python -m scripts.replay_akasha2 \
+  --source /absolute/workspace/sessions.db \
+  --output /absolute/workspace/memory/akasha2-candidate.db \
+  --model exact-existing-model \
+  --embedding-endpoint https://your-existing-embedding-endpoint/v1
+```
+
+endpoint 只用于固定空间身份，不会发请求。缺失向量、维度混杂、内容不匹配或候选路径已存在会失败。
+检查候选后，停止 runtime，备份已有 `memory/akasha2.db`，再把候选放到该路径并显式切换 plugin。
+不能在 writer 运行时替换数据库。来源 stream 和原文必须保持一致。

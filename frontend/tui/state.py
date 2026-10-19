@@ -11,6 +11,7 @@ from uuid import uuid4
 from bus.events_lifecycle import (
     ContextBudgetUpdated,
     ContextPrepared,
+    ModelAttemptStatus,
     StreamDeltaReady,
     ToolCallCompleted,
     ToolCallStarted,
@@ -94,8 +95,15 @@ class TurnViewState:
             return True
         if isinstance(event, StreamDeltaReady):
             step = self.steps.setdefault(event.iteration, StepView(event.iteration))
+            if event.reset:
+                step.content = ''
+                step.reasoning = ''
             step.content += event.content_delta
             step.reasoning += event.reasoning_delta
+            return True
+        if isinstance(event, ModelAttemptStatus):
+            self.status = 'retrying' if event.phase == 'retrying' else 'running'
+            self.error = event.reason if event.phase == 'exhausted' else ''
             return True
         if isinstance(event, ContextPrepared):
             self.context_plan = event.plan_name

@@ -270,7 +270,6 @@ class MemoryEngine(
     MemoryIngestApi,
     MemoryRetrievalApi,
     MemoryWriteApi,
-    MemoryAdminApi,
     Protocol,
 ):
     pass

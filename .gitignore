@@ -12,6 +12,7 @@ Reference/
 # Runtime workspace state. All of this is created by the agent at run time
 # under the workspace root (see [runtime].workspace in config.example.toml).
 # None of it belongs in the repository.
+/workspace/
 /sessions/
 /memory/
 /uploads/

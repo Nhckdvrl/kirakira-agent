@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 from core.schema import JsonDict
+from agent.model_runtime.retry import ModelRetryPolicy
 
 
 @dataclass
@@ -19,6 +20,7 @@ class RuntimeConfig:
     model_timeout_seconds: float = 120.0
     repeated_tool_call_limit: int = 3
     stream: bool = True
+    retry_policy: ModelRetryPolicy = field(default_factory=ModelRetryPolicy)
 
 
 @dataclass

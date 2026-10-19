@@ -202,6 +202,12 @@ class ContentModule(_LoopModule):
         )
         if interest:
             memory_text = "%s\n\n【相关长期记忆】\n%s" % (memory_text, interest)
+        if loop._cfg.pool_enabled:
+            contents = await loop._content_pool(contents, now,
+                memory_text + "\n" + ctx.get("proactive_context", ""))
+            if not contents:
+                frame.slots[SLOT_PROPOSAL_CONTENT] = 'pool_wait'
+                return frame
         try:
             pushed = await loop._push_content(
                 contents,

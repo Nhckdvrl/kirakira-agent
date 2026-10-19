@@ -222,3 +222,22 @@ def test_frozen_event_tool_chain_preserves_explicit_reinforcement():
 
     chain = ({"calls": [{"name": "reinforce_memory", "status": "success"}]},)
     assert _reinforce_boost_for_turn({}, chain) > 1
+
+
+def test_tied_timestamp_publications_and_offline_rebuild_preserve_identical_order(tmp_path):
+    from scripts.replay_akasha import rebuild
+    async def scenario():
+        sessions = SessionManager(tmp_path); engine = engine_at(tmp_path)
+        for number in range(12):
+            event = commit(sessions, 1, 'music '+str(number))  # exact same wall time
+            await engine._on_turn_committed(event)
+        before = logical(engine._store)
+        assert len(before['receipts']) == 12
+        model = engine._config.memory.embedding.model
+        close(engine); sessions.close()
+        result = rebuild(tmp_path/'sessions.db', tmp_path/'candidate.db', model)
+        assert result['learned_turns'] == 12
+        candidate = AkashaStore(tmp_path/'candidate.db')
+        assert logical(candidate) == before
+        candidate.close()
+    asyncio.run(scenario())

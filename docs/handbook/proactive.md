@@ -56,3 +56,18 @@ uv run pytest -q tests/test_proactive.py tests/test_proactive_lifecycle.py
 
 完整拓扑和提交边界见[主动执行架构](../architecture/proactive.md)。Drift 的使用方式见
 [Drift 手册](./drift.md)。
+
+## 兴趣衰减池
+
+```toml
+[proactive.pool]
+enabled = true
+threshold = 1.5
+half_life_hours = 18.0
+```
+
+每个内容修订只在同一模型/用户规则/长期记忆指纹下估计一次兴趣与置信度。质量随首次到达时间衰减；
+池达到阈值且有待处理到达才进入 share/skip 判断。高价值旧内容可与新到达一起参与；旧内容不会仅靠
+轮询反复唤醒模型。缺少 published_at 的内容按低置信度处理，来源应提供可靠发布时间。
+同源惩罚只影响候选排序，不减少池总质量。告警仍走独立链路，context 不单独触发发送。
+模型打分失败保留待处理状态；投递仍需要来源修订与会话版本有效。

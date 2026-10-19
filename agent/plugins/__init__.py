@@ -1,5 +1,7 @@
 """Canonical plugin runtime API."""
 
+from agent.composition import ServiceKey, ServiceUnavailable
+
 from agent.plugins.decorators import (
     on_after_reasoning,
     on_after_step,
@@ -21,6 +23,8 @@ from agent.plugins.specs import (
 )
 
 __all__ = [
+    "ServiceKey",
+    "ServiceUnavailable",
     "ManagedServiceSpec",
     "McpServerSpec",
     "Plugin",

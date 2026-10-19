@@ -12,6 +12,9 @@ from typing import Any, List
 
 from agent.core.runner import Agent, DEFAULT_SYSTEM
 from agent.core.execution import ExecutionStore
+from agent.composition import ServiceRegistry
+from plugins.default_memory.contract import MEMORY_SERVICES, MEMORY_READER, MemoryReader
+from agent.model_runtime.retry import ModelRetryPolicy
 from agent.config import config_value, load_dotenv, load_toml_config, require_env
 from bus.queue import MessageBus
 from infra.channels.contract import ChannelContext
@@ -25,9 +28,9 @@ from agent.model_runtime.context_policy import recommended_context_settings
 from bus.event_bus import EventBus
 from core.memory.legacy import MemoryRuntime
 from agent.mcp import McpCatalogPublisher, WorkspaceMcpAdmin, WorkspaceMcpWatcher
-from infra.providers.llm_provider import OpenAICompatibleClient
+from infra.providers.step_plan import create_model_client
 from infra.providers.model_client_adapter import ModelClientProvider
-from core.memory.services import build_memory_services
+from bootstrap.memory import build_memory_services
 from agent.looping.ports import ContextServices, LLMServices, SessionServices
 from agent.plugins import PluginManager
 from agent.plugins.watcher import PluginWatcher
@@ -67,7 +70,7 @@ def build_agent(workdir: Path) -> Agent:
     )
     if not model:
         model = require_env("MODEL_ID")
-    client = OpenAICompatibleClient(
+    client = create_model_client(
         base_url=os.getenv("OPENAI_COMPATIBLE_BASE_URL")
         or config_value(app_config, "llm", "main", "base_url"),
         api_key=os.getenv("OPENAI_COMPATIBLE_API_KEY")
@@ -474,7 +477,7 @@ async def build_runtime(
     )
     if not model:
         model = require_env("MODEL_ID")
-    client = OpenAICompatibleClient(
+    client = create_model_client(
         base_url=os.getenv("OPENAI_COMPATIBLE_BASE_URL")
         or config_value(app_config, "llm", "main", "base_url"),
         api_key=os.getenv("OPENAI_COMPATIBLE_API_KEY")
@@ -505,7 +508,7 @@ async def build_runtime(
     if light_model and light_base_url:
         from agent.model_runtime.fallback import ResilientModelClient
 
-        light_client = OpenAICompatibleClient(
+        light_client = create_model_client(
             base_url=light_base_url,
             api_key=os.getenv("LIGHT_OPENAI_COMPATIBLE_API_KEY")
             or config_value(app_config, "llm", "light", "api_key", default="")
@@ -563,6 +566,8 @@ async def build_runtime(
             config_value(app_config, "agent", "context", "memory_window", default=40)
         ),
     )
+    capabilities = ServiceRegistry()
+    capabilities.publish('bootstrap:memory', {MEMORY_SERVICES: memory_services, MEMORY_READER: MemoryReader(memory_services.engine)})
     memory = MemoryRuntime(
         workdir,
         session_manager=session_manager,
@@ -672,6 +677,7 @@ async def build_runtime(
         model_timeout_seconds=float(os.getenv("AGENT_MODEL_TIMEOUT", "120")),
         repeated_tool_call_limit=int(os.getenv("AGENT_REPEATED_TOOL_LIMIT", "3")),
         stream=_env_bool("AGENT_STREAM", True),
+        retry_policy=ModelRetryPolicy(max_retries=int(config_value(app_config, 'llm', 'main', 'max_retries', default=10))),
     )
     execution_store = ExecutionStore(workdir / ".kirakira" / "executions.db")
     execution_store.recover()
@@ -712,6 +718,7 @@ async def build_runtime(
         session_services=SessionServices(session_manager=session_manager),
         context_services=ContextServices(context=context),
         recall_inspector=recall_inspector,
+        service_registry=capabilities,
     )
     loop = AgentLoop(bus=bus, pipeline=pipeline)
     bundled_plugin_root = (
@@ -729,6 +736,7 @@ async def build_runtime(
         memory=memory,
         mcp_publisher=mcp_publisher,
         skill_loader=context.skills,
+        service_registry=capabilities,
     )
     await plugin_manager.load_all()
     # 在途 turn 持有各插件当前代际租约;热重载换代不会抽走 turn 正在用的能力。
@@ -887,6 +895,7 @@ async def build_runtime(
         mcp_watcher=mcp_watcher,
         plugin_watcher=plugin_watcher,
         memory_services=memory_services,
+        service_registry=capabilities,
         scheduler=scheduler,
         subagents=subagents,
         proactive_loop=proactive_loop,

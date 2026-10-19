@@ -1,0 +1,17 @@
+{
+  "repository": "https://github.com/kachofugetsu09/akashic-agent",
+  "revision": "d85b00c233686b68b082052b1b20123905aeab13",
+  "files": {
+    "application/cycle.py": "da334a3befb1152ad8f3675ed36e165a992fd121bd7efacfef0699e8c8cf934e",
+    "domain/__init__.py": "31704fdd527e81239c8aca67643849f6b92ab07355041eb58a73aae07e97a4ca",
+    "domain/model.py": "545b408562d8be227232be831eb28f1ca2ac42a2fc56b25d212707ef9c7ae81d",
+    "domain/features.py": "4bd29c33e52673a6b8a0db8f1b5e1dac43ab6c8dff362dd462792394a96b995e",
+    "domain/graph.py": "c735b64b2a442e69894b19a29b818c0866d3dc110f26b377ae161f7d439ed800",
+    "domain/diffusion.py": "07476a613e856d9547e56d61b5ff100d3b8a753449e9b27a6bca3798f98cfda6",
+    "domain/readout.py": "eff13a88b1aa10b4b1a0ffdb180a580057a05e4c0a78f3ecc4a79e80f2927f5f",
+    "infrastructure/persistence.py": "413de783cfb61a87a157302133b460d0784d1a9a8f45b71c5c6cd0cfe137aa90",
+    "infrastructure/consumption.py": "caad8024d60944b8ba2b97976561d2eb62ee62f97049db3919f77878751d8155",
+    "infrastructure/lexical.py": "7489144ad5c3fc7fe5287377eed753d704769a74ec9c822e2eb9da2d5affa8e2"
+  },
+  "integration": "Kirakira adapter and consumption format are maintained separately in engine.py."
+}

@@ -153,7 +153,6 @@ class AkashaMemoryEngine:
         try:
             initialize_cursor(self._store, self._session_db_path)
         except BaseException:
-            self._embedder.close()
             self._embedding_store.close()
             self._store.close()
             raise
@@ -1255,43 +1254,7 @@ def _current_query_seq(
 
 
 # 从 sessions.db 反查 after-turn 已经持久化的本轮消息。
-def _load_committed_turn_messages(
-    session_db_path: Path, event: TurnCommitted,
-) -> list[SourceMessage]:
-    """Stable IDs select the exact committed pair; legacy content lookup must be unique."""
-    if not session_db_path.exists():
-        return []
-    with closing(sqlite3.connect(f"{session_db_path.resolve().as_uri()}?mode=ro", uri=True)) as db:
-        db.row_factory = sqlite3.Row
-        params = [event.session_key]
-        condition = "u.session_key = ?"
-        if event.assistant_message_id:
-            condition += " AND a.id = ?"
-            params.append(event.assistant_message_id)
-            if event.user_message_id:
-                condition += " AND u.id = ?"
-                params.append(event.user_message_id)
-        else:
-            condition += " AND u.content = ? AND a.content = ?"
-            params.extend([event.persisted_user_message or event.input_message, event.assistant_response])
-        pairs = db.execute(
-            "SELECT u.id AS uid, a.id AS aid FROM messages u JOIN messages a "
-            "ON a.session_key=u.session_key AND a.seq=u.seq+1 AND a.role='assistant' "
-            "WHERE u.role='user' AND " + condition, params,
-        ).fetchall()
-        if not pairs:
-            return []
-        if len(pairs) != 1:
-            raise ValueError("ambiguous legacy commit; stable message IDs required")
-        rows = db.execute("SELECT * FROM messages WHERE id IN (?, ?) ORDER BY seq",
-                          (pairs[0]["uid"], pairs[0]["aid"])).fetchall()
-    if any(json.loads(row["extra_json"] or "{}").get("skip_post_memory")
-           or json.loads(row["extra_json"] or "{}").get("proactive") for row in rows):
-        return []
-    if rows[1]["content"] == "[interrupted]" or any(not row["content"].strip() for row in rows):
-        return []
-    return [SourceMessage(id=row["id"], session_key=row["session_key"], seq=row["seq"],
-                          role=row["role"], content=row["content"], ts=row["ts"]) for row in rows]
+from session.turn_source import load_committed_turn_messages as _load_committed_turn_messages
 
 
 # 从 sessions.db 读取 turn card。

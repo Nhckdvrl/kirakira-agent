@@ -341,15 +341,7 @@ class ActivationUpdate:
     ts: float
 
 
-@dataclass(frozen=True)
-class SourceMessage:
-    id: str
-    session_key: str
-    seq: int
-    role: str
-    content: str
-    ts: str
-    salience: float | None = None
+from session.turn_source import SourceMessage
 
 
 @dataclass(frozen=True)

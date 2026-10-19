@@ -1,10 +1,8 @@
 """Kirakira Agent learning harness module."""
 
-import asyncio
 import json
 import logging
 import os
-import time
 import urllib.error
 import urllib.request
 from typing import Any, Callable, Dict, List, Optional
@@ -17,6 +15,7 @@ from agent.model_runtime.types import (
     RetryableModelError,
 )
 from agent.model_runtime.json_utils import load_json_object_loose
+from agent.model_runtime.retry import retry_after_seconds
 
 
 logger = logging.getLogger(__name__)
@@ -162,6 +161,10 @@ class OpenAICompatibleClient:
     def _finalize_stream(self, state: Dict[str, Any]) -> ModelResponse:
         chunks = state["chunks"]
         finish_reason = state["finish_reason"]
+        if not finish_reason:
+            raise RetryableModelError('Model stream ended without a terminal finish reason')
+        if finish_reason == 'length':
+            return ModelResponse(text=''.join(state['text_parts']), stop_reason='length')
         calls = []
         for index in sorted(state["raw_calls"]):
             item = state["raw_calls"][index]
@@ -174,7 +177,7 @@ class OpenAICompatibleClient:
             text="".join(state["text_parts"]),
             reasoning_content="".join(state["reasoning_parts"]),
             tool_calls=calls,
-            stop_reason="tool_use" if calls or finish_reason == "tool_calls" else "end_turn",
+            stop_reason="length" if finish_reason == "length" else ("tool_use" if calls or finish_reason == "tool_calls" else "end_turn"),
             raw={"stream_chunks": chunks[-20:]},
             usage=next(
                 (
@@ -206,21 +209,25 @@ class OpenAICompatibleClient:
         headers = self._headers()
         content = json.dumps(payload).encode("utf-8")
         state = self._new_stream_state()
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            async with client.stream(
-                "POST", url, content=content, headers=headers
-            ) as response:
-                if response.status_code >= 400:
-                    detail = (await response.aread()).decode("utf-8", errors="replace")
-                    raise self._http_error_for(
-                        response.status_code, detail
-                    ) or RuntimeError(
-                        "Model request failed: HTTP %s %s"
-                        % (response.status_code, detail)
-                    )
-                async for raw_line in response.aiter_lines():
-                    if not self._consume_stream_line(raw_line.strip(), state, on_delta):
-                        break
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                async with client.stream(
+                    "POST", url, content=content, headers=headers
+                ) as response:
+                    if response.status_code >= 400:
+                        detail = (await response.aread()).decode("utf-8", errors="replace")
+                        raise self._http_error_for(
+                            response.status_code, detail
+                        ) or RetryableModelError(
+                            "Model request failed: HTTP %s %s" % (response.status_code, detail),
+                            status_code=response.status_code,
+                            retry_after=retry_after_seconds(response.headers.get('Retry-After')),
+                        )
+                    async for raw_line in response.aiter_lines():
+                        if not self._consume_stream_line(raw_line.strip(), state, on_delta):
+                            break
+        except httpx.RequestError as exc:
+            raise RetryableModelError(f'Model stream transport failed: {type(exc).__name__}') from exc
         return self._finalize_stream(state)
 
     # --- async-native transport (Phase 1): 直接 await，去掉 to_thread 阻抗 ---
@@ -268,41 +275,17 @@ class OpenAICompatibleClient:
 
     async def _arequest(self, payload: Dict[str, Any]) -> str:
         import httpx
-
-        url = self._chat_completions_url()
-        headers = self._headers()
-        content = json.dumps(payload).encode("utf-8")
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            for attempt in range(3):
-                try:
-                    resp = await client.post(url, content=content, headers=headers)
-                except httpx.RequestError as exc:
-                    if attempt < 2:
-                        await asyncio.sleep(2**attempt)
-                        continue
-                    raise RetryableModelError(
-                        "Model request failed for %s: %s. Check OPENAI_COMPATIBLE_BASE_URL, "
-                        "network/DNS/proxy settings, API key, and MODEL_ID."
-                        % (url, exc)
-                    ) from exc
-                if resp.status_code < 400:
-                    return resp.text
-                detail = resp.text
-                error = self._http_error_for(resp.status_code, detail)
-                if error is not None:
-                    raise error
-                if attempt < 2:
-                    retry_after = resp.headers.get("Retry-After")
-                    try:
-                        delay = float(retry_after) if retry_after else 2**attempt
-                    except ValueError:
-                        delay = 2**attempt
-                    await asyncio.sleep(min(10.0, max(0.1, delay)))
-                    continue
-                raise RetryableModelError(
-                    "Model request failed: HTTP %s %s" % (resp.status_code, detail)
-                )
-        raise RetryableModelError("Model request failed after retries")
+            try:
+                response = await client.post(self._chat_completions_url(),
+                    content=json.dumps(payload).encode('utf-8'), headers=self._headers())
+            except httpx.RequestError as exc:
+                raise RetryableModelError(f'Model transport failed: {type(exc).__name__}') from exc
+            if response.status_code >= 400:
+                raise self._http_error_for(response.status_code, response.text) or RetryableModelError(
+                    f'Model request failed: HTTP {response.status_code} {response.text}',
+                    status_code=response.status_code, retry_after=retry_after_seconds(response.headers.get('Retry-After')))
+            return response.text
 
     def parse_response(self, payload: JsonDict) -> ModelResponse:
         choices = payload.get("choices") or []
@@ -332,7 +315,7 @@ class OpenAICompatibleClient:
             )
 
         finish_reason = choice.get("finish_reason") or ""
-        stop_reason = "tool_use" if tool_calls or finish_reason == "tool_calls" else "end_turn"
+        stop_reason = "length" if finish_reason == "length" else ("tool_use" if tool_calls or finish_reason == "tool_calls" else "end_turn")
         return ModelResponse(
             text=text,
             reasoning_content=reasoning_content,
@@ -396,63 +379,17 @@ class OpenAICompatibleClient:
             )
 
     def _open(self, payload: Dict[str, Any]):
-        request = urllib.request.Request(
-            self._chat_completions_url(),
-            data=json.dumps(payload).encode("utf-8"),
-            headers=self._headers(),
-            method="POST",
-        )
-        for attempt in range(3):
-            try:
-                return urllib.request.urlopen(request, timeout=self.timeout)
-            except urllib.error.HTTPError as exc:
-                detail = exc.read().decode("utf-8", errors="replace")
-                lowered = detail.lower()
-                if any(
-                    marker in lowered
-                    for marker in (
-                        "context length",
-                        "context_length",
-                        "maximum context",
-                        "too many tokens",
-                    )
-                ):
-                    raise ContextLengthError(
-                        "Model context is too long: HTTP %s %s" % (exc.code, detail)
-                    ) from exc
-                if any(
-                    marker in lowered
-                    for marker in ("content safety", "content_filter", "safety policy")
-                ):
-                    raise ContentSafetyError(
-                        "Model content safety rejection: HTTP %s %s" % (exc.code, detail)
-                    ) from exc
-                if exc.code in (429, 500, 502, 503, 504) and attempt < 2:
-                    retry_after = exc.headers.get("Retry-After") if exc.headers else None
-                    try:
-                        delay = float(retry_after) if retry_after else 2**attempt
-                    except ValueError:
-                        delay = 2**attempt
-                    time.sleep(min(10.0, max(0.1, delay)))
-                    continue
-                error_type = (
-                    RetryableModelError
-                    if exc.code in (429, 500, 502, 503, 504)
-                    else RuntimeError
-                )
-                raise error_type(
-                    "Model request failed: HTTP %s %s" % (exc.code, detail)
-                ) from exc
-            except urllib.error.URLError as exc:
-                if attempt < 2:
-                    time.sleep(2**attempt)
-                    continue
-                raise RetryableModelError(
-                    "Model request failed for %s: %s. Check OPENAI_COMPATIBLE_BASE_URL, "
-                    "network/DNS/proxy settings, API key, and MODEL_ID."
-                    % (self._chat_completions_url(), exc.reason)
-                ) from exc
-        raise RetryableModelError("Model request failed after retries")
+        request = urllib.request.Request(self._chat_completions_url(),
+            data=json.dumps(payload).encode('utf-8'), headers=self._headers(), method='POST')
+        try:
+            return urllib.request.urlopen(request, timeout=self.timeout)
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode('utf-8', errors='replace')
+            raise self._http_error_for(exc.code, detail) or RetryableModelError(
+                f'Model request failed: HTTP {exc.code} {detail}', status_code=exc.code,
+                retry_after=retry_after_seconds(exc.headers.get('Retry-After') if exc.headers else None)) from exc
+        except urllib.error.URLError as exc:
+            raise RetryableModelError(f'Model transport failed: {exc.reason}') from exc
 
     def _chat_completions_url(self) -> str:
         if self.base_url.endswith("/chat/completions"):
