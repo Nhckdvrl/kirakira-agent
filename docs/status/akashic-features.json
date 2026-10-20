@@ -1,984 +1,575 @@
 {
-  "reference": {
-    "repository": "https://github.com/kachofugetsu09/akashic-agent",
-    "revision": "e1628ddc8a33c2840e5b4558ff3b66af207eec2a",
-    "date": "2026-10-20"
-  },
-  "scope": "全部生产插件、可选提供方、SDK/客户端协议与部署能力；性能工作不作为功能完成证据。",
-  "completion_rule": "每项具备实际入口、生产装配、持久化/取消/重启合同与可复现功能验证后才可标为 aligned；partial/missing 不能计为完成。partial 仅表示已有相关实现或基础落点，不表示已经复刻该上游插件；missing 表示尚无对应生产提供者。",
-  "features": [
-    {
-      "upstream_plugin": "akasha",
-      "description": "从消息学习并提供普通 Context 材料与记忆工具",
-      "group": "memory",
-      "status": "partial",
-      "upstream_entry": "plugins/akasha/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/akasha/plugin.py",
-      "kirakira_paths": [
-        "plugins/akasha",
-        "plugins/akasha2",
-        "core/memory"
-      ],
-      "acceptance": "维持原文学习、精确/联想读出与来源展开；补齐上游宿主能力与反馈/管理面合同后验证，保留算法 pin 和质量边界。"
-    },
-    {
-      "upstream_plugin": "akashic_clients",
-      "description": "Web Akashic client channel",
-      "group": "delivery",
-      "status": "partial",
-      "upstream_entry": "plugins/akashic_clients/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/akashic_clients/plugin.py",
-      "kirakira_paths": [
-        "infra/channels",
-        "bus",
-        "plugins/tools/message_push.py"
-      ],
-      "acceptance": "Web/Android 输入与日志订阅共用持久消息源；验证断线补读、客户端重连、附件和重复输入交接。"
-    },
-    {
-      "upstream_plugin": "akashic_sender",
-      "description": "确认目标会话已保存的消息，Web 和 Android Shell 从日志订阅",
-      "group": "delivery",
-      "status": "partial",
-      "upstream_entry": "plugins/akashic_sender/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/akashic_sender/plugin.py",
-      "kirakira_paths": [
-        "infra/channels",
-        "bus",
-        "plugins/tools/message_push.py"
-      ],
-      "acceptance": "从已保存的消息构造客户端可见输出；发送确认和日志订阅游标独立，重启后不产生另一份正文真相。"
-    },
-    {
-      "upstream_plugin": "assets",
-      "description": "保存当前组合的固定代码资产目录",
-      "group": "extension",
-      "status": "missing",
-      "upstream_entry": "plugins/assets/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/assets/plugin.py",
-      "kirakira_paths": [],
-      "acceptance": "组合发布时冻结代码资产根，消费者通过 capability 读取；候选与在途代际不能互相读到对方资产。"
-    },
-    {
-      "upstream_plugin": "channels",
-      "description": "连接、接纳、原 binding 发送与持久输入恢复",
-      "group": "delivery",
-      "status": "partial",
-      "upstream_entry": "plugins/channels/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/channels/plugin.py",
-      "kirakira_paths": [
-        "infra/channels",
-        "bus",
-        "plugins/tools/message_push.py"
-      ],
-      "acceptance": "入站先完成持久交接；固定原 binding，连接关闭排空、断线恢复与消息接纳去重均可验证。"
-    },
-    {
-      "upstream_plugin": "codex",
-      "description": "ChatGPT login, Codex catalog, and Responses transport",
-      "group": "models",
-      "status": "missing",
-      "upstream_entry": "plugins/codex/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/codex/plugin.py",
-      "kirakira_paths": [],
-      "acceptance": "接入登录状态、模型目录及原生 Responses 驱动；验证流式工具、取消、usage 和刷新失败恢复。"
-    },
-    {
-      "upstream_plugin": "commands",
-      "description": "命令注册、短生命目录执行和未知效果恢复",
-      "group": "runtime",
-      "status": "partial",
-      "upstream_entry": "plugins/commands/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/commands/plugin.py",
-      "kirakira_paths": [
-        "plugins/reply_program",
-        "plugins/ledger",
-        "plugins/control",
-        "plugins/tools",
-        "plugins/scheduler"
-      ],
-      "acceptance": "独立命令目录与实际实现绑定；目录执行短生命周期，未知效果须可查询与核对，不能自动重做。"
-    },
-    {
-      "upstream_plugin": "compaction",
-      "description": "按不可变消息前缀发布摘要，并为已使用的摘要保留原始读取口",
-      "group": "runtime",
-      "status": "partial",
-      "upstream_entry": "plugins/compaction/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/compaction/plugin.py",
-      "kirakira_paths": [
-        "plugins/models/context_compaction.py",
-        "plugins/ledger/compaction_runtime.py"
-      ],
-      "acceptance": "只发布不可变消息前缀摘要；保留已使用摘要及原文读取口，重启、取消、摘要失败不丢历史。"
-    },
-    {
-      "upstream_plugin": "computer",
-      "description": "The user's logged-in browser: tabs, anonymous contexts, and visual control",
-      "group": "product",
-      "status": "missing",
-      "upstream_entry": "plugins/computer/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/computer/plugin.py",
-      "kirakira_paths": [],
-      "acceptance": "真实浏览器 driver、匿名上下文及可视控制；浏览器与显示资源按 owner 关闭，实际用户入口可操作。"
-    },
-    {
-      "upstream_plugin": "content",
-      "description": "按固定协议组装内容，各解析器只读取同一份原文",
-      "group": "runtime",
-      "status": "partial",
-      "upstream_entry": "plugins/content/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/content/plugin.py",
-      "kirakira_paths": [
-        "plugins/reply_program",
-        "plugins/ledger",
-        "plugins/control",
-        "plugins/tools",
-        "plugins/scheduler"
-      ],
-      "acceptance": "文本、图片、附件按固定协议从同一原文解析；各 renderer 不得另外保存冲突正文或读取动态替代物。"
-    },
-    {
-      "upstream_plugin": "content_view",
-      "description": "按原消息位置回读工具结果全文或指定范围",
-      "group": "runtime",
-      "status": "partial",
-      "upstream_entry": "plugins/content_view/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/content_view/plugin.py",
-      "kirakira_paths": [
-        "core/memory",
-        "plugins/tools/registry.py"
-      ],
-      "acceptance": "按原消息位置读完整工具输出或范围，能够展开被模型上下文截断的结果，并保留来源身份。"
-    },
-    {
-      "upstream_plugin": "context",
-      "description": "用固定日志和已取得材料组成请求，不执行检索或摘要",
-      "group": "runtime",
-      "status": "partial",
-      "upstream_entry": "plugins/context/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/context/plugin.py",
-      "kirakira_paths": [
-        "plugins/context/conversation.py",
-        "plugins/models",
-        "plugins/context"
-      ],
-      "acceptance": "仅用固定日志与已取得材料组装模型请求；检索、摘要和实时材料各由独立 owner 提供，重试不偷换历史。"
-    },
-    {
-      "upstream_plugin": "conversation",
-      "description": "接纳和控制同一来源的消息，程序由调用者另行选择",
-      "group": "runtime",
-      "status": "partial",
-      "upstream_entry": "plugins/conversation/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/conversation/plugin.py",
-      "kirakira_paths": [
-        "plugins/reply_program/service.py",
-        "plugins/sources/admission.py"
-      ],
-      "acceptance": "已接入 owner 所属 steer 暂存/撤回、步间原子接纳与末步后普通请求接续；继续补渠道/工作台交互和完整来源任务协议。多输入 Turn 已保留原文，记忆 pair 消费者暂跳过自动学习。"
-    },
-    {
-      "upstream_plugin": "conversation_ui",
-      "description": "conversation_ui",
-      "group": "product",
-      "status": "partial",
-      "upstream_entry": "plugins/conversation_ui/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/conversation_ui/plugin.py",
-      "kirakira_paths": [
-        "frontend/web_ui.py",
-        "infra/channels/web_chat_channel.py"
-      ],
-      "acceptance": "会话工作台消费持久消息、工具和状态投影；重连、取消、附件、历史与目录变化都有实际交互入口。"
-    },
-    {
-      "upstream_plugin": "delivery",
-      "description": "独立发送已保存消息，固定原目的地与出站绑定并恢复真实效果",
-      "group": "delivery",
-      "status": "partial",
-      "upstream_entry": "plugins/delivery/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/delivery/plugin.py",
-      "kirakira_paths": [
-        "infra/channels",
-        "bus",
-        "plugins/tools/message_push.py"
-      ],
-      "acceptance": "独立发送已保存的消息，固定原目的地与出站绑定；已知回执去重，未知外部结果保留待核对。"
-    },
-    {
-      "upstream_plugin": "delivery_policy",
-      "description": "默认只发送完整可见回复；显式通知沿来源自己的固定发送选择",
-      "group": "delivery",
-      "status": "partial",
-      "upstream_entry": "plugins/delivery_policy/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/delivery_policy/plugin.py",
-      "kirakira_paths": [
-        "infra/channels",
-        "bus",
-        "plugins/tools/message_push.py"
-      ],
-      "acceptance": "完整可见回复与显式通知按来源自己的选择投递；中间工具文本不得因默认策略泄漏到用户渠道。"
-    },
-    {
-      "upstream_plugin": "drift",
-      "description": "Durable Drift proposal state",
-      "group": "proactive",
-      "status": "partial",
-      "upstream_entry": "plugins/drift/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/drift/plugin.py",
-      "kirakira_paths": [
-        "proactive_v2",
-        "plugins/proactive_flow",
-        "plugins/wake_proactive",
-        "plugins/drift_flow"
-      ],
-      "acceptance": "proposal 发现、认领、continuity、修订失效和重启结算形成持久链；验证用户意图变更时的让出。"
-    },
-    {
-      "upstream_plugin": "eventmail",
-      "description": "Immutable Content, Alert, and Context mailbox",
-      "group": "proactive",
-      "status": "partial",
-      "upstream_entry": "plugins/eventmail/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/eventmail/plugin.py",
-      "kirakira_paths": [
-        "proactive_v2",
-        "plugins/proactive_flow",
-        "plugins/wake_proactive",
-        "plugins/drift_flow"
-      ],
-      "acceptance": "不可变 Content/Alert/Context 邮箱及版本身份；去重、筛选消费、过期、真实发送确认与反馈可追溯。"
-    },
-    {
-      "upstream_plugin": "files",
-      "description": "读取、列出、写入和编辑文件",
-      "group": "workspace",
-      "status": "partial",
-      "upstream_entry": "plugins/files/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/files/plugin.py",
-      "kirakira_paths": [
-        "plugins/tools/builtins.py",
-        "plugins/working_directory"
-      ],
-      "acceptance": "文件操作固定执行目标及其 cwd 依赖；补齐宿主后端、prepared 参数、未知结果查询和恢复合同。",
-      "functional_evidence": [
-        "tests/test_workspace_features.py",
-        "docs/operations/evaluations/2026-10-19-workspace-functions.md"
-      ]
-    },
-    {
-      "upstream_plugin": "gateway",
-      "description": "JSON-RPC 控制面与远程命令",
-      "group": "runtime",
-      "status": "partial",
-      "upstream_entry": "plugins/gateway/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/gateway/plugin.py",
-      "kirakira_paths": [
-        "plugins/control",
-        "infra/control"
-      ],
-      "acceptance": "协议握手、类型校验、事件订阅、取消、重连和远程命令均走同一 owner；客户端不能另造运行状态。"
-    },
-    {
-      "upstream_plugin": "gemini",
-      "description": "Gemini 原生 GenerateContent 驱动",
-      "group": "models",
-      "status": "missing",
-      "upstream_entry": "plugins/gemini/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/gemini/plugin.py",
-      "kirakira_paths": [],
-      "acceptance": "实现原生 GenerateContent 请求、流式工具与内容映射；验证原生 usage、取消和 provider 错误。"
-    },
-    {
-      "upstream_plugin": "host_execution",
-      "description": "拥有宿主进程与容器控制，代码 owner 与 generation 授权仍属内核",
-      "group": "extension",
-      "status": "missing",
-      "upstream_entry": "plugins/host_execution/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/host_execution/plugin.py",
-      "kirakira_paths": [],
-      "acceptance": "宿主文件、PTY、进程和容器经授权 backend 接入；owner 关闭、连接丢失与重连可恢复，避免本地路径假定。"
-    },
-    {
-      "upstream_plugin": "jobs",
-      "description": "后台任务完成通知：忙时注入当前回合，闲时唤醒原会话",
-      "group": "runtime",
-      "status": "partial",
-      "upstream_entry": "plugins/jobs/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/jobs/plugin.py",
-      "kirakira_paths": [
-        "plugins/jobs",
-        "plugins/subagent/service.py",
-        "plugins/reply/follower.py"
-      ],
-      "acceptance": "独立持久结果 owner 已接入；忙时按模型步注入、闲时原会话唤醒，消费与回复同事务，取消/重启可回放。继续补齐 Shell/进程等全部 producer 和工作台任务面板。"
-    },
-    {
-      "upstream_plugin": "ledger",
-      "description": "消息、同库事务、附件与入站交接的持久 owner",
-      "group": "runtime",
-      "status": "partial",
-      "upstream_entry": "plugins/ledger/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/ledger/plugin.py",
-      "kirakira_paths": [
-        "plugins/ledger",
-        "plugins/reply_program"
-      ],
-      "acceptance": "已接入 Input/Output/ToolResult/Control 账本、原子效果引用、历史导入与显式删除；继续补附件、读写授权与完整来源/任务提交协议，记忆/压缩仍经兼容历史消费。"
-    },
-    {
-      "upstream_plugin": "ledger_invariants",
-      "description": "Ledger 追加顺序与 Turn 关闭前缀检查",
-      "group": "runtime",
-      "status": "partial",
-      "upstream_entry": "plugins/ledger_invariants/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/ledger_invariants/plugin.py",
-      "kirakira_paths": [
-        "plugins/reply_program",
-        "plugins/ledger",
-        "plugins/control",
-        "plugins/tools",
-        "plugins/scheduler"
-      ],
-      "acceptance": "检查消息追加顺序、来源身份和 Turn 关闭前缀；失败须在提交处拒绝，覆盖取消、崩溃和并发接纳。"
-    },
-    {
-      "upstream_plugin": "managed_processes",
-      "description": "取得并持有 Context 所属的进程",
-      "group": "extension",
-      "status": "missing",
-      "upstream_entry": "plugins/managed_processes/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/managed_processes/plugin.py",
-      "kirakira_paths": [],
-      "acceptance": "仅取得 Context 所属进程并持有其生命周期；代际撤销、取消和启动失败均排空实际进程。"
-    },
-    {
-      "upstream_plugin": "markdown_memory",
-      "description": "把已使用摘要的确切原文提炼进 SELF.md、MEMORY.md 与 topics/ 主题",
-      "group": "memory",
-      "status": "partial",
-      "upstream_entry": "plugins/markdown_memory/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/markdown_memory/plugin.py",
-      "kirakira_paths": [
-        "plugins/default_memory",
-        "memory2"
-      ],
-      "acceptance": "从确切已使用摘要的原文提炼 SELF/MEMORY/topics；写入有原文依据，失败重试不重复或污染来源。"
-    },
-    {
-      "upstream_plugin": "mcp",
-      "description": "按调用取得 MCP 会话并持有关闭责任",
-      "group": "extension",
-      "status": "partial",
-      "upstream_entry": "plugins/mcp/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/mcp/plugin.py",
-      "kirakira_paths": [
-        "plugins/extensions",
-        "agent/composition",
-        "plugins/mcp",
-        "plugins/skills/service.py"
-      ],
-      "acceptance": "按调用获得固定代际 MCP 会话；子进程由资源 owner 管理，热更新和取消等待实际关闭。"
-    },
-    {
-      "upstream_plugin": "message_push",
-      "description": "推送消息，并在 supervisor runtime 提供安全重启",
-      "group": "delivery",
-      "status": "partial",
-      "upstream_entry": "plugins/message_push/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/message_push/plugin.py",
-      "kirakira_paths": [
-        "infra/channels",
-        "bus",
-        "plugins/tools/message_push.py"
-      ],
-      "acceptance": "固定授权目的地的主动发送及安全重启；回执、未知结果和重启提交边界须由真实入口验证。"
-    },
-    {
-      "upstream_plugin": "models",
-      "description": "Provider-neutral model connections, selection, and execution",
-      "group": "models",
-      "status": "partial",
-      "upstream_entry": "plugins/models/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/models/plugin.py",
-      "kirakira_paths": [
-        "infra/providers",
-        "plugins/models",
-        "plugins/default_memory/config_models.py"
-      ],
-      "acceptance": "统一 provider-neutral 连接、目录、启停及角色选择；运行期配置事务、能力与 usage 投影覆盖真实 UI/API。"
-    },
-    {
-      "upstream_plugin": "onboarding",
-      "description": "按依赖顺序配置已安装的功能",
-      "group": "product",
-      "status": "partial",
-      "upstream_entry": "plugins/onboarding/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/onboarding/plugin.py",
-      "kirakira_paths": [
-        "bootstrap/setup_wizard.py"
-      ],
-      "acceptance": "按依赖顺序展示已安装能力配置；验证失效、取消和重复提交，只有通过能力验证才完成引导。"
-    },
-    {
-      "upstream_plugin": "openai_compatible",
-      "description": "OpenAI-compatible Chat Completions and embeddings",
-      "group": "models",
-      "status": "partial",
-      "upstream_entry": "plugins/openai_compatible/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/openai_compatible/plugin.py",
-      "kirakira_paths": [
-        "infra/providers/llm_provider.py",
-        "infra/providers/step_plan.py"
-      ],
-      "acceptance": "Chat Completions 与 embeddings 的真实协议、流式工具、usage、恢复和能力声明；保留 Step Token Plan 限定路由。"
-    },
-    {
-      "upstream_plugin": "opencode_go",
-      "description": "OpenCode Go Chat Completions models and local login import",
-      "group": "models",
-      "status": "missing",
-      "upstream_entry": "plugins/opencode_go/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/opencode_go/plugin.py",
-      "kirakira_paths": [],
-      "acceptance": "独立模型提供方与本地登录导入；验证模型目录、凭据刷新、流式请求和明确失败处理。"
-    },
-    {
-      "upstream_plugin": "plugin_update",
-      "description": "安装插件并在 selection accepted 或 active/failed 后用原渠道报告结果",
-      "group": "extension",
-      "status": "missing",
-      "upstream_entry": "plugins/plugin_update/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/plugin_update/plugin.py",
-      "kirakira_paths": [],
-      "acceptance": "安装/更新选择被接受后跟踪 active/failed，按原渠道报告结果；不得先回复成功或丢失重启后的结算。"
-    },
-    {
-      "upstream_plugin": "programmatic",
-      "description": "程序调用的输入、停止、恢复与结果；默认保存原文但排除学习",
-      "group": "runtime",
-      "status": "partial",
-      "upstream_entry": "plugins/programmatic/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/programmatic/plugin.py",
-      "kirakira_paths": [
-        "plugins/control/service.py",
-        "plugins/reply_program/scoped.py"
-      ],
-      "acceptance": "程序输入、停止、恢复与结果有完整 API；原文可查但默认排除记忆学习，完成结果可重复读取。"
-    },
-    {
-      "upstream_plugin": "projects",
-      "description": "按项目组织对话，并为 Session 宽键提供 project 维度",
-      "group": "workspace",
-      "status": "partial",
-      "upstream_entry": "plugins/projects/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/projects/plugin.py",
-      "kirakira_paths": [
-        "plugins/projects",
-        "plugins/projects/factory.py",
-        "frontend/workspace_ui.py"
-      ],
-      "acceptance": "稳定 ID、创建回执、改名/归档和创建时目录默认值已接入；继续补齐完整工作台项目/会话组织及可扩展 scope 维度。",
-      "functional_evidence": [
-        "tests/test_workspace_features.py",
-        "docs/operations/evaluations/2026-10-19-workspace-functions.md"
-      ]
-    },
-    {
-      "upstream_plugin": "prompt",
-      "description": "每次请求读取人格与行为规则，附带已接纳输入的时间和渠道事实",
-      "group": "product",
-      "status": "partial",
-      "upstream_entry": "plugins/prompt/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/prompt/plugin.py",
-      "kirakira_paths": [
-        "plugins/context"
-      ],
-      "acceptance": "每次请求读取人格与行为材料，附带已接纳输入时间和渠道事实；保持事实来源、规则优先级和实时文件失效语义。"
-    },
-    {
-      "upstream_plugin": "react",
-      "description": "组合上下文、模型、内容与工具，不拥有会话或外部效果状态",
-      "group": "runtime",
-      "status": "partial",
-      "upstream_entry": "plugins/react/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/react/plugin.py",
-      "kirakira_paths": [
-        "plugins/react/reasoner.py",
-        "plugins/tools/invoker.py",
-        "plugins/models/invoker.py"
-      ],
-      "acceptance": "上下文、模型、内容与工具可独立替换；完整批次持久化与续跑不重放已完成副作用，并与来源程序分离。"
-    },
-    {
-      "upstream_plugin": "reply",
-      "description": "跟随日志并组合默认回复；接纳、材料、模型与工具各有独立 owner",
-      "group": "runtime",
-      "status": "partial",
-      "upstream_entry": "plugins/reply/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/reply/plugin.py",
-      "kirakira_paths": [
-        "plugins/reply_program",
-        "plugins/ledger",
-        "plugins/control",
-        "plugins/tools",
-        "plugins/scheduler"
-      ],
-      "acceptance": "跟随持久日志组合默认回复；接纳、材料、模型和工具独立，忙时输入与后台结果正确进入同一轮。"
-    },
-    {
-      "upstream_plugin": "reply_program",
-      "description": "一次回复的资源与执行组合；不拥有来源策略或后台监听",
-      "group": "runtime",
-      "status": "partial",
-      "upstream_entry": "plugins/reply_program/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/reply_program/plugin.py",
-      "kirakira_paths": [
-        "plugins/reply_program",
-        "plugins/ledger",
-        "plugins/control",
-        "plugins/tools",
-        "plugins/scheduler"
-      ],
-      "acceptance": "一次回复的资源与执行组合可持久恢复；停止/关闭排空真实资源，不承担来源策略和后台监听。"
-    },
-    {
-      "upstream_plugin": "runtime_diagnostics",
-      "description": "运行指标、事件循环停顿现场、插件操作与限时内存剖析，供运维读取",
-      "group": "extension",
-      "status": "partial",
-      "upstream_entry": "plugins/runtime_diagnostics/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/runtime_diagnostics/plugin.py",
-      "kirakira_paths": [
-        "plugins/dashboard/service.py",
-        "scripts/inspect_execution.py"
-      ],
-      "acceptance": "按 owner 提供运行指标、停顿现场、插件操作和限时诊断；本阶段只补可用功能，不据此开展整体性能优化。"
-    },
-    {
-      "upstream_plugin": "runtime_inspection",
-      "description": "汇总 owner 文档与可选任务、技能的只读运行时检查投影",
-      "group": "extension",
-      "status": "partial",
-      "upstream_entry": "plugins/runtime_inspection/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/runtime_inspection/plugin.py",
-      "kirakira_paths": [
-        "scripts/inspect_execution.py",
-        "plugins/dashboard/service.py"
-      ],
-      "acceptance": "汇总 owner 的只读运行时文档、任务与技能投影；检查不能改变状态，也不能暴露私密配置。"
-    },
-    {
-      "upstream_plugin": "scheduler",
-      "description": "持久调度：到点在创建任务的会话里执行，最终回复按原触发投递",
-      "group": "runtime",
-      "status": "partial",
-      "upstream_entry": "plugins/scheduler/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/scheduler/plugin.py",
-      "kirakira_paths": [
-        "plugins/scheduler"
-      ],
-      "acceptance": "来源会话、notify/run 和持久 fire 已有；补齐工具边界让出用户、保存/恢复同一程序和未知效果核对。"
-    },
-    {
-      "upstream_plugin": "session_title",
-      "description": "首条用户消息自动生成短标题，保留用户改名",
-      "group": "product",
-      "status": "missing",
-      "upstream_entry": "plugins/session_title/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/session_title/plugin.py",
-      "kirakira_paths": [],
-      "acceptance": "首条用户消息生成持久短标题；用户改名优先，失败/取消/重启及多客户端更新不覆盖手动标题。"
-    },
-    {
-      "upstream_plugin": "shell",
-      "description": "执行命令并管理其进程",
-      "group": "workspace",
-      "status": "partial",
-      "upstream_entry": "plugins/shell/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/shell/plugin.py",
-      "kirakira_paths": [
-        "plugins/tools/unified_exec.py",
-        "plugins/tools/builtins.py"
-      ],
-      "acceptance": "实际执行 cwd、PTY/stdin 与进程 owner 已接入；继续补齐宿主执行 backend、预备参数及断连后的进程查询。",
-      "functional_evidence": [
-        "tests/test_workspace_features.py",
-        "docs/operations/evaluations/2026-10-19-workspace-functions.md"
-      ]
-    },
-    {
-      "upstream_plugin": "shell_ui",
-      "description": "应用外框、设置工作区与插件列表",
-      "group": "product",
-      "status": "partial",
-      "upstream_entry": "plugins/shell_ui/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/shell_ui/plugin.py",
-      "kirakira_paths": [
-        "frontend/web_ui.py",
-        "plugins/dashboard/service.py"
-      ],
-      "acceptance": "完整应用外框、设置工作区与插件列表；操作必须映射真实能力状态、错误和发布回执。"
-    },
-    {
-      "upstream_plugin": "sites",
-      "description": "把 Agent 做的网页（原型、设计稿、showcase）发布到用户右侧边栏，用户在自己的浏览器里直接操作",
-      "group": "product",
-      "status": "missing",
-      "upstream_entry": "plugins/sites/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/sites/plugin.py",
-      "kirakira_paths": [],
-      "acceptance": "将 Agent 生成网页作为可访问资产发布；有真实浏览器入口、稳定身份及资源 owner，不能只有返回 URL 字符串。"
-    },
-    {
-      "upstream_plugin": "sites_tab",
-      "description": "在对话工作台的“网站”标签里打开 Agent 发布的网页，切换手机、平板与自适应宽度",
-      "group": "product",
-      "status": "missing",
-      "upstream_entry": "plugins/sites_tab/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/sites_tab/plugin.py",
-      "kirakira_paths": [],
-      "acceptance": "工作台网站标签可打开发布页面并切换手机/平板/自适应宽度；来源与选中状态跟随会话。"
-    },
-    {
-      "upstream_plugin": "skills",
-      "description": "提供技能目录与技能读取工具",
-      "group": "extension",
-      "status": "partial",
-      "upstream_entry": "plugins/skills/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/skills/plugin.py",
-      "kirakira_paths": [
-        "plugins/skills/service.py",
-        "plugins/skills/loader.py"
-      ],
-      "acceptance": "技能目录发现与按需读取遵循授权和资源代际；显示确切来源，并与子 Agent/Drift 使用同一读取合同。"
-    },
-    {
-      "upstream_plugin": "sources",
-      "description": "按来源注册接纳与控制，供渠道和默认回复组合使用",
-      "group": "runtime",
-      "status": "partial",
-      "upstream_entry": "plugins/sources/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/sources/plugin.py",
-      "kirakira_paths": [
-        "plugins/ledger/turn_source.py",
-        "plugins/reply_program/service.py"
-      ],
-      "acceptance": "来源注册拥有接纳与控制，程序由调用方选择；权限、时间、记忆排除和接纳回执不可只靠字符串渠道判断。"
-    },
-    {
-      "upstream_plugin": "stable_view",
-      "description": "命令行查看当前 stable 插件组合树",
-      "group": "extension",
-      "status": "partial",
-      "upstream_entry": "plugins/stable_view/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/stable_view/plugin.py",
-      "kirakira_paths": [
-        "plugins/extensions",
-        "agent/composition",
-        "plugins/mcp",
-        "plugins/skills/service.py"
-      ],
-      "acceptance": "CLI 查看当前已发布组合树、依赖及状态；输出来自 actual stable 代际，不能显示未发布候选为当前。"
-    },
-    {
-      "upstream_plugin": "standard_web",
-      "description": "提供 Web 搜索与读取工具；端点由各提供方插件负责",
-      "group": "product",
-      "status": "partial",
-      "upstream_entry": "plugins/standard_web/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/standard_web/plugin.py",
-      "kirakira_paths": [
-        "plugins/tools/web.py"
-      ],
-      "acceptance": "Web 搜索/读取通过独立提供方能力组合；上层工具不持有某个商业端点或凭据。"
-    },
-    {
-      "upstream_plugin": "subagent",
-      "description": "独立内部消息任务，固定工具权限并向父会话回传",
-      "group": "product",
-      "status": "partial",
-      "upstream_entry": "plugins/subagent/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/subagent/plugin.py",
-      "kirakira_paths": [
-        "plugins/subagent/service.py"
-      ],
-      "acceptance": "独立持久消息任务、固定工具权限、继承 cwd 并回传父会话；补齐忙时注入、恢复和父/子取消生命周期。",
-      "functional_evidence": [
-        "tests/test_workspace_features.py",
-        "docs/operations/evaluations/2026-10-19-workspace-functions.md"
-      ]
-    },
-    {
-      "upstream_plugin": "telegram_channel",
-      "description": "Telegram inbound and outbound v3 channel adapter",
-      "group": "delivery",
-      "status": "partial",
-      "upstream_entry": "plugins/telegram_channel/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/telegram_channel/plugin.py",
-      "kirakira_paths": [
-        "infra/channels",
-        "bus",
-        "plugins/tools/message_push.py"
-      ],
-      "acceptance": "真实 Telegram 入站交接、reply/context/附件转换和发送 binding；重复 update 与断线重启不会重复接纳。"
-    },
-    {
-      "upstream_plugin": "telegram_sender",
-      "description": "用固定凭据发送 Telegram 正文和附件",
-      "group": "delivery",
-      "status": "partial",
-      "upstream_entry": "plugins/telegram_sender/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/telegram_sender/plugin.py",
-      "kirakira_paths": [
-        "infra/channels",
-        "bus",
-        "plugins/tools/message_push.py"
-      ],
-      "acceptance": "固定凭据发送正文和附件；多段结果、真实发送回执、未知外部结果及重启核对可验证。"
-    },
-    {
-      "upstream_plugin": "terminal",
-      "description": "工作台里用户自己敲命令的终端；PTY 归执行主机，本插件只按会话命名",
-      "group": "workspace",
-      "status": "missing",
-      "upstream_entry": "plugins/terminal/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/terminal/plugin.py",
-      "kirakira_paths": [],
-      "acceptance": "工作台用户终端通过会话命名并使用执行宿主 PTY；重连、输出补读、stdin、窗口变化及关闭都有真实入口。"
-    },
-    {
-      "upstream_plugin": "timer",
-      "description": "单次截止时间等待，不拥有调度或来源语义",
-      "group": "runtime",
-      "status": "partial",
-      "upstream_entry": "plugins/timer/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/timer/plugin.py",
-      "kirakira_paths": [
-        "plugins/reply_program",
-        "plugins/ledger",
-        "plugins/control",
-        "plugins/tools",
-        "plugins/scheduler"
-      ],
-      "acceptance": "单次截止时间等待可取消并按 owner 排空；只拥有等待，不混入调度、来源或轮次策略。"
-    },
-    {
-      "upstream_plugin": "tool_search",
-      "description": "按插件 ID 展示获授工具的完整 schema，并解码间接调用",
-      "group": "extension",
-      "status": "partial",
-      "upstream_entry": "plugins/tool_search/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/tool_search/plugin.py",
-      "kirakira_paths": [
-        "plugins/extensions",
-        "agent/composition",
-        "plugins/mcp",
-        "plugins/skills/service.py"
-      ],
-      "acceptance": "仅检索已授予工具，展示完整 schema 并解码间接调用；热更新与固定代际授权在实际执行前再检查。"
-    },
-    {
-      "upstream_plugin": "tools",
-      "description": "声明工具并固定实际实现；一次调用的回执独立于会话",
-      "group": "runtime",
-      "status": "partial",
-      "upstream_entry": "plugins/tools/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/tools/plugin.py",
-      "kirakira_paths": [
-        "plugins/reply_program",
-        "plugins/ledger",
-        "plugins/control",
-        "plugins/tools",
-        "plugins/scheduler"
-      ],
-      "acceptance": "固定实现、prepared 参数和稳定 effect key；结果可查询，独占批次/授权/取消/未知效果恢复由公共合同保证。"
-    },
-    {
-      "upstream_plugin": "turn_projection",
-      "description": "从消息读取逻辑 Turn，不保存内容或消费进度",
-      "group": "runtime",
-      "status": "aligned",
-      "upstream_entry": "plugins/turn_projection/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/turn_projection/plugin.py",
-      "kirakira_paths": [
-        "plugins/turn_projection",
-        "plugins/ledger",
-        "plugins/control"
-      ],
-      "acceptance": "上游投影及合同原样接入原生 provider，从统一 Message 读取引用，不保存内容或游标；覆盖多输入、暂停/恢复、跨来源、abandon 晚到结果、quiet 与重启，提供 turn/project 控制入口。",
-      "evidence": [
-        "tests/test_reply_programs.py",
-        "plugins/ledger/UPSTREAM.json",
-        "eval/scenarios/core.py",
-        "docs/operations/evaluations/2026-10-20-message-ledger.md"
-      ]
-    },
-    {
-      "upstream_plugin": "ui",
-      "description": "注册并封存插件的 Web 与 Dashboard UI",
-      "group": "product",
-      "status": "partial",
-      "upstream_entry": "plugins/ui/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/ui/plugin.py",
-      "kirakira_paths": [
-        "plugins/dashboard/service.py",
-        "frontend"
-      ],
-      "acceptance": "通过版本能力注册和封存插件 UI；候选/active 代际隔离，真实 RPC 校验、资产和关闭归各自 owner。"
-    },
-    {
-      "upstream_plugin": "vision",
-      "description": "通过已配置的 vision 角色查看图片",
-      "group": "models",
-      "status": "partial",
-      "upstream_entry": "plugins/vision/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/vision/plugin.py",
-      "kirakira_paths": [
-        "plugins/tools/builtins.py"
-      ],
-      "acceptance": "独立 vision 角色读取图片及会话 cwd 路径；多图、预算、损坏文件和原生 provider 内容映射可验证。"
-    },
-    {
-      "upstream_plugin": "visuals",
-      "description": "生成可交互的图表、解释和模拟，作为 HTML 消息附件保存",
-      "group": "product",
-      "status": "missing",
-      "upstream_entry": "plugins/visuals/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/visuals/plugin.py",
-      "kirakira_paths": [],
-      "acceptance": "生成交互 HTML 并保存为持久消息附件；浏览器安全展示、重启和原消息回读不依赖临时文件。"
-    },
-    {
-      "upstream_plugin": "wake",
-      "description": "内部消息完成初筛、调查与告警，真实送达后确认原职责",
-      "group": "proactive",
-      "status": "partial",
-      "upstream_entry": "plugins/wake/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/wake/plugin.py",
-      "kirakira_paths": [
-        "proactive_v2",
-        "plugins/proactive_flow",
-        "plugins/wake_proactive",
-        "plugins/drift_flow"
-      ],
-      "acceptance": "初筛、调查、share/skip 和真实送达后确认原职责；邮箱版本、用户变化、静默与调查预算形成完整生命周期。"
-    },
-    {
-      "upstream_plugin": "web_auth",
-      "description": "Web 入口门禁：主人账号密码、记住设备与本机一次性登录",
-      "group": "product",
-      "status": "missing",
-      "upstream_entry": "plugins/web_auth/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/web_auth/plugin.py",
-      "kirakira_paths": [],
-      "acceptance": "主人账号密码、记住设备和本机一次性登录覆盖 Web 全部敏感路由；过期、退出、恢复与 CSRF 有实际验证。"
-    },
-    {
-      "upstream_plugin": "web_fetch_http",
-      "description": "直接通过 HTTP(S) 读取网页正文",
-      "group": "product",
-      "status": "partial",
-      "upstream_entry": "plugins/web_fetch_http/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/web_fetch_http/plugin.py",
-      "kirakira_paths": [
-        "plugins/tools/web.py"
-      ],
-      "acceptance": "直接 HTTP(S) 读取、正文提取、窄范围续读与来源引用；超时、重定向、流限制和错误明确可用。"
-    },
-    {
-      "upstream_plugin": "web_search_exa",
-      "description": "经 Exa 搜索互联网；可配置自建或代理端点与 API key",
-      "group": "product",
-      "status": "partial",
-      "upstream_entry": "plugins/web_search_exa/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/web_search_exa/plugin.py",
-      "kirakira_paths": [
-        "plugins/tools/web.py"
-      ],
-      "acceptance": "Exa 独立端点/代理/key 配置与搜索能力；结果来源、错误、取消和 onboarding 验证通过实际工具链。"
-    },
-    {
-      "upstream_plugin": "working_directory",
-      "description": "管理会话工作目录",
-      "group": "workspace",
-      "status": "partial",
-      "upstream_entry": "plugins/working_directory/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/working_directory/plugin.py",
-      "kirakira_paths": [
-        "plugins/working_directory",
-        "plugins/react/reasoner.py",
-        "plugins/control/service.py"
-      ],
-      "acceptance": "每 Session cwd、实时 AGENTS、独占切换及回执/CAS 已接入；补齐宿主路径能力、prepared 调用和持久续跑。",
-      "functional_evidence": [
-        "tests/test_workspace_features.py",
-        "docs/operations/evaluations/2026-10-19-workspace-functions.md"
-      ]
-    },
-    {
-      "upstream_plugin": "workloads",
-      "description": "取得并持有 Context 所属的 Workload",
-      "group": "extension",
-      "status": "missing",
-      "upstream_entry": "plugins/workloads/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/workloads/plugin.py",
-      "kirakira_paths": [],
-      "acceptance": "Context 获取并持有 Workload；候选隔离、代际撤销、失败回收与执行宿主容器生命周期可验证。"
-    },
-    {
-      "upstream_plugin": "workspace_changes",
-      "description": "查看会话工作目录（git 仓库）的改动，回复下方给出每轮的摘要",
-      "group": "workspace",
-      "status": "missing",
-      "upstream_entry": "plugins/workspace_changes/plugin.py",
-      "upstream_url": "https://github.com/kachofugetsu09/akashic-agent/blob/e1628ddc8a33c2840e5b4558ff3b66af207eec2a/plugins/workspace_changes/plugin.py",
-      "kirakira_paths": [],
-      "acceptance": "以会话 cwd 的 git 仓库展示改动，并保存每轮摘要；有真实 diff/工作台入口，目录丢失不误读其他仓库。"
-    }
-  ],
-  "additional_surfaces": [
-    {
-      "name": "Python SDK and app-server protocol",
-      "status": "partial",
-      "upstream_paths": [
-        "sdk/python",
-        "schema/app-server-v2.json"
-      ],
-      "kirakira_paths": [
-        "plugins/control/client.py",
-        "plugins/control/protocol"
-      ],
-      "acceptance": "可安装 SDK、应用控制协议、typed event 与流式 turn 生命周期；重连、恢复、取消和错误行为以实际客户端验证。"
-    },
-    {
-      "name": "Deployment, bundles and onboarding",
-      "status": "partial",
-      "upstream_paths": [
-        "docker",
-        "bundles",
-        "systemd",
-        "bootstrap"
-      ],
-      "kirakira_paths": [
-        "bootstrap/setup_wizard.py",
-        "bootstrap/app.py"
-      ],
-      "acceptance": "独立安装与组合选择、容器/宿主桥、启动升级、备份恢复、引导和 supervisor 运维链；包不依赖 Reference checkout。"
-    },
-    {
-      "name": "Web workbench and Android Shell protocol",
-      "status": "partial",
-      "upstream_paths": [
-        "frontend",
-        "plugins/akashic_clients",
-        "plugins/gateway"
-      ],
-      "kirakira_paths": [
-        "frontend/web_ui.py",
-        "infra/channels/web_chat_channel.py"
-      ],
-      "acceptance": "完整 Web 工作台与 Android 协议消费者；持久日志同步、附件、项目/目录、终端、diff、网站和设置形成实际用户流程。"
+  "upstream_commit": "e1628ddc8a33c2840e5b4558ff3b66af207eec2a",
+  "native_files": 924,
+  "scope": "production implementation and architecture; external integrations need separate configuration and validation",
+  "plugins": [
+    {
+      "id": "akasha",
+      "directory": "plugins/akasha",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 45
+    },
+    {
+      "id": "akashic_clients",
+      "directory": "plugins/akashic_clients",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": false,
+      "pinned_files": 20
+    },
+    {
+      "id": "akashic_sender",
+      "directory": "plugins/akashic_sender",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 1
+    },
+    {
+      "id": "assets",
+      "directory": "plugins/assets",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 3
+    },
+    {
+      "id": "channels",
+      "directory": "plugins/channels",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 4
+    },
+    {
+      "id": "codex",
+      "directory": "plugins/codex",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": false,
+      "pinned_files": 9
+    },
+    {
+      "id": "commands",
+      "directory": "plugins/commands",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 4
+    },
+    {
+      "id": "compaction",
+      "directory": "plugins/compaction",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 4
+    },
+    {
+      "id": "computer",
+      "directory": "plugins/computer",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": false,
+      "pinned_files": 25
+    },
+    {
+      "id": "content",
+      "directory": "plugins/content",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 3
+    },
+    {
+      "id": "content_view",
+      "directory": "plugins/content_view",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": false,
+      "pinned_files": 1
+    },
+    {
+      "id": "context",
+      "directory": "plugins/context",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 7
+    },
+    {
+      "id": "conversation",
+      "directory": "plugins/conversation",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 5
+    },
+    {
+      "id": "conversation-ui",
+      "directory": "plugins/conversation_ui",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": false,
+      "pinned_files": 3
+    },
+    {
+      "id": "delivery",
+      "directory": "plugins/delivery",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 8
+    },
+    {
+      "id": "delivery_policy",
+      "directory": "plugins/delivery_policy",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 4
+    },
+    {
+      "id": "drift",
+      "directory": "plugins/drift",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 4
+    },
+    {
+      "id": "eventmail",
+      "directory": "plugins/eventmail",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 4
+    },
+    {
+      "id": "files",
+      "directory": "plugins/files",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 5
+    },
+    {
+      "id": "gateway",
+      "directory": "plugins/gateway",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 25
+    },
+    {
+      "id": "gemini",
+      "directory": "plugins/gemini",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": false,
+      "pinned_files": 5
+    },
+    {
+      "id": "host_execution",
+      "directory": "plugins/host_execution",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 30
+    },
+    {
+      "id": "jobs",
+      "directory": "plugins/jobs",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 6
+    },
+    {
+      "id": "ledger",
+      "directory": "plugins/ledger",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 32
+    },
+    {
+      "id": "ledger_invariants",
+      "directory": "plugins/ledger_invariants",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 2
+    },
+    {
+      "id": "managed_processes",
+      "directory": "plugins/managed_processes",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 5
+    },
+    {
+      "id": "markdown_memory",
+      "directory": "plugins/markdown_memory",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 5
+    },
+    {
+      "id": "mcp",
+      "directory": "plugins/mcp",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 6
+    },
+    {
+      "id": "message_push",
+      "directory": "plugins/message_push",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 5
+    },
+    {
+      "id": "models",
+      "directory": "plugins/models",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 20
+    },
+    {
+      "id": "onboarding",
+      "directory": "plugins/onboarding",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": false,
+      "pinned_files": 6
+    },
+    {
+      "id": "openai-compatible",
+      "directory": "plugins/openai_compatible",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 6
+    },
+    {
+      "id": "opencode-go",
+      "directory": "plugins/opencode_go",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": false,
+      "pinned_files": 5
+    },
+    {
+      "id": "plugin_update",
+      "directory": "plugins/plugin_update",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": false,
+      "pinned_files": 5
+    },
+    {
+      "id": "programmatic",
+      "directory": "plugins/programmatic",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 5
+    },
+    {
+      "id": "projects",
+      "directory": "plugins/projects",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 3
+    },
+    {
+      "id": "prompt",
+      "directory": "plugins/prompt",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 8
+    },
+    {
+      "id": "react",
+      "directory": "plugins/react",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 3
+    },
+    {
+      "id": "reply",
+      "directory": "plugins/reply",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 5
+    },
+    {
+      "id": "reply_program",
+      "directory": "plugins/reply_program",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 3
+    },
+    {
+      "id": "runtime_diagnostics",
+      "directory": "plugins/runtime_diagnostics",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": false,
+      "pinned_files": 9
+    },
+    {
+      "id": "runtime_inspection",
+      "directory": "plugins/runtime_inspection",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 5
+    },
+    {
+      "id": "scheduler",
+      "directory": "plugins/scheduler",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 12
+    },
+    {
+      "id": "session_title",
+      "directory": "plugins/session_title",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": false,
+      "pinned_files": 2
+    },
+    {
+      "id": "shell",
+      "directory": "plugins/shell",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 8
+    },
+    {
+      "id": "shell-ui",
+      "directory": "plugins/shell_ui",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": false,
+      "pinned_files": 4
+    },
+    {
+      "id": "sites",
+      "directory": "plugins/sites",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": false,
+      "pinned_files": 7
+    },
+    {
+      "id": "sites_tab",
+      "directory": "plugins/sites_tab",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": false,
+      "pinned_files": 3
+    },
+    {
+      "id": "skills",
+      "directory": "plugins/skills",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 8
+    },
+    {
+      "id": "sources",
+      "directory": "plugins/sources",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 4
+    },
+    {
+      "id": "stable_view",
+      "directory": "plugins/stable_view",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": false,
+      "pinned_files": 2
+    },
+    {
+      "id": "standard_web",
+      "directory": "plugins/standard_web",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 5
+    },
+    {
+      "id": "step-plan",
+      "directory": "plugins/step_plan",
+      "api_version": 3,
+      "upstream": false,
+      "headless_selected": true,
+      "pinned_files": 1
+    },
+    {
+      "id": "subagent",
+      "directory": "plugins/subagent",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 6
+    },
+    {
+      "id": "telegram_channel",
+      "directory": "plugins/telegram_channel",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": false,
+      "pinned_files": 12
+    },
+    {
+      "id": "telegram_sender",
+      "directory": "plugins/telegram_sender",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": false,
+      "pinned_files": 10
+    },
+    {
+      "id": "terminal",
+      "directory": "plugins/terminal",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": false,
+      "pinned_files": 5
+    },
+    {
+      "id": "timer",
+      "directory": "plugins/timer",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 3
+    },
+    {
+      "id": "tool_search",
+      "directory": "plugins/tool_search",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 3
+    },
+    {
+      "id": "tools",
+      "directory": "plugins/tools",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 8
+    },
+    {
+      "id": "turn_projection",
+      "directory": "plugins/turn_projection",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 2
+    },
+    {
+      "id": "ui",
+      "directory": "plugins/ui",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": false,
+      "pinned_files": 11
+    },
+    {
+      "id": "vision",
+      "directory": "plugins/vision",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 4
+    },
+    {
+      "id": "visuals",
+      "directory": "plugins/visuals",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": false,
+      "pinned_files": 8
+    },
+    {
+      "id": "wake",
+      "directory": "plugins/wake",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 21
+    },
+    {
+      "id": "web-auth",
+      "directory": "plugins/web_auth",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": false,
+      "pinned_files": 5
+    },
+    {
+      "id": "web_fetch_http",
+      "directory": "plugins/web_fetch_http",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 3
+    },
+    {
+      "id": "web_search_exa",
+      "directory": "plugins/web_search_exa",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 7
+    },
+    {
+      "id": "working_directory",
+      "directory": "plugins/working_directory",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 9
+    },
+    {
+      "id": "workloads",
+      "directory": "plugins/workloads",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": true,
+      "pinned_files": 5
+    },
+    {
+      "id": "workspace_changes",
+      "directory": "plugins/workspace_changes",
+      "api_version": 3,
+      "upstream": true,
+      "headless_selected": false,
+      "pinned_files": 9
     }
   ]
 }

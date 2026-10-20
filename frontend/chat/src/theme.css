@@ -1,0 +1,17 @@
+@import "../../theme/src/material-tokens.css";
+@import "../../theme/src/brand-tokens.css";
+@import "../../theme/src/paper-surface.css";
+
+.akashic-chat {
+  font-family: var(--ak-type-reading);
+  font-synthesis: none;
+  letter-spacing: normal;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  --radius: 0.75rem;
+}
+
+code, kbd, pre, .mono, .font-mono {
+  font-family: var(--ak-type-technical);
+  letter-spacing: 0;
+}

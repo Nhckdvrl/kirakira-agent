@@ -1,65 +1,67 @@
-"""Kirakira Agent learning harness module."""
+"""从 TOML 读取 Core 自有的中性配置。"""
 
-import os
-import re
+from __future__ import annotations
+
 import tomllib
 from pathlib import Path
-from typing import Any, Dict
+
+from agent.config_models import Config
 
 
-def load_dotenv(path: Path) -> Dict[str, str]:
-    values: Dict[str, str] = {}
-    if not path.exists():
-        return values
-    for raw_line in path.read_text().splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip().strip('"').strip("'")
-        values[key] = value
-        os.environ.setdefault(key, value)
-    return values
+def load_config(
+    path: str | Path = "config.toml",
+    *,
+    workspace: str | Path,
+) -> Config:
+    workspace_path = Path(workspace)
+    config_path = Path(path)
+    data = _load_config_data(config_path)
+    _validate_core_config(data)
+
+    return Config(
+        config_path=config_path.expanduser().resolve(),
+        workspace_path=workspace_path.expanduser().resolve(),
+    )
 
 
-def require_env(name: str) -> str:
-    value = os.getenv(name)
-    if not value:
-        raise RuntimeError("Missing required environment variable: %s" % name)
+def _validate_core_config(data: dict) -> None:
+    """Validate only the neutral root config owned by Core.
+
+    Plugin-owned settings live under each installed plugin's data directory.
+    Rejecting unknown tables here is what prevents an old client table from
+    being silently accepted when its migration bundle is absent.
+    """
+
+    _reject_unknown_keys(data, {"runtime"}, field="配置")
+    runtime = _as_dict(data.get("runtime"), field="runtime")
+    _reject_unknown_keys(runtime, {"workspace"}, field="runtime")
+    if "workspace" in runtime and not isinstance(runtime["workspace"], str):
+        raise ValueError("runtime.workspace 必须是字符串")
+
+
+def _reject_unknown_keys(data: dict, allowed: set[str], *, field: str) -> None:
+    unknown = sorted(set(data).difference(allowed))
+    if unknown:
+        joined = ", ".join(f"{field}.{name}" for name in unknown)
+        raise ValueError(f"Core 配置不支持字段: {joined}")
+
+
+def _as_dict(value: object, *, field: str) -> dict:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError(f"{field} 必须是 TOML table")
     return value
 
 
-def load_toml_config(path: Path) -> Dict[str, Any]:
-    if not path.exists():
-        return {}
-    with path.open("rb") as handle:
-        payload = tomllib.load(handle)
-    return _expand_env(payload)
+def _load_config_data(path: str | Path) -> dict:
+    path = Path(path)
+    if path.suffix.lower() != ".toml":
+        raise ValueError(f"主配置仅支持 TOML: {path.suffix}")
+    return tomllib.loads(path.read_text(encoding="utf-8"))
 
 
-def config_value(config: Dict[str, Any], *path: str, default: Any = None) -> Any:
-    current: Any = config
-    for key in path:
-        if not isinstance(current, dict) or key not in current:
-            return default
-        current = current[key]
-    return current
-
-
-def _expand_env(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {str(key): _expand_env(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_expand_env(item) for item in value]
-    if not isinstance(value, str):
-        return value
-    pattern = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
-
-    def replace(match: re.Match[str]) -> str:
-        name = match.group(1)
-        if name not in os.environ:
-            raise RuntimeError("Missing environment variable referenced by config: %s" % name)
-        return os.environ[name]
-
-    return pattern.sub(replace, value)
+__all__ = [
+    "Config",
+    "load_config",
+]

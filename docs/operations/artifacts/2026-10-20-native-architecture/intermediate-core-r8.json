@@ -1,0 +1,138 @@
+{
+  "billing_surface": "step_plan",
+  "model": "step-5-preview",
+  "workspace": "/tmp/kn-full-architecture-r8",
+  "cases": [
+    {
+      "name": "native_reply",
+      "passed": true,
+      "detail": {
+        "answer": "BASIC_63f3082b02"
+      },
+      "duration_s": 3.787
+    },
+    {
+      "name": "bound_file_roundtrip",
+      "passed": true,
+      "detail": {
+        "answer": "\u5199\u597d\u4e86\uff0c\u4e5f\u8bfb\u56de\u6765\u4e86\u3002\n\nToken: `FILE_63f3082b02`",
+        "facts": 6
+      },
+      "duration_s": 13.487
+    },
+    {
+      "name": "managed_process_mcp",
+      "passed": true,
+      "detail": {
+        "answer": "native_probe \u8fd4\u56de\uff1a\n\n- value: MCP_63f3082b02\n- managed_pid: 2532528\n- ready: true\n- python: 3.14.6",
+        "results": 1
+      },
+      "duration_s": 6.01
+    },
+    {
+      "name": "native_shell",
+      "passed": true,
+      "detail": {
+        "answer": "stdout:\n\n```\nSHELL_63f3082b02\n```\n\n\u9000\u51fa\u7801 0\uff0c\u8fdb\u7a0b\u6210\u529f\u7ed3\u675f\u3002"
+      },
+      "duration_s": 3.917
+    },
+    {
+      "name": "tool_error_repair",
+      "passed": true,
+      "detail": {
+        "answer": "read_file \u62a5\u9519\u4e86\uff0c\u6587\u4ef6\u786e\u5b9e\u4e0d\u5b58\u5728\uff1a\n\n```\n\u6587\u4ef6\u4e0d\u5b58\u5728\uff1a/tmp/kn-full-architecture-r8/missing-63f3082b02\n```\n\nnative_probe \u7684\u771f\u5b9e\u8fd4\u56de\u662f\uff1a\n\n```json\n{\"value\": \"REPAIRED_63f3082b02\", \"ready\": true, \"managed_pid\": 2532528, \"python\": [3, 14, 6]}\n```\n\nready \u662f true\uff0cpid 2532528\u3002"
+      },
+      "duration_s": 8.013
+    },
+    {
+      "name": "native_subagent",
+      "passed": true,
+      "detail": {
+        "answer": "\u5b50\u4efb\u52a1\u5df2\u540c\u6b65\u5b8c\u6210\u3002\n\n\u7ed3\u679c\uff1a\n\nCHILD_63f3082b02\n\n\u9000\u51fa\u539f\u56e0\u662f completed\uff0c\u8ddf\u4f60\u8981\u7684\u56de\u590d\u5185\u5bb9\u4e00\u81f4\u3002",
+        "child_sessions": [
+          "subagent:ed4193960a754d2c9b21f5590bffd1b7"
+        ]
+      },
+      "duration_s": 9.626
+    },
+    {
+      "name": "driver_local_reload",
+      "passed": true,
+      "detail": {
+        "answer": "RELOADED_63f3082b02",
+        "same_root": true
+      },
+      "duration_s": 3.01
+    },
+    {
+      "name": "task_bound_steer_withdraw",
+      "passed": true,
+      "detail": {
+        "answer": "native_probe \u8fd4\u56de\u7684\u662f\uff1a\n\n`{\"value\": \"ORIGINAL_63f3082b02\", \"ready\": true, \"managed_pid\": 2532528, \"python\": [3, 14, 6]}`\n\n\u670d\u52a1\u662f\u5c31\u7eea\u72b6\u6001\uff0cmanaged PID 2532528\uff0cPython 3.14.6\u3002\n\n\u6309\u4f60\u7684\u8981\u6c42\u5e26\u4e0a\u6807\u8bb0\uff1a**STEER_63f3082b02**",
+        "accepted_inputs": 2
+      },
+      "duration_s": 13.37
+    },
+    {
+      "name": "source_pause_resume_no_effect_replay",
+      "passed": true,
+      "detail": {
+        "answer": "\u5199\u597d\u4e86\uff0c\u4e00\u6b21\u5199\u5165\u3002\n\n\u6587\u4ef6\u5185\u5bb9\uff1a\n\n```\nONCE_63f3082b02\n```\n\n\u8def\u5f84 `/tmp/kn-full-architecture-r8/resume-proof.txt`\uff0c15 \u5b57\u8282\u3002",
+        "write_effects": 1,
+        "tool_results": 2
+      },
+      "duration_s": 6.563
+    },
+    {
+      "name": "new_input_revokes_old_source_task",
+      "passed": true,
+      "detail": {
+        "answer": "\u6536\u5230\u3002\u7528\u521a\u624d\u90a3\u6b21\u63a2\u6d4b\u7684\u7ed3\u679c\uff0c\u4e0d\u518d\u91cd\u8dd1\u3002\n\n\u63a2\u6d4b\u8fd4\u56de\uff1avalue = **FIRST_63f3082b02**\uff0cready = true\uff0cmanaged_pid = 2532528\uff0cpython \u7248\u672c = 3.14.6\u3002\n\n\u6307\u4ee4\u4e32\uff1a**SUPERSEDE_63f3082b02**",
+        "effect_results": 1
+      },
+      "duration_s": 9.908
+    },
+    {
+      "name": "immutable_attachment_projection",
+      "passed": true,
+      "detail": {
+        "answer": "ATTACHMENT_63f3082b02",
+        "artifact_id": "81142bde947b44508e69546eac929bce"
+      },
+      "duration_s": 12.443
+    },
+    {
+      "name": "scheduler_native_source_delivery",
+      "passed": false,
+      "error": "AssertionError: scheduler delivery receipt did not settle",
+      "duration_s": 30.979
+    },
+    {
+      "name": "restart_reuses_native_history",
+      "passed": true,
+      "detail": {
+        "answer": "Token: `FILE_63f3082b02`"
+      },
+      "duration_s": 9.245
+    }
+  ],
+  "summary": {
+    "passed": 12,
+    "total": 13,
+    "python": "3.14.6",
+    "recorded_business_model_calls": 40,
+    "model_states": {
+      "success": 40
+    },
+    "driver_ids": [
+      "step-plan"
+    ],
+    "endpoints": [
+      "https://api.stepfun.com/step_plan/v1"
+    ],
+    "input_tokens": 285956,
+    "output_tokens": 2265,
+    "coverage": "native Models business-call ledger; connection/model setup probes are additional calls"
+  }
+}

@@ -61,3 +61,18 @@ htmlcov/
 # Editor / OS
 .DS_Store
 .transcripts/
+
+# Native runtime generated artifacts
+node_modules/
+/static/
+frontend/dashboard/static/
+/plugin-data/
+/model-registry.sqlite3*
+/sessions-derived.db*
+/runtime/
+/plugin-stable.json
+/plugin-inputs/
+
+# Derived web assets are shipped by the package build, never source control.
+/plugins/ui/static/
+/plugins/akashic_clients/static/

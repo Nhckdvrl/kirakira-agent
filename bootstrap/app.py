@@ -1,373 +1,375 @@
-"""CLI selection and serving the composed runtime."""
+from __future__ import annotations
 
-import argparse
 import asyncio
-import importlib.util
+import logging
 import os
 import signal
-import sys
+from collections.abc import Iterable
 from pathlib import Path
+from typing import Any, Awaitable, Callable
 
-from agent.config import config_value, load_dotenv, load_toml_config
-from agent.supervisor import RESTART_EXIT_CODE
-from bootstrap.application import Application
-from bootstrap.runtime import build_runtime
-from core.schema import JsonDict
+from bootstrap.web_shell import WebShellServer
+
+from agent.restart import RestartGate
+from agent.config_models import Config
+from bootstrap.cleanup import run_cleanup_steps
+from bootstrap.runtime_readiness import RuntimeReadiness
+from bootstrap.tools import CoreRuntime, build_core_runtime
+from bootstrap.workspace_lock import WorkspaceInstanceLock
+from agent.plugins.watcher import PluginWatcher
+from core.net.http import (
+    SharedHttpResources,
+    clear_default_shared_http_resources,
+    configure_default_shared_http_resources,
+)
+from core.common.diagnostic_log import configure_logging
+
+configure_logging()
+logging.getLogger("agent.plugins.manager").setLevel(
+    os.environ.get("AKASHIC_PLUGIN_LOG_LEVEL", "INFO").upper()
+)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
+logger = logging.getLogger(__name__)
 
 
-async def runtime_repl(
-    runtime: Application, workdir: Path, session_id: str | None = None
-) -> None:
-    """Backward-compatible name for the line-oriented streaming client."""
-
-    from frontend.tui.plain import runtime_plain_repl
-
-    await runtime_plain_repl(runtime, workdir, session_id=session_id)
+_run_cleanup_steps = run_cleanup_steps
 
 
-async def runtime_serve(runtime: Application) -> int:
-    """跑后台服务直到停止信号或 agent 自请求重启。
-
-    返回进程退出码:重启提交成立时返回 RESTART_EXIT_CODE(75),supervisor 收到
-    75 + 私有管道上的有效 commit 帧才会拉起下一代(照 Reference main.py:serve)。
-    """
-    tasks = await runtime.start_background()
-    readiness = None
-    boot_id = (
-        os.getenv("AKASHIC_BOOT_ID", "") or os.getenv("KIRAKIRA_BOOT_ID", "")
-    ).strip()
-    supervised = (
-        os.getenv("AKASHIC_SUPERVISED") == "1"
-        or os.getenv("KIRAKIRA_SUPERVISED") == "1"
-    )
-    if supervised and boot_id:
-        from bootstrap.runtime_readiness import RuntimeReadiness
-
-        readiness = RuntimeReadiness(runtime.session_manager.workspace, boot_id)
-        readiness.mark_ready()
-    loop = asyncio.get_running_loop()
-    stop_event = asyncio.Event()
-    registered_signals: list[signal.Signals] = []
-    for watched in (signal.SIGINT, signal.SIGTERM):
-        try:
-            loop.add_signal_handler(watched, stop_event.set)
-            registered_signals.append(watched)
-        except NotImplementedError, RuntimeError:
-            pass
-    restart_requested = False
-    stop_task = asyncio.create_task(stop_event.wait(), name="shutdown_signal")
-    restart_task = (
-        asyncio.create_task(
-            runtime.restart_coordinator.wait_committed(),
-            name="restart_committed",
-        )
-        if runtime.restart_coordinator is not None
-        else None
-    )
-    try:
-        print("kirakira-agent server running. Ctrl+C to stop.")
-        watched_tasks = {stop_task}
-        if restart_task is not None:
-            watched_tasks.add(restart_task)
-        done, _ = await asyncio.wait(watched_tasks, return_when=asyncio.FIRST_COMPLETED)
-        if restart_task is not None and restart_task in done:
-            await restart_task
-            restart_requested = True
-    except KeyboardInterrupt, asyncio.CancelledError:
-        pass
-    finally:
-        for pending_task in (stop_task, restart_task):
-            if pending_task is not None and not pending_task.done():
-                pending_task.cancel()
-        for watched in registered_signals:
-            loop.remove_signal_handler(watched)
+def _clear_readiness(
+    readiness: RuntimeReadiness | None,
+) -> Callable[[], Awaitable[None]]:
+    async def clear() -> None:
         if readiness is not None:
             readiness.clear()
-        await runtime.stop_background(tasks)
-    return RESTART_EXIT_CODE if restart_requested else 0
+
+    return clear
 
 
-def resolve_workspace(
-    cli_workspace: str | None,
-    app_config: JsonDict,
-    *,
-    default: Path,
-) -> Path:
-    """按 --workspace > KIRAKIRA_WORKSPACE > config [runtime].workspace > 默认解析。
+def _raise_unexpected_task_errors(name: str, results: Iterable[object]) -> None:
+    """记录并重新抛出任务停止时的首个非取消异常。"""
 
-    运行时可写状态（session、记忆、附件、插件数据、workspace MCP）全部落在这个根下，
-    不同 workspace 之间互不共享。
-    """
-
-    env_value = os.getenv("KIRAKIRA_WORKSPACE")
-    configured = str(config_value(app_config, "runtime", "workspace", default="") or "")
-    for candidate in (cli_workspace, env_value, configured):
-        if candidate is None:
+    first_error: BaseException | None = None
+    for result in results:
+        if not isinstance(result, BaseException) or isinstance(
+            result, asyncio.CancelledError
+        ):
             continue
-        text = str(candidate).strip()
-        if not text:
-            continue
-        return Path(text).expanduser().resolve()
-    return default
-
-
-async def _main_async(args: argparse.Namespace, workdir: Path) -> int:
-    from agent.workspace_lock import WorkspaceInstanceLock
-
-    workspace_lock = WorkspaceInstanceLock(workdir)
-    workspace_lock.acquire()
-    try:
-        runtime = await build_runtime(
-            workdir,
-            enable_web=args.web,
-            enable_telegram=args.telegram,
-            enable_qq=args.qq,
-            enable_qqbot=args.qqbot,
-            config_path=args.config_path,
+        logger.error(
+            "%s failed while stopping",
+            name,
+            exc_info=(type(result), result, result.__traceback__),
         )
-        if getattr(args, "proactive", False):
-            await _run_proactive_once(runtime)
-        elif args.serve or args.web or args.telegram or args.qq or args.qqbot:
-            return await runtime_serve(runtime)
-        else:
-            mode = choose_cli_mode(force_tui=args.tui, force_plain=args.plain)
-            if mode == "tui":
-                try:
-                    from frontend.tui.app import runtime_tui
-                except ModuleNotFoundError as exc:
-                    if exc.name != "textual":
-                        raise
-                    print(
-                        "Textual 未安装，自动回退到 plain 流式模式。"
-                        "安装项目依赖后可使用全屏 TUI。",
-                        file=sys.stderr,
-                    )
-                    await runtime_repl(runtime, workdir, session_id=args.session)
-                else:
-                    await runtime_tui(runtime, workdir, session_id=args.session)
-            else:
-                await runtime_repl(runtime, workdir, session_id=args.session)
-        return 0
-    finally:
-        workspace_lock.release()
+        if first_error is None:
+            first_error = result
+    if first_error is not None:
+        raise first_error
 
 
-async def _run_proactive_once(runtime: Application) -> None:
-    """手动跑一次主动 tick 并打印状态，供演示/调试（不等电量定时器）。"""
-    import json as _json
+def _stop_plugin_watcher(
+    watcher: PluginWatcher | None,
+    task: asyncio.Task[None] | None,
+) -> Callable[[], Awaitable[None]]:
+    async def stop() -> None:
+        if watcher is not None:
+            watcher.stop()
+            await watcher.wait_stopped()
+        if task is not None:
+            try:
+                await task
+            except asyncio.CancelledError:
+                return
 
-    tasks = []
-    try:
-        loop = runtime.proactive_loop
-        if loop is None:
-            print(
-                "主动链路未启用。请在 config.toml 的 [proactive] 设 enabled=true "
-                "并填好 [proactive.target]。"
-            )
+    return stop
+
+
+def _wait_server_task(
+    task: asyncio.Task[None] | None,
+) -> Callable[[], Awaitable[None]]:
+    async def wait() -> None:
+        if task is None:
             return
-        if runtime.channel_host is not None:
-            await runtime.channel_host.start_all()
-        tasks.append(
-            asyncio.create_task(runtime.bus.dispatch_outbound(), name="bus_dispatch")
-        )
-        print("→ 执行一次主动 tick ...")
-        await loop.tick_once()
-        await runtime.bus.drain(timeout=10.0)
-        print(_json.dumps(loop.status(), ensure_ascii=False, indent=2))
-    finally:
-        await runtime.stop_background(tasks)
-
-
-def choose_cli_mode(
-    *,
-    force_tui: bool = False,
-    force_plain: bool = False,
-    stdin_isatty: bool | None = None,
-    stdout_isatty: bool | None = None,
-    textual_available: bool | None = None,
-) -> str:
-    """Select a UI without importing optional TUI dependencies in scripts/CI."""
-
-    if force_plain:
-        return "plain"
-    if force_tui:
-        return "tui"
-    stdin_tty = sys.stdin.isatty() if stdin_isatty is None else stdin_isatty
-    stdout_tty = sys.stdout.isatty() if stdout_isatty is None else stdout_isatty
-    available = (
-        importlib.util.find_spec("textual") is not None
-        if textual_available is None
-        else textual_available
-    )
-    return "tui" if stdin_tty and stdout_tty and available else "plain"
-
-
-def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Kirakira Agent")
-    parser.add_argument(
-        "command",
-        nargs="?",
-        choices=["memory"],
-        help="Administrative command group (currently: memory).",
-    )
-    parser.add_argument(
-        "memory_action",
-        nargs="?",
-        choices=[
-            "doctor",
-            "backup",
-            "migrate",
-            "verify",
-            "rollback",
-            "clear",
-            "repair-kinds",
-        ],
-        help="Memory administration action.",
-    )
-    parser.add_argument(
-        "--backup-id", default="", help="Backup id for memory verify/rollback."
-    )
-    parser.add_argument(
-        "--confirm",
-        default="",
-        help="Explicit confirmation token for destructive memory actions.",
-    )
-    parser.add_argument(
-        "--include-sessions",
-        action="store_true",
-        help="Also delete all persisted sessions during memory clear.",
-    )
-    parser.add_argument(
-        "--clear-self",
-        action="store_true",
-        help="Also reset memory/SELF.md during memory clear.",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Report planned changes without writing (memory repair-kinds).",
-    )
-    parser.add_argument(
-        "--serve",
-        action="store_true",
-        help="Run background agent loop and configured channels.",
-    )
-    parser.add_argument("--web", action="store_true", help="Enable stdlib web channel.")
-    parser.add_argument(
-        "--telegram", action="store_true", help="Enable Telegram Bot API channel."
-    )
-    parser.add_argument(
-        "--qq", action="store_true", help="Enable QQ OneBot webhook channel."
-    )
-    parser.add_argument(
-        "--qqbot", action="store_true", help="Enable official Tencent QQBot channel."
-    )
-    parser.add_argument(
-        "--proactive",
-        action="store_true",
-        help="Run one proactive tick now (demo/debug), print status, then exit.",
-    )
-    ui_group = parser.add_mutually_exclusive_group()
-    ui_group.add_argument(
-        "--tui",
-        action="store_true",
-        help="Force the full-screen Textual client for local interaction.",
-    )
-    ui_group.add_argument(
-        "--plain",
-        action="store_true",
-        help="Use the line-oriented streaming client (also selected for pipes/CI).",
-    )
-    parser.add_argument(
-        "--session",
-        default=None,
-        help=(
-            "Named local conversation to resume. Without this flag, each launch "
-            "starts a fresh empty conversation."
-        ),
-    )
-    parser.add_argument(
-        "--workspace",
-        default=None,
-        help=(
-            "Runtime state root (sessions, memory, plugin data, workspace MCP). "
-            "Overrides KIRAKIRA_WORKSPACE and config [runtime].workspace."
-        ),
-    )
-    parser.add_argument(
-        "--config",
-        default=None,
-        help="Path to config.toml. Defaults to ./config.toml.",
-    )
-    args = parser.parse_args(argv)
-    # config 先于 workspace 解析：workspace 可以写在 config 里，但 config 本身不住在
-    # workspace 内，否则会形成先有鸡还是先有蛋。
-    cwd = Path(os.getcwd()).resolve()
-    args.config_path = (
-        Path(args.config).expanduser().resolve() if args.config else cwd / "config.toml"
-    )
-    # 解析 workspace 就要展开 config 里的 ${...} 引用（含 secret），所以先加载与
-    # config 同目录的 .env；build_runtime 之后会再按 workspace 加载一次，setdefault 保证
-    # 早绑定的值不被覆盖。
-    load_dotenv(args.config_path.parent / ".env")
-    workdir = resolve_workspace(
-        args.workspace, load_toml_config(args.config_path), default=cwd
-    )
-    workdir.mkdir(parents=True, exist_ok=True)
-    if not (
-        os.environ.get("AKASHIC_SUPERVISED") == "1"
-        or os.environ.get("KIRAKIRA_SUPERVISED") == "1"
-    ):
-        from agent.migrations import migrate_installation
-
         try:
-            outcome = migrate_installation(args.config_path, workdir)
-        except RuntimeError as exc:
-            parser.exit(2, "workspace migration failed: %s\n" % exc)
-        if outcome.state == "migrated":
-            print("workspace migrations applied: %s" % len(outcome.migrations))
-    if args.command == "memory":
-        import json as _json
+            await task
+        except asyncio.CancelledError:
+            return
 
-        from plugins.default_memory.admin import (
-            backup,
-            clear,
-            doctor,
-            migrate,
-            repair_kinds,
-            rollback,
-            verify,
-        )
+    return wait
 
-        if not args.memory_action:
-            parser.error(
-                "memory requires doctor/backup/migrate/verify/rollback/clear/repair-kinds"
+
+class AppRuntime:
+    def __init__(
+        self,
+        config: Config,
+        workspace: Path,
+        *,
+        restart_gate: RestartGate | None = None,
+        readiness: RuntimeReadiness | None = None,
+    ) -> None:
+        self.config = config
+        self.workspace = workspace
+        if restart_gate is None and readiness is not None:
+            # fixture/嵌入式 host 没有 supervisor 时，readiness 仍是该 host
+            # 的启动边界；让 Core、Channel Host 和 readiness 使用同一身份。
+            restart_gate = RestartGate(
+                boot_id=readiness.boot_id,
+                supervised=False,
             )
+        self.restart_gate = restart_gate
+        self.readiness = readiness
+        self.http_resources = SharedHttpResources()
+        self.core: CoreRuntime | None = None
+        self.web_shell: WebShellServer | None = None
+        self.web_shell_task: asyncio.Task[None] | None = None
+        self.plugin_watcher: PluginWatcher | None = None
+        self.plugin_watcher_task: asyncio.Task[None] | None = None
+        self._shutdown = False
+        self._started = False
+        self._plugin_candidate_tasks: set[asyncio.Task[Any]] = set()
+        self._plugin_reload_signal_installed = False
+        self._shutdown_task: asyncio.Task[None] | None = None
+        self._workspace_lock = WorkspaceInstanceLock(workspace)
+
+    async def start(self) -> None:
+        if self._started:
+            return
+        self._workspace_lock.acquire()
+        if self.readiness is not None:
+            self.readiness.mark_stage("workspace.locked")
         try:
-            if args.memory_action == "doctor":
-                result = doctor(workdir, project_root=cwd)
-            elif args.memory_action == "backup":
-                result = backup(workdir)
-            elif args.memory_action == "migrate":
-                result = migrate(workdir)
-            elif args.memory_action == "verify":
-                result = verify(workdir, backup_id=args.backup_id)
-            elif args.memory_action == "repair-kinds":
-                result = repair_kinds(workdir, dry_run=args.dry_run)
-            elif args.memory_action == "rollback":
-                result = rollback(workdir, backup_id=args.backup_id)
-            else:
-                result = clear(
-                    workdir,
-                    confirm=args.confirm,
-                    include_sessions=args.include_sessions,
-                    clear_self=args.clear_self,
+            configure_default_shared_http_resources(self.http_resources)
+            self.core = build_core_runtime(
+                self.config,
+                self.workspace,
+                self.http_resources,
+                restart_gate=self.restart_gate,
+                host_ready=(lambda: self.readiness.ready) if self.readiness else None,
+            )
+            await self.core.start()
+            if self.readiness is not None:
+                self.readiness.mark_stage("core.ready")
+            plugin_manager = getattr(self.core, "plugin_manager", None)
+            if self.readiness is not None:
+                self.readiness.mark_stage("services.ready")
+
+            if plugin_manager is None:
+                raise RuntimeError("插件 Runtime 不可用")
+            if os.environ.get("AKASHIC_SUPERVISED") != "1" and "AKASHIC_WEB_PORT" in os.environ:
+                from bootstrap.web_shell import create_web_shell_server
+                host = os.environ.get("AKASHIC_WEB_HOST", "127.0.0.1")
+                if host != "127.0.0.1" and os.environ.get("AKASHIC_WEB_ALLOW_NON_LOOPBACK") != "1":
+                    raise ValueError("公网 Web Shell 需要 AKASHIC_WEB_ALLOW_NON_LOOPBACK=1")
+                port = int(os.environ["AKASHIC_WEB_PORT"])
+                if not 1 <= port <= 65535:
+                    raise ValueError("AKASHIC_WEB_PORT 必须是 1 到 65535")
+                shell = create_web_shell_server(self.workspace, host=host, port=port)
+                self.web_shell = shell
+                self.web_shell_task = asyncio.create_task(shell.serve(), name="web_shell")
+                await asyncio.to_thread(shell.startup_event.wait, 5)
+                if not shell.started:
+                    raise RuntimeError("Web Shell 未完成启动")
+            if plugin_manager is not None:
+                self.plugin_watcher = PluginWatcher(
+                    plugin_manager,
+                    accepting=lambda: self.restart_gate is None or self.restart_gate.accepting,
                 )
-        except Exception as exc:
-            parser.exit(2, "memory %s failed: %s\n" % (args.memory_action, exc))
-        print(_json.dumps(result, ensure_ascii=False, indent=2))
-        return
-    exit_code = asyncio.run(_main_async(args, workdir))
-    if exit_code:
-        # 重启换代(75)必须作为进程退出码传给 supervisor;正常退出保持 return 语义。
-        sys.exit(exit_code)
+                self.plugin_watcher_task = asyncio.create_task(
+                    self.plugin_watcher.run(),
+                    name="plugin_watcher",
+                )
+
+            self._install_plugin_reload_signal()
+            if self.readiness is not None:
+                self.readiness.mark_stage("runtime.started")
+            self._started = True
+        except (asyncio.CancelledError, Exception) as startup_error:
+            try:
+                await self.shutdown()
+            except (asyncio.CancelledError, Exception) as rollback_error:
+                raise startup_error from rollback_error
+            raise
+
+    async def run(self) -> None:
+        """监督宿主任务，退出时完成清理并保留原始错误。"""
+        run_error: BaseException | None = None
+        try:
+            # 1. 完整启动后监督实际宿主任务与进程停止请求。
+            await self.start()
+            assert self.core is not None
+            shutdown_task = asyncio.create_task(self.core.restart_gate.wait_shutdown(), name="process_shutdown")
+            self._shutdown_task = shutdown_task
+            watched_tasks = {
+                task
+                for task in (
+                    self.web_shell_task,
+                    self.plugin_watcher_task,
+                    shutdown_task,
+                )
+                if task is not None
+            }
+            # 实际宿主监督任务获得一次调度机会后仍存活，才对外发布 ready。
+            done, _ = await asyncio.wait(watched_tasks, timeout=0)
+            if not done:
+                if self.readiness is not None:
+                    self.readiness.mark_ready()
+                done, _ = await asyncio.wait(
+                    watched_tasks,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+            if shutdown_task in done:
+                try:
+                    await shutdown_task
+                finally:
+                    self._shutdown_task = None
+            else:
+                if self.web_shell_task is not None and self.web_shell_task in done:
+                    watched_task = self.web_shell_task
+                    self.web_shell_task = None
+                elif (
+                    self.plugin_watcher_task is not None
+                    and self.plugin_watcher_task in done
+                ):
+                    watched_task = self.plugin_watcher_task
+                    self.plugin_watcher_task = None
+                else:
+                    raise RuntimeError("未知 runtime watcher task")
+                await watched_task
+        except (asyncio.CancelledError, Exception) as error:
+            run_error = error
+
+        # 2. 清理全部资源；关闭失败作为原始错误的原因保留。
+        shutdown_error: BaseException | None = None
+        try:
+            await self.shutdown()
+        except (asyncio.CancelledError, Exception) as error:
+            shutdown_error = error
+
+        if run_error is not None:
+            if shutdown_error is not None and shutdown_error is not run_error:
+                raise run_error from shutdown_error
+            raise run_error
+        if shutdown_error is not None:
+            raise shutdown_error
+
+    async def _cancel_shutdown_task(self) -> None:
+        """收束进程停止等待；取消正常结束，其他错误继续暴露。"""
+        task = self._shutdown_task
+        if task is None:
+            return
+        _ = task.cancel()
+        try:
+            results = await asyncio.gather(task, return_exceptions=True)
+        finally:
+            self._shutdown_task = None
+
+        _raise_unexpected_task_errors("process shutdown task", results)
+
+    async def _cancel_plugin_candidate_tasks(self) -> None:
+        for task in self._plugin_candidate_tasks:
+            _ = task.cancel()
+        results: list[object] = []
+        try:
+            if self._plugin_candidate_tasks:
+                results = await asyncio.gather(
+                    *self._plugin_candidate_tasks,
+                    return_exceptions=True,
+                )
+        finally:
+            self._plugin_candidate_tasks.clear()
+        _raise_unexpected_task_errors("plugin candidate task", results)
+
+    async def _request_server_shutdown(self) -> None:
+        if self.web_shell is not None:
+            self.web_shell.should_exit = True
+
+    async def shutdown(self) -> None:
+        if self._shutdown:
+            return
+        self._shutdown = True
+        closing_root = None if self.core is None else self.core.plugin_manager.live_root
+        try:
+            self._remove_plugin_reload_signal()
+            # 已排空业务后先关闭入站连接；插件释放前保留数据库和 HTTP provider。
+            await _run_cleanup_steps(
+                ("plugin_candidate_tasks.cancel", self._cancel_plugin_candidate_tasks),
+                ("process_shutdown.cancel", self._cancel_shutdown_task),
+                ("servers.request_shutdown", self._request_server_shutdown),
+                ("web_shell.wait", _wait_server_task(self.web_shell_task)),
+                (
+                    "plugin_watcher.stop",
+                    _stop_plugin_watcher(
+                        self.plugin_watcher,
+                        self.plugin_watcher_task,
+                    ),
+                ),
+            )
+            if self.core is not None:
+                await self.core.stop()
+            await _run_cleanup_steps(
+                ("http_resources.aclose", self.http_resources.aclose),
+                (
+                    "runtime_readiness.clear",
+                    _clear_readiness(self.readiness),
+                ),
+            )
+            if self._started and self.readiness is not None:
+                self.readiness.mark_closed(None if closing_root is None else closing_root.generation_id)
+        finally:
+            self._workspace_lock.release()
+            clear_default_shared_http_resources(self.http_resources)
+
+    def _install_plugin_reload_signal(self) -> None:
+        if not hasattr(signal, "SIGHUP"):
+            return
+        manager = getattr(self.core, "plugin_manager", None)
+        if manager is None:
+            return
+        loop = asyncio.get_running_loop()
+        loop.add_signal_handler(signal.SIGHUP, self._schedule_plugin_candidate_scan)
+        self._plugin_reload_signal_installed = True
+
+    def _remove_plugin_reload_signal(self) -> None:
+        if not self._plugin_reload_signal_installed:
+            return
+        _ = asyncio.get_running_loop().remove_signal_handler(signal.SIGHUP)
+        self._plugin_reload_signal_installed = False
+
+    def _schedule_plugin_candidate_scan(self) -> None:
+        manager = getattr(self.core, "plugin_manager", None)
+        if manager is None or self._shutdown or (self.restart_gate is not None and not self.restart_gate.accepting):
+            return
+        if self.plugin_watcher is not None:
+            self.plugin_watcher.request_scan()
+            return
+        task = asyncio.create_task(
+            manager.reconcile_changed(),
+            name="plugin_reload_scan",
+        )
+        self._plugin_candidate_tasks.add(task)
+        task.add_done_callback(self._plugin_candidate_scan_done)
+
+    def _plugin_candidate_scan_done(self, task: asyncio.Task[Any]) -> None:
+        self._plugin_candidate_tasks.discard(task)
+        if task.cancelled():
+            return
+        error = task.exception()
+        if error is not None:
+            logger.error(
+                "plugin candidate scan failed",
+                exc_info=(type(error), error, error.__traceback__),
+            )
+
+
+def build_app_runtime(
+    config: Config,
+    workspace: Path,
+    *,
+    restart_gate: RestartGate | None = None,
+    readiness: RuntimeReadiness | None = None,
+) -> AppRuntime:
+    return AppRuntime(
+        config,
+        workspace,
+        restart_gate=restart_gate,
+        readiness=readiness,
+    )

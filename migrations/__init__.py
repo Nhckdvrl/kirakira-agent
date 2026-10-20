@@ -1,1 +1,1 @@
-"""Version-controlled, append-only workspace migration catalog."""
+"""版本控制内的一次性兼容迁移。"""

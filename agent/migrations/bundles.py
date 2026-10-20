@@ -1,0 +1,655 @@
+"""发现并校验内置插件的离线 Yoyo migration bundle。"""
+
+from __future__ import annotations
+
+import ast
+from contextlib import contextmanager
+import importlib.util
+import re
+import sys
+import tomllib
+from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
+from typing import Iterator, Sequence, cast
+
+from yoyo import read_migrations
+from yoyo.migrations import Migration, MigrationList, StepCollector, exceptions
+
+from agent.plugins.source_resolver import (
+    ResolvedPluginSource,
+    resolve_plugin_sources,
+)
+
+
+_MIGRATION_CATALOG = "migration.catalog.toml"
+
+_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
+_CATALOG_KEYS = {"schema_version", "bundle_id", "version", "migration_root", "package_name", "migrations"}
+_MIGRATION_KEYS = {"id", "path", "depends", "transactional"}
+_PACKAGE_NAME = re.compile(r"^[a-z_][a-z0-9_]{0,63}$")
+_REJECTED_IMPORT_PREFIXES = (
+    "plugins",
+    "agent.plugins",
+    "bootstrap",
+)
+_ALLOWED_CORE_MIGRATION_MODULES = frozenset({
+    "agent.migrations.context",
+    "agent.plugin_composition",
+    "agent.plugin_composition.config_input",
+    "infra.persistence.json_store",
+    "core.common.timekit",
+    "core.net.http",
+})
+
+
+class MigrationBundleError(ValueError):
+    """迁移 bundle 的静态内容不满足安装合同。"""
+
+
+class MigrationBundleBlocked(RuntimeError):
+    """workspace 有待执行迁移，但实现 bundle 尚未安装。"""
+
+    code = "migration_blocked"
+
+    def __init__(
+        self,
+        *,
+        bundle_id: str,
+        migration_ids: Sequence[str],
+        missing_dependencies: Sequence[str] = (),
+    ) -> None:
+        self.bundle_id = bundle_id
+        self.migration_ids = tuple(migration_ids)
+        self.missing_dependencies = tuple(missing_dependencies)
+        detail = [
+            self.code,
+            f"bundle={bundle_id}",
+            f"migrations={','.join(self.migration_ids)}",
+        ]
+        if self.missing_dependencies:
+            detail.append(
+                f"missing_dependencies={','.join(self.missing_dependencies)}"
+            )
+        super().__init__(" ".join(detail))
+
+
+@dataclass(frozen=True, slots=True)
+class MigrationSpec:
+    """一个 bundle 中已冻结的 migration 元数据。"""
+
+    migration_id: str
+    path: str
+    depends: tuple[str, ...]
+    transactional: bool
+
+
+@dataclass(frozen=True, slots=True)
+class MigrationBundle:
+    """一个已安装 artifact 提供的 Yoyo source；字节完整性由安装边界负责。"""
+
+    bundle_id: str
+    version: str
+    artifact_root: Path
+    migration_root: Path
+    catalog_path: Path
+    migrations: tuple[MigrationSpec, ...]
+    package_name: str
+    plugin_name: str = ""
+    marketplace: str = ""
+
+    @property
+    def migration_ids(self) -> tuple[str, ...]:
+        return tuple(item.migration_id for item in self.migrations)
+
+
+@dataclass(frozen=True, slots=True)
+class MigrationRequirement:
+    """Core 中立索引只记录 ID 和 owner；依赖与事务属性由 owner bundle 唯一声明。"""
+
+    migration_id: str
+    bundle_id: str | None
+
+
+def discover_migration_bundles(
+    *,
+    plugin_dirs: Sequence[Path] = (),
+    fixed_sources: Sequence[ResolvedPluginSource] | None = None,
+) -> tuple[MigrationBundle, ...]:
+    """只从明确的插件 source 读取 bundle，不扫描 checkout/plugins。"""
+
+    sources = (
+        tuple(fixed_sources) if fixed_sources is not None else
+        tuple(resolve_plugin_sources(plugin_dirs))
+    )
+    bundles: list[MigrationBundle] = []
+    seen_bundles: set[str] = set()
+    seen_packages: set[str] = set()
+    seen_migrations: set[str] = set()
+    for source in sources:
+        if source.source_type != "builtin":
+            continue
+        catalog = source.plugin_root / _MIGRATION_CATALOG
+        if not catalog.exists() and not catalog.is_symlink():
+            continue
+        bundle = load_migration_bundle(source)
+        if bundle.bundle_id in seen_bundles:
+            raise MigrationBundleError(f"重复 migration bundle: {bundle.bundle_id}")
+        if bundle.package_name in seen_packages:
+            raise MigrationBundleError(
+                f"重复 migration package_name: {bundle.package_name}"
+            )
+        overlap = seen_migrations.intersection(bundle.migration_ids)
+        if overlap:
+            raise MigrationBundleError(
+                "重复 migration ID: " + ", ".join(sorted(overlap))
+            )
+        seen_bundles.add(bundle.bundle_id)
+        seen_packages.add(bundle.package_name)
+        seen_migrations.update(bundle.migration_ids)
+        bundles.append(bundle)
+    return tuple(sorted(bundles, key=lambda item: item.bundle_id))
+
+
+def load_migration_bundle(
+    source: ResolvedPluginSource,
+) -> MigrationBundle:
+    """解析一个静态 bundle；artifact 字节已由安装边界校验，这里只核对结构。"""
+
+    root = source.plugin_root.resolve(strict=True)
+    catalog_path = _inside_file(root, root / _MIGRATION_CATALOG, "migration catalog")
+    try:
+        raw = tomllib.loads(catalog_path.read_text(encoding="utf-8"))
+    except (UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
+        raise MigrationBundleError(f"migration catalog 无法解析: {catalog_path}") from error
+    if set(raw) != _CATALOG_KEYS:
+        raise MigrationBundleError(
+            f"migration catalog 顶层字段错误: {sorted(set(raw) ^ _CATALOG_KEYS)}"
+        )
+    if raw.get("schema_version") != 2:
+        raise MigrationBundleError("migration catalog schema_version 必须为 2")
+    bundle_id = _id(raw.get("bundle_id"), "bundle_id")
+    version = _version(raw.get("version"), "version")
+    package_name = raw.get("package_name")
+    if not isinstance(package_name, str) or _PACKAGE_NAME.fullmatch(package_name) is None:
+        raise MigrationBundleError("package_name 必须是安全 Python 包名")
+    migration_root_value = raw.get("migration_root")
+    if not isinstance(migration_root_value, str):
+        raise MigrationBundleError("migration_root 必须是字符串路径")
+    migration_root = _inside_directory(
+        root,
+        root / _relative_path(migration_root_value, "migration_root"),
+        "migration_root",
+    )
+    if package_name != migration_root.name:
+        raise MigrationBundleError("package_name 必须等于 migration_root 目录名")
+    package_init = migration_root / "__init__.py"
+    if not package_init.is_file() or package_init.is_symlink():
+        raise MigrationBundleError("migration_root 必须包含普通 __init__.py")
+    specs = _migration_specs(raw.get("migrations"), migration_root)
+    # 1. Yoyo 会扫描 source directory，未列入 catalog 的 .py 不能藏入执行面。
+    declared_paths = {item.path for item in specs}
+    actual_paths = {
+        path.relative_to(migration_root).as_posix()
+        for path in migration_root.glob("*.py")
+        if path.name != "__init__.py" and (path.is_file() or path.is_symlink())
+    }
+    if actual_paths != declared_paths:
+        raise MigrationBundleError(
+            "migration_root 文件集合与 catalog 不一致: "
+            f"missing={sorted(declared_paths - actual_paths)}, "
+            f"extra={sorted(actual_paths - declared_paths)}"
+        )
+    # 2. helper 与迁移同受导入边界约束；它们只能引用本 bundle 和允许的中立模块。
+    for path in sorted(migration_root.rglob("*.py")):
+        if "__pycache__" not in path.relative_to(migration_root).parts:
+            _validate_source_imports(path, migration_root=migration_root)
+    _validate_local_dependency_graph(specs, bundle_id)
+    return MigrationBundle(
+        bundle_id=bundle_id,
+        version=version,
+        artifact_root=root,
+        migration_root=migration_root,
+        catalog_path=catalog_path,
+        migrations=tuple(specs),
+        package_name=package_name,
+        plugin_name=source.plugin_name,
+        marketplace=source.marketplace,
+    )
+
+
+# 读取 catalog 中的迁移声明，并确认每个声明指向 bundle 内的普通迁移文件。
+def _migration_specs(raw_migrations: object, migration_root: Path) -> list[MigrationSpec]:
+    if not isinstance(raw_migrations, list) or not raw_migrations:
+        raise MigrationBundleError("migration catalog.migrations 必须是非空数组")
+    specs: list[MigrationSpec] = []
+    ids: set[str] = set()
+    for index, item in enumerate(cast(list[object], raw_migrations)):
+        if not isinstance(item, dict) or set(item) != _MIGRATION_KEYS:
+            raise MigrationBundleError(
+                f"migrations[{index}] 字段必须是 {sorted(_MIGRATION_KEYS)}"
+            )
+        entry = cast(dict[str, object], item)
+        migration_id = _id(entry.get("id"), f"migrations[{index}].id")
+        if migration_id in ids:
+            raise MigrationBundleError(f"migration ID 重复: {migration_id}")
+        path_value = entry.get("path")
+        if not isinstance(path_value, str):
+            raise MigrationBundleError(f"migrations[{index}].path 必须是字符串")
+        relative_path = _relative_path(path_value, f"migrations[{index}].path")
+        path = _inside_file(migration_root, migration_root / relative_path, f"migrations[{index}].path")
+        if path.suffix != ".py" or path.name == "__init__.py":
+            raise MigrationBundleError(f"migrations[{index}].path 必须是普通 Python migration 文件")
+        depends_value = entry.get("depends")
+        if not isinstance(depends_value, list) or not all(isinstance(value, str) for value in depends_value):
+            raise MigrationBundleError(f"migrations[{index}].depends 无效")
+        depends = tuple(cast(list[str], depends_value))
+        if len(set(depends)) != len(depends) or migration_id in depends:
+            raise MigrationBundleError(f"migrations[{index}].depends 无效")
+        transactional = entry.get("transactional")
+        if not isinstance(transactional, bool):
+            raise MigrationBundleError(f"migrations[{index}].transactional 无效")
+        ids.add(migration_id)
+        specs.append(MigrationSpec(migration_id, relative_path, depends, transactional))
+    return specs
+
+
+def load_migration_requirements(path: Path) -> tuple[MigrationRequirement, ...]:
+    """读取 Core 的中立 ID 索引；索引没有任何 migration 实现。"""
+
+    if not path.exists():
+        return ()
+    if path.is_symlink() or not path.is_file():
+        raise MigrationBundleError(f"migration requirement catalog 必须是普通文件: {path}")
+    try:
+        raw = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError) as error:
+        raise MigrationBundleError(f"migration requirement catalog 无法解析: {path}") from error
+    if set(raw) != {"schema_version", "migrations"} or raw.get("schema_version") != 2:
+        raise MigrationBundleError("migration requirement catalog schema 无效")
+    values = raw.get("migrations")
+    if not isinstance(values, list):
+        raise MigrationBundleError("migration requirement catalog.migrations 必须是数组")
+    result: list[MigrationRequirement] = []
+    seen: set[str] = set()
+    for index, item in enumerate(cast(list[object], values)):
+        if not isinstance(item, dict) or set(item) != {"id", "bundle"}:
+            raise MigrationBundleError(f"requirements[{index}] 字段错误")
+        entry = cast(dict[str, object], item)
+        migration_id = _id(entry.get("id"), f"requirements[{index}].id")
+        if migration_id in seen:
+            raise MigrationBundleError(f"requirement ID 重复: {migration_id}")
+        bundle = entry.get("bundle")
+        seen.add(migration_id)
+        result.append(MigrationRequirement(
+            migration_id=migration_id,
+            bundle_id=None if bundle is None else _id(bundle, f"requirements[{index}].bundle"),
+        ))
+    return tuple(result)
+
+
+def validate_bundle_dependencies(
+    bundles: Sequence[MigrationBundle],
+    *,
+    core_migration_ids: Sequence[str],
+    requirements: Sequence[MigrationRequirement] = (),
+    applied_ids: Sequence[str] = (),
+    require_missing_bundles: bool = True,
+) -> None:
+    """在 Yoyo 执行前拒绝待执行迁移的缺失 owner 和断裂依赖。"""
+
+    available_ids = set(core_migration_ids)
+    available_ids.update(item.migration_id for bundle in bundles for item in bundle.migrations)
+    applied = set(applied_ids)
+    bundle_by_id = {bundle.bundle_id: bundle for bundle in bundles}
+    for requirement in requirements:
+        if (
+            requirement.bundle_id is not None
+            and requirement.bundle_id not in bundle_by_id
+            and not require_missing_bundles
+        ):
+            continue
+        if requirement.migration_id not in available_ids:
+            continue
+        if requirement.bundle_id is None:
+            if requirement.migration_id not in set(core_migration_ids):
+                raise MigrationBundleError(
+                    f"Core requirement 错误地缺少实现: {requirement.migration_id}"
+                )
+            continue
+        bundle = bundle_by_id.get(requirement.bundle_id)
+        if bundle is None:
+            continue
+        spec = next(
+            (
+                item
+                for item in bundle.migrations
+                if item.migration_id == requirement.migration_id
+            ),
+            None,
+        )
+        if spec is None:
+            raise MigrationBundleError(
+                f"bundle 未提供 requirement ID: {requirement.migration_id}"
+            )
+    # 已落账迁移不再需要历史依赖闭包；待执行迁移必须在当前 Core/bundle 中找到全部依赖。
+    for bundle in bundles:
+        missing: set[str] = set()
+        for spec in bundle.migrations:
+            if spec.migration_id in applied:
+                continue
+            missing.update(dep for dep in spec.depends if dep not in available_ids)
+        if missing:
+            raise MigrationBundleBlocked(
+                bundle_id=bundle.bundle_id,
+                migration_ids=bundle.migration_ids,
+                missing_dependencies=tuple(sorted(missing)),
+            )
+def validate_pending_requirements(
+    requirements: Sequence[MigrationRequirement],
+    *,
+    loaded_ids: Sequence[str],
+    applied_ids: Sequence[str],
+    bundles: Sequence[MigrationBundle],
+    require_missing_bundles: bool = True,
+) -> None:
+    """对缺少实现的未落账 ID 返回明确的 blocked，而不是伪造成功。"""
+
+    loaded = set(loaded_ids)
+    applied = set(applied_ids)
+    bundle_ids = {bundle.bundle_id for bundle in bundles}
+    for requirement in requirements:
+        if requirement.migration_id in loaded or requirement.migration_id in applied:
+            continue
+        if (
+            requirement.bundle_id is not None
+            and requirement.bundle_id not in bundle_ids
+            and not require_missing_bundles
+        ):
+            continue
+        raise MigrationBundleBlocked(
+            bundle_id=requirement.bundle_id or "core",
+            migration_ids=(requirement.migration_id,),
+        )
+
+
+@contextmanager
+def migration_import_paths(bundles: Sequence[MigrationBundle]) -> Iterator[None]:
+    """在 Yoyo load/apply 窗口安装精确的 bundle package 身份。"""
+
+    package_names = tuple(bundle.package_name for bundle in bundles)
+    if len(set(package_names)) != len(package_names):
+        raise MigrationBundleError("migration package_name 必须在一次加载中唯一")
+    loaded_names = set(sys.modules)
+    for package_name in package_names:
+        if any(
+            name == package_name or name.startswith(package_name + ".")
+            for name in loaded_names
+        ):
+            raise MigrationBundleError(
+                f"migration package_name 已在当前进程加载: {package_name}"
+            )
+        if importlib.util.find_spec(package_name) is not None:
+            raise MigrationBundleError(
+                f"migration package_name 与现有模块冲突: {package_name}"
+            )
+
+    original_modules = set(sys.modules)
+    try:
+        for bundle in bundles:
+            package_name = bundle.package_name
+            init_path = bundle.migration_root / "__init__.py"
+            spec = importlib.util.spec_from_file_location(
+                package_name,
+                init_path,
+                submodule_search_locations=[str(bundle.migration_root)],
+            )
+            if spec is None or spec.loader is None:
+                raise MigrationBundleError(
+                    f"migration package 无法加载: {package_name}"
+                )
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[package_name] = module
+            spec.loader.exec_module(module)
+        yield
+    finally:
+        for module_name in tuple(sys.modules):
+            if module_name in original_modules or not any(
+                module_name == package_name
+                or module_name.startswith(package_name + ".")
+                for package_name in package_names
+            ):
+                continue
+            sys.modules.pop(module_name, None)
+
+
+class _BundleMigration(Migration):
+    """Load one Yoyo file under its validated external package identity."""
+
+    def __init__(self, migration_id: str, path: str, source_dir: str, package_name: str):
+        super().__init__(migration_id, path, source_dir)
+        self._package_name = package_name
+
+    def load(self) -> None:
+        if self.loaded:
+            return
+        collector = StepCollector(migration=self)
+        with open(self.path, "r", encoding="utf-8") as stream:
+            self.source = stream.read()
+        if self.is_raw_sql():
+            super().load()
+            return
+        module_name = f"{self._package_name}.{Path(self.path).stem}"
+        spec = importlib.util.spec_from_file_location(module_name, self.path)
+        if spec is None or spec.loader is None:
+            raise exceptions.BadMigration(self.path)
+        module = importlib.util.module_from_spec(spec)
+        module.step = collector.add_step  # type: ignore[attr-defined]
+        module.group = collector.add_step_group  # type: ignore[attr-defined]
+        module.transaction = collector.add_step_group  # type: ignore[attr-defined]
+        module.__yoyo_collector__ = collector  # type: ignore[attr-defined]
+        try:
+            spec.loader.exec_module(module)
+        except Exception as error:
+            raise exceptions.BadMigration(self.path, error) from error
+        depends = getattr(module, "__depends__", [])
+        if isinstance(depends, (str, bytes)):
+            depends = [depends]
+        self._depends = {
+            Migration._Migration__all_migrations.get(identifier)  # type: ignore[attr-defined]
+            for identifier in depends
+        }
+        if None in self._depends:
+            raise exceptions.BadMigration(
+                f"Could not resolve dependencies in {self.path}"
+            )
+        self.module = module
+        self.use_transactions = getattr(module, "__transactional__", True)
+        self.steps = collector.create_steps(self.use_transactions)
+
+
+class _RecordedMigration(Migration):
+    """只用于解析已有落账或空库基线的依赖，永远不能执行。"""
+
+    def load(self) -> None:
+        raise RuntimeError(f"migration receipt 不是可执行实现: {self.id}")
+
+
+def _read_migrations(
+    core_source: str,
+    bundles: Sequence[MigrationBundle] = (),
+    recorded_ids: Sequence[str] = (),
+) -> MigrationList:
+    """加载实际实现，并把已落账依赖登记为不可执行的 receipt。"""
+
+    core = read_migrations(core_source)
+    migrations = list(core)
+    for bundle in bundles:
+        source = read_migrations(str(bundle.migration_root))
+        migrations.extend(
+            _BundleMigration(
+                migration.id,
+                migration.path,
+                migration.source_dir,
+                bundle.package_name,
+            )
+            for migration in source
+            if migration.id != "__init__"
+        )
+    loaded = {migration.id for migration in migrations}
+    for identity in recorded_ids:
+        if identity not in loaded:
+            _RecordedMigration(identity, "<recorded>", "")
+    return MigrationList(migrations)
+
+
+def _validate_local_dependency_graph(
+    specs: Sequence[MigrationSpec], bundle_id: str
+) -> None:
+    local_ids = {item.migration_id for item in specs}
+    graph = {
+        item.migration_id: {dep for dep in item.depends if dep in local_ids}
+        for item in specs
+    }
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(node: str) -> None:
+        if node in visiting:
+            raise MigrationBundleError(f"bundle 依赖环: {bundle_id}:{node}")
+        if node in visited:
+            return
+        visiting.add(node)
+        for dependency in graph[node]:
+            visit(dependency)
+        visiting.remove(node)
+        visited.add(node)
+
+    for node in graph:
+        visit(node)
+
+
+def _validate_source_imports(path: Path, *, migration_root: Path) -> None:
+    try:
+        source = path.read_text(encoding="utf-8")
+        imports = _source_imports(path, source)
+    except (OSError, SyntaxError, UnicodeDecodeError) as error:
+        raise MigrationBundleError(f"migration source 无法解析: {path}") from error
+    for module, level, node in imports:
+        if node is not None and level:
+            # 相对 import 目标依赖当前文件系统，每次重新核对。
+            _validate_relative_import(path, migration_root, node)
+            continue
+        if any(
+            module == prefix or module.startswith(prefix + ".")
+            for prefix in _REJECTED_IMPORT_PREFIXES
+        ):
+            raise MigrationBundleError(
+                f"migration 不得 import 当前 runtime/插件 namespace: {path}:{module}"
+            )
+        if _is_disallowed_migration_host(module):
+            raise MigrationBundleError(
+                f"migration 不得 import Core 业务 migration helper: {path}:{module}"
+            )
+
+
+# 同一启动会多次发现 bundle；只复用由源码内容决定的 import 事实。
+@lru_cache(maxsize=256)
+def _source_imports(path: Path, source: str) -> tuple[tuple[str, int, ast.ImportFrom | None], ...]:
+    tree = ast.parse(source, filename=str(path))
+    imports: list[tuple[str, int, ast.ImportFrom | None]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            function = node.func
+            dynamic_import = (
+                isinstance(function, ast.Name)
+                and function.id in {"__import__", "import_module"}
+            ) or (
+                isinstance(function, ast.Attribute)
+                and function.attr == "import_module"
+            )
+            if dynamic_import:
+                raise MigrationBundleError(
+                    f"migration 不允许动态 import: {path}"
+                )
+        if isinstance(node, ast.Import):
+            imports.extend((item.name, 0, None) for item in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            imports.append((node.module or "", node.level, node))
+    return tuple(imports)
+
+
+def _is_disallowed_migration_host(module: str) -> bool:
+    """Reject private Core imports except the audited migration host atoms."""
+
+    top = module.split(".", 1)[0]
+    if top not in {"agent", "core", "infra", "memory2", "session"}:
+        return False
+    return module not in _ALLOWED_CORE_MIGRATION_MODULES
+
+
+def _validate_relative_import(path: Path, migration_root: Path, node: ast.ImportFrom) -> None:
+    """Allow only relative imports whose target stays inside this bundle package."""
+    current_package = path.parent
+    target = current_package
+    for _ in range(node.level - 1):
+        target = target.parent
+    if node.module:
+        target = target.joinpath(*node.module.split("."))
+    target = target.resolve(strict=False)
+    if not target.is_relative_to(migration_root):
+        raise MigrationBundleError(f"migration relative import 越过 bundle: {path}")
+    if target.exists() and not target.is_dir() and target.suffix != ".py":
+        raise MigrationBundleError(f"migration relative import 目标无效: {path}")
+    candidates = (target, target.with_suffix(".py"), target / "__init__.py")
+    if not any(candidate.is_file() for candidate in candidates):
+        raise MigrationBundleError(f"migration relative import 缺少 bundle helper: {path}:{node.module or ''}")
+
+
+def _id(raw: object, label: str) -> str:
+    if not isinstance(raw, str) or _ID.fullmatch(raw) is None:
+        raise MigrationBundleError(f"{label} 无效")
+    return raw
+
+
+def _version(raw: object, label: str) -> str:
+    if not isinstance(raw, str) or not raw or raw != raw.strip():
+        raise MigrationBundleError(f"{label} 无效")
+    return raw
+
+
+def _relative_path(raw: str, label: str) -> str:
+    path = Path(raw)
+    if (
+        not raw
+        or raw != raw.strip()
+        or path.is_absolute()
+        or any(part in {"", ".", ".."} for part in path.parts)
+        or "\\" in raw
+    ):
+        raise MigrationBundleError(f"{label} 必须是 artifact 内的相对路径")
+    return "/".join(path.parts)
+
+
+def _inside_directory(root: Path, path: Path, label: str) -> Path:
+    resolved = path.resolve(strict=True)
+    if path.is_symlink() or not resolved.is_dir() or not resolved.is_relative_to(root):
+        raise MigrationBundleError(f"{label} 必须是 artifact 内的普通目录: {path}")
+    _reject_symlink_ancestors(root, path, label)
+    return resolved
+
+
+def _inside_file(root: Path, path: Path, label: str) -> Path:
+    resolved = path.resolve(strict=True)
+    if path.is_symlink() or not resolved.is_file() or not resolved.is_relative_to(root):
+        raise MigrationBundleError(f"{label} 必须是 artifact 内的普通文件: {path}")
+    _reject_symlink_ancestors(root, path, label)
+    return resolved
+
+
+def _reject_symlink_ancestors(root: Path, path: Path, label: str) -> None:
+    current = root
+    for part in path.relative_to(root).parts:
+        current /= part
+        if current.is_symlink():
+            raise MigrationBundleError(f"{label} 不能穿过符号链接: {current}")

@@ -1,0 +1,22 @@
+用法: python main.py [命令] [选项]
+
+命令:
+  setup                         初始化 Core（业务配置在 Web 页面完成）
+  init                          非交互初始化配置和工作区
+  gateway                       启动未托管 Agent 服务（调试）
+  supervise                     显式进入 supervisor（兼容别名）
+  app-server --stdio            在 stdio 上运行程序化控制面
+  exec --new|--session ID PROMPT 提交程序输入并等待结果
+  dashboard                     单独启动 Dashboard
+  plugin-install [--update-id ID] 安装 Git 插件
+  plugin-install-trusted-batch  离线安装 operator 已信任的 exact v3 插件批次
+  plugin-uninstall PLUGIN_ID    卸载插件
+  plugin-status [UPDATE_ID]      查询当前插件或指定更新
+  plugin-doctor [PLUGIN_ID]     检查插件状态
+
+通用选项:
+  --config PATH                 配置文件，默认 config.toml
+  --workspace PATH              覆盖 config.toml 中的 runtime.workspace
+  -h, --help                    显示帮助
+
+无命令时启动 Agent 服务。

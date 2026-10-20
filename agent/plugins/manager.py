@@ -1,0 +1,2520 @@
+from __future__ import annotations
+
+import asyncio
+import copy
+import hashlib
+import json
+import importlib.util
+import logging
+import os
+import secrets
+import stat
+import sys
+from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
+from contextvars import Context as TaskContext
+from pathlib import Path
+from typing import Literal, TypeVar, cast
+from uuid import uuid4
+
+from core.common.file_io import run_file_io
+
+from agent.plugins.execution import (
+    CodeOwner,
+    ExecutionAccess,
+)
+from agent.plugin_composition import (
+    CompositionRoot,
+    FiberState,
+    PluginRuntime,
+)
+from agent.plugin_composition.config_input import CONFIG_INPUT, load_config, save_config, config_bytes, config_refs, _credential_path
+from agent.plugin_composition.context import Fiber
+from agent.plugin_composition.endpoints import GUARD_PROTOCOL, EndpointPlanWriter
+from agent.plugin_composition.credentials import CredentialClients
+from agent.plugin_composition.model import (
+    resolve_declared_workspace_file,
+    resolve_declared_workspace_root,
+)
+from agent.plugin_composition.plugin_updates import (
+    UpdateStatus,
+)
+from agent.plugin_composition.tasks import PluginTasks
+from agent.plugins._operation import (
+    AcceptedFuture,
+    ManagerOperation,
+    OperationBusyError,
+    OperationTimeoutError,
+    complete_critical as _complete_critical,
+    current_operation,
+    observe_operation,
+    run_operation,
+)
+from agent.plugin_composition.config_input import decode_config, encode_config
+from agent.plugins.channel_credentials import CoreProviderClientFactory
+from agent.plugins.composable import ComposablePlugin
+from agent.plugins.generation import PluginGeneration
+from agent.plugins.host import (
+    check_host_dependencies as check_host_dependencies,
+    provide_host_services as provide_host_services,
+)
+from agent.plugins.importer import FreshPluginImporter
+from agent.plugins.public_contracts import public_contracts
+from agent.plugins.input_preparation import (
+    PLUGIN_INPUT_API,
+    SOURCE_EXCLUDED_NAMES,
+    _resolve_plugin_data_dir,
+    _resolve_plugin_id,
+    _source_revision,
+    source_revisions,
+    prepare_plugin_input,
+)
+from agent.plugins.install import (
+    _split_installed_plugin_id,
+    finalize_uninstall_plugin,
+    install_git_plugin,
+)
+from agent.plugins.manifest import (
+    ensure_workspace_plugin_data_dir,
+    installed_plugin_ids,
+    plugins_root,
+    validate_workspace_plugin_data_path,
+    workspace_plugin_data_dir,
+)
+from agent.plugins.bundles import plugin_choices, set_plugin_choice
+from agent.plugins.distribution_sources import DistributionSources
+from agent.plugins.python_environment import PythonEnvironments
+from agent.plugins.reload_journal import (
+    RecoveryActionName,
+    RecoveryTarget,
+    ReloadJournal,
+    ReloadPhase,
+    ReloadRecoveryAction,
+)
+from agent.plugins.scope import CleanupFailure, PluginScope
+from agent.plugins.distribution_sources import is_distribution_input
+from agent.plugins.selection import PluginSelection, SelectionConflictError
+from agent.plugins.source_resolver import (
+    PluginSourceFailure,
+    ResolvedPluginSource,
+    _iter_declared_plugin_roots,
+    _iter_installed_plugin_roots,
+    scan_plugin_sources,
+)
+from agent.plugins.static_manifest import (
+    PluginSourceCompileError,
+    PluginSourceContentError,
+    command_python_runtime,
+    load_static_plugin_manifest,
+    materialize_command,
+    source_error_details,
+)
+from agent.restart import RestartGate
+
+logger = logging.getLogger(__name__)
+U = TypeVar("U")
+
+
+def _reject_retired_owner_recovery(action: ReloadRecoveryAction) -> None:
+    """拒绝仍依赖已删除 owner 的旧恢复记录，不伪造恢复完成。"""
+
+    resource = action.failure_resource or ""
+    retired = {"activity-publication", "plugin-skill-projection"}.intersection({
+        item.strip() for item in resource.split(",") if item.strip()
+    })
+    retired.update(
+        item.strip() for item in resource.split(",")
+        if item.strip().startswith(("channel-binding:", "channel-generation:"))
+        or item.strip() == "channel-publication"
+    )
+    if not retired:
+        return
+    raise RuntimeError(
+        "runtime recovery blocked: durable action retains retired "
+        f"{sorted(retired)} owner; migrate or resolve it manually before "
+        f"recovery (tx={action.tx_id}, plugin={action.plugin_id}, "
+        f"resource={resource!r}); journal remains pending"
+    )
+
+
+class PluginManager:
+    # 应用预算覆盖实际输入准备、受影响分支挂载与恢复；
+    # 用于截断挂起操作，不能按交互请求的延迟设定。
+    POST_PUBLISH_TIMEOUT_SECONDS = 300.0
+    # 冷启动还须归档全部安装输入并挂载完整组合，规模随安装数增长。
+    BOOT_COMMIT_TIMEOUT_SECONDS = 7200.0
+
+    def __init__(
+        self,
+        plugin_dirs: list[Path],
+        *,
+        workspace: Path,
+        installed_cache_root: Path | None = None,
+        source_failures: tuple[PluginSourceFailure, ...] = (),
+        distribution: DistributionSources = DistributionSources(),
+        restart_gate: RestartGate | None = None,
+        host_ready: Callable[[], bool] | None = None,
+    ) -> None:
+        self._dirs = plugin_dirs
+        self._distribution = distribution
+        self._workspace = workspace
+        self._selection = PluginSelection(workspace)
+        self._python_environments = PythonEnvironments(workspace)
+        self._update_watchers: set[asyncio.Event] = set()
+        self._plugin_tasks = PluginTasks()
+        self._installed_cache_root = installed_cache_root
+        self._source_failures: dict[str, PluginSourceFailure] = {
+            _source_failure_key(failure): failure
+            for failure in source_failures
+        }
+        self._cleanup_failures: list[CleanupFailure] = []
+        # watch_revision 的廉价指纹门控：只有磁盘元数据指纹变化才重做完整发现。
+        self._watch_fingerprint: bytes | None = None
+        self._watch_result: dict[str, str] = {}
+        self._watch_root_map: dict[str, str] = {}
+        # Failed Root builds retain their module and data owners until cleanup succeeds.
+        self._building_roots: dict[CompositionRoot, tuple[PluginGeneration, ...]] = {}
+        self._operation: ManagerOperation | None = None
+        self._stopping = False
+        self._draining_generations: dict[str, list[PluginGeneration]] = {}
+        # The formal local runtime has one Root and one live generation owner map.
+        self._live_root: CompositionRoot | None = None
+        self._plan_writer: EndpointPlanWriter | None = None
+        self._active_generations: dict[str, PluginGeneration] = {}
+        self._live_execution_access: ExecutionAccess | None = None
+        self._live_credentials: CredentialClients | None = None
+        self._fresh_importer = FreshPluginImporter()
+        # PluginManager 也可以由嵌入式/测试 host 直接构造；该 host 仍需一
+        # 次性的 boot identity，不能退回固定的 unmanaged marker。
+        self._host_ready = host_ready
+        self._host_boot_id = restart_gate.boot_id if restart_gate is not None else uuid4().hex
+        self._restart_gate = restart_gate or RestartGate(boot_id=self._host_boot_id, supervised=False)
+        self._reload_journal = ReloadJournal(workspace)
+
+    def _require_operation_idle(self) -> None:
+        if self._stopping:
+            raise RuntimeError("PluginManager 已停止接纳操作；只能显式重试 terminate")
+        if self._operation is not None and not self._operation.task.done():
+            raise OperationBusyError("PluginManager busy：原操作和资源尚未退出")
+
+    async def wait_idle(self) -> None:
+        """只等待已有操作物理退出，不取消或接纳新操作。"""
+        operation = self._operation
+        if operation is not None:
+            await asyncio.shield(operation.task)
+
+    def _check_operation_commit(self) -> ManagerOperation:
+        """耐久提交前同步调用；检查到实际同步提交之间不得 await。
+
+        返回同一操作 owner；耐久写入确认成功后将 committed 设为选中的实际 ref。
+        线程写入结果未定时须保留线程任务并停止接纳，不能先宣称回滚。
+        """
+        operation = current_operation.get()
+        if operation is None or operation is not self._operation or operation.task.done():
+            raise RuntimeError("插件提交不属于当前 Manager 操作")
+        if operation.task.cancelling():
+            operation.revoke(cancel=False)
+        if self._stopping or operation.revoked:
+            raise asyncio.CancelledError("插件操作提交许可已撤销")
+        if asyncio.get_running_loop().time() >= operation.deadline:
+            operation.revoke(cancel=False)
+            raise OperationTimeoutError(operation)
+        return operation
+
+    def _operation_can_continue(self) -> bool:
+        """仅查询当前许可；被撤销的操作不能自动恢复或开放接纳。"""
+        operation = current_operation.get()
+        return (
+            operation is not None and operation is self._operation
+            and not operation.task.done() and not self._stopping and not operation.revoked
+            and not operation.task.cancelling()
+            and asyncio.get_running_loop().time() < operation.deadline
+        )
+
+    def _operation_finished(self, task: asyncio.Task[object]) -> None:
+        """观察迟到错误但保留实际 task，供显式 retry/terminate 查询。"""
+        operation = self._operation if self._operation is not None and self._operation.task is task else None
+        if not task.cancelled():
+            error = task.exception()
+            if error is not None:
+                logger.error("插件操作结束但失败: %s", error)
+                if operation is not None and operation.accepted is not None and not operation.accepted.done():
+                    operation.accepted.set_exception(error)
+            elif operation is not None and operation.accepted is not None and not operation.accepted.done():
+                operation.accepted.set_exception(RuntimeError("插件更新操作结束但未到达 accepted"))
+        elif operation is not None and operation.accepted is not None and not operation.accepted.done():
+            operation.accepted.set_exception(RuntimeError("插件更新操作被取消，未到达 accepted"))
+        if operation is not None and operation.accepted is not None and operation.accepted.done():
+            # Background owner futures must be consumed even when the caller disconnected.
+            if not operation.accepted.cancelled():
+                _ = operation.accepted.exception()
+        self._notify_updates()
+
+    def _revoke_operation(self, operation: ManagerOperation) -> None:
+        """截止时结束 accepted 等待，再撤销迟到提交许可。"""
+        operation.settle_accepted(OperationTimeoutError(operation))
+        operation.revoke()
+
+    def _start_operation(
+        self, work: Callable[[], Awaitable[U]], *, background: bool = False,
+        commit_timeout: float | None = None, update_id: str | None = None,
+        accepted: AcceptedFuture | None = None,
+    ) -> ManagerOperation:
+        """Start one finite operation whose task retains cleanup ownership."""
+        self._restart_gate.check_open()
+        self._require_operation_idle()
+        if commit_timeout is None:
+            commit_timeout = self.POST_PUBLISH_TIMEOUT_SECONDS
+        loop = asyncio.get_running_loop()
+        operation = ManagerOperation(
+            loop.time() + commit_timeout, update_id=update_id, accepted=accepted,
+        )
+        self._operation = operation
+
+        operation.task = asyncio.create_task(
+            run_operation(operation, work), name="plugin-manager-operation",
+            context=TaskContext() if background else None,
+        )
+        operation.task.add_done_callback(self._operation_finished)
+        timer = loop.call_at(operation.deadline, self._revoke_operation, operation)
+        operation.task.add_done_callback(lambda _: timer.cancel())
+        return operation
+
+    async def _run_operation(
+        self, work: Callable[[], Awaitable[U]], *,
+        commit_timeout: float | None = None,
+    ) -> U:
+        """公开入口有限观察同一任务；退出观察不释放仍在工作的 owner。"""
+        operation = self._start_operation(
+            work, background=True, commit_timeout=commit_timeout,
+        )
+        try:
+            return cast(U, await observe_operation(operation, deadline=operation.deadline))
+        finally:
+            if operation.revoked:
+                self._revoke_operation(operation)
+
+
+    @property
+    def cleanup_failures(self) -> list[CleanupFailure]:
+        return list(self._cleanup_failures)
+
+    @property
+    def live_root(self) -> CompositionRoot | None:
+        """Expose the existing formal Root for read-only recovery routing."""
+
+        return self._live_root
+
+    def generation(self, plugin_id: str) -> PluginGeneration | None:
+        return self._active_generations.get(plugin_id)
+
+    @property
+    def installed_plugins_home(self) -> Path:
+        return _plugins_home(self._installed_cache_root)
+
+
+    @property
+    def reload_journal(self) -> ReloadJournal:
+        return self._reload_journal
+
+    def watch_revision(self) -> dict[str, str]:
+        """分别记录每个输入的磁盘变化，不把一次选择变更扩成全量更新。"""
+        manifest = plugin_choices(self._workspace, self._distribution.root)
+        probe = self._watch_probe(manifest)
+        if probe is not None and probe == self._watch_fingerprint:
+            return dict(self._watch_result)
+        revisions: dict[str, bytes] = {}
+        root_map: dict[str, str] = {}
+        mods, failures = self._discover_modules(
+            record_source_failures=False,
+        )
+        for failure in failures:
+            identity = failure.plugin_id or f"source:{failure.source_type}:{failure.source_root}"
+            revisions[identity] = _source_metadata_revision(failure.source_root)
+            root_map[str(failure.source_root.resolve(strict=False))] = ""
+        for mod in mods:
+            plugin_id = _resolve_plugin_id(mod)
+            plugin_dir = Path(mod["plugin_root"])
+            data_dir = _resolve_plugin_data_dir(
+                mod["name"],
+                mod,
+                self._workspace,
+            )
+            revisions[plugin_id] = (
+                _source_metadata_revision(plugin_dir)
+                + _path_metadata(data_dir / CONFIG_INPUT)
+            )
+            root_map[str(plugin_dir.resolve(strict=False))] = str(data_dir)
+        result = {
+            plugin_id: hashlib.sha256(
+                revisions.get(plugin_id, b"source:missing")
+                + str(manifest.get(plugin_id, "@" not in plugin_id)).encode()
+            ).hexdigest()
+            for plugin_id in revisions.keys() | manifest.keys()
+        }
+        # 发现会跳过禁用与重名的 builtin 源，不把它们写进 root_map；
+        # 把它们记为无数据目录，后续探测才能稳定命中指纹。
+        # 这类源的启用变化经 manifest 与禁用集合指纹覆盖，不依赖 data_dir。
+        for root in self._watch_roots():
+            root_map.setdefault(root, "")
+        self._watch_root_map = root_map
+        self._watch_fingerprint = self._watch_probe(manifest)
+        self._watch_result = result
+        return result
+
+    def _watch_roots(self) -> set[str]:
+        """探测枚举的源码根：已安装缓存、分发源与声明目录，与完整发现同源。"""
+        roots: set[str] = set()
+        if self._installed_cache_root is not None:
+            for source in _iter_installed_plugin_roots(
+                self._installed_cache_root,
+                load_manifests=False,
+            ):
+                if source.plugin_root in self._distribution.ignored_installed_roots:
+                    continue
+                roots.add(str(source.plugin_root.resolve(strict=False)))
+        for source in self._distribution.sources:
+            roots.add(str(source.plugin_root.resolve(strict=False)))
+        for plugin_dirs_root in self._dirs:
+            for plugin_root in _iter_declared_plugin_roots(plugin_dirs_root):
+                roots.add(str(plugin_root.resolve(strict=False)))
+        return roots
+
+    def _watch_probe(self, manifest: Mapping[str, object]) -> bytes:
+        """枚举源码根并按元数据指纹判定是否必须重做完整发现。
+
+        指纹与结果摘要使用同一套检测输入（目录枚举 + 逐文件元数据 +
+        data_dir 配置 + bundle patch），未变化时完整发现的结果必然相同。
+        """
+        digest = hashlib.sha256()
+        digest.update(repr(sorted(manifest.items())).encode())
+        digest.update(
+            repr(sorted(str(path) for path in self._distribution.ignored_installed_roots)).encode()
+        )
+        for root in sorted(self._watch_roots()):
+            digest.update(root.encode())
+            digest.update(_source_metadata_revision(Path(root)))
+            data_dir = self._watch_root_map.get(root, "")
+            if data_dir:
+                digest.update(_path_metadata(Path(data_dir) / CONFIG_INPUT))
+        return digest.digest()
+
+    def watch_targets(self) -> tuple[tuple[Path, ...], tuple[Path, ...]]:
+        """事件监听目标：（递归监听的源码树与容器，单独监听的选择/配置文件）。
+
+        容器目录覆盖已安装插件与其指针的增删；配置文件按文件目标监听，
+        数据目录内的运行时写入不产生事件。
+        """
+        trees: list[Path] = []
+        if self._installed_cache_root is not None:
+            trees.append(self._installed_cache_root)
+        trees.extend(source.plugin_root for source in self._distribution.sources)
+        trees.extend(self._dirs)
+        files = [
+            Path(data_dir) / CONFIG_INPUT
+            for data_dir in self._watch_root_map.values()
+            if data_dir
+        ]
+        files.append(self._workspace / "bundle.patch.toml")
+        return tuple(trees), tuple(files)
+
+    # 扫描所有 plugin_dirs，返回可加载的插件描述列表
+    def discover(
+        self,
+        *,
+        record_source_failures: bool = True,
+    ) -> list[dict[str, str]]:
+        mods, _failures = self._discover_modules(
+            record_source_failures=record_source_failures,
+        )
+        return mods
+
+    def _discover_modules(
+        self,
+        *,
+        record_source_failures: bool,
+    ) -> tuple[list[dict[str, str]], tuple[PluginSourceFailure, ...]]:
+        mods: list[dict[str, str]] = []
+        seen_names: set[str] = set()
+        scan = scan_plugin_sources(
+            self._dirs,
+            installed_cache_root=self._installed_cache_root,
+            fixed_sources=self._distribution.sources,
+            ignored_installed_roots=self._distribution.ignored_installed_roots,
+        )
+        if record_source_failures:
+            self._remember_source_failures(scan.failures)
+        sources: list[ResolvedPluginSource] = []
+        for source in scan.sources:
+            name = source.plugin_name
+            if not name:
+                raise RuntimeError(
+                    f"source scan 未提供已验证 plugin id: {source.plugin_root}"
+                )
+            if name in seen_names and source.source_type == "builtin":
+                logger.warning("插件名重复，跳过: %s (%s)", name, source.plugin_root)
+                continue
+            seen_names.add(name)
+            sources.append(source)
+        # 已安装 API 包括停用实现；同名未采用的内置源码不参与登记。
+        public_contracts.register(sources)
+        for source in sources:
+            name = source.plugin_name
+            module_path = source.plugin_root / "plugin.py"
+            mods.append(
+                {
+                    "name": name,
+                    "plugin_root": str(source.plugin_root),
+                    "module_path": str(module_path),
+                    "manifest_digest": (
+                        source.static_manifest.identity_digest
+                        if source.static_manifest is not None
+                        else ""
+                    ),
+                    "ingress_guard": "true" if source.static_manifest is not None and source.static_manifest.ingress_guard else "false",
+                    "marketplace": source.marketplace,
+                    "source_type": source.source_type,
+                    **({"distribution_source": source.distribution_source, "wheel_tree_sha256": source.wheel_tree_sha256}
+                       if source in self._distribution.sources else {}),
+                }
+            )
+        return mods, scan.failures
+
+    def _remember_source_failures(
+        self, failures: tuple[PluginSourceFailure, ...],
+    ) -> None:
+        for failure in failures:
+            self._source_failures[_source_failure_key(failure)] = failure
+
+    def _clear_source_failure(self, mod: Mapping[str, str]) -> None:
+        source_root = Path(mod["plugin_root"]).resolve(strict=False)
+        source_type = cast(Literal["builtin", "installed"], mod["source_type"])
+        self._source_failures.pop(
+            _source_failure_key_for_root(source_root, source_type), None,
+        )
+
+    def _source_failure_for_error(
+        self,
+        mod: Mapping[str, str],
+        error: BaseException,
+        *,
+        phase: str,
+        plugin_id: str | None,
+    ) -> PluginSourceFailure:
+        if isinstance(error, PluginSourceContentError):
+            error_type, error_text = source_error_details(error)
+        else:
+            error_type, error_text = type(error).__name__, str(error) or type(error).__name__
+        return PluginSourceFailure(
+            source_root=Path(mod["plugin_root"]).resolve(strict=False),
+            source_type=cast(Literal["builtin", "installed"], mod["source_type"]),
+            phase=phase,
+            error_type=error_type,
+            error_text=error_text,
+            plugin_id=plugin_id,
+        )
+
+    async def _prepare_one_with_source_diagnostics(
+        self,
+        mod: dict[str, str],
+    ) -> PluginGeneration | None:
+        try:
+            generation = await self._prepare_one(
+                mod,
+            )
+        except PluginSourceCompileError as error:
+            self._remember_source_failures((self._source_failure_for_error(
+                mod, error, phase="compile", plugin_id=_resolve_plugin_id(mod),
+            ),))
+            return None
+        except PluginSourceContentError as error:
+            self._remember_source_failures((self._source_failure_for_error(
+                mod, error, phase="identity", plugin_id=None,
+            ),))
+            return None
+        if generation is not None:
+            self._clear_source_failure(mod)
+        return generation
+
+    def _source_root_hint(
+        self, plugin_id: str, active: PluginGeneration | None,
+    ) -> Path | None:
+        if active is None:
+            return None
+        source_root = active.plugin_dir.resolve(strict=False)
+        code_root = active.code_dir.resolve(strict=False)
+        if source_root == code_root:
+            return None
+        return source_root
+
+    def _remember_missing_source(
+        self, plugin_id: str, active: PluginGeneration | None,
+    ) -> None:
+        source_root = self._source_root_hint(plugin_id, active)
+        if source_root is None:
+            return
+        source_type = (
+            active.source_type if active is not None else
+            ("installed" if "@" in plugin_id else "builtin")
+        )
+        failure = PluginSourceFailure(
+            source_root=source_root,
+            source_type=cast(Literal["builtin", "installed"], source_type),
+            phase="source",
+            error_type="SourceUnavailable",
+            error_text="插件源码目录暂时不可用；selection 未改变",
+            plugin_id=plugin_id,
+        )
+        key = _source_failure_key(failure)
+        if key not in self._source_failures:
+            self._source_failures[key] = failure
+
+    async def load_all(self) -> None:
+        await self._run_operation(
+            self._load_all, commit_timeout=self.BOOT_COMMIT_TIMEOUT_SECONDS,
+        )
+
+    async def _load_all(self) -> None:
+        """从唯一完整选择启动；null 只允许首次固定安装输入。"""
+        discovered = self.discover()
+        self._recover_config_updates()
+        for update_id, plugin_id, outcome in self._reload_journal.settle_orphaned_installs(self.installed_plugins_home):
+            logger.warning("启动按磁盘指针结算中断安装: %s %s -> %s", update_id, plugin_id, outcome)
+        selection_ref = self._selection.read()
+        if self._live_root is not None:
+            raise RuntimeError("load_all 不能重复启动正式 Root")
+        self._check_operation_commit()
+        self._plugin_tasks.start()
+        recovery = self._reload_journal.pending_recovery()
+        receipts = await self._prepare_boot_runtime_recovery(tuple(
+            action for action in recovery
+            if action.runtime_owner_boot_id is not None
+            or action.action in {"retry_generation_cleanup", "retry_runtime_recovery"}
+        ))
+        for action in recovery:
+            self._reload_journal.settle_boot(
+                action, committed=self._selection_transition_committed(action.tx_id, selection_ref),
+                cleanup_receipt=receipts.get(action.tx_id),
+            )
+        if selection_ref is not None:
+            selection_ref = await self._adopt_installed_inputs(selection_ref, discovered)
+            components = self._selection_components(selection_ref)
+            await self._load_live_initial(components, expected_ref=selection_ref)
+            return
+        enabled = plugin_choices(self._workspace, self._distribution.root)
+        selected = tuple(
+            mod for mod in discovered
+            if enabled.get(_resolve_plugin_id(mod), "@" not in _resolve_plugin_id(mod))
+        )
+        inputs: list[PluginGeneration] = []
+        try:
+            for mod in selected:
+                generation = await self._prepare_one_with_source_diagnostics(
+                    mod,
+                )
+                if generation is None:
+                    if _source_failure_key_for_mod(mod) in self._source_failures:
+                        # 普通坏插件可跳过；守卫不能从首次选择中消失，否则重启后也会无门放行。
+                        if mod["ingress_guard"] == "true":
+                            raise RuntimeError(f"入口守卫准备失败，拒绝启动: {_resolve_plugin_id(mod)}")
+                        continue
+                    raise RuntimeError(f"完整插件组合加载失败: {_resolve_plugin_id(mod)}")
+                inputs.append(generation)
+            components = tuple(
+                self._generation_input_ref(item)
+                for item in sorted(inputs, key=lambda item: item.plugin_id)
+            )
+            await self._load_live_initial(components, expected_ref=None, prepared=tuple(inputs))
+        except BaseException:
+            for generation in tuple(inputs):
+                if generation.state != "active":
+                    try:
+                        await self._dispose_generation(generation, state="discarded")
+                    except BaseException:
+                        logger.exception("首次启动插件输入清理失败: %s", generation.plugin_id)
+            raise
+
+    # 启动以磁盘为准：外置安装的当前指针与启停选择覆盖上次应用留下的 selection 输入。
+    async def _adopt_installed_inputs(self, selection_ref: str, discovered: list[dict[str, str]]) -> str:
+        # 1. 已选外置输入：停用则移除，制品与当前指针不同则换成当前制品。
+        choices = plugin_choices(self._workspace, self._distribution.root)
+        installed = {_resolve_plugin_id(mod): mod for mod in discovered if mod["source_type"] == "installed"}
+        # discovery 读不出的已提交制品：同一插件目录下、但不是当前运行代码的那一份。
+        broken = {failure.source_root for failure in self._source_failures.values()
+                  if failure.source_type == "installed" and failure.phase == "identity"}
+        components: list[str] = []
+        selected: set[str] = set()
+        for ref in self._selection_components(selection_ref):
+            record = self._selection.read_input(ref)
+            plugin_id = cast(str, record["plugin_id"])
+            mod = installed.get(plugin_id)
+            selected.add(plugin_id)
+            if record["source_type"] == "installed" and choices.get(plugin_id) is False:
+                continue
+            code = Path(cast(str, record["code"])).resolve()
+            if record["source_type"] == "installed" and mod is None and any(
+                    root.parent == code.parent and root != code for root in broken):
+                # 当前制品内容错误：插件不可用并保留诊断，不自动退回旧制品。
+                continue
+            # cache 缺失时保留原输入，由加载 fail loud，不静默丢掉已启用插件。
+            if record["source_type"] != "installed" or mod is None or (
+                Path(cast(str, record["code"])) == Path(mod["plugin_root"]).resolve()
+            ):
+                components.append(ref)
+            elif (replacement := await self._boot_input(mod, initial=False)) is not None:
+                components.append(replacement)
+        # 2. 已启用但尚未进入 selection 的外置安装，同样按当前制品加入。
+        for plugin_id, mod in sorted(installed.items()):
+            if plugin_id not in selected and choices.get(plugin_id) is True:
+                if (added := await self._boot_input(mod, initial=True)) is not None:
+                    components.append(added)
+        if tuple(components) == self._selection_components(selection_ref):
+            self._bind_installed_inputs(selection_ref)
+            return selection_ref
+        # 3. 一次 CAS 提交按磁盘换代后的完整选择；绑定在提交后补做，崩溃后下次启动仍会补。
+        operation = self._check_operation_commit()
+        committed = self._selection.commit(tuple(components), expected_ref=selection_ref)
+        operation.committed = committed
+        self._bind_installed_inputs(committed)
+        logger.warning("启动按磁盘指针与启停选择换代外置插件 selection")
+        return committed
+
+    # 每次启动把最终选中的外置输入接到已提交但未绑定的安装记录；按代码路径精确匹配，幂等。
+    def _bind_installed_inputs(self, selection_ref: str) -> None:
+        for ref in self._selection_components(selection_ref):
+            record = self._selection.read_input(ref)
+            if record["source_type"] == "installed":
+                self._reload_journal.bind_boot_input(
+                    cast(str, record["plugin_id"]), ref, Path(cast(str, record["code"])))
+
+    # 准备一个外置插件的启动输入；源码内容错误按首次启动规则只留诊断并跳过。
+    async def _boot_input(self, mod: dict[str, str], *, initial: bool) -> str | None:
+        try:
+            prepared = await run_file_io(lambda: prepare_plugin_input(
+                mod, workspace=self._workspace, selection=self._selection, initial=initial,
+            ))
+        except PluginSourceContentError as error:
+            phase = "compile" if isinstance(error, PluginSourceCompileError) else "identity"
+            self._remember_source_failures((self._source_failure_for_error(
+                mod, error, phase=phase, plugin_id=_resolve_plugin_id(mod) if phase == "compile" else None,
+            ),))
+            return None
+        return prepared.input_ref
+
+    def _selection_components(self, ref: str) -> tuple[str, ...]:
+        return self._selection.components(ref)
+
+    def _selection_for_plugin(
+        self,
+        expected_ref: str | None,
+        plugin_id: str,
+        replacement: str | None,
+    ) -> tuple[str, ...]:
+        """Replace one persisted input while preserving every other input ref."""
+        components = () if expected_ref is None else self._selection_components(expected_ref)
+        result: list[str] = []
+        replaced = False
+        for ref in components:
+            record = self._selection.read_input(ref)
+            current = record.get("plugin_id")
+            if current != plugin_id:
+                result.append(ref)
+            elif replacement is not None and not replaced:
+                result.append(replacement)
+                replaced = True
+        if replacement is not None and not replaced:
+            result.append(replacement)
+        return tuple(result)
+
+    async def _load_live_initial(
+        self,
+        components: tuple[str, ...],
+        *,
+        expected_ref: str | None,
+        prepared: tuple[PluginGeneration, ...] = (),
+    ) -> None:
+        """Build the single formal Root without compiling a snapshot or fallback Root."""
+        generation_id = "plugins-live:" + secrets.token_hex(16)
+        self._plan_writer = EndpointPlanWriter(self._workspace / "runtime/endpoints.json", generation_id)
+        root = CompositionRoot(generation_id, endpoint_publisher=self._plan_writer.publish)
+        generations: tuple[PluginGeneration, ...] = prepared
+        cleanup_generations: tuple[PluginGeneration, ...] = generations
+        runnable: tuple[PluginGeneration, ...] = ()
+        self._live_root = root
+        self._building_roots[root] = ()
+        try:
+            if not prepared:
+                loaded = self._selected_generations(
+                    components, root, workspace=self._workspace, sources={},
+                )
+                generations = tuple(loaded.values())
+                cleanup_generations = generations
+            else:
+                for generation in generations:
+                    current = self._active_generations.get(generation.plugin_id)
+                    if current is not None and current is not generation:
+                        raise RuntimeError(
+                            f"live generation owner 已存在: {generation.plugin_id}"
+                        )
+                    self._active_generations[generation.plugin_id] = generation
+                self._building_roots[root] = generations
+            # 选中即要求，且先于任何 apply：其他插件的路由不会在守卫就位前发布成无门。
+            for generation in generations:
+                self._require_ingress(generation)
+            # Selection is the durable input boundary.  No import or apply is
+            # allowed before this commit when booting a fresh selection.
+            if expected_ref is None:
+                operation = self._check_operation_commit()
+                committed = self._selection.commit(components, expected_ref=None)
+                operation.committed = committed
+                self._bind_installed_inputs(committed)
+            runnable_items: list[PluginGeneration] = []
+            for generation in generations:
+                if not (generation.data_dir / CONFIG_INPUT).exists() and generation.config_projection:
+                    save_config(generation.data_dir, generation.config_projection)
+                try:
+                    await self._load_live_generation(generation)
+                except Exception:
+                    await self._retain_pre_fiber_failure(generation)
+                    continue
+                current = self._active_generations.get(generation.plugin_id)
+                if current is not None and current is not generation:
+                    raise RuntimeError(f"live generation owner 已存在: {generation.plugin_id}")
+                self._active_generations[generation.plugin_id] = generation
+                runnable_items.append(generation)
+                ensure_workspace_plugin_data_dir(generation.data_dir, self._workspace)
+            runnable = tuple(runnable_items)
+            self._building_roots[root] = runnable
+            await self._provide_composition_services(root, runnable)
+            check_host_dependencies(root, runnable)
+            for generation in runnable:
+                await self._mount_generation_composition(root, generation)
+            # Receipt readiness is diagnostic; each Fiber owns its local failure state.
+            for generation in runnable:
+                generation.state = "active"
+            self._finish_recovered_config_updates()
+            self._building_roots.pop(root, None)
+        except BaseException:
+            cleanup_errors: list[BaseException] = []
+            tracked = self._building_roots.get(root, ())
+            cleanup: list[PluginGeneration] = list(cleanup_generations)
+            for generation in tracked:
+                if not any(item is generation for item in cleanup):
+                    cleanup.append(generation)
+            for generation in reversed(tuple(cleanup)):
+                if generation.state not in {"discarded", "retired"}:
+                    try:
+                        await self._dispose_generation(generation, state="discarded")
+                    except BaseException as cleanup_error:
+                        cleanup_errors.append(cleanup_error)
+            try:
+                await root.dispose()
+            except BaseException as cleanup_error:
+                cleanup_errors.append(cleanup_error)
+            else:
+                self._building_roots.pop(root, None)
+                if self._live_root is root:
+                    self._live_root = None
+            if cleanup_errors:
+                raise BaseExceptionGroup("live Root 失败且清理未完成", cleanup_errors)
+            raise
+
+    async def _load_selected_generation(self, generation: PluginGeneration) -> None:
+        """正式挂载前加载当前已选安装模块。"""
+        if generation.fiber is not None:
+            raise RuntimeError("generation 已有 Fiber，不能重新执行 pre-Fiber load")
+        if generation.instance is None:
+            changed = public_contracts.register((ResolvedPluginSource(
+                generation.code_dir, generation.source_type,
+                plugin_name=generation.plugin_id.split("@", 1)[0],
+            ),))
+            if changed:
+                raise RuntimeError("公共合同已变化，须重启进程: " + ", ".join(sorted(changed)))
+            self._import_plugin(generation.module_path, generation.code_dir)
+            manifest = generation.static_manifest
+            if manifest is None:
+                manifest = load_static_plugin_manifest(generation.code_dir)
+                generation.static_manifest = manifest
+            generation.instance = ComposablePlugin.from_module(
+                sys.modules[generation.module_path], manifest,
+            )
+            if generation.instance.name != generation.plugin_id.split("@", 1)[0]:
+                raise ValueError("归档插件身份不一致")
+        generation.state = "loading"
+
+    def _require_ingress(self, generation: PluginGeneration) -> None:
+        if (self._plan_writer is not None and generation.static_manifest is not None
+                and generation.static_manifest.ingress_guard):
+            self._plan_writer.require(GUARD_PROTOCOL)
+
+    async def _load_live_generation(self, generation: PluginGeneration) -> None:
+        """Record only live pre-Fiber load failures before normal retention."""
+        # 运行中启用或换代守卫插件同样先登记要求；其 apply 失败时入口拒绝而非放行。
+        self._require_ingress(generation)
+        try:
+            await self._load_selected_generation(generation)
+        except Exception as error:
+            if generation.fiber is not None:
+                raise RuntimeError(
+                    "pre-Fiber load 失败时 generation 已有 Fiber"
+                ) from error
+            if generation.load_error is not None:
+                raise RuntimeError(
+                    "generation load_error 不得被第二次覆盖"
+                ) from error
+            generation.load_error = error
+            generation.state = "failed"
+            raise
+
+    async def _retain_pre_fiber_failure(self, generation: PluginGeneration) -> None:
+        """Retain one selected pre-Fiber failure after its physical cleanup attempt."""
+        current = self._active_generations.get(generation.plugin_id)
+        selection_ref = self._selection.read()
+        if (
+            generation.load_error is None
+            or generation.fiber is not None
+            or generation.state != "failed"
+            or (current is not None and current is not generation)
+            or generation.input_ref is None
+            or selection_ref is None
+            or generation.input_ref not in self._selection_components(selection_ref)
+        ):
+            raise RuntimeError("不是可 retained 的 pre-Fiber generation failure")
+        if current is None:
+            self._active_generations[generation.plugin_id] = generation
+        try:
+            await self._dispose_generation(
+                generation,
+                state="failed",
+                retain_selected_failed=True,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception(
+                "selected pre-Fiber generation cleanup 未完成: %s",
+                generation.plugin_id,
+            )
+
+
+    def _generation_fibers(self, generation: PluginGeneration) -> tuple[Fiber, ...]:
+        """Return the live Root Fibers owned by one exact generation."""
+        root = self._live_root
+        if root is None:
+            return ()
+        return root.fibers(plugin_id=generation.plugin_id, generation_id=generation.generation_id)
+
+    def _capture_local_readiness(
+        self, generations: tuple[PluginGeneration, ...],
+    ) -> tuple[Fiber, ...]:
+        """换代前保留实际消费者，服务边撤销后仍能核对原就绪范围。"""
+        root = self._live_root
+        if root is None:
+            return ()
+        return root.consumers(fiber for generation in generations for fiber in self._generation_fibers(generation))
+
+    def _require_local_generation_ready(
+        self, generation: PluginGeneration, *, affected: tuple[Fiber, ...] = (),
+    ) -> None:
+        """只检查本次 generation 和实际受影响范围。"""
+        root = self._live_root
+        fibers = self._generation_fibers(generation)
+        if root is None or not fibers:
+            raise RuntimeError(f"目标 generation 未建立 Fiber: {generation.plugin_id}")
+        root.require_ready(fibers)
+        try:
+            root.require_ready((*affected, *root.consumers(fibers, declared=True)))
+        except RuntimeError as error:
+            raise RuntimeError(
+                f"插件 {generation.plugin_id} 已就绪，但依赖消费者尚未就绪: {error}"
+            ) from error
+
+    async def _start_local_generation(
+        self,
+        generation: PluginGeneration,
+        *,
+        affected: tuple[Fiber, ...] = (),
+        check_readiness: bool = True,
+    ) -> None:
+        """Load and mount one selected generation on the existing live Root."""
+        root = self._live_root
+        if root is None:
+            raise RuntimeError("正式 live Root 尚未建立")
+        self._check_operation_commit()
+        try:
+            await self._load_live_generation(generation)
+        except Exception:
+            await self._retain_pre_fiber_failure(generation)
+            raise
+        ensure_workspace_plugin_data_dir(generation.data_dir, self._workspace)
+        check_host_dependencies(root, (generation,))
+        self._active_generations[generation.plugin_id] = generation
+        await self._attach_generation_hosts(generation)
+        await self._mount_generation_composition(root, generation)
+        self._check_operation_commit()
+        if check_readiness:
+            self._require_local_generation_ready(generation, affected=affected)
+        generation.state = "active"
+
+    async def _attach_generation_hosts(self, generation: PluginGeneration) -> None:
+        """Add this exact generation to stable host facades already provided by the Root."""
+        root = self._live_root
+        if root is None:
+            raise RuntimeError("正式 live Root 尚未建立")
+        execution = self._live_execution_access
+        if execution is None:
+            raise RuntimeError("live Root 缺少稳定 ExecutionAccess")
+        execution.add_owner(
+            generation.plugin_id, generation.generation_id,
+            CodeOwner(
+                generation.generation_id, generation.code_dir,
+                lambda command, cwd, generation=generation: self._resolve_runtime_command(
+                    generation, command, cwd,
+                ),
+            ),
+        )
+        clients = self._live_credentials
+        if clients is None:
+            raise RuntimeError("live Root 缺少稳定 CredentialClients")
+        clients.add_factory(
+            generation.plugin_id, generation.generation_id,
+            CoreProviderClientFactory(
+                generation.data_dir, generation.config_projection, generation.config_revision,
+            ),
+        )
+
+    def _selection_transition_committed(self, tx_id: str, current_ref: str | None) -> bool | None:
+        """按前驱和完整 refs 认定同一次转换；旧记录缺证据时明确未知。"""
+        intent = self._reload_journal.selection_candidate(tx_id)
+        if intent is None:
+            return None
+        base, components = intent
+        return self._selection.transition_committed(base, components)
+
+    async def _prepare_boot_runtime_recovery(
+        self,
+        actions: tuple[ReloadRecoveryAction, ...],
+    ) -> dict[str, str]:
+        """清理真实旧 boot owner；不改变运行选择或安装输入。"""
+
+        if not actions:
+            return {}
+        for action in actions:
+            _reject_retired_owner_recovery(action)
+        current_boot_id = os.environ.get("AKASHIC_BOOT_ID", "").strip()
+        if os.environ.get("AKASHIC_SUPERVISED") != "1" or not current_boot_id:
+            raise RuntimeError("v3 runtime recovery 需要 supervised boot identity")
+        from agent.background.boot_guardian import _cleanup_boot_processes
+
+        cleaned_boots: set[str] = set()
+        receipts: dict[str, str] = {}
+        for action in actions:
+            previous_boot_id = action.runtime_owner_boot_id
+            if previous_boot_id is not None and (
+                not previous_boot_id.strip() or previous_boot_id == current_boot_id
+            ):
+                raise RuntimeError(
+                    "v3 runtime recovery 缺少不同于当前进程的旧 boot identity"
+                )
+            cleanup = "not-required"
+            if previous_boot_id is not None:
+                cleanup = "complete"
+                if previous_boot_id not in cleaned_boots:
+                    await asyncio.to_thread(
+                        _cleanup_boot_processes,
+                        boot_id=previous_boot_id,
+                        gateway_group_id=None,
+                    )
+                    cleaned_boots.add(previous_boot_id)
+            receipts[action.tx_id] = (
+                f"boot-reconcile:previous={previous_boot_id}:"
+                f"current={current_boot_id}:cleanup={cleanup}:"
+                f"target={action.recovery_target}"
+            )
+        return receipts
+
+
+    async def _dispose_generation(
+        self,
+        generation: PluginGeneration,
+        *,
+        state: str,
+        retain_selected_failed: bool = False,
+    ) -> None:
+        """成功后才解除 owner；失败或取消保留资源供显式关闭重试。"""
+
+        # 1. 调用者可能已移除 active/prepared，先把责任交给既有排空集合。
+        tracked = self._draining_generations.setdefault(generation.plugin_id, [])
+        if not any(item is generation for item in tracked):
+            tracked.append(generation)
+
+        async def close_resources() -> None:
+            """Close Fiber and generation-owned resources before module removal."""
+
+            if generation.fiber is not None:
+                await generation.fiber.dispose()
+            if self._live_credentials is not None:
+                await self._live_credentials.remove_factory(
+                    generation.plugin_id, generation.generation_id,
+                )
+            failures = await generation.scope.aclose()
+            self._cleanup_failures.extend(failures)
+            if failures:
+                raise RuntimeError(
+                    "generation scope cleanup 未完成，必须显式 retry: "
+                    + "; ".join(f"{item.resource}: {item.error}" for item in failures)
+                )
+            if self._live_execution_access is not None:
+                self._live_execution_access.remove_owner(
+                    generation.plugin_id, generation.generation_id,
+                )
+
+        # 2. 重复取消不能截断清理；任何失败均阻止卸载模块与恢复接纳。
+        try:
+            _, cancelled = await _complete_critical(close_resources())
+        except BaseException as error:
+            self._cleanup_failures.append(CleanupFailure(
+                resource=f"plugin:{generation.plugin_id}:generation:{generation.generation_id}",
+                error=str(error) or type(error).__name__,
+            ))
+            try:
+                self._record_root_failure(
+                    generation, error, resource="generation-cleanup",
+                    formal_effects=("generation_runtime_cleanup_pending",),
+                )
+            except Exception as journal_error:
+                raise BaseExceptionGroup(
+                    "generation 清理与持久失败记录均失败", [error, journal_error],
+                ) from None
+            raise
+
+        # 3. 所有资源确认关闭后才移除模块及排空 owner。
+        self._remove_module_tree(generation.module_path)
+        if generation.reload_tx_id is not None:
+            record = self._reload_journal.get(generation.reload_tx_id)
+            if record.phase == "cleanup_failed":
+                self._reload_journal.settle_generation_cleanup(
+                    tx_id=record.tx_id,
+                    plugin_id=generation.plugin_id,
+                    generation_id=generation.generation_id,
+                    receipt=f"generation-cleanup:{generation.plugin_id}:{generation.generation_id}",
+                )
+        generation.state = state
+        if retain_selected_failed:
+            generation.instance = None
+            generation.fiber = None
+        elif self._active_generations.get(generation.plugin_id) is generation:
+            self._active_generations.pop(generation.plugin_id, None)
+        self._forget_drained_generation(generation)
+        if cancelled:
+            raise asyncio.CancelledError
+
+
+    def _forget_drained_generation(self, generation: PluginGeneration) -> None:
+        tracked = self._draining_generations.get(generation.plugin_id)
+        if tracked is None:
+            return
+        remaining = [item for item in tracked if item is not generation]
+        if remaining:
+            self._draining_generations[generation.plugin_id] = remaining
+        else:
+            _ = self._draining_generations.pop(generation.plugin_id, None)
+
+
+    async def reconcile_changed(
+        self, *, plugin_ids: frozenset[str] | None = None,
+    ) -> list[dict[str, object]]:
+        """应用指定的变化输入；显式全量请求仍检查当前已选来源。"""
+        return await self._run_operation(lambda: self._reconcile_changed(plugin_ids))
+
+
+    def read_config_input(self, plugin_id: str) -> dict[str, object]:
+        generation = self._active_generations[plugin_id]
+        return {"input_ref": generation.input_ref, "config_revision": generation.config_revision}
+
+    async def apply_config_input(self, plugin_id: str, request_id: str,
+                                 expected_input: str, config: Mapping[str, object]) -> dict[str, object]:
+        """准备候选并立即返回；独立宿主任务拥有正式提交和排空。"""
+        # 1. 校验输入身份与凭据归属，重放同一请求只读取回执。
+        if not request_id or len(request_id) > 128 or request_id.strip() != request_id:
+            raise ValueError("配置请求 ID 无效")
+        content = config_bytes(config)
+        revision = hashlib.sha256(content).hexdigest()
+        try:
+            previous_request = self._reload_journal.config_update(request_id)
+        except KeyError:
+            previous_request = None
+        if previous_request is not None:
+            if previous_request["plugin_id"] != plugin_id or previous_request["previous_input"] != expected_input:
+                raise ValueError("配置请求 ID 已被其他输入使用")
+            if previous_request["config_revision"] != revision:
+                raise ValueError("同一请求 ID 不允许修改配置")
+            return self.read_config_update(plugin_id, request_id)
+        try:
+            self._require_operation_idle()
+        except OperationBusyError as error:
+            raise ValueError("另一个配置或插件操作正在完成，请稍后重试") from error
+        generation = self._active_generations[plugin_id]
+        if generation.input_ref != expected_input:
+            raise ValueError("配置已更新，请刷新后重试")
+        for ref in config_refs(config):
+            path = _credential_path(generation.data_dir, ref)
+            if path.is_symlink() or path.with_suffix(".revoked").exists() or hashlib.sha256(path.read_bytes()).hexdigest() != ref.path[1]:
+                raise ValueError("凭据版本无效或不属于当前插件")
+        # 2. 固定同一制品的新输入，不先改可见配置文件。
+        record = dict(self._selection.read_input(expected_input))
+        record.update(config_revision=revision)
+        input_ref = self._selection.prepare(record)
+        self._reload_journal.create_config_update(request_id, plugin_id, expected_input, input_ref,
+                                                 revision, json.dumps(encode_config(config), ensure_ascii=False, allow_nan=False))
+        self._start_operation(lambda: self._apply_config_update(request_id), background=True)
+        return self.read_config_update(plugin_id, request_id)
+
+    def read_config_update(self, plugin_id: str, request_id: str) -> dict[str, object]:
+        row = self._reload_journal.config_update(request_id)
+        if row["plugin_id"] != plugin_id:
+            raise PermissionError("不能读取其他插件的配置回执")
+        selected_ref = self._selection.read()
+        selected = selected_ref is not None and row["input_ref"] in self._selection_components(selected_ref)
+        generation = self._active_generations.get(plugin_id)
+        settled = row["state"] == "active" or (
+            row["state"] == "selected"
+            and (self._operation is None or self._operation.task.done())
+        )
+        if settled and selected and generation is not None and generation.state == "active" and generation.input_ref == row["input_ref"] and self._generation_is_locally_ready(generation):
+            row["state"] = "active"
+        elif row["state"] == "active":
+            row["state"] = "superseded" if not selected else "failed"
+        row["selected"] = selected
+        row.pop("pending_config")
+        return row
+
+    def _publish_config_update(self, request_id: str) -> None:
+        """发布已选请求的当前配置；临时正文只保留到文件耐久写入。"""
+        row = self._reload_journal.config_update(request_id)
+        if row["pending_config"] is None:
+            return
+        config = decode_config(json.loads(cast(str, row["pending_config"])))
+        if not isinstance(config, dict):
+            raise ValueError("配置请求不是映射")
+        plugin_id = cast(str, row["plugin_id"])
+        name, _, marketplace = plugin_id.partition("@")
+        data_dir = workspace_plugin_data_dir(self._workspace, name, marketplace or "builtin")
+        _, revision = load_config(data_dir)
+        if revision != row["config_revision"]:
+            save_config(data_dir, config)
+        self._reload_journal.clear_pending_config(request_id)
+
+    async def _apply_config_update(self, request_id: str) -> dict[str, object]:
+        """沿既有 selection CAS 与局部换代路径应用自身配置。"""
+        row = self._reload_journal.config_update(request_id)
+        plugin_id = cast(str, row["plugin_id"])
+        try:
+            previous = self._active_generations[plugin_id]
+            if previous.input_ref != row["previous_input"]:
+                raise ValueError("提交前配置已改变，请刷新后重试")
+            root = self._live_root
+            if root is None:
+                raise RuntimeError("运行图尚未建立")
+            generation = self._selected_generations((cast(str, row["input_ref"]),), root,
+                workspace=self._workspace, sources={plugin_id: previous}, register_live=False)[plugin_id]
+            projection = decode_config(json.loads(cast(str, row["pending_config"])))
+            if not isinstance(projection, dict):
+                raise ValueError("配置请求不是映射")
+            generation.config_projection = projection
+            generation.config_revision = cast(str, row["config_revision"])
+            await self._update_live_generation(generation, previous, expected_ref=self._selection.read(),
+                                               config_request_id=request_id)
+            self._reload_journal.finish_config_update(request_id, "active")
+        except BaseException as error:
+            self._reload_journal.finish_config_update(request_id, "failed", str(error) or type(error).__name__)
+            raise
+        return self.read_config_update(plugin_id, request_id)
+
+    def _recover_config_updates(self) -> None:
+        """启动时只修复已正式采用的输入，不自动重试未提交的请求。"""
+        selection_ref = self._selection.read()
+        components = () if selection_ref is None else self._selection_components(selection_ref)
+        for row in self._reload_journal.pending_config_updates():
+            request_id = cast(str, row["request_id"])
+            input_ref = cast(str, row["input_ref"])
+            if input_ref in components:
+                self._publish_config_update(request_id)
+                self._reload_journal.finish_config_update(request_id, "selected")
+            else:
+                self._reload_journal.clear_pending_config(request_id)
+                if row["state"] != "failed":
+                    self._reload_journal.finish_config_update(request_id, "failed", "配置应用中断，正式选择未采用；请重新提交")
+
+    def _finish_recovered_config_updates(self) -> None:
+        """配置投影已恢复且实际选中实例 ready 后，才结算原请求。"""
+        selection_ref = self._selection.read()
+        components = () if selection_ref is None else self._selection_components(selection_ref)
+        for row in self._reload_journal.pending_config_updates():
+            generation = self._active_generations.get(cast(str, row["plugin_id"]))
+            if (generation is not None and row["input_ref"] in components
+                and generation.input_ref == row["input_ref"]
+                and generation.state == "active" and self._generation_is_locally_ready(generation)):
+                self._reload_journal.finish_config_update(cast(str, row["request_id"]), "active")
+
+    async def install(
+        self, *, source: str, marketplace: str, ref_name: str,
+        sparse_paths: list[str], update_id: str,
+    ) -> UpdateStatus:
+        """Install one fixed artifact and return when its selection CAS is accepted."""
+        if not isinstance(update_id, str) or not update_id or update_id.strip() != update_id:
+            raise ValueError("插件更新 ID 必须是非空且无首尾空白的字符串")
+        try:
+            self._reload_journal.update(update_id)
+        except KeyError:
+            pass
+        else:
+            raise RuntimeError("已有插件更新请求只能查询，不能重跑安装")
+        accepted: asyncio.Future[UpdateStatus] = asyncio.get_running_loop().create_future()
+        self._start_operation(
+            lambda: self._install_public(
+                source=source, marketplace=marketplace, ref_name=ref_name,
+                sparse_paths=sparse_paths, update_id=update_id, accepted=accepted,
+            ),
+            background=True, update_id=update_id, accepted=accepted,
+        )
+        # 调用方取消只结束等待；宿主任务继续负责安装与排空。
+        return await asyncio.shield(accepted)
+
+    async def uninstall(self, plugin_id: str) -> dict[str, object]:
+        """Return after selection removal; one Manager task owns physical cleanup."""
+        if not isinstance(plugin_id, str) or not plugin_id or plugin_id.strip() != plugin_id:
+            raise ValueError("插件 ID 必须是非空且无首尾空白的字符串")
+        _ = _split_installed_plugin_id(plugin_id)
+        accepted: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
+        _ = self._start_operation(
+            lambda: self._uninstall_public(plugin_id, accepted=accepted),
+            background=True,
+            accepted=accepted,
+        )
+        # 调用方取消只结束等待；宿主任务继续负责物理清理。
+        return await asyncio.shield(accepted)
+
+    async def _uninstall_public(
+        self, plugin_id: str, *, accepted: asyncio.Future[dict[str, object]],
+    ) -> dict[str, object]:
+        """Disable, CAS-remove, drain the target owners, then finalize its install."""
+        self._check_operation_commit()
+        self.require_installed_plugin(plugin_id)
+        distribution_owned = any(
+            f"{source.plugin_name}@{source.marketplace}" == plugin_id for source in self._distribution.sources)
+        _ = set_plugin_choice(self._workspace, plugin_id, enabled=False, distribution=self._distribution.root)
+        expected_ref = self._selection.read()
+        result = await self._deactivate_plugin(
+            plugin_id,
+            expected_ref=expected_ref,
+            accepted=accepted,
+        )
+        for generation in tuple(self._draining_generations.get(plugin_id, ())):
+            await self._dispose_generation(generation, state="retired")
+        self._check_operation_commit()
+        if distribution_owned:
+            # Immutable distribution code remains available; false is the same
+            # durable user choice used by disable and future deployments.
+            self._notify_updates()
+            return {"plugin_id": plugin_id, "state": "disabled",
+                    "selection_ref": result["selection_ref"], "distribution_owned": True}
+        finalize_result, finalize_cancelled = await _complete_critical(
+            asyncio.to_thread(
+                finalize_uninstall_plugin,
+                plugin_id,
+                workspace=self._workspace,
+                plugins_home=self.installed_plugins_home,
+            )
+        )
+        if finalize_cancelled:
+            raise asyncio.CancelledError
+        cache_path, data_path = finalize_result
+        self._notify_updates()
+        return {
+            "plugin_id": plugin_id,
+            "state": "removed",
+            "selection_ref": result["selection_ref"],
+            "cache_path": str(cache_path),
+            "data_path": str(data_path),
+        }
+
+    async def _install_public(
+        self, *, source: str, marketplace: str, ref_name: str,
+        sparse_paths: list[str], update_id: str,
+        accepted: asyncio.Future[UpdateStatus],
+    ) -> UpdateStatus:
+        """Run install, input binding, selection CAS, and same-Root activation."""
+        installation_started = False
+        try:
+            self._check_operation_commit()
+            try:
+                self._reload_journal.update(update_id)
+            except KeyError:
+                pass
+            else:
+                # The public pre-check closes the normal path; this second check
+                # closes the race where another owner persisted the ID meanwhile.
+                raise RuntimeError("已有插件更新请求只能查询，不能重跑安装")
+            installation_started = True
+            result, install_cancelled = await _complete_critical(
+                asyncio.to_thread(
+                    install_git_plugin,
+                    workspace=self._workspace,
+                    source=source,
+                    marketplace=marketplace,
+                    ref_name=ref_name,
+                    sparse_paths=sparse_paths,
+                    plugins_home=self.installed_plugins_home,
+                    update_id=update_id,
+                    reserved_ids=frozenset(f"{item.plugin_name}@{item.marketplace}"
+                                           for item in self._distribution.sources),
+                )
+            )
+            if install_cancelled:
+                raise asyncio.CancelledError
+            self._check_operation_commit()
+            mod = {
+                "name": result.plugin_name,
+                "plugin_root": str(result.installed_path),
+                "module_path": str(result.installed_path / "plugin.py"),
+                "manifest_digest": load_static_plugin_manifest(result.installed_path).identity_digest,
+                "marketplace": result.marketplace,
+                "source_type": "installed",
+            }
+            generation = await self._prepare_one_with_source_diagnostics(
+                mod,
+            )
+            if generation is None:
+                raise RuntimeError(f"安装目标未进入 live generation: {result.plugin_name}@{result.marketplace}")
+            if generation.input_ref is None:
+                raise RuntimeError("安装目标没有归档引用")
+            self._reload_journal.set_input_ref(result.update_id, generation.input_ref)
+            expected_ref = self._selection.read()
+            previous = self._active_generations.get(generation.plugin_id)
+            changed = public_contracts.register((ResolvedPluginSource(
+                generation.code_dir, generation.source_type, plugin_name=result.plugin_name,
+            ),))
+            if changed:
+                # 提交下次启动的输入；当前 Root 保留旧类型与所有 live owner。
+                operation = self._check_operation_commit()
+                components = self._selection_for_plugin(expected_ref, generation.plugin_id, generation.input_ref)
+                self._reload_journal.require_contract_restart(result.update_id)
+                operation.committed = self._selection.commit(components, expected_ref=expected_ref)
+                await self._dispose_generation(generation, state="discarded")
+                status = self.read_update(result.update_id)
+                if not accepted.done():
+                    accepted.set_result(status)
+                return status
+            await self._update_live_generation(
+                generation, previous, expected_ref=expected_ref,
+                update_id=result.update_id, accepted=accepted,
+            )
+            return self.read_update(result.update_id)
+        except BaseException as error:
+            if installation_started:
+                try:
+                    current = self._reload_journal.update(update_id)
+                except KeyError:
+                    current = None
+                if current is not None and not current.error:
+                    self._reload_journal.record_update_error(
+                        update_id, str(error) or type(error).__name__,
+                    )
+            if not accepted.done():
+                accepted.set_exception(error if isinstance(error, Exception) else RuntimeError(str(error)))
+            raise
+
+    def read_update(self, update_id: str) -> UpdateStatus:
+        """Project durable input, exact selection, and the live generation state."""
+        update = self._reload_journal.update(update_id)
+        input_ref = update.input_ref
+        selection_ref = self._selection.read()
+        components = () if selection_ref is None else self._selection_components(selection_ref)
+        selected = input_ref is not None and input_ref in components
+        generation = self._active_generations.get(update.plugin_id)
+        fiber_state = None if generation is None or generation.fiber is None else generation.fiber.state.value
+        generation_id = None if generation is None else generation.generation_id
+        active_input_ref = None if generation is None else generation.input_ref
+        state: Literal["accepted", "active", "failed", "unknown", "restart_required"] = "unknown"
+        readiness_error: str | None = None
+        exact_generation = (
+            input_ref is not None
+            and selected
+            and generation is not None
+            and generation.input_ref == input_ref
+        )
+        if exact_generation and generation is not None and generation.load_error is not None:
+            readiness_error = (
+                str(generation.load_error)
+                or type(generation.load_error).__name__
+            )
+            state = "failed"
+        elif (
+            exact_generation
+            and generation is not None
+            and generation.state == "active"
+            and generation.fiber is not None
+            and generation.fiber.state == FiberState.ACTIVE
+        ):
+            try:
+                self._require_local_generation_ready(generation)
+            except RuntimeError as error:
+                readiness_error = str(error) or type(error).__name__
+            else:
+                state = "active"
+        if state == "unknown" and update.restart_required and selected:
+            state = "restart_required"
+        if state == "unknown":
+            operation = self._operation
+            if (
+                operation is not None
+                and operation.update_id == update_id
+                and not operation.task.done()
+                and not operation.revoked
+                and selected
+            ):
+                state = "accepted"
+            elif readiness_error is not None or update.error:
+                state = "failed"
+        selection = (
+            "unknown" if input_ref is None or selection_ref is None
+            else "selected" if selected else "not_selected"
+        )
+        return UpdateStatus(
+            update_id=update_id,
+            plugin_id=update.plugin_id,
+            input_ref=input_ref,
+            selection=selection,
+            generation_id=generation_id,
+            active_input_ref=active_input_ref,
+            fiber_state=fiber_state,
+            state=state,
+            error=readiness_error or update.error,
+        )
+
+
+    def _notify_updates(self) -> None:
+        for event in self._update_watchers:
+            event.set()
+
+    async def watch_updates(self) -> AsyncGenerator[None]:
+        """订阅先登记再读；通知只唤醒，读取仍以现有 journal 为准。"""
+        event = asyncio.Event()
+        self._update_watchers.add(event)
+        event.set()
+        try:
+            while True:
+                _ = await event.wait()
+                event.clear()
+                yield None
+        finally:
+            self._update_watchers.remove(event)
+
+
+    def require_installed_plugin(self, plugin_id: str) -> None:
+        """Fail before registering uninstall when the plugin has no installed owner."""
+
+        if plugin_id not in self._installed_ids():
+            raise RuntimeError(f"插件未安装: {plugin_id}")
+
+    def _installed_ids(self) -> frozenset[str]:
+        return installed_plugin_ids(self.installed_plugins_home) | frozenset(
+            f"{source.plugin_name}@{source.marketplace}" for source in self._distribution.sources)
+
+    async def _reconcile_changed(
+        self, plugin_ids: frozenset[str] | None = None,
+    ) -> list[dict[str, object]]:
+        """Reconcile changed inputs in the one formal Root and owner map."""
+        if self._live_root is None:
+            raise RuntimeError("local Loader 尚未建立 live Root；已知宿主迁移缺口阻止更新")
+        if any(self._draining_generations.values()):
+            raise OperationBusyError("上一次更新仍有资源 owner；必须显式 retry/terminate")
+        results: list[dict[str, object]] = []
+        discovered_mods, _failures = self._discover_modules(
+            record_source_failures=True,
+        )
+        discovered = {
+            _resolve_plugin_id(mod): mod for mod in discovered_mods
+        }
+        manifest = plugin_choices(self._workspace, self._distribution.root)
+        desired = {
+            plugin_id
+            for plugin_id, mod in discovered.items()
+            if manifest.get(plugin_id, "@" not in plugin_id)
+        }
+        selection_ref = self._selection.read()
+        selected_ids = set()
+        selected_components: tuple[str, ...] = ()
+        if selection_ref is not None:
+            selected_components = self._selection_components(selection_ref)
+            selected_ids = {
+                cast(str, self._selection.read_input(ref)["plugin_id"])
+                for ref in selected_components
+            }
+        explicitly_disabled = {
+            plugin_id
+            for plugin_id in selected_ids
+            if manifest.get(plugin_id, "@" not in plugin_id) is False
+        }
+        # 1. 已提交但失去实例的输入先全部挂回同一图；PENDING 消费者不能
+        # 阻止后面缺失的 provider 挂载。恢复读取已选归档，不另选当前源码。
+        missing = tuple(
+            ref for ref in selected_components
+            if (plugin_id := cast(str, self._selection.read_input(ref)["plugin_id"]))
+            not in self._active_generations
+            and plugin_id not in explicitly_disabled
+            and (plugin_ids is None or plugin_id in plugin_ids)
+        )
+        restored = self._selected_generations(
+            missing, self._live_root, workspace=self._workspace,
+            sources={}, register_live=False,
+        )
+        readiness_ids = set(restored)
+        for generation in restored.values():
+            results.append(await self._update_live_generation(
+                generation, None, expected_ref=selection_ref, check_readiness=False,
+            ))
+        for plugin_id in sorted((set(self._active_generations) | selected_ids) - desired):
+            if plugin_ids is not None and plugin_id not in plugin_ids:
+                continue
+            if plugin_id not in explicitly_disabled:
+                active = self._active_generations.get(plugin_id)
+                source_root = self._source_root_hint(plugin_id, active)
+                self._remember_missing_source(plugin_id, active)
+                results.append({
+                    "plugin_id": plugin_id,
+                    "publication_state": "source_unavailable",
+                    "selection_ref": selection_ref,
+                    "source_root": None if source_root is None else str(source_root),
+                })
+                continue
+            result = await self._deactivate_plugin(plugin_id, expected_ref=selection_ref)
+            selection_ref = cast(str, result["selection_ref"])
+            results.append(result)
+        for plugin_id in sorted(desired):
+            if plugin_ids is not None and plugin_id not in plugin_ids:
+                continue
+            if plugin_id not in selected_ids:
+                results.append({
+                    "plugin_id": plugin_id,
+                    "publication_state": "unselected_source",
+                    "selection_ref": selection_ref,
+                })
+                continue
+            active = self._active_generations.get(plugin_id)
+            mod = discovered[plugin_id]
+            if (
+                active is not None
+                and active.load_error is not None
+                and active.fiber is None
+                and active.state == "failed"
+                and active.input_ref in selected_components
+            ):
+                results.append({
+                    "plugin_id": plugin_id,
+                    "publication_state": "failed_selected",
+                    "error": (
+                        str(active.load_error)
+                        or type(active.load_error).__name__
+                    ),
+                })
+                continue
+            revision = await run_file_io(lambda: _source_revision(Path(mod["plugin_root"])))
+            _config, config_revision = load_config(
+                _resolve_plugin_data_dir(mod["name"], mod, self._workspace),
+            )
+            had_source_failure = (
+                _source_failure_key_for_mod(mod) in self._source_failures
+            )
+            same_input = (
+                active is not None
+                and active.state == "active"
+                and active.fiber is not None
+                and active.fiber.state in {FiberState.ACTIVE, FiberState.PENDING}
+                and active.config_revision == config_revision
+                and (
+                    active.source_revision == revision
+                    # 安装路径可原位变化；与加载时的摘要比较，不能将同一路径重读两遍。
+                    or active.runtime_revision == await run_file_io(lambda:
+                        _source_revision(Path(mod["plugin_root"]), runtime_only=True))
+                )
+            )
+            if same_input and not had_source_failure:
+                if active.fiber.state is FiberState.PENDING:
+                    readiness_ids.add(plugin_id)
+                continue
+            if public_contracts.register((ResolvedPluginSource(
+                Path(mod["plugin_root"]), cast(Literal["builtin", "installed"], mod["source_type"]),
+                plugin_name=mod["name"],
+            ),)):
+                results.append({"plugin_id": plugin_id, "publication_state": "restart_required",
+                                "selection_ref": selection_ref})
+                continue
+            generation = await self._prepare_one_with_source_diagnostics(
+                mod,
+            )
+            if generation is None:
+                results.append({
+                    "plugin_id": plugin_id,
+                    "publication_state": "source_unavailable",
+                    "selection_ref": selection_ref,
+                })
+                continue
+            if same_input:
+                # A disappeared source can be revalidated without replacing an
+                # unrelated live generation merely to clear its old diagnostic.
+                await self._dispose_generation(generation, state="discarded")
+                if active.fiber.state is FiberState.PENDING:
+                    readiness_ids.add(plugin_id)
+                continue
+            result = await self._update_live_generation(
+                generation, active, expected_ref=selection_ref,
+            )
+            selection_ref = cast(str, result["selection_ref"])
+            results.append(result)
+        # 2. 现有依赖图完成激活后，按本次实际恢复范围报告最终就绪。
+        for plugin_id in sorted(readiness_ids):
+            self._require_local_generation_ready(self._active_generations[plugin_id])
+        return results
+
+    async def _update_live_generation(
+        self,
+        generation: PluginGeneration,
+        previous: PluginGeneration | None,
+        *,
+        expected_ref: str | None,
+        update_id: str | None = None,
+        accepted: asyncio.Future[UpdateStatus] | None = None,
+        config_request_id: str | None = None,
+        check_readiness: bool = True,
+    ) -> dict[str, object]:
+        """Commit B, drain A, and mount B on the same live Root."""
+        root = self._live_root
+        if root is None:
+            raise RuntimeError("正式 live Root 尚未建立")
+        affected = self._capture_local_readiness(
+            () if previous is None else (previous,)
+        )
+        try:
+            replacement_ref = self._generation_input_ref(generation)
+            components = self._selection_for_plugin(
+                expected_ref, generation.plugin_id, replacement_ref,
+            )
+            if (
+                previous is not None
+                and previous.input_ref == replacement_ref
+                and self._selection_contains(expected_ref, replacement_ref)
+                and self._generation_is_locally_ready(previous)
+            ):
+                self._check_operation_commit()
+                await self._dispose_generation(generation, state="discarded")
+                if update_id is not None and accepted is not None and not accepted.done():
+                    accepted.set_result(self.read_update(update_id))
+                return {
+                    "plugin_id": generation.plugin_id,
+                    "old_generation": previous.generation_id,
+                    "new_generation": previous.generation_id,
+                    "selection_ref": cast(str, expected_ref),
+                    "publication_state": "active",
+                }
+            operation = self._check_operation_commit()
+            if previous is None and self._selection_contains(expected_ref, replacement_ref):
+                # 恢复已选实例不产生新的输入选择或重复发布记录。
+                if self._selection.read() != expected_ref:
+                    raise SelectionConflictError("stable 基线已变化")
+                selection_ref = cast(str, expected_ref)
+            else:
+                selection_ref = self._selection.commit(
+                    components,
+                    expected_ref=expected_ref,
+                )
+            operation.committed = selection_ref
+            if config_request_id is not None:
+                self._reload_journal.finish_config_update(config_request_id, "selected")
+                self._publish_config_update(config_request_id)
+            if update_id is not None and accepted is not None and not accepted.done():
+                accepted.set_result(self.read_update(update_id))
+            if not self._operation_can_continue():
+                raise OperationTimeoutError(operation)
+            if previous is not None:
+                await self._dispose_generation(previous, state="retired")
+            if not self._operation_can_continue():
+                raise OperationTimeoutError(operation)
+            await self._start_local_generation(
+                generation, affected=affected, check_readiness=check_readiness,
+            )
+            return {
+                "plugin_id": generation.plugin_id,
+                "old_generation": None if previous is None else previous.generation_id,
+                "new_generation": generation.generation_id,
+                "selection_ref": selection_ref,
+                "publication_state": "active",
+            }
+        except BaseException:
+            retained_pre_fiber_failure = (
+                generation.load_error is not None
+                and generation.fiber is None
+                and generation.state == "failed"
+                and self._active_generations.get(generation.plugin_id) is generation
+            )
+            selected_ref = self._selection.read()
+            retained_failed_fiber = (
+                generation.fiber is not None
+                and generation.fiber.state == FiberState.FAILED
+                and generation.fiber.error is not None
+                and generation.input_ref is not None
+                and self._selection_contains(selected_ref, generation.input_ref)
+                and self._active_generations.get(generation.plugin_id) is generation
+            )
+            if retained_failed_fiber:
+                generation.load_error = generation.fiber.error
+                generation.state = "failed"
+                await self._dispose_generation(
+                    generation, state="failed", retain_selected_failed=True,
+                )
+            elif not retained_pre_fiber_failure and (
+                generation.state != "active"
+                or self._active_generations.get(generation.plugin_id) is generation
+            ):
+                try:
+                    await self._dispose_generation(generation, state="discarded")
+                except BaseException:
+                    # Selection B remains committed; the draining owner is retained for explicit retry.
+                    raise
+            raise
+
+    def _selection_contains(self, selection_ref: str | None, input_ref: str) -> bool:
+        """Check the exact persisted selection without accepting a missing one."""
+        return selection_ref is not None and input_ref in self._selection_components(selection_ref)
+
+    def _generation_is_locally_ready(self, generation: PluginGeneration) -> bool:
+        """Return readiness for an already-owned local generation."""
+        if (
+            generation.state != "active"
+            or generation.fiber is None
+            or generation.fiber.state != FiberState.ACTIVE
+        ):
+            return False
+        try:
+            self._require_local_generation_ready(generation)
+        except RuntimeError:
+            return False
+        return True
+
+    async def set_plugin_enabled(self, plugin_id: str, enabled: bool) -> dict[str, object]:
+        return await self._run_operation(lambda: self._set_plugin_enabled(plugin_id, enabled))
+
+    # 用户启停：写入持久选择后在同一 live Root 内生效，公开合同变化才留到重启。
+    async def _set_plugin_enabled(self, plugin_id: str, enabled: bool) -> dict[str, object]:
+        # 1. 只接受已安装或发行版自带的插件，选择与 CLI plugin-enable 同源。
+        self.require_installed_plugin(plugin_id)
+        _ = set_plugin_choice(self._workspace, plugin_id, enabled=enabled, distribution=self._distribution.root)
+        # 2. 停用沿用排空路径，依赖它的插件由组合图转入等待。
+        if not enabled:
+            await self._reconcile_disabled_and_drain(plugin_id)
+            self._notify_updates()
+            return {"plugin_id": plugin_id, "publication_state": "disabled"}
+        # 3. 已选中的输入按变化调和；调和不报告未变化的插件，已在运行即视为启用完成。
+        results = await self._reconcile_changed(frozenset({plugin_id}))
+        result: dict[str, object] | None = next((item for item in results if item.get("plugin_id") == plugin_id), None)
+        if result is None and plugin_id in self._active_generations:
+            result = {"plugin_id": plugin_id, "publication_state": "unchanged"}
+        # 4. 只有确实未选入的插件才按安装路径准备新 generation。
+        elif result is None or result.get("publication_state") == "unselected_source":
+            result = await self._select_enabled(plugin_id)
+        self._notify_updates()
+        return result
+
+    # 把重新启用的插件准备为新 generation 并挂入当前 Root。
+    async def _select_enabled(self, plugin_id: str) -> dict[str, object]:
+        mods, _failures = self._discover_modules(record_source_failures=True)
+        mod = next((item for item in mods if _resolve_plugin_id(item) == plugin_id), None)
+        if mod is None:
+            return {"plugin_id": plugin_id, "publication_state": "source_unavailable"}
+        generation = await self._prepare_one_with_source_diagnostics(mod)
+        if generation is None:
+            return {"plugin_id": plugin_id, "publication_state": "source_unavailable"}
+        expected_ref = self._selection.read()
+        if public_contracts.register((ResolvedPluginSource(
+            generation.code_dir, generation.source_type, plugin_name=mod["name"],
+        ),)):
+            # 当前 Root 保留旧类型；选择提交给下次启动。
+            operation = self._check_operation_commit()
+            components = self._selection_for_plugin(expected_ref, plugin_id, self._generation_input_ref(generation))
+            operation.committed = self._selection.commit(components, expected_ref=expected_ref)
+            await self._dispose_generation(generation, state="discarded")
+            return {"plugin_id": plugin_id, "publication_state": "restart_required"}
+        return await self._update_live_generation(generation, None, expected_ref=expected_ref)
+
+    async def reconcile_disabled_and_drain(self, plugin_id: str) -> None:
+        await self._run_operation(lambda: self._reconcile_disabled_and_drain(plugin_id))
+
+    async def _reconcile_disabled_and_drain(self, plugin_id: str) -> None:
+        manifest = plugin_choices(self._workspace, self._distribution.root)
+        if manifest.get(plugin_id, False):
+            raise RuntimeError(f"插件尚未禁用: {plugin_id}")
+        for generation in tuple(self._draining_generations.get(plugin_id, ())):
+            await self._dispose_generation(generation, state="retired")
+        selection_ref = self._selection.read()
+        selected = False
+        if selection_ref is not None:
+            selected = any(
+                self._selection.read_input(ref).get("plugin_id") == plugin_id
+                for ref in self._selection_components(selection_ref)
+            )
+        if plugin_id in self._active_generations or selected:
+            _ = await self._deactivate_plugin(plugin_id, expected_ref=selection_ref)
+        for generation in tuple(self._draining_generations.get(plugin_id, ())):
+            await self._dispose_generation(generation, state="retired")
+        if self._draining_generations.get(plugin_id):
+            raise RuntimeError(f"插件仍有未关闭的资源 owner，须先 recovery/terminate: {plugin_id}")
+
+    async def _deactivate_plugin(
+        self, plugin_id: str, *, expected_ref: str | None = None,
+        accepted: asyncio.Future[dict[str, object]] | None = None,
+    ) -> dict[str, object]:
+        """Remove one generation from the selection and the same live Root."""
+        active = self._active_generations.get(plugin_id)
+        if expected_ref is None:
+            expected_ref = self._selection.read()
+        components = self._selection_for_plugin(expected_ref, plugin_id, None)
+        operation = self._check_operation_commit()
+        selection_ref = self._selection.commit(components, expected_ref=expected_ref)
+        operation.committed = selection_ref
+        if accepted is not None and not accepted.done():
+            accepted.set_result({
+                "plugin_id": plugin_id,
+                "state": "accepted",
+                "selection_ref": selection_ref,
+            })
+        if active is not None:
+            await self._dispose_generation(active, state="retired")
+        return {
+            "plugin_id": plugin_id, "old_generation": None if active is None else active.generation_id,
+            "new_generation": None, "selection_ref": selection_ref,
+            "publication_state": "disabled",
+        }
+
+
+    async def retry_runtime_recovery(self, plugin_id: str) -> dict[str, object]:
+        return await self._run_operation(lambda: self._retry_runtime_recovery(plugin_id))
+
+    async def _retry_runtime_recovery(self, plugin_id: str) -> dict[str, object]:
+        """关闭保留的局部 owner 后重新加载当前已选安装模块。"""
+        root = self._live_root
+        selection_ref = self._selection.read()
+        if root is None or selection_ref is None:
+            raise RuntimeError("没有该插件的局部 live retry selection")
+        selected = tuple(
+            ref for ref in self._selection_components(selection_ref)
+            if self._selection.read_input(ref)["plugin_id"] == plugin_id
+        )
+        if len(selected) != 1:
+            raise RuntimeError("selection 未提供该插件的唯一局部重试输入")
+        owners: list[PluginGeneration] = []
+        active = self._active_generations.get(plugin_id)
+        if active is not None:
+            owners.append(active)
+        owners.extend(self._draining_generations.get(plugin_id, ()))
+        unique_owners = tuple(
+            owner for index, owner in enumerate(owners)
+            if not any(owner is prior for prior in owners[:index])
+        )
+        affected = self._capture_local_readiness(unique_owners)
+        for owner in unique_owners:
+            await self._dispose_generation(owner, state="retired")
+        self._check_operation_commit()
+        fresh = self._selected_generations(
+            selected, root, workspace=self._workspace, sources={}, register_live=False,
+        )[plugin_id]
+        try:
+            await self._start_local_generation(fresh, affected=affected)
+        except BaseException:
+            retained_pre_fiber_failure = (
+                fresh.load_error is not None
+                and fresh.fiber is None
+                and fresh.state == "failed"
+                and self._active_generations.get(fresh.plugin_id) is fresh
+            )
+            if not retained_pre_fiber_failure:
+                try:
+                    await self._dispose_generation(fresh, state="discarded")
+                except BaseException:
+                    raise
+            raise
+        return {
+            "plugin_id": plugin_id,
+            "publication_state": "recovered",
+            "generation_id": fresh.generation_id,
+            "retry_receipt": "selected-local-generation-retried",
+        }
+
+
+    def plugin_status(self) -> dict[str, object]:
+        """展示制品库存、bundle 选择、generation 与当前操作。"""
+        manifest = plugin_choices(self._workspace, self._distribution.root)
+        selection_ref = self._selection.read()
+        selected_refs: dict[str, str] = {}
+        if selection_ref is not None:
+            for input_ref in self._selection_components(selection_ref):
+                descriptor = self._selection.read_input(input_ref)
+                plugin_id = descriptor.get("plugin_id")
+                if not isinstance(plugin_id, str):
+                    raise TypeError("selection 输入缺少 plugin_id")
+                if plugin_id in selected_refs:
+                    raise RuntimeError(f"selection 重复包含插件: {plugin_id}")
+                selected_refs[plugin_id] = input_ref
+
+        def cleanup_pending(generation: PluginGeneration) -> bool:
+            return any(
+                item is generation
+                for item in self._draining_generations.get(generation.plugin_id, ())
+            )
+
+        def error_text(generation: PluginGeneration) -> str | None:
+            if generation.load_error is None:
+                return None
+            return str(generation.load_error) or type(generation.load_error).__name__
+
+        def generation_status(generation: PluginGeneration) -> dict[str, object]:
+            return {
+                "generation_id": generation.generation_id,
+                "input_ref": generation.input_ref,
+                "state": generation.state,
+                "load_error": error_text(generation),
+                "cleanup_pending": cleanup_pending(generation),
+                "fiber_state": (
+                    None if generation.fiber is None else generation.fiber.state.value
+                ),
+            }
+
+        operation_view = None if self._operation is None else self._operation.status()
+        operation_plugin_id = (
+            None if operation_view is None else operation_view["plugin_id"]
+        )
+
+        installed = self._installed_ids()
+        plugin_ids = (
+            set(installed) | set(manifest)
+            | set(selected_refs)
+            | set(self._active_generations)
+            | set(self._draining_generations)
+        )
+        if operation_plugin_id is not None:
+            plugin_ids.add(operation_plugin_id)
+        plugins: list[dict[str, object]] = []
+        for plugin_id in sorted(plugin_ids):
+            active = self._active_generations.get(plugin_id)
+            draining = tuple(self._draining_generations.get(plugin_id, ()))
+            if "@" not in plugin_id:
+                cache_exists = False
+            else:
+                plugin_name, marketplace = _split_installed_plugin_id(plugin_id)
+                cache_exists = (
+                    self.installed_plugins_home / "cache" / marketplace / plugin_name
+                ).exists()
+            plugins.append({
+                "plugin_id": plugin_id,
+                "installed": plugin_id in installed,
+                "enabled": manifest.get(plugin_id),
+                "selected_ref": selected_refs.get(plugin_id),
+                "selected_distribution_source": (
+                    self._selection.read_input(selected_refs[plugin_id]).get("distribution_source")
+                    if plugin_id in selected_refs else None
+                ),
+                "distribution_available": any(
+                    f"{source.plugin_name}@{source.marketplace}" == plugin_id
+                    for source in self._distribution.sources
+                ),
+                "cache_exists": cache_exists,
+                "draining_generations": [generation_status(item) for item in draining],
+                # Keep the original flat projection for existing status consumers.
+                "generation_id": None if active is None else active.generation_id,
+                "input_ref": None if active is None else active.input_ref,
+                "state": None if active is None else active.state,
+                "load_error": None if active is None else error_text(active),
+                "cleanup_pending": (
+                    False if active is None else cleanup_pending(active)
+                ),
+                "fiber_state": (
+                    None if active is None or active.fiber is None
+                    else active.fiber.state.value
+                ),
+                "version": None if active is None or active.static_manifest is None else active.static_manifest.version,
+                "description": str(getattr(active.instance, "desc", "")) if active is not None else "",
+            })
+        source_failures = [
+            {
+                "source_root": str(failure.source_root),
+                "source_type": failure.source_type,
+                "phase": failure.phase,
+                "error_type": failure.error_type,
+                "error_text": failure.error_text,
+                "plugin_id": failure.plugin_id,
+            }
+            for failure in sorted(
+                self._source_failures.values(),
+                key=lambda item: (str(item.source_root), item.source_type),
+            )
+        ]
+        return {
+            "selection_ref": selection_ref,
+            "selection_components": list(selected_refs.values()),
+            "plugins": plugins,
+            "source_failures": source_failures,
+            "operation": operation_view,
+        }
+
+
+    async def _prepare_one(
+        self,
+        mod: dict[str, str],
+    ) -> PluginGeneration | None:
+        """准备当前安装输入，不导入或挂载插件代码。"""
+        plugin_id = _resolve_plugin_id(mod)
+        if plugin_choices(self._workspace, self._distribution.root).get(plugin_id, "@" not in plugin_id) is False:
+            return None
+        selection_ref = self._selection.read()
+        selected_ids = set() if selection_ref is None else {
+            self._selection.read_input(ref)["plugin_id"] for ref in self._selection_components(selection_ref)
+        }
+        prepared = await run_file_io(lambda: prepare_plugin_input(
+            mod, workspace=self._workspace, selection=self._selection, initial=plugin_id not in selected_ids,
+        ))
+        plugin_id = prepared.plugin_id
+        # 1. Preparation owns only the returned generation; no candidate Root is built.
+        namespace = secrets.token_hex(12)
+        module_path = f"_akashic_input_{namespace}"
+        generation_id = f"{plugin_id}:input:{namespace}"
+        scope = PluginScope(plugin_id, generation_id=generation_id)
+        source = PluginGeneration(
+            plugin_id=plugin_id, generation_id=generation_id, module_path=module_path,
+            source_revision=prepared.source_revision, config_revision=prepared.config_revision,
+            runtime_revision=prepared.runtime_revision,
+            plugin_dir=prepared.plugin_dir, data_dir=prepared.data_dir, instance=None, scope=scope,
+            config_projection=prepared.config, input_ref=prepared.input_ref,
+            static_manifest=prepared.static_manifest,
+            code_dir_path=prepared.code_dir, source_type=prepared.source_type,
+            state="prepared",
+        )
+        return source
+
+
+    def _selected_generations(
+        self,
+        components: tuple[str, ...],
+        root: CompositionRoot,
+        *,
+        workspace: Path,
+        sources: Mapping[str, PluginGeneration],
+        register_live: bool = True,
+    ) -> dict[str, PluginGeneration]:
+        """从固定输入创建只属于当前 Root 的模块、Scope 和 generation。"""
+
+        records = tuple(self._selection.read_input(ref) for ref in components)
+        for record in records:
+            if record["version"] not in {5, 6} or record["runtime"] != {
+                "python_tag": sys.implementation.cache_tag,
+                "binding_api": PLUGIN_INPUT_API,
+            }:
+                raise RuntimeError("插件选择格式或运行合同不兼容；请显式升级选择或重新安装")
+        generations: dict[str, PluginGeneration] = {}
+        namespace = secrets.token_hex(12)
+        for index, (ref, record) in enumerate(zip(components, records, strict=True)):
+            code_dir = Path(cast(str, record["code"])).resolve(strict=True)
+            is_distribution_input(record, code_dir)
+            revision, runtime_revision = source_revisions(code_dir)
+            plugin_id = cast(str, record["plugin_id"])
+            if plugin_id in generations:
+                raise ValueError(f"选择重复包含插件: {plugin_id}")
+            source = sources.get(plugin_id)
+            data_dir = workspace / cast(str, record["data_dir"])
+            validate_workspace_plugin_data_path(data_dir, workspace)
+            module_path = f"_akashic_plugin_{namespace}_{index}"
+            generation_id = f"{plugin_id}:{namespace}:{index}"
+            scope = PluginScope(plugin_id, generation_id=generation_id)
+            manifest = load_static_plugin_manifest(code_dir)
+            if manifest.name != plugin_id.split("@", 1)[0]:
+                raise ValueError(f"已安装插件身份改变: {plugin_id}")
+            projection, config_revision = load_config(data_dir)
+            defaults = code_dir / "initial_config.json"
+            if not (data_dir / CONFIG_INPUT).exists() and defaults.exists():
+                if defaults.is_symlink():
+                    raise ValueError("初始配置不能是符号链接")
+                projection = json.loads(defaults.read_bytes())
+                if not isinstance(projection, dict):
+                    raise ValueError("初始配置必须是映射")
+                config_revision = hashlib.sha256(config_bytes(projection)).hexdigest()
+            generation = PluginGeneration(
+                plugin_id=plugin_id, generation_id=generation_id, module_path=module_path,
+                source_revision=revision, config_revision=config_revision,
+                runtime_revision=runtime_revision,
+                plugin_dir=code_dir if source is None else source.plugin_dir,
+                data_dir=data_dir, config_projection=cast(dict[str, object], projection),
+                instance=None, scope=scope,
+                static_manifest=manifest,
+                source_type=cast(Literal["builtin", "installed"], record["source_type"]),
+                input_ref=ref,
+                code_dir_path=code_dir,
+                state="prepared",
+            )
+            generations[plugin_id] = generation
+            if register_live:
+                existing = self._active_generations.get(plugin_id)
+                if existing is not None and existing is not generation:
+                    raise RuntimeError(f"live generation owner 已存在: {plugin_id}")
+                self._active_generations[plugin_id] = generation
+                self._building_roots[root] = tuple(generations.values())
+        return generations
+
+    @staticmethod
+    def _generation_input_ref(generation: PluginGeneration) -> str:
+        if generation.input_ref is None:
+            raise RuntimeError(f"插件缺少当前输入身份: {generation.plugin_id}")
+        return generation.input_ref
+
+
+    async def _close_building_root(self, root: CompositionRoot) -> None:
+        """关闭成功才解除构建 owner，调用者取消仍等待真实清理结束。"""
+
+        async def close() -> None:
+            await root.dispose()
+            # Root.dispose 自己合并并发关闭；各等待者确认同一成功结果。
+            self._building_roots.pop(root, None)
+
+        try:
+            _, cancelled = await _complete_critical(close())
+        except BaseException as error:
+            operation = current_operation.get()
+            if operation is not None and operation.revoked and isinstance(error, Exception):
+                raise BaseExceptionGroup(
+                    "Root 清理期间调用者取消且清理失败",
+                    [asyncio.CancelledError(), error],
+                ) from None
+            raise
+        if cancelled:
+            raise asyncio.CancelledError
+
+
+    async def _provide_composition_services(self, root: CompositionRoot, mount_order: tuple[PluginGeneration, ...]) -> None:
+        """把固定安装事实和宿主输入交给装配层，不解释产品 Service。"""
+        self._live_execution_access, self._live_credentials = await provide_host_services(
+            root, mount_order, boot_id=self._host_boot_id,
+            resolve_command=self._resolve_runtime_command,
+            runtime_generations=lambda: (self._active_generations, self._draining_generations),
+            runtime_updating=lambda: self._operation is not None and not self._operation.task.done(),
+            live_root=lambda: self._live_root, installer=self,
+            tasks=self._plugin_tasks,
+            restart_gate=self._restart_gate,
+            host_ready=self._host_ready,
+        )
+
+
+    async def _mount_generation_composition(
+        self,
+        root: CompositionRoot,
+        generation: PluginGeneration,
+    ) -> None:
+        """用 generation 自己的正式 runtime 挂载一个 v3 插件。"""
+
+        plugin = cast(ComposablePlugin, generation.instance)
+        workspace = self._workspace
+        for name in plugin.workspace_roots:
+            _ = resolve_declared_workspace_root(workspace, name)
+        for name in plugin.workspace_files:
+            _ = resolve_declared_workspace_file(workspace, name)
+        try:
+            generation.fiber = await root._mount_module(  # pyright: ignore[reportPrivateUsage]
+                plugin.apply,
+                name=generation.plugin_id,
+                inject=plugin.inject,
+                plugin_module=plugin.module,
+                runtime=PluginRuntime(
+                    plugin_id=generation.plugin_id,
+                    generation_id=generation.generation_id,
+                    plugin_dir=generation.code_dir,
+                    data_dir=generation.data_dir,
+                    workspace=workspace,
+                    config=copy.deepcopy(generation.config_projection),
+                    workspace_roots=plugin.workspace_roots,
+                    workspace_files=plugin.workspace_files,
+                ),
+            )
+        except BaseException:
+            # Keep the exact runtime-identified Fiber if the kernel retained it.
+            generation.fiber = next(
+                (
+                    fiber for fiber in root.fibers()
+                    if fiber.runtime is not None
+                    and fiber.runtime.plugin_id == generation.plugin_id
+                    and fiber.runtime.generation_id == generation.generation_id
+                ),
+                None,
+            )
+            raise
+
+
+    def _resolve_runtime_command(
+        self,
+        generation: PluginGeneration,
+        command: tuple[str, ...],
+        cwd: str,
+    ) -> tuple[str, ...]:
+        """把命令指向安装固定的环境，不重新验收已发布材料。"""
+        manifest = generation.static_manifest
+        runtimes = () if manifest is None else manifest.python
+        runtime_root = command_python_runtime(generation.code_dir, command, cwd, runtimes)
+        environment = None
+        if runtime_root is not None:
+            if generation.input_ref is None:
+                raise RuntimeError("外部 runtime 缺少代码归档")
+            record = self._selection.read_input(generation.input_ref)
+            refs = cast(Mapping[str, str], record["python_environments"])
+            if runtime_root not in refs:
+                raise RuntimeError("插件命令缺少固定 Python 环境；请通过安装流程准备")
+            environment = self._python_environments.open(refs[runtime_root])
+        return materialize_command(
+            generation.code_dir, runtimes, command, cwd, environment_root=environment
+        )
+
+    def _record_root_failure(
+        self,
+        generation: PluginGeneration,
+        error: BaseException,
+        *,
+        resource: str = "root",
+        formal_effects: tuple[str, ...],
+        recovery_target: RecoveryTarget | None = None,
+    ) -> None:
+        """Persist one executable runtime failure without releasing its owner."""
+
+        tx_id = self._ensure_runtime_recovery_transaction(generation)
+        self._reload_journal.annotate(tx_id, {
+            "event": "runtime_failure_owner",
+            "runtime_generation_id": generation.generation_id,
+        })
+        action: RecoveryActionName = (
+            "retry_generation_cleanup" if resource == "generation-cleanup"
+            else "retry_runtime_recovery"
+        )
+        phase: ReloadPhase = "degraded" if action == "retry_runtime_recovery" else "cleanup_failed"
+        failure_resource = f"{resource}:{generation.generation_id}"
+        failure_error = str(error) or type(error).__name__
+        self._reload_journal.advance(
+            tx_id,
+            phase,
+            error=failure_error,
+            resource=failure_resource,
+            formal_effects=formal_effects,
+            recovery_action=action,
+            recovery_target=(
+                recovery_target
+                if recovery_target is not None
+                else self._composition_recovery_target(
+                    generation,
+                    tx_id=tx_id,
+                )
+            ),
+        )
+
+    def _ensure_runtime_recovery_transaction(
+        self,
+        generation: PluginGeneration,
+    ) -> str:
+        """Create a durable owner when cleanup fails outside an active reload."""
+
+        tx_id = generation.reload_tx_id
+        if tx_id is not None:
+            phase = self._reload_journal.get(tx_id).phase
+            if phase not in {"complete", "aborted", "recovered"}:
+                return tx_id
+
+        # Persist the actual generation and boot owner; selection is unchanged.
+        base_generation = self._active_generations.get(generation.plugin_id)
+        tx_id = self._reload_journal.begin(
+            plugin_id=generation.plugin_id,
+            base_snapshot_id=None,
+            base_generation_id=(
+                None if base_generation is None else base_generation.generation_id
+            ),
+            generation_id=generation.generation_id,
+            source_revision=generation.source_revision,
+            config_revision=generation.config_revision,
+            details={"base_selection_ref": self._selection.read()},
+        )
+        generation.reload_tx_id = tx_id
+        boot_id = os.environ.get("AKASHIC_BOOT_ID", "").strip()
+        if boot_id:
+            self._reload_journal.mark_runtime_owner(tx_id, boot_id)
+        return tx_id
+
+    def _composition_recovery_target(
+        self, generation: PluginGeneration, *, tx_id: str | None = None,
+    ) -> RecoveryTarget:
+        """仅用于故障诊断；恢复输入始终从唯一完整 selection 读取。"""
+        ref = self._selection.read()
+        if ref is not None and generation.input_ref in self._selection_components(ref):
+            return "candidate"
+        return "base"
+
+
+    def _import_plugin(self, module_name: str, plugin_root: Path) -> None:
+        """只从固定制品根导入普通 plugin.py，不接受入口别名。"""
+        path = plugin_root / "plugin.py"
+        if path.is_symlink() or not path.is_file():
+            raise ValueError(f"插件 plugin.py 必须是普通文件: {path}")
+        self._fresh_importer.register(module_name, plugin_root)
+        spec = self._fresh_importer.root_spec(module_name, path)
+        if spec is None or spec.loader is None:
+            self._fresh_importer.unregister(module_name)
+            raise ImportError(f"无法加载插件文件: {path}")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
+        # 调用者已在导入前登记 Root cleanup；异常时不能越过 Scope 卸载模块。
+        spec.loader.exec_module(module)  # type: ignore[union-attr]
+        if module.__file__ is None or Path(module.__file__).resolve(strict=True) != path.resolve(strict=True):
+            raise RuntimeError("插件 module 文件与固定制品 plugin.py 不一致")
+
+    def _remove_module_tree(self, module_name: str) -> None:
+        self._fresh_importer.unregister(module_name)
+        for imported_name in tuple(sys.modules):
+            if imported_name == module_name or imported_name.startswith(
+                f"{module_name}."
+            ):
+                _ = sys.modules.pop(imported_name, None)
+
+    async def terminate_all(self) -> None:
+        """同步撤销当前操作，再有限等待同一次全量关闭；超时仍保留任务。"""
+        deadline = asyncio.get_running_loop().time() + self.POST_PUBLISH_TIMEOUT_SECONDS
+        operation = self._begin_termination(deadline=deadline)
+        await observe_operation(operation, deadline=deadline, cancel=False)
+
+    def _begin_termination(self, *, deadline: float | None = None) -> ManagerOperation:
+        """停止接纳并交接唯一 owner；重复调用返回同一关闭任务。"""
+        previous = self._operation
+        if previous is not None and current_operation.get() is previous and not previous.task.done():
+            raise RuntimeError("cleanup 不能等待其所属 PluginManager 操作")
+        if self._stopping and previous is not None and previous.task.done():
+            if not previous.task.cancelled() and previous.task.exception() is None:
+                return previous
+        if deadline is None:
+            deadline = asyncio.get_running_loop().time() + self.POST_PUBLISH_TIMEOUT_SECONDS
+        if not self._stopping or previous is None or previous.task.done():
+            # 停止标记与撤销之间没有 await；旧操作从此不能提交或重开接纳。
+            self._stopping = True
+            if previous is not None:
+                previous.revoke()
+            operation = ManagerOperation(deadline)
+            self._operation = operation
+            operation.task = asyncio.create_task(
+                run_operation(operation, lambda: self._finish_termination(previous)),
+                name="plugin-manager-terminate",
+            )
+            operation.task.add_done_callback(self._operation_finished)
+        else:
+            operation = previous
+        return operation
+
+    async def _finish_termination(self, previous: ManagerOperation | None) -> None:
+        """关闭任务持有原操作，等实际工作结束后才接管资源。"""
+        if previous is not None and not previous.task.done():
+            # 不再次 cancel；此前的关闭或不可取消线程仍沿原调用栈结束。
+            await asyncio.wait((previous.task,))
+        await self._terminate_all()
+
+    async def _terminate_all(self) -> None:
+        """Close the one live Root and each retained resource owner."""
+
+        # The shutdown task owns all resources after the previous operation exits.
+        externally_cancelled = False
+        live_root = self._live_root
+        for generation in tuple(reversed(tuple(self._active_generations.values()))):
+            _, cancelled = await _complete_critical(
+                self._dispose_generation(generation, state="retired")
+            )
+            externally_cancelled = externally_cancelled or cancelled
+        for generations in tuple(self._draining_generations.values()):
+            for generation in tuple(generations):
+                _, cancelled = await _complete_critical(
+                    self._dispose_generation(generation, state="retired")
+                )
+                externally_cancelled = externally_cancelled or cancelled
+        _, cancelled = await _complete_critical(self._plugin_tasks.close())
+        externally_cancelled = externally_cancelled or cancelled
+        if live_root is not None:
+            _, cancelled = await _complete_critical(live_root.dispose())
+            externally_cancelled = externally_cancelled or cancelled
+            self._live_root = None
+            self._live_execution_access = None
+            self._live_credentials = None
+        # An unfinished Root build retains its exact cleanup owner.
+        for root in tuple(self._building_roots):
+            await self._close_building_root(root)
+        # A failed cleanup remains in the drain map for an explicit retry.
+        for tracked in tuple(self._draining_generations.values()):
+            for generation in tuple(tracked):
+                _, cancelled = await _complete_critical(
+                    self._dispose_generation(generation, state="retired")
+                )
+                externally_cancelled = externally_cancelled or cancelled
+        if externally_cancelled:
+            raise asyncio.CancelledError
+
+
+def _plugins_home(installed_cache_root: Path | None) -> Path:
+    if installed_cache_root is not None:
+        return installed_cache_root.parent
+    return plugins_root()
+
+
+def _source_failure_key(failure: PluginSourceFailure) -> str:
+    """Key one source diagnostic by normalized root and source kind."""
+    return _source_failure_key_for_root(failure.source_root, failure.source_type)
+
+
+def _source_failure_key_for_root(
+    source_root: Path,
+    source_type: Literal["builtin", "installed"],
+) -> str:
+    """Build a diagnostic key without fabricating a failure record."""
+    return f"{source_type}:{source_root.resolve(strict=False)}"
+
+
+def _source_failure_key_for_mod(mod: Mapping[str, str]) -> str:
+    """Build the diagnostic key used by a discovered source module."""
+    return _source_failure_key_for_root(
+        Path(mod["plugin_root"]).resolve(strict=False),
+        cast(Literal["builtin", "installed"], mod["source_type"]),
+    )
+
+
+def _source_metadata_revision(plugin_dir: Path) -> bytes:
+    """按原顺序读取当前文件元数据，不为每个条目构造 Path。"""
+    digest = hashlib.sha256()
+    excluded = SOURCE_EXCLUDED_NAMES
+    for current, directories, filenames in os.walk(plugin_dir, followlinks=False):
+        directories[:] = sorted(name for name in directories if name not in excluded)
+        relative_dir = os.path.relpath(current, plugin_dir)
+        for name in [*directories, *sorted(filenames)]:
+            if name in excluded:
+                continue
+            path = os.path.join(current, name)
+            relative = name if relative_dir == "." else os.path.join(relative_dir, name)
+            try:
+                metadata = os.lstat(path)
+            except FileNotFoundError:
+                continue
+            digest.update(relative.encode())
+            digest.update(str(metadata.st_mtime_ns).encode())
+            digest.update(str(metadata.st_size).encode())
+            if stat.S_ISLNK(metadata.st_mode):
+                digest.update(os.readlink(path).encode())
+    return digest.digest()
+
+
+def _path_metadata(path: Path) -> bytes:
+    try:
+        stat = path.stat()
+    except FileNotFoundError:
+        return f"{path}:missing".encode()
+    return f"{path}:{stat.st_mtime_ns}:{stat.st_size}".encode()

@@ -1,0 +1,8 @@
+# Preserve existing EOF blanks in byte-pinned upstream sources.
+core/common/file_io.py whitespace=-blank-at-eof
+frontend/chat/src/message-view.tsx whitespace=-blank-at-eof
+plugins/host_execution/controller_access.py whitespace=-blank-at-eof
+plugins/ledger/admissions.py whitespace=-blank-at-eof
+plugins/ledger/bindings.py whitespace=-blank-at-eof
+plugins/scheduler/schedule.py whitespace=-blank-at-eof
+plugins/working_directory/contract.py whitespace=-blank-at-eof

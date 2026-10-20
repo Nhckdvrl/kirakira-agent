@@ -1,0 +1,232 @@
+from collections.abc import Awaitable, Callable, Mapping
+from contextlib import ExitStack
+from functools import partial
+from typing import cast
+from core.common.file_io import run_file_io
+from core.common.diagnostic_log import log_timing
+
+from agent.plugin_composition import Context
+from plugins.ui.contract import hidden_part, part_display_key
+from plugins.ledger.contract import ARTIFACT_READ
+from plugins.ledger.contract import BINDINGS
+from plugins.channels.contract import CHANNEL_STEER, ChannelInboundMessage, InputPartRejected, read_input_parts
+from plugins.commands.contract import COMMANDS
+from plugins.ledger.contract import (
+    MESSAGE_CATALOG,
+    MESSAGE_WRITERS,
+    OWNER_STATE,
+    SESSION_ADMISSION,
+    MessageConflict,
+    MessageReader,
+    SessionAttributes,
+)
+from agent.plugin_composition.tasks import (
+    RESTART_GATE,
+    TASKS,
+    Task,
+)
+from plugins.ledger.contract import (
+    ContentPart,
+    ContentReferences,
+    Control,
+    Input,
+    Message,
+    Output,
+)
+from plugins.conversation.contract import (
+    CHECK_ORIGIN as CHECK_ORIGIN,
+    CONVERSATION_COMPLETE_V2 as CONVERSATION_COMPLETE,
+    CONVERSATION_STEER,
+    ConversationCompleteV2 as ConversationComplete,
+    input_part_key,
+)
+from plugins.sources.contract import (
+    SOURCE_CHANGED_V3 as SOURCE_CHANGED,
+    SOURCE_SESSION_V4 as SOURCE_SESSION,
+    SOURCES_V5 as SOURCES,
+    CompletionProgram,
+    SessionFactoryV4 as SessionFactory,
+    SourceChangedV3 as SourceChanged,
+    GuardedSourceSession as SourceSession,
+)
+
+from .commands import CONTENT, CONVERSATION_COMMANDS, SOURCE_CHECK, run_commands
+from .steer import Steers
+
+api_version = 3
+name = "conversation"
+version = "1.0.0"
+desc = "接纳和控制同一来源的消息，程序由调用者另行选择"
+inject = (
+    BINDINGS, OWNER_STATE, TASKS, ARTIFACT_READ, COMMANDS, CONTENT, SOURCE_CHECK,
+    MESSAGE_WRITERS, SESSION_ADMISSION, SOURCES, SOURCE_SESSION, RESTART_GATE,
+    MESSAGE_CATALOG,
+)
+
+
+async def apply(ctx: Context) -> None:
+    """接纳同一来源的输入与控制；客户端片段的校验和由它派生的会话状态都归片段 owner。"""
+    def changed(reader: MessageReader, source: str, pending: bool) -> None:
+        ctx.emit(SOURCE_CHANGED, SourceChanged(reader, source, pending))
+
+    def open(session_id: str, extra: Mapping[str, Callable[[ContentPart], ContentReferences]] | None = None) -> SourceSession:
+        def check_reply_target(part: ContentPart) -> ContentReferences:
+            references = check_reply(part)
+            target = ctx.require(MESSAGE_CATALOG).reader(session_id).get(cast(str, part.value))
+            if target is None or not isinstance(target.body, (Input, Output)):
+                raise MessageConflict("引用目标不是当前 Session 的 Input 或 Output")
+            return references
+
+        writers = ctx.require(MESSAGE_WRITERS)
+        inputs = writers.bind(
+            ctx, author="user", source="conversation", body_types=(Input,),
+            content={"text": ctx.require(CONTENT).check_text, "artifact_ref": ctx.require(CONTENT).check_artifact, "channel.origin": check_origin,
+                     "reply_ref": check_reply_target, **(extra or {})},
+            part_metadata=True,
+        )
+        controls = writers.bind(
+            ctx, author="app", source="conversation", body_types=(Control,), content={},
+        )
+        return ctx.require(SOURCE_SESSION)(
+            reader=ctx.require(MESSAGE_CATALOG).reader(session_id),
+            inputs=inputs(session_id), controls=controls(session_id),
+            tasks=ctx.require(TASKS).open(ctx), changed=changed,
+            restart_gate=ctx.require(RESTART_GATE),
+        )
+
+    # 前端只读了末尾一页时用 RETRY_LATEST_INPUT 指代最新输入；resume 仍会核对它就是最新且等待恢复。
+    def latest_input_id(session_id: str) -> str:
+        reader = ctx.require(MESSAGE_CATALOG).reader(session_id)
+        with reader.read_snapshot():
+            latest = reader.latest_input("conversation", through_seq=reader.head())
+        if latest is None:
+            raise ValueError("没有可重试的输入")
+        return latest.message_id
+
+    async def accept(session_id: str, message_id: str, message: ChannelInboundMessage) -> Message:
+        log_timing("input.received", session_id=session_id, request_id=message_id)
+        command = message.content.strip().split(maxsplit=1)
+        if command and command[0].split("@", 1)[0].lower() == "/stop":
+            return await open(session_id).pause(message_id)
+        retry = message.metadata.get("retry_of_client_message_id")
+        if retry is not None:
+            if not isinstance(retry, str) or not retry:
+                raise ValueError("重试必须引用已有 Input")
+            if retry == RETRY_LATEST_INPUT:
+                retry = await run_file_io(lambda: latest_input_id(session_id))
+            return await open(session_id).resume(message_id, retry)
+        # 1. 每条首次输入都接纳 Session；省略维度的续聊保留已有固定属性。
+        dimensions = session_dimensions(message.metadata)
+        catalog = ctx.require(MESSAGE_CATALOG)
+        reader = catalog.reader(session_id)
+
+        def initial_attributes() -> SessionAttributes:
+            with reader.read_snapshot():
+                return reader.attributes if catalog.exists(session_id) else SessionAttributes()
+
+        attributes = SessionAttributes.scoped(dimensions) if dimensions else await run_file_io(initial_attributes)
+        _ = await ctx.require(SESSION_ADMISSION).ensure_async(ctx, session_id, attributes)
+        # 2. 来源只核验已发布附件，不接管传输 lease 或派生另一份元数据。
+        if message.attachments:
+            artifacts = ctx.require(ARTIFACT_READ)
+            for ref in message.attachments:
+                lease = await artifacts.acquire(ref)
+                await lease.aclose()
+        parts = (
+            origin_part(message),
+            ContentPart("text", message.content),
+            *(ContentPart("artifact_ref", ref.artifact_id) for ref in message.attachments),
+        )
+        reply = message.metadata.get("reply_to_message_id")
+        if reply is not None:
+            parts += (ContentPart("reply_ref", reply),)
+        # 3. 客户端附带的片段交给声明了该 kind 的 owner 校验；Input 与全部引用原子提交，传输时间、handoff 和重复 ID 不进入正文。
+        #    owner 缺席时只拒收新内容：账本先核对同一 message_id 的不可变内容，已提交输入仍能重放收据。
+        with ExitStack() as scopes:
+            extra: dict[str, Callable[[ContentPart], ContentReferences]] = {}
+            for kind, value in read_input_parts(message.metadata.get("input_parts")):
+                if kind in OWN_INPUT_KINDS:
+                    raise InputPartRejected(f"输入片段 {kind} 只能由来源自己写入")
+                check = scopes.enter_context(ctx.borrow(input_part_key(kind)))
+                extra[kind] = partial(reject_input_part, kind) if check is None else partial(check, reader=reader)
+                parts += (ContentPart(kind, value),)
+            accepted = await open(session_id, extra).accept(message_id, Input(parts))
+        log_timing("input.committed", session_id=session_id, request_id=message_id, counts={"seq": accepted.seq})
+        return accepted
+
+    @ctx.entrypoint
+    async def command(task: Task, reader: MessageReader, source: str) -> Message | None:
+        return await run_commands(ctx, task, reader, source)
+
+    @ctx.entrypoint
+    async def complete(
+        session_id: str, program: CompletionProgram,
+    ) -> Message:
+        return await open(session_id).complete(program)
+
+    _ = await ctx.provide(CHECK_ORIGIN, check_origin)
+    # 自己写入的内部材料不进聊天正文；宿主不维护按插件列举的隐藏名单。
+    for kind in ("channel.origin", "command.result"):
+        _ = await ctx.provide(part_display_key(kind), hidden_part)
+    _ = await ctx.provide(CONVERSATION_COMMANDS, command)
+    _ = await ctx.provide(CONVERSATION_COMPLETE, complete)
+    steers = Steers(
+        open_session=open,
+        accept=accept, body=lambda message: Input((origin_part(message), ContentPart("text", message.content))),
+        scope=ctx.runtime_scope,
+    )
+    _ = await ctx.spawn(steers.run(), name="conversation-steers")
+    _ = await ctx.provide(CONVERSATION_STEER, steers)
+    _ = await ctx.provide(CHANNEL_STEER, steers)
+    _ = await ctx.require(SOURCES).register(ctx, name="conversation", open=open, accept=accept, channels=None,
+        needs_reply=lambda reader: ctx.require(SOURCE_SESSION).needs_reply(reader, "conversation"))
+
+
+# 与前端 message-timeline.ts 的 RETRY_LATEST_INPUT 一致。
+RETRY_LATEST_INPUT = "latest"
+
+# 渠道来源只记录回传地址，不进入模型正文。
+def origin_part(message: ChannelInboundMessage) -> ContentPart:
+    return ContentPart("channel.origin", {
+        "channel": message.channel, "chat_id": message.chat_id, "sender": message.sender,
+    })
+
+
+def reject_input_part(kind: str, part: ContentPart) -> ContentReferences:
+    raise InputPartRejected(f"没有插件接收输入片段: {kind}")
+
+
+# 来源自己写入的片段不能由客户端冒充。
+OWN_INPUT_KINDS = frozenset({"text", "artifact_ref", "channel.origin", "reply_ref", "command.result"})
+
+
+def check_origin(part: ContentPart) -> ContentReferences:
+    """来源保存原始传输事实；metadata 不获得 source、角色或路由覆盖权。"""
+    raw_value = part.value
+    if not isinstance(raw_value, Mapping):
+        raise ValueError("channel.origin 必须是对象")
+    value = cast(Mapping[str, object], raw_value)
+    if set(value) != {"channel", "chat_id", "sender"} or any(
+        not isinstance(item, str) or not item for item in value.values()
+    ):
+        raise ValueError("channel.origin 身份无效")
+    return ContentReferences()
+
+
+def session_dimensions(metadata: Mapping[str, object]) -> dict[str, str]:
+    """传输只携带维度声明；取值合法性由各维度 owner 在接纳时校验。"""
+    raw = metadata.get("session_dimensions")
+    if raw is None:
+        return {}
+    if not isinstance(raw, Mapping):
+        raise ValueError("session_dimensions 必须是对象")
+    dimensions = cast(Mapping[object, object], raw)
+    if any(not isinstance(key, str) or not isinstance(value, str) for key, value in dimensions.items()):
+        raise ValueError("session_dimensions 只能包含字符串")
+    return {cast(str, key): cast(str, value) for key, value in dimensions.items()}
+
+
+def check_reply(part: ContentPart) -> ContentReferences:
+    if not isinstance(part.value, str) or not part.value:
+        raise ValueError("reply_ref 必须是目标 message_id")
+    return ContentReferences()

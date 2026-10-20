@@ -1,0 +1,144 @@
+{
+  "billing_surface": "step_plan",
+  "model": "step-5-preview",
+  "workspace": "/tmp/kn-full-architecture-r10",
+  "cases": [
+    {
+      "name": "native_reply",
+      "passed": true,
+      "detail": {
+        "answer": "BASIC_495ff63821"
+      },
+      "duration_s": 4.06
+    },
+    {
+      "name": "bound_file_roundtrip",
+      "passed": true,
+      "detail": {
+        "answer": "\u5199\u597d\u4e86\uff0c\u8bfb\u56de\u6765\u4e5f\u5bf9\u4e0a\u4e86\uff0c\u4e00\u884c\u5185\u5bb9\u5c31\u662f `FILE_495ff63821`\u3002\n\ntoken\uff1a**FILE_495ff63821**",
+        "facts": 6
+      },
+      "duration_s": 9.665
+    },
+    {
+      "name": "managed_process_mcp",
+      "passed": true,
+      "detail": {
+        "answer": "value: MCP_495ff63821\nmanaged_pid: 2539828",
+        "results": 1
+      },
+      "duration_s": 3.737
+    },
+    {
+      "name": "native_shell",
+      "passed": true,
+      "detail": {
+        "answer": "stdout\uff1a`SHELL_495ff63821`"
+      },
+      "duration_s": 5.924
+    },
+    {
+      "name": "tool_error_repair",
+      "passed": true,
+      "detail": {
+        "answer": "\u8bfb\u6587\u4ef6\u786e\u5b9e\u62a5\u9519\uff1a\u6587\u4ef6\u4e0d\u5b58\u5728\u3002\n\nnative_probe \u8fd4\u56de\u4e86\uff1a\n- value: REPAIRED_495ff63821\n- ready: true\n- managed_pid: 2539828\n- python: 3.14.6\n\n\u5c31\u8fd9\u4e9b\u3002"
+      },
+      "duration_s": 5.791
+    },
+    {
+      "name": "native_subagent",
+      "passed": true,
+      "detail": {
+        "answer": "\u5b50\u4efb\u52a1\u5df2\u5b8c\u6210\u3002\n\n\u7ed3\u679c\uff1aCHILD_495ff63821\n\n\u9000\u51fa\u539f\u56e0\uff1acompleted",
+        "child_sessions": [
+          "subagent:fd7c13d32fce459980710621ec275cb2"
+        ]
+      },
+      "duration_s": 6.602
+    },
+    {
+      "name": "driver_local_reload",
+      "passed": true,
+      "detail": {
+        "answer": "RELOADED_495ff63821",
+        "same_root": true
+      },
+      "duration_s": 4.685
+    },
+    {
+      "name": "task_bound_steer_withdraw",
+      "passed": true,
+      "detail": {
+        "answer": "\u8c03\u7528\u8fd4\u56de\uff1a`value` \u662f ORIGINAL_495ff63821\uff0c`ready` \u4e3a true\uff0c`managed_pid` 2539828\uff0c`python` \u7248\u672c [3, 14, 6]\u3002\n\nSTEER_495ff63821",
+        "accepted_inputs": 2
+      },
+      "duration_s": 11.412
+    },
+    {
+      "name": "source_pause_resume_no_effect_replay",
+      "passed": true,
+      "detail": {
+        "answer": "\u5199\u597d\u4e86\uff0c/tmp/kn-full-architecture-r10/resume-proof.txt\uff0c\u5185\u5bb9\u662f\uff1a\n\nONCE_495ff63821\n\n\u53ea\u5199\u4e86\u4e00\u6b21\uff0c\u8bfb\u56de\u6765\u6838\u5bf9\u8fc7\uff0c\u4e00\u81f4\u3002",
+        "write_effects": 1,
+        "tool_results": 2
+      },
+      "duration_s": 14.871
+    },
+    {
+      "name": "new_input_revokes_old_source_task",
+      "passed": true,
+      "detail": {
+        "answer": "SUPERSEDE_495ff63821\n\n\u7528\u7684\u662f\u521a\u624d\u90a3\u6b21 pending \u7684\u7ed3\u679c\uff1avalue \u4e3a FIRST_495ff63821\uff0cready \u4e3a true\uff0cmanaged_pid 2539828\uff0cPython 3.14.6\u3002\u6ca1\u6709\u518d\u8c03\u4e00\u6b21\u3002",
+        "effect_results": 1
+      },
+      "duration_s": 10.308
+    },
+    {
+      "name": "immutable_attachment_projection",
+      "passed": true,
+      "detail": {
+        "answer": "ATTACHMENT_495ff63821",
+        "artifact_id": "8bd81a33e9a14b1c8f9d22bbcb2be421"
+      },
+      "duration_s": 5.779
+    },
+    {
+      "name": "scheduler_native_source_delivery",
+      "passed": true,
+      "detail": {
+        "answer": "TIMER_495ff63821",
+        "created_jobs": 1,
+        "delivered_fires": 1,
+        "source": "scheduler:5ffaea0abbe1e575932f93e5aedc79400e64fb06d80aa6273a0b07c6f9028c65",
+        "parent_reasoning_effort": "medium"
+      },
+      "duration_s": 28.342
+    },
+    {
+      "name": "restart_reuses_native_history",
+      "passed": true,
+      "detail": {
+        "answer": "\u8bfb\u5230\u4e86\uff0c\u6587\u4ef6\u91cc\u5c31\u4e00\u884c\uff1a**FILE_495ff63821**"
+      },
+      "duration_s": 8.788
+    }
+  ],
+  "summary": {
+    "passed": 13,
+    "total": 13,
+    "python": "3.14.6",
+    "recorded_business_model_calls": 29,
+    "model_states": {
+      "success": 29
+    },
+    "driver_ids": [
+      "step-plan"
+    ],
+    "endpoints": [
+      "https://api.stepfun.com/step_plan/v1"
+    ],
+    "input_tokens": 199691,
+    "output_tokens": 2017,
+    "coverage": "native Models business-call ledger; connection/model setup probes are additional calls"
+  }
+}

@@ -1,0 +1,89 @@
+from __future__ import annotations
+
+from functools import partial
+
+import asyncio
+from collections.abc import Mapping
+
+from agent.plugin_composition import Context
+from plugins.ledger.contract import MESSAGE_WRITERS, MessageReader
+from plugins.models.contract import ModelError
+from agent.plugin_composition.tasks import Task
+from plugins.ledger.contract import Control, Message
+from plugins.models.contract import (
+    MODEL_CONTENT as MODEL_CONTENT,
+    ModelContent as ModelContent,
+)
+from plugins.sources.contract import (
+    SOURCE_CHECK_V2 as SOURCE_CHECK,
+)
+from plugins.reply_program.contract import (
+    REPLY_EXECUTE_V4 as REPLY_EXECUTE,
+)
+
+from .messages import HINTS, render
+from .request import STAGE_TOOLS, Request, WakeFailure, read_phase
+
+
+async def run(ctx: Context, task: Task, reader: MessageReader, request: Request) -> Message:
+    """按归档程序和原工具运行一个真实阶段，已知失败也保存为普通 Control。"""
+    request = Request.model_validate(request.model_dump())
+    _, phase = read_phase(reader.snapshot(), request)
+    names = (tuple(name for name in request.tools if name != "screen_content")
+             if phase.stage == "investigate" else STAGE_TOOLS[phase.stage])
+    fixed = {name: request.tools[name] for name in names}
+
+    async def authorize(binding: str, arguments: Mapping[str, object]) -> Mapping[str, object] | str:
+        if binding not in fixed.values():
+            return 'Wake 原阶段未授予该工具'
+        return {"source": "wake", "session_id": request.session_id}
+
+    try:
+        return await ctx.require(REPLY_EXECUTE)(
+            ctx,
+            task,
+            reader,
+            "wake",
+            render_content=lambda part: render(
+                part,
+                fallback=lambda item: ctx.require(MODEL_CONTENT).render(item, artifacts={}),
+            ),
+            check_admission=partial(ctx.require(SOURCE_CHECK), task, reader, "wake", task.boundary_hint),
+            authorize=authorize,
+            tool_view=None,
+            fixed_bindings=fixed,
+            # 推理也占用输出预算，阶段不另设会截断工具决定的小上限。
+            max_output_tokens=0,
+            max_steps=(
+                3
+                if phase.stage == "screen"
+                else 1
+                if phase.stage == "alert"
+                else 20
+                if phase.stage == "investigate"
+                else 40
+            ),
+            terminal_tools=frozenset(
+                name for name in names if name in STAGE_TOOLS[phase.stage]
+            ),
+            exclude_material_kinds=(
+                frozenset({"recall", "profile"})
+                if phase.stage in {"investigate", "alert"}
+                else frozenset()
+            ),
+            prompt_hints=(HINTS[phase.stage],),
+        )
+    except (RuntimeError, TimeoutError) as error:
+        failure = ModelError.read(error)
+        if failure is None:
+            raise
+        reason = WakeFailure(message=str(error), retryable=failure.retryable).model_dump_json()
+    # 此处只结算本层已知的失败；未知工具效果和存储错误保持原事实并向上传播。
+    writer = ctx.require(MESSAGE_WRITERS).bind(ctx, author="wake", source="wake", body_types=(Control,), content={})(reader.session_id)
+    task.on_close(writer.expire)
+    try:
+        if not task.active:
+            raise asyncio.CancelledError
+        return await writer.append_async(request.phase_id(phase.stage) + ":failure", Control("failure", reader.head(source="wake"), reason))
+    finally:
+        writer.expire()

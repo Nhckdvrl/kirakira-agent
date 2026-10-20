@@ -1,0 +1,19 @@
+--- a/plugins/host_execution/shell_runtime.py
++++ b/plugins/host_execution/shell_runtime.py
+@@ -282,10 +282,16 @@
+     options = parts.get("options", b"").decode("utf-8", "replace")
+     if shell.kind is ShellKind.ZSH:
+         lines.extend(f"setopt {name} 2>/dev/null" for name in options.split() if name not in _ZSH_SKIP_OPTIONS)
++        # The function dump already contains parsed definitions. User functions
++        # can themselves define aliases, so expansion must stay off while later
++        # function names are parsed, then return to the captured option state.
++        lines.append("setopt no_aliases")
+     else:
+         lines.append(options)
+         lines.append("shopt -s expand_aliases")
+     lines.append(parts.get("functions", b"").decode("utf-8", "replace"))
++    if shell.kind is ShellKind.ZSH and "noaliases" not in options.split():
++        lines.append("setopt aliases")
+     lines.append(parts.get("aliases", b"").decode("utf-8", "replace"))
+     # 只导出 rc 新增或改动的变量，避免覆盖网关按调用设置的环境。
+     for entry in parts.get("env", b"").split(b"\0"):

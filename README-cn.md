@@ -1,231 +1,50 @@
-<p align="center">
-  <img src="./docs/assets/readme/kirakira-agent-icon.png" alt="Kirakira Agent 图标" width="96">
-</p>
+# Kirakira Agent
 
-<h1 align="center">Kirakira Agent</h1>
+具备主动交互和长期记忆的多渠道 Agent Runtime。
 
-<p align="center">
-  <strong>本地优先、可持续运行的多渠道 AI Agent Runtime</strong><br>
-  <sub>被动对话 · 主动执行 · Drift · 记忆 · 插件 · MCP</sub>
-</p>
+当前运行主干移植自 [Akashic Agent](https://github.com/kachofugetsu09/akashic-agent) 的
+`e1628ddc8a33c2840e5b4558ff3b66af207eec2a`，采用完整原生插件与执行架构。
+来源、文件摘要及许可证见 [UPSTREAM.json](UPSTREAM.json)、[THIRD_PARTY.md](THIRD_PARTY.md)。
 
-<p align="center">
-  <a href="./README-cn.md"><b>简体中文</b></a> ·
-  <a href="./README.md">English</a> ·
-  <a href="./docs/INDEX.md">文档</a>
-</p>
+消息接纳、来源任务、回复程序、模型、工具、记忆、主动交互、投递和界面由独立插件拥有。
+同一 CompositionRoot 负责 Context/Fiber/Effect 生命周期；Task 管理接纳、撤权与物理排空。
+Ledger 提供唯一消息事实、窄读写权限、同库 owner 事务与固定 provider bindings。
+工具执行使用 prepared 目标，支持本地进程、HostBridge、MCP、托管进程和可选 Workload controller。
 
-<p align="center">
-  <a href="https://github.com/Nhckdvrl/kirakira-agent/stargazers"><img src="https://img.shields.io/github/stars/Nhckdvrl/kirakira-agent?style=flat&color=f29ab2" alt="GitHub Stars"></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/github/license/Nhckdvrl/kirakira-agent?color=738bd7" alt="MIT License"></a>
-  <img src="https://img.shields.io/badge/Python-3.14.6-64a8df" alt="Python 3.14.6">
-  <img src="https://img.shields.io/badge/runtime-local--first-f2b84b" alt="Local-first runtime">
-</p>
+## 开始使用
 
-<p align="center">
-  <img src="./docs/assets/readme/kirakira-agent-hero.png" alt="Kirakira Agent：空舞台、乐器、星光与三条运行链" width="100%">
-</p>
+项目只使用 Python 3.14.6 和一个 `.venv`：
 
-## Kirakira 是什么
-
-Kirakira 是一个本地优先、多渠道的 AI Agent Runtime。它把被动对话、主动执行、长期记忆和空闲任务
-放在同一个可观测、可扩展的运行时中；会话和运行状态默认保存在本地 workspace。
-
-可选的事件记忆以完整原始对话为事实源，将精确语义召回与图式联想补全结合，恢复带日期和来源的
-跨会话经历。模型能沿 `source_ref` 展开原文上下文，核对人物、对象、关系和历史更正；学习只在
-对话提交后发生，显式召回不改写学习图。原子快照与固定向量重放支持长期运行后的恢复和重建。
-
-运行合同、部署范围与实际验证见[架构总览](docs/architecture/overview.md)、
-[当前状态](docs/status/current.md)和[验证记录](docs/operations/verification.md)。
-
-## 一分钟了解
-
-| 你关心的问题 | Kirakira 的做法 |
-| --- | --- |
-| Agent 如何工作 | 被动 Turn、Proactive 和 Drift 三条链共用模型、工具、记忆与 Channel |
-| 数据放在哪里 | Session、Memory、任务和运行轨迹默认保存在本地 workspace |
-| 如何操作不同仓库 | 项目提供一次性默认值；各 Session 独立 cwd，文件/Shell/子任务和实时仓库规则共用目录 owner |
-| 如何记住过去 | 精确回忆与联想补全协作，保留原文证据、稳定消息身份和可重放图状态 |
-| 如何扩展 | 用 Plugin、MCP、Skill、Tool 和 Proactive Source 增加能力 |
-| 如何控制上下文 | 完整历史持久化，旧历史滚动摘要，近 20k token 保留原文 |
-| 如何排查运行过程 | 保存 tool chain、context trace、token usage、tick 和 module step |
-| 模型是否绑定 | 通过 OpenAI-compatible 接口接入主模型、轻模型和独立 embedding 服务 |
-
-## 三条运行链
-
-```text
-用户消息 ─→ 被动 Turn ─→ 上下文投影 ─→ ReAct/工具 ─→ 提交 Session ─→ 渠道回复
-
-定时唤醒 ─→ Proactive Gate ─→ alert/content/context ─→ 判断 ─→ 投递或跳过
-                                                   └─ 无推送时进入 Drift
+```sh
+uv sync --frozen --group dev --extra providers
+uv run kirakira-agent init --workspace /absolute/path/to/workspace --profile headless
+uv run kirakira-agent configure-step-plan --workspace /absolute/path/to/workspace --key-file /private/path/step-plan.key
+uv run kirakira-agent gateway --config /absolute/path/to/workspace/config.toml --workspace /absolute/path/to/workspace
 ```
 
-- **被动回复**：同 session 串行、跨 session 并行；支持流式模型、工具、MCP、插件、长期
-  记忆、子 Agent、调度与中断。
-- **主动推送**：电量节流、三类数据源、冷却/去重、真实渠道 ACK、源反馈，以及每个 tick 和
-  module step 的持久运行轨迹。
-- **Drift**：主动轮次无内容可发时，读取用户的 `drift/skills/*/SKILL.md` 执行可持续后台任务。
+Step5 驱动固定使用 Step Token Plan 专用地址，不跟随重定向或回退其他计费路由。
+主配置只保留 `[runtime].workspace`，业务设置归各插件的数据目录。
+使用 `--profile web` 加入工作台，并运行 `npm ci && npm run build` 构建界面。
 
-## 快速开始
+旧 Kirakira 工作区需要显式导入新目录，原目录保留：
 
-统一使用 Python 3.14.6 与 [uv](https://docs.astral.sh/uv/)。版本由 `.python-version`
-固定，本地开发与 CI 共用同一 Python 版本和 `uv.lock`，所有项目命令使用项目内唯一的 `.venv`。
-
-```bash
-uv sync --frozen --group dev
-uv run python main.py setup    # 交互式初始化
-uv run python main.py init     # 非交互初始化
-uv run python main.py          # supervisor -> gateway
-uv run python main.py gateway  # 不经 supervisor 的调试入口
+```sh
+uv run python -m scripts.migrate_legacy_workspace --source /old/workspace --destination /new/workspace
 ```
 
-没有 `config.toml` 时，默认入口会自动进入初始化向导。旧公开入口继续兼容：
-
-```bash
-uv run python -m kirakira_agent --tui
-uv run python -m kirakira_agent --plain
-uv run python -m kirakira_agent --session research
-```
-
-DeepSeek 示例：
-
-```toml
-[llm.main]
-model = "deepseek-v4-flash"
-base_url = "https://api.deepseek.com/v1"
-api_key = "${DEEPSEEK_API_KEY}"
-context_window = 128000 # 按供应商公布值填写
-
-[agent]
-max_tokens = 8192
-max_iterations = 40
-
-[memory]
-enabled = true
-plugin = "akasha" # 可选 default / akasha；当前可继续使用 Akasha v1
-
-[memory.embedding]
-model = "text-embedding-v3"
-base_url = "${EMBEDDING_BASE_URL}"
-api_key = "${EMBEDDING_API_KEY}"
-```
-
-聊天端点通常不提供 embedding，因此记忆向量端点单独配置。
-
-## 当前已经承重的能力
-
-### 上下文治理
-
-- `sessions.db/messages` 是权威历史；正常保存只能追加，不能删除或覆盖旧消息。
-- 每次模型请求前都经过 compaction gate：74% 触发，hard limit 为 `context_window - max_tokens`。
-- 历史按完整 interaction unit 切分，旧单元进入滚动结构化摘要，最新至少 20k token 原文保留。
-- 上下文超长重试不会修改数据库；下一轮仍从完整持久历史重新投影。
-- 工具 schema、图片和输出预留进入同一预算；压缩不能丢掉仍在运行的 Shell 起点。
-- 每轮保存所选计划、各 section 大小、近似 token 估算和模型实际 usage。
-- usage 覆盖状态明确区分 `exact`、`partial`、`unavailable`，缺遥测不能伪装成 0。
-
-详见[上下文治理手册](docs/handbook/context.md)。
-
-### 工具、Shell 与子 Agent
-
-- 统一 Shell 生命周期支持前台/后台、PTY、`write_stdin`、增量输出、取消、超时和进程组清理。
-- 每个 turn/子 Agent 有独立 execution owner；清理一个 child 不会误杀其他任务。
-- inline/background 子 Agent 共用全局准入上限，结束后释放资源并回注结构化结果。
-- ToolMeta 记录风险、是否常驻、能否预加载、搜索提示和 builtin/MCP/plugin 来源。
-- MCP/plugin 工具可以 deferred，通过 `tool_search select:<name>` 解锁。
-
-### Scheduler
-
-- 支持 `at`、`after`、`every`、5/6 段 cron 和 IANA 时区。
-- `instant` 直接执行；`soft` 使用隔离的 `scheduler:<job-id>` session 发起被动 turn。
-- soft turn 默认跳过普通会话的记忆摄入/检索和消息推送工具，避免污染用户上下文。
-- 持久化任务有容量上限，interval/cron 可重复，旧 `run_at/delay/repeat` API 继续兼容。
-
-### 记忆
-
-- `core/memory/` 是统一协议与服务入口；`memory2/` 是默认结构化记忆算法；具体引擎位于
-  `plugins/default_memory/` 与 `plugins/akasha/`。
-- Default 引擎支持结构化摄入、向量/关键词多 lane、RRF、预算注入、证据与变更操作。
-- Akasha v1 仍是正式可选引擎：以完整 turn 为真相，支持图扩散/RAR、持久化、证据、召回与强化。
-- 本阶段不强制升级 Akasha v2；其恢复/重建等更厚合同保留为后续扩展空间。
-
-详见[记忆架构](docs/architecture/memory.md)和[记忆使用手册](docs/handbook/memory.md)。
-
-### Proactive / Drift 与运行轨迹
-
-- 主动链有 Gate、模块 DAG、能力快照租约、alert/content/context、冷却、投递去重和 ACK。
-- `proactive.db` 保存 `tick_log` 与 `tick_step_log`，每一步记录状态、耗时、terminal 与错误。
-- 被引用的 content 会向源端回传 `interesting`；失败反馈进入 pending 后重试。
-- 一般 Agent turn 同样保存 `tool_chain`、`context_trace`，控制面发布 turn/tool/stream 事件。
-- 当前仓库提供的是**轨迹数据与查询基础**；新的前端可视化页面暂不在本轮范围。
-
-### Workspace 与质量门禁
-
-- 启动时用 workspace 单实例锁保护迁移与运行；Yoyo 是统一迁移账本，migration 只允许追加。
-- `scripts/check_change_impact.py` 按高风险 owner 选择语义合同测试。
-- `tests/semantic/` 固化“历史不可破坏”和“仓库可独立运行”两条底线。
-- 主模型与轻模型可以分开配置；轻模型只在可重试传输/限流/服务端错误且尚未产生可见流时回退主模型。
+导入保留原始消息、时间和工具引用，旧程序和授权不自动重放；记忆图仍保留在原工作区。
+具体设置和迁移范围见[启动指南](docs/handbook/start.md)。
 
 ## 验证
 
-```bash
+```sh
+uv run python -m scripts.check_upstream_kernel
 uv run pytest -q
-uv run kirakira-impact --base HEAD --run
-uv run kirakira-verify-online
+uv run kirakira-verify-online --key-file /private/path/step-plan.key --workspace /tmp/new-eval --output /tmp/native-eval.json
 ```
 
-`kirakira-verify-online` 使用隔离临时 workspace，不打印密钥，实际检查：
+在线评测使用实际生产插件图和真实 Step5，覆盖消息、文件、Shell、MCP、托管进程、子代理、
+局部更新、插话、暂停恢复、来源抢占、附件和重启。
+可选外部提供方需要单独配置；验证范围见[当前状态](docs/status/current.md)和[验证记录](docs/operations/verification.md)。
 
-- 模型文本与具名强制工具调用；
-- token usage 归一化；
-- embedding；
-- Runtime 真实执行并消费 `read_file`；
-- 长历史生成 session compaction ledger，且持久历史不变；
-- Akasha v1 turn 摄入、召回以及模型消费召回内容。
-
-## 目录
-
-组合内核直接复用固定提交的 Akashic 源码，逐文件校验字节一致性。
-业务装配和边界见[Runtime 架构](docs/architecture/overview.md)。
-
-```text
-agent/            原生 Context/Fiber/Effect 内核、配置与 supervisor
-bootstrap/        默认组合、应用外观与 CLI/setup
-plugins/ledger/   权威 Session/消息、不可变输入与 owner 事务
-plugins/          回复、来源、ReAct、模型、工具、MCP、记忆与主动业务 owner
-bus/              message queue and event contracts
-core/             shared schema, network and memory contracts
-infra/            provider, channel, control and persistence adapters
-memory2/          default structured-memory algorithms and storage
-plugin_packages/  distributable extension packages
-proactive_v2/     proactive frame and tick orchestration
-frontend/         terminal and local Web presentation surfaces
-eval/             memory evaluation harnesses
-migrations/       append-only workspace migrations
-scripts/          verification, migration and change-impact tools
-kirakira_agent/   public `python -m kirakira_agent` entry shell
-```
-
-workspace 解析顺序为：`--workspace` → `KIRAKIRA_WORKSPACE` →
-`config.toml [runtime].workspace` → 当前目录。
-
-## 文档
-
-从[文档索引](docs/INDEX.md)开始。当前完成情况和延期项见
-[当前状态](docs/status/current.md)，整体设计见[架构总览](docs/architecture/overview.md)，实际执行证据见
-[验证记录](docs/operations/verification.md)。使用说明统一放在 `docs/handbook/`。
-
-前端与移动端不在当前后端整理范围内；现有前端功能继续保持可用。
-
-## License
-
-MIT，见 [LICENSE](LICENSE)。
-
-## Attribution
-
-Kirakira learns from [Akashic Agent](https://github.com/kachofugetsu09/akashic-agent).
-The optional Akasha2 algorithms are adapted from commit `d85b00c`; the vendored
-[MIT license](plugins/akasha2/LICENSE) and [file provenance](plugins/akasha2/UPSTREAM.json)
-ship with the package. The runtime adapter and evaluation results are maintained here.
-项目与工作目录行为也参考当前上游设计；来源合同、本地实现与未覆盖的范围见
-[ADR0015](docs/decisions/0015-projects-and-session-directories.md)。
+[架构](docs/architecture/overview.md) · [文档目录](docs/INDEX.md) · [SDK](sdk/)

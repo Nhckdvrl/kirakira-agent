@@ -1,26 +1,11 @@
-# 维护与诊断
+# 维护入口
 
-此目录保留日常维护、恢复和诊断工具。可复用评测统一放在 [`eval/`](../eval/README.md)。
+- `check_upstream_kernel.py`：校验完整原生来源摘要及明确记录的补丁。
+- `migrate_legacy_workspace.py`：只读旧库，生成独立的新工作区。
+- `message_wake_scenario.py`：真实 SQLite 的类型订阅、并发提交、回滚和重开。
+- `scheduler_tools_scenario.py`：确定性模型对端上的原生调度集成验收。
+- `ledger_runtime_scenario.py`：提交后进程退出、恢复与插件局部更新。
+- `clean_workspace.py`：清理缓存，保留源码、环境和用户运行数据。
+- `build-web-plugins.mjs`：构建原生插件的工作台界面。
 
-| 命令模块 | 用途 |
-| --- | --- |
-| `scripts.check_upstream_kernel` | 校验原生内核与 Akasha2 固定文件 |
-| `scripts.check_feature_alignment` | 校验功能清单，`--write` 更新对应文档 |
-| `scripts.check_yoyo_migrations` | 检查已注册迁移不可变 |
-| `scripts.check_change_impact` | 选择受影响合同，`--run` 执行 |
-| `scripts.inspect_execution` | 只读查看执行事实和未知结果 |
-| `scripts.replay_akasha` / `scripts.replay_akasha2` | 从来源库显式重建到新的目标库 |
-| `scripts.verify_online` | 在隔离目录验证已配置 provider；通过 `--help` 查看要求 |
-| `scripts.clean_workspace` | 删除生成的缓存、构建产物、字节码及空目录 |
-
-```bash
-uv run --frozen python -B -m scripts.clean_workspace --dry-run
-uv run --frozen python -B -m scripts.clean_workspace
-```
-
-清理器跳过 Git 已跟踪文件，不跟随符号链接，保留唯一 `.venv`、Reference 和运行数据目录。
-私有配置、数据库、锁文件、模型缓存和评测记录不属于清理对象。
-pytest 与 Ruff 的新缓存统一写入已忽略的 `.cache/`；Python 字节码可用 `-B` 避免生成。
-
-临时修补、迁移辅助和结果整理的一次性脚本不进入仓库。需要保留的复现程序应归入对应模块，
-运行输出写入新的隔离目录；被引用的历史结果不能当缓存删除。
+完整运行说明见 `docs/handbook/start.md`；在线 Step5 验证入口为 `eval.native_runtime`。

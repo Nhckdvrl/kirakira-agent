@@ -1,1 +1,1 @@
-"""Canonical persistent-session package."""
+"""持久消息、资源和入站交接的普通插件。"""

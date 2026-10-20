@@ -1,1 +1,1 @@
-"""Durable background results, independent of their producers and reply programs."""
+"""后台任务完成通知插件包。"""

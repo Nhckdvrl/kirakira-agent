@@ -1,43 +1,50 @@
-"""Configuration and results exchanged between runtime owners."""
+"""单次 Message 到 Message 的模型循环合同。"""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import List, Optional
+from collections.abc import Awaitable, Callable, Mapping
+from contextlib import AbstractContextManager
+from typing import Protocol
 
-from core.schema import JsonDict
-from plugins.models.retry import ModelRetryPolicy
+from agent.plugin_composition import RuntimeScope, ServiceKey
+from plugins.ledger.contract import MessageReader, MessageWriter, OwnerStore
+from plugins.models.contract import StreamCallback
+from plugins.models.contract import BoundChatModel
+from plugins.ledger.contract import Message
+from plugins.content.contract import ContentView
+from plugins.context.contract import ContextBuilder, SummaryReducer
+from plugins.models.contract import MessageProjection
+from plugins.tools.contract import StartCheck
+from plugins.tools.contract import ToolMenu
 
-
-@dataclass
-class ReactConfig:
-    model: str
-    context_window: int = 0
-    effective_context_percent: float = 0.9
-    max_iterations: int = 10
-    max_tokens: int = 8192
-    history_window: int = 40
-    model_timeout_seconds: float = 120.0
-    repeated_tool_call_limit: int = 3
-    max_parallel_tool_calls: int = 4
-    stream: bool = True
-    retry_policy: ModelRetryPolicy = field(default_factory=ModelRetryPolicy)
+Materials = Mapping[str, object]
+Preview = Callable[[str], AbstractContextManager[StreamCallback]]
 
 
-@dataclass
-class ReactResult:
-    reply: str
-    tools_used: List[str] = field(default_factory=list)
-    tool_chain: List[JsonDict] = field(default_factory=list)
-    thinking: str = ""
-    context_trace: JsonDict = field(default_factory=dict)
-    # 本轮是否有工具声明需要用户确认;None 表示没有。
-    mobile_attention: Optional[str] = None
-    execution_id: str = ""
-    stop_reason: str = "completed"
+class OrderedReact(Protocol):
+    async def __call__(
+        self,
+        reader: MessageReader,
+        writer: MessageWriter,
+        *,
+        model: BoundChatModel,
+        context: ContextBuilder,
+        projection: MessageProjection,
+        materials: Callable[[tuple[Message, ...]], Awaitable[Materials]],
+        content: ContentView,
+        tools: ToolMenu,
+        max_output_tokens: int,
+        max_steps: int,
+        reduce: SummaryReducer | None = None,
+        preview: Preview | None = None,
+        terminal_tools: frozenset[str] = frozenset(),
+        capture_scope: Callable[[], RuntimeScope] | None = None,
+        state: OwnerStore,
+        check_start: StartCheck,
+        max_parallel_calls: int = 1,
+        before_step: Callable[[], Awaitable[None]] | None = None,
+    ) -> Message: ...
 
 
-from agent.composition import ServiceKey
-
-REACT = ServiceKey("react.execute.v1")
-REACT_CONFIG = ServiceKey("react.config.v1")
+# v2 也在新 Output 的同一事务核对控制前提，不能把首次启动许可当作永久提交权。
+REACT_ORDERED_V2 = ServiceKey[OrderedReact]("react.ordered-start.v2")

@@ -1,0 +1,617 @@
+from __future__ import annotations
+
+import os
+import json
+import re
+import shutil
+import subprocess
+import tempfile
+from dataclasses import dataclass
+from pathlib import Path
+from collections.abc import Mapping
+from typing import cast
+from uuid import uuid4
+
+from agent.plugins.python_environment import ENVIRONMENT_FILE, OfflineWheels, PythonEnvironments
+from agent.plugins.reload_journal import ReloadJournal
+from agent.plugins.distribution_sources import distribution_plugin_sources, read_distribution_adoption
+from agent.plugins.files import sync_directory
+
+from agent.plugins.artifacts import (
+    ArtifactPointer,
+    ArtifactPointers,
+    read_pointers,
+    relative_artifact_pointer,
+    resolve_pointer,
+    write_pointers,
+)
+from agent.plugins.manifest import (
+    ensure_workspace_plugin_data_dir,
+    installed_plugin_ids,
+    validate_workspace_plugin_data_path,
+    plugins_root,
+    workspace_plugin_data_dir,
+)
+from agent.plugins.bundles import patch_rows, set_plugin_choice
+from agent.plugins.static_manifest import (
+    StaticPluginManifest,
+    load_static_plugin_manifest,
+)
+
+
+@dataclass(frozen=True)
+class PluginInstallResult:
+    plugin_name: str
+    plugin_version: str
+    marketplace: str
+    installed_path: Path
+    data_path: Path
+    source_revision: str
+    update_id: str = ""
+
+
+@dataclass
+class _CacheActivation:
+    result: PluginInstallResult
+    plugin_base: Path
+    previous_pointers: ArtifactPointers | None
+    created_artifact: bool
+    created_data_dir: bool
+    superseded_artifact: Path | None
+    journal: ReloadJournal
+
+    def rollback(self) -> None:
+        """撤销已发布 cache，并恢复发布前的可运行版本。"""
+
+        # 1. 恢复发布前完整 pointer state；缺失状态也精确恢复。
+        self.journal.rollback_updates(self.plugin_base.parents[2], update_id=self.result.update_id, error="install failed")
+
+        # 2. 只删除本事务新建、且尚未被任何旧 pointer 引用的 artifact。
+        target_root = self.result.installed_path
+        if self.created_artifact and (target_root.exists() or target_root.is_symlink()):
+            _remove_path(target_root)
+        # 3. 安装未提交时不留下本事务新建的正式 plugin-data 空目录。
+        if self.created_data_dir:
+            _remove_created_data_dir(self.result.data_path)
+
+    def finalize(self) -> None:
+        """提交完成后删除离线刷新所替代的旧 artifact。"""
+
+        if self.superseded_artifact is not None:
+            _remove_path(self.superseded_artifact)
+
+
+def set_installed_plugin_enabled(
+    plugin_id: str,
+    *,
+    enabled: bool,
+    workspace: Path,
+    plugins_home: Path | None = None,
+) -> Path:
+    home = plugins_home or plugins_root()
+    _ = _split_installed_plugin_id(plugin_id)
+    installed = set(installed_plugin_ids(home))
+    distribution = os.environ.get("AKASHIC_PLUGIN_DISTRIBUTION")
+    if distribution:
+        installed.update(f"{source.plugin_name}@{source.marketplace}"
+                         for source in distribution_plugin_sources(Path(distribution)))
+    if plugin_id not in installed:
+        raise ValueError(f"插件未安装: {plugin_id}")
+    return set_plugin_choice(workspace, plugin_id, enabled=enabled)
+
+
+def finalize_uninstall_plugin(
+    plugin_id: str,
+    *,
+    workspace: Path,
+    plugins_home: Path | None = None,
+) -> tuple[Path, Path]:
+    """删除已禁用插件的 cache；保留停用选择和 workspace plugin-data。"""
+
+    home = plugins_home or plugins_root()
+    plugin_name, marketplace = _split_installed_plugin_id(plugin_id)
+    cache_path = home / "cache" / marketplace / plugin_name
+    data_path = workspace_plugin_data_dir(workspace, plugin_name, marketplace)
+    if cache_path.exists():
+        shutil.rmtree(cache_path)
+    return cache_path, data_path
+
+
+def _split_installed_plugin_id(plugin_id: str) -> tuple[str, str]:
+    plugin_name, separator, marketplace = plugin_id.rpartition("@")
+    if (
+        not separator
+        or not plugin_name
+        or not marketplace
+        or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", plugin_name) is None
+        or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", marketplace) is None
+    ):
+        raise ValueError(f"无效的已安装插件 ID: {plugin_id}")
+    return plugin_name, marketplace
+
+
+def install_git_plugin(
+    *,
+    workspace: Path,
+    source: str,
+    marketplace: str,
+    ref_name: str = "",
+    sparse_paths: list[str] | None = None,
+    plugins_home: Path | None = None,
+    refresh_existing_artifact: bool = False,
+    update_id: str | None = None,
+    offline_wheels: OfflineWheels | None = None,
+    reserved_ids: frozenset[str] = frozenset(),
+) -> PluginInstallResult:
+    home = (plugins_home or plugins_root()).resolve(strict=False)
+    journal = ReloadJournal(workspace)
+    # 发布锁保证此刻没有其他安装在途；遗留 armed 只能来自中断进程，按磁盘结算。
+    _ = journal.settle_orphaned_installs(home)
+    update_id = uuid4().hex if update_id is None else update_id
+    if not isinstance(update_id, str) or not update_id or update_id.strip() != update_id:
+        raise ValueError("插件更新 ID 必须是非空且无首尾空白的字符串")
+    try:
+        journal.update(update_id)
+    except KeyError:
+        pass
+    else:
+        raise RuntimeError("已有插件更新请求只能查询，不能重跑安装")
+    _ = _validate_path_segment(marketplace, "marketplace")
+    if not isinstance(source, str) or not source or source != source.strip():
+        raise ValueError("插件 source 必须是非空且不含首尾空白的字符串")
+    if not isinstance(ref_name, str):
+        raise ValueError("插件 ref 必须是字符串")
+    if ref_name != ref_name.strip():
+        raise ValueError("插件 ref 不能包含首尾空白")
+    if ref_name.startswith("-"):
+        raise ValueError("插件 ref 不能以命令选项开头")
+    sparse = sparse_paths or []
+    if not all(
+        isinstance(path, str) and path and path == path.strip() for path in sparse
+    ):
+        raise ValueError("插件 sparse path 必须是非空字符串")
+    marketplace_root = home / "marketplaces" / marketplace
+    cache_root = home / "cache" / marketplace
+    _ensure_directory_tree(home, marketplace_root)
+    _ensure_directory_tree(home, cache_root)
+
+    # 1. 写 cache 前校验用户选择，避免坏配置把安装事务推到半路。
+    choices = {row.plugin: not row.disabled for row in patch_rows(workspace)}
+    with tempfile.TemporaryDirectory(
+        dir=marketplace_root, prefix="clone-"
+    ) as clone_dir:
+        clone_root = Path(clone_dir)
+        _clone_git_source(
+            source=source,
+            destination=clone_root,
+            ref_name=ref_name,
+            sparse_paths=sparse,
+        )
+        _validate_source_tree(clone_root)
+        source_revision = _run_git(["rev-parse", "HEAD"], cwd=clone_root)
+        if re.fullmatch(r"[0-9a-f]{40}", source_revision) is None:
+            raise RuntimeError(f"插件 Git HEAD 无效: {source_revision}")
+        static_manifest = load_static_plugin_manifest(clone_root)
+        plugin_name = _validate_path_segment(static_manifest.name, "插件 name")
+        # 默认 preset 的身份不能被外置安装接管；克隆校验后、cache/data 写入前拒绝。
+        reserved = set(reserved_ids)
+        adoption = read_distribution_adoption(workspace)
+        if adoption is not None:
+            reserved.update(row["plugin_id"] for row in cast(tuple[Mapping[str, str], ...], adoption["entries"]))
+        receipt_path = workspace / "runtime/distribution-install.json"
+        if receipt_path.exists():
+            receipt = json.loads(receipt_path.read_text())
+            if marketplace == receipt["marketplace"]:
+                raise ValueError(f"外置插件不能接管内置数据身份: {plugin_name}@{marketplace}; 请使用独立 marketplace")
+            configured = os.environ.get("AKASHIC_PLUGIN_DISTRIBUTION")
+            if configured:
+                reserved.update(f"{item.plugin_name}@{item.marketplace}" for item in
+                                distribution_plugin_sources(Path(configured)))
+        if f"{plugin_name}@{marketplace}" in reserved:
+            raise ValueError(f"外置插件不能接管内置数据身份: {plugin_name}@{marketplace}; 请使用独立身份并显式停用原实现")
+        plugin_version = _validate_path_segment(
+            static_manifest.version,
+            "插件 version",
+        )
+        previous_enabled = choices.get(f"{plugin_name}@{marketplace}")
+        activation = _activate_plugin_version(
+            plugin_name=plugin_name,
+            plugin_version=plugin_version,
+            static_manifest=static_manifest,
+            marketplace=marketplace,
+            clone_root=clone_root,
+            cache_root=cache_root,
+            data_root=workspace.resolve(strict=False) / "plugin-data",
+            workspace=workspace,
+            source_revision=source_revision,
+            refresh_existing_artifact=refresh_existing_artifact,
+            journal=journal, update_id=update_id,
+            previous_enabled=previous_enabled,
+            offline_wheels=offline_wheels,
+        )
+        plugin_id = f"{plugin_name}@{marketplace}"
+        try:
+            # 2. 安装在当前 workspace 显式启用，其他 workspace 的选择不变。
+            _ = set_plugin_choice(workspace, plugin_id, enabled=True)
+        except BaseException:
+            activation.rollback()
+            raise
+        journal.commit_update(update_id)
+        activation.finalize()
+    return activation.result
+
+
+def _clone_git_source(
+    *,
+    source: str,
+    destination: Path,
+    ref_name: str,
+    sparse_paths: list[str],
+) -> None:
+    if sparse_paths:
+        _ = _run_git(
+            [
+                "clone",
+                "--filter=blob:none",
+                "--no-checkout",
+                "--",
+                source,
+                str(destination),
+            ]
+        )
+        _ = _run_git(
+            ["sparse-checkout", "set", "--", *sparse_paths],
+            cwd=destination,
+        )
+        checkout_ref = _resolve_git_ref(ref_name or "HEAD", destination)
+        _ = _run_git(
+            ["checkout", "--detach", checkout_ref],
+            cwd=destination,
+        )
+        return
+    _ = _run_git(["clone", "--", source, str(destination)])
+    if ref_name:
+        checkout_ref = _resolve_git_ref(ref_name, destination)
+        _ = _run_git(["checkout", "--detach", checkout_ref], cwd=destination)
+
+
+def _resolve_git_ref(ref_name: str, repository: Path) -> str:
+    """将用户 ref 解析为 commit SHA，避免 checkout 参数歧义。"""
+
+    candidates = [ref_name]
+    if ref_name.startswith("refs/heads/"):
+        candidates.append(f"refs/remotes/origin/{ref_name.removeprefix('refs/heads/')}")
+    elif not ref_name.startswith("refs/remotes/origin/"):
+        candidates.append(f"refs/remotes/origin/{ref_name}")
+    last_error: RuntimeError | None = None
+    for candidate in candidates:
+        try:
+            resolved = _run_git(
+                [
+                    "rev-parse",
+                    "--verify",
+                    "--end-of-options",
+                    f"{candidate}^{{commit}}",
+                ],
+                cwd=repository,
+            )
+        except RuntimeError as error:
+            last_error = error
+            continue
+        if resolved:
+            return resolved
+    raise RuntimeError(f"git ref 无法解析: {ref_name}") from last_error
+
+
+def _activate_plugin_version(
+    *,
+    plugin_name: str,
+    plugin_version: str,
+    static_manifest: StaticPluginManifest,
+    marketplace: str,
+    clone_root: Path,
+    cache_root: Path,
+    data_root: Path,
+    workspace: Path,
+    source_revision: str,
+    refresh_existing_artifact: bool,
+    journal: ReloadJournal, update_id: str, previous_enabled: bool | None,
+    offline_wheels: OfflineWheels | None,
+) -> _CacheActivation:
+    """Prepare one immutable artifact and publish its direct install pointer."""
+
+    # 1. 校验正式数据身份，但在依赖 staging 成功前不创建它。
+    data_path = data_root / f"{plugin_name}-{marketplace}"
+    validate_workspace_plugin_data_path(data_path, workspace)
+    plugin_base = cache_root / plugin_name
+    _ensure_directory(plugin_base)
+    visible_versions = _cache_version_dirs(plugin_base)
+    if visible_versions:
+        paths = ", ".join(str(path) for path in visible_versions)
+        raise ValueError(f"插件 cache 含不受支持的旧版可见目录: {paths}")
+    previous_pointers = read_pointers(plugin_base)
+    if (
+        previous_pointers is not None
+        and previous_pointers.stable != previous_pointers.latest
+    ):
+        raise RuntimeError(f"插件有未决历史指针对，须先恢复: {plugin_name}@{marketplace}")
+    stable = (
+        previous_pointers.stable
+        if previous_pointers is not None
+        else ArtifactPointer(None)
+    )
+
+    artifacts_root = plugin_base / ".artifacts"
+    _ensure_directory(artifacts_root)
+    artifact_id = f"{plugin_version}-{source_revision[:16]}"
+    base_target_root = artifacts_root / artifact_id
+    superseded_artifact = (
+        resolve_pointer(plugin_base, stable)
+        if refresh_existing_artifact and stable.path is not None
+        else None
+    )
+    target_root = (
+        artifacts_root / f"{artifact_id}-restaged-{uuid4().hex[:16]}"
+        if refresh_existing_artifact and base_target_root.exists()
+        else base_target_root
+    )
+    if target_root.is_symlink():
+        raise ValueError(f"插件 artifact 目标不能是符号链接: {target_root}")
+    if target_root.exists() and not target_root.is_dir():
+        raise ValueError(f"插件 artifact 目标不是目录: {target_root}")
+
+    staging_root = Path(
+        tempfile.mkdtemp(dir=cache_root, prefix=f".{plugin_name}-install-")
+    )
+    created_artifact = False
+    created_data_dir = False
+    armed = False
+    try:
+        # 2. 在不可发现的 staging 目录复制代码并准备依赖，旧版本保持可见
+        _ = shutil.copytree(clone_root, staging_root, dirs_exist_ok=True)
+        if offline_wheels is None:
+            _prepare_static_python_runtimes(
+                staging_root, static_manifest, workspace=workspace
+            )
+        else:
+            _prepare_static_python_runtimes(
+                staging_root, static_manifest, workspace=workspace,
+                offline_wheels=offline_wheels,
+            )
+
+        # 3. 先落完整 artifact，再原子切换 stable/latest 指针对。
+        if target_root.exists():
+            generated_runtime_roots = tuple(
+                target_root / Path(runtime.requirements).parent / ".venv"
+                for runtime in static_manifest.python
+            )
+            _validate_source_tree(
+                target_root,
+                generated_runtime_roots=generated_runtime_roots,
+            )
+            existing_revision = _run_git(["rev-parse", "HEAD"], cwd=target_root)
+            if existing_revision != source_revision:
+                raise RuntimeError(f"插件 artifact 身份冲突: {target_root}")
+            environment_ref = staging_root / ENVIRONMENT_FILE
+            previous_ref = target_root / ENVIRONMENT_FILE
+            if environment_ref.exists() and (
+                not previous_ref.is_file()
+                or previous_ref.is_symlink()
+                or previous_ref.read_bytes() != environment_ref.read_bytes()
+            ):
+                # 显式重装旧环境时发布新 artifact，失败仍可恢复完整旧 pointer。
+                target_root = (
+                    artifacts_root / f"{artifact_id}-runtime-{uuid4().hex[:16]}"
+                )
+                os.replace(staging_root, target_root)
+                created_artifact = True
+            else:
+                _remove_path(staging_root)
+        else:
+            os.replace(staging_root, target_root)
+            created_artifact = True
+        created_data_dir = not data_path.exists()
+        ensure_workspace_plugin_data_dir(data_path, workspace)
+        installed = relative_artifact_pointer(plugin_base, target_root)
+        # 新指针可见之前，先让代码目录与旧状态的恢复点耐久。
+        _sync_artifact_tree(target_root)
+        sync_directory(artifacts_root)
+        sync_directory(plugin_base)
+        journal.arm_update(
+            update_id=update_id, plugin_id=f"{plugin_name}@{marketplace}", plugin_base=plugin_base,
+            previous=previous_pointers, candidate=installed, previous_enabled=previous_enabled,
+        )
+        armed = True
+        _ = write_pointers(
+            plugin_base,
+            stable=installed,
+            latest=installed,
+        )
+    except BaseException:
+        if armed:
+            journal.rollback_updates(plugin_base.parents[2], update_id=update_id, error="install failed")
+        if created_artifact and (target_root.exists() or target_root.is_symlink()):
+            _remove_path(target_root)
+        if staging_root.exists() or staging_root.is_symlink():
+            _remove_path(staging_root)
+        if created_data_dir:
+            _remove_created_data_dir(data_path)
+        raise
+
+    result = PluginInstallResult(
+        plugin_name=plugin_name,
+        plugin_version=plugin_version,
+        marketplace=marketplace,
+        installed_path=target_root,
+        data_path=data_path,
+        source_revision=source_revision,
+        update_id=update_id,
+    )
+    return _CacheActivation(
+        result=result,
+        plugin_base=plugin_base,
+        previous_pointers=previous_pointers,
+        created_artifact=created_artifact,
+        created_data_dir=created_data_dir,
+        superseded_artifact=superseded_artifact,
+        journal=journal,
+    )
+
+
+def _sync_artifact_tree(root: Path) -> None:
+    """先同步实际源码文件与目录，再允许指针指向它。"""
+    for directory, _, files in os.walk(root, followlinks=False, topdown=False):
+        current = Path(directory)
+        for name in files:
+            path = current / name
+            if not path.is_symlink():
+                with path.open("rb") as stream:
+                    os.fsync(stream.fileno())
+        sync_directory(current)
+
+
+def _remove_created_data_dir(path: Path) -> None:
+    """Remove only an empty plugin-data directory owned by this transaction."""
+
+    try:
+        path.rmdir()
+    except FileNotFoundError:
+        return
+    except OSError as error:
+        raise RuntimeError(
+            f"安装回滚无法删除新建 plugin-data 空目录: {path}"
+        ) from error
+
+
+def _cache_version_dirs(plugin_base: Path) -> list[Path]:
+    """列出不能再参与安装或发布的旧版可见目录。"""
+
+    result: list[Path] = []
+    for child in sorted(plugin_base.iterdir()):
+        if child.name.startswith("."):
+            continue
+        if child.is_symlink():
+            raise ValueError(f"插件 cache 版本不能是符号链接: {child}")
+        if not child.is_dir():
+            raise ValueError(f"插件 cache 版本不是目录: {child}")
+        result.append(child)
+    return result
+
+
+def _remove_path(path: Path) -> None:
+    if path.is_symlink() or path.is_file():
+        path.unlink()
+        return
+    if path.is_dir():
+        shutil.rmtree(path)
+
+
+def _ensure_directory(path: Path) -> None:
+    if path.is_symlink():
+        raise ValueError(f"插件路径不能是符号链接: {path}")
+    if path.exists() and not path.is_dir():
+        raise ValueError(f"插件路径不是目录: {path}")
+    path.mkdir(parents=True, exist_ok=True)
+
+
+def _ensure_directory_tree(root: Path, path: Path) -> None:
+    """在指定 root 内创建目录，并拒绝中间符号链接。"""
+
+    root = root.resolve(strict=False)
+    try:
+        relative = path.relative_to(root)
+    except ValueError as error:
+        raise ValueError(f"插件路径越界: {path}") from error
+    current = root
+    for part in relative.parts:
+        current /= part
+        if current.is_symlink():
+            raise ValueError(f"插件路径不能穿过符号链接: {current}")
+    _ensure_directory(path)
+
+
+def _validate_path_segment(value: object, label: str) -> str:
+    if (
+        not isinstance(value, str)
+        or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", value) is None
+    ):
+        raise ValueError(f"{label} 必须是安全的单一路径段")
+    return value
+
+
+def _validate_source_tree(
+    root: Path,
+    *,
+    generated_runtime_roots: tuple[Path, ...] = (),
+) -> None:
+    """校验 Git source 链接，并跳过 Core 已生成的 runtime 内容。"""
+
+    root = root.resolve(strict=True)
+    # 1. lstat 所有文件和目录项，但不让 os.walk 跟随 source 链接
+    for current, directories, filenames in os.walk(root, followlinks=False):
+        for name in [*directories, *filenames]:
+            path = Path(current) / name
+            if any(
+                path != runtime_root and path.is_relative_to(runtime_root)
+                for runtime_root in generated_runtime_roots
+            ):
+                continue
+            if not path.is_symlink():
+                continue
+            try:
+                resolved = path.resolve(strict=True)
+            except (FileNotFoundError, RuntimeError) as error:
+                raise ValueError(f"插件 source 符号链接无效: {path}") from error
+            if not resolved.is_relative_to(root):
+                raise ValueError(f"插件 source 符号链接越界: {path} -> {resolved}")
+            if resolved == root or path.parent.resolve(strict=True).is_relative_to(
+                resolved
+            ):
+                raise ValueError(f"插件 source 符号链接形成循环: {path} -> {resolved}")
+
+
+def _prepare_static_python_runtimes(
+    plugin_root: Path,
+    manifest: StaticPluginManifest,
+    *,
+    workspace: Path,
+    offline_wheels: OfflineWheels | None = None,
+) -> None:
+    """在最终耐久路径准备环境；安装 cache 只保存不可变引用。"""
+    if manifest.python:
+        environments = PythonEnvironments(workspace)
+        refs = {}
+        used_offline_wheels = False
+        for runtime in manifest.python:
+            requirements = (plugin_root / runtime.requirements).read_text(encoding="utf-8")
+            if offline_wheels is not None and requirements.strip():
+                refs[runtime.runtime_root] = environments.prepare(
+                    plugin_root, runtime, offline_wheels=offline_wheels
+                )
+                used_offline_wheels = True
+            else:
+                refs[runtime.runtime_root] = environments.prepare(plugin_root, runtime)
+        if offline_wheels is not None and not used_offline_wheels:
+            raise ValueError("没有非空 Python requirements，不能提供离线 wheel")
+        with (plugin_root / ENVIRONMENT_FILE).open("w") as stream:
+            _ = stream.write(json.dumps(refs, sort_keys=True))
+            stream.flush()
+            os.fsync(stream.fileno())
+
+
+def _run_git(args: list[str], cwd: Path | None = None) -> str:
+    result = subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+        env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+    )
+    if result.returncode == 0:
+        return result.stdout.strip()
+    raise RuntimeError(
+        "git 命令失败: "
+        + " ".join(args)
+        + f"\nstdout:\n{result.stdout.strip()}\nstderr:\n{result.stderr.strip()}"
+    )

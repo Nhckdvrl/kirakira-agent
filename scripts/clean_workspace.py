@@ -28,6 +28,10 @@ PROTECTED_ROOTS = frozenset(
         "observe",
         ".transcripts",
         "node_modules",
+        "runtime",
+        "plugin-data",
+        "subagent-runs",
+        "web-auth",
     }
 )
 CACHE_NAMES = frozenset({"__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache"})
