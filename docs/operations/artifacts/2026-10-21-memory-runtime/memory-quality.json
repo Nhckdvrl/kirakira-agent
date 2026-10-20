@@ -81049,6 +81049,12 @@
     "source-ID coverage does not establish that an excerpt contains the answer",
     "valid citation IDs do not establish that every claim is supported",
     "question-ID partitions may share background histories",
-    "invalid judgments remain in the denominator as failures"
-  ]
+    "invalid judgments remain in the denominator as failures",
+    "the 42-question aggregate includes development questions; only the final 14-question partition was reserved from method development"
+  ],
+  "partition_use": {
+    "memory-final-discovery": "development questions; included in the 42-question aggregate",
+    "memory-final-recheck": "development recheck questions; included in the aggregate",
+    "memory-final-reserve": "14 reserved questions, run after retrieval/presentation methods were frozen"
+  }
 }
