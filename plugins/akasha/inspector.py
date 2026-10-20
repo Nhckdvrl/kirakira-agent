@@ -224,11 +224,13 @@ class RecallInspector:
         origin = source.model_dump(mode="json", exclude={"query"})
         return {"query_id": identity, "query_text": title[:180], "query_text_truncated": len(title) > 180,
                 "ts": recall.timestamp.isoformat(), "source": origin, "graph_version": recall.graph_version,
-                "hit_count": len(recall.hits), "presented_count": len(recall.presented_message_ids)}
+                "hit_count": len(recall.hits), "presented_count": len(recall.presented_message_ids),
+                "selection": recall.selection, "presentation": recall.presentation, "max_chars": recall.max_chars}
 
     # 命中和实际呈现分开显示；正文只从查询记录指向的原消息读取。
     def _detail(self, identity: str, recall: Recall) -> dict[str, object]:
         hits: list[dict[str, object]] = []
+        spans = {span.message_id: span for span in recall.presented_spans}
         for hit in recall.hits:
             messages: list[dict[str, object]] = []
             for message_id in hit.message_ids:
@@ -237,10 +239,16 @@ class RecallInspector:
                     raise ValueError(f"召回出处消息缺失: {message_id}")
                 if not isinstance(message.body, (Input, Output)):
                     raise ValueError(f"召回成员不是输入或输出: {message_id}")
-                text = "\n".join(cast(str, part.value) for part in message.body.parts
+                text = "".join(cast(str, part.value) for part in message.body.parts
                                  if isinstance(part, ContentPart) and part.kind == "text")
-                messages.append({"message_id": message_id, "preview": text[:240],
-                                 "truncated": len(text) > 240,
+                span = spans.get(message_id)
+                if span is not None and span.source_chars != len(text):
+                    raise ValueError("召回片段与原始消息长度不一致")
+                shown = text if span is None else text[span.start:span.end]
+                messages.append({"message_id": message_id, "preview": shown[:240],
+                                 "truncated": len(shown) > 240,
+                                 "excerpt": None if span is None else span.model_dump(mode="json"),
+                                 "recorded_at": message.recorded_at.isoformat(), "author": message.author,
                                  "presented": message_id in recall.presented_message_ids})
             hits.append({"score": hit.score, "lane": hit.lane, "sources": list(hit.sources), "messages": messages})
         return self._ui_result({**self._summary(identity, recall), "hits": hits, "pushes": recall.pushes,

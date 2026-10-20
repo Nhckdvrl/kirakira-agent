@@ -1,1 +1,1 @@
-"""Private helpers owned by the Akashic clients migration bundle."""
+"""Private helpers owned by the Kirakira clients migration bundle."""

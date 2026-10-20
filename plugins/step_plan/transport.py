@@ -402,7 +402,7 @@ async def _probe_embedding(
         async with asyncio.timeout(30):
             payload = await _request_limited_json(
                 connection, credential, "POST", "/embeddings",
-                body={"model": model, "input": ["Akashic embedding setup check", "Akashic embedding order check"]},
+                body={"model": model, "input": ["Kirakira embedding setup check", "Kirakira embedding order check"]},
                 max_bytes=4 * 1024 * 1024,
             )
     except TimeoutError as error:

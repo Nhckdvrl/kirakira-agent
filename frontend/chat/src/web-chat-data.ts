@@ -49,7 +49,7 @@ export function isAbortError(error: unknown): boolean {
 
 export function errorMessage(error: unknown): string {
   if (error instanceof TypeError && error.message === "Failed to fetch") {
-    return "无法连接 Akashic。请确认服务仍在运行，然后重试。";
+    return "无法连接 Kirakira。请确认服务仍在运行，然后重试。";
   }
   return error instanceof Error ? error.message : String(error);
 }

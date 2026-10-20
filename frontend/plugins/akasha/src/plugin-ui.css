@@ -1,5 +1,12 @@
 @import "../../../../plugins/akasha/plugin_ui.css";
 
+.akasha-plugin-ui-evidence {
+  display: block;
+  margin-block-end: 4px;
+  color: var(--ak-color-text-secondary);
+  font-size: 0.6875rem;
+}
+
 .akasha-plugin-ui-query-status {
   margin-block: 8px;
   color: var(--ak-color-text-secondary);

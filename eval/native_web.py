@@ -1,4 +1,4 @@
-"""Step5 through the native workbench, project scope and directory providers."""
+"""Real-provider workbench, project scope and directory acceptance."""
 
 import argparse
 import asyncio
@@ -10,9 +10,9 @@ from uuid import uuid4
 
 import httpx
 
+from eval.models import EvaluationModel
 from eval.native_runtime import text
 from kirakira_agent.runtime import (
-    configure_step_plan,
     initialize_workspace,
     runtime,
     submit,
@@ -40,11 +40,12 @@ class ModuleOrder(HTMLParser):
             self.module_count += 1
 
 
-async def evaluate(workspace, key_file):
+async def evaluate(workspace, key_file, *, model_config=None):
+    model_config = model_config or EvaluationModel.read(None)
     initialize_workspace(workspace, profile="web")
     async with runtime(workspace) as core:
-        await configure_step_plan(core, key_file)
-        await configure_step_plan(core, key_file)
+        await model_config.configure(core, key_file)
+        await model_config.configure(core, key_file)
         root = core.plugin_manager.live_root
         queries = root.context.require(PLUGIN_UI)
         catalog = await queries.catalog()
@@ -116,6 +117,7 @@ async def evaluate(workspace, key_file):
                 }
 
         return {
+            "model_config": model_config.description(),
             "passed": True,
             "project_scope": project_id,
             "answer": text(answer),
@@ -132,12 +134,13 @@ def main():
     parser.add_argument("--workspace", type=Path, required=True)
     parser.add_argument("--key-file", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--model-config", type=Path)
     args = parser.parse_args()
     os.environ.setdefault(
         "AKASHIC_PLUGIN_HOME",
         str(args.workspace.parent / (args.workspace.name + "-home")),
     )
-    result = asyncio.run(evaluate(args.workspace.resolve(), args.key_file))
+    result = asyncio.run(evaluate(args.workspace.resolve(), args.key_file, model_config=EvaluationModel.read(args.model_config)))
     args.output.write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result))
 

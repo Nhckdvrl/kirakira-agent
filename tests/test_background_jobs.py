@@ -11,7 +11,8 @@ import pytest
 import pytest_asyncio
 
 from agent.plugin_composition import ServiceKey
-from plugins.channels.contract import CHANNEL_INPUT_V2 as CHANNEL_INPUT, ChannelInboundMessage
+from plugins.channels.contract import CHANNEL_INPUT_V2 as CHANNEL_INPUT
+from plugins.channels.contract import ChannelInboundMessage
 from plugins.jobs.board import JobBoard
 from plugins.jobs.contract import JOB_NOTICES, JobOutcome, JobWatch
 from plugins.ledger.contract import Input, Output, ToolResult
@@ -187,6 +188,7 @@ def _collecting_shell_sources(sources: Path, *, tool: str, chain: bool) -> None:
         text = text.replace('return LLMResponse("finished")', '''if len(calls) == 4:
                 return LLMResponse(None, [ToolCall("next-job", "shell", {
                     "command": "sleep 1; echo next-background-done", "description": "next background",
+                    "shell": "bash", "login": False,
                     "run_in_background": True, "yield_time_ms": 250})])
             return LLMResponse("finished")''')
     provider.write_text(text)

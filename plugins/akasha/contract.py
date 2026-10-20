@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from typing import Annotated, Any, Literal, Protocol, Self
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, FiniteFloat, model_validator
 from plugins.ledger.contract import CallRef
@@ -49,6 +49,7 @@ class ProgramSource(BaseModel):
     kind: Literal["program"] = "program"
     key: Text
     query: Annotated[str, Field(min_length=1, max_length=32000)]
+    session_id: Text | None = None
 
 
 class Hit(BaseModel):
@@ -62,6 +63,20 @@ class Hit(BaseModel):
     lane: Literal["dense", "completion"]
     sources: tuple[Text, ...]
     basin_ids: tuple[Text, ...] = ()
+
+
+class EvidenceSpan(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+    message_id: Text
+    start: Annotated[int, Field(ge=0)]
+    end: Annotated[int, Field(gt=0)]
+    source_chars: Annotated[int, Field(gt=0)]
+
+    @model_validator(mode="after")
+    def bounds(self) -> Self:
+        if not self.start < self.end <= self.source_chars:
+            raise ValueError("evidence excerpt is outside its source")
+        return self
 
 
 class Recall(BaseModel):
@@ -78,6 +93,11 @@ class Recall(BaseModel):
     strong: bool = False
     time_start: AwareDatetime | None = None
     time_end: AwareDatetime | None = None
+    rendering_version: Literal[1, 2, 3] = 1
+    selection: Literal["lanes", "fused"] = "lanes"
+    presentation: Literal["whole", "excerpts"] = "whole"
+    query_text: Text | None = None
+    presented_spans: tuple[EvidenceSpan, ...] = ()
     hits: tuple[Hit, ...] = Field(max_length=45)
     presented_message_ids: tuple[Text, ...] = ()
     active_basin_count: Annotated[int, Field(ge=0)]
@@ -97,6 +117,8 @@ class Recall(BaseModel):
             raise ValueError("实际呈现的消息必须是本次命中的唯一成员")
         if self.time_start is not None and self.time_end is not None and self.time_start > self.time_end:
             raise ValueError("召回时间窗口倒置")
+        if self.presented_spans and tuple(span.message_id for span in self.presented_spans) != self.presented_message_ids:
+            raise ValueError("excerpt spans must match the actually presented messages")
         return self
 
 
@@ -108,3 +130,83 @@ class RecallRecordsRead(Protocol):
 
 # Akasha dashboard 读取查询出处，不取得学习 writer。
 AKASHA_RECORDS_VIEW = ServiceKey[Callable[[], RecallRecordsRead]]("akasha.recall-records.v1")
+
+
+class RecallQuery(BaseModel):
+    """A time window selects conversation segments by their start time."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+    query: Annotated[str, Field(min_length=1, max_length=32000)]
+    limit: Annotated[int, Field(ge=1, le=40)] = Field(
+        default=10, description="Candidate bound; selection determines total or per-lane allocation.",
+    )
+    time_start: Annotated[AwareDatetime, Field(strict=False)] | None = None
+    time_end: Annotated[AwareDatetime, Field(strict=False)] | None = None
+    selection: Literal["lanes", "fused"] = Field(
+        default="lanes", description="lanes: up to five dense plus limit completion candidates; fused: limit total candidates using reciprocal rank fusion.",
+    )
+    presentation: Literal["whole", "excerpts"] = Field(
+        default="whole", description="whole: complete source messages; excerpts: shared budget with original-text offsets.",
+    )
+
+    @model_validator(mode="after")
+    def check_query(self) -> Self:
+        if not self.query.strip():
+            raise ValueError("memory query cannot be blank")
+        if self.time_start is not None and self.time_end is not None and self.time_start > self.time_end:
+            raise ValueError("memory time window is reversed")
+        return self
+
+
+class MemoryQuery(RecallQuery):
+    """A retry key belongs to one session and one immutable query request."""
+
+    key: Annotated[str, Field(min_length=1, max_length=256)]
+    session_id: Text
+    max_chars: Annotated[int, Field(ge=256, le=32000)] = 6000
+
+
+class MemoryEvidence(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+    message_id: Text
+    session_id: Text
+    seq: Annotated[int, Field(ge=0)]
+    recorded_at: AwareDatetime
+    author: Text
+    excerpt: EvidenceSpan | None = None
+
+
+class MemoryReadout(BaseModel):
+    """Only evidence actually present in material receives a source reference."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+    retrieval_ref: Text
+    record: Recall
+    material: str
+    evidence: tuple[MemoryEvidence, ...]
+
+
+MEMORY_QUERIES = ServiceKey[Callable[[MemoryQuery], Awaitable[MemoryReadout]]]("memory.queries.v1")
+
+
+class MemorySourceWindow(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+    retrieval_ref: Text
+    message_id: Text
+    offset: Annotated[int, Field(ge=0)] = 0
+    length: Annotated[int, Field(ge=1, le=6000)] = 2000
+
+
+class MemorySourceQuery(MemorySourceWindow):
+    session_id: Text
+
+
+class MemorySourceReadout(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+    retrieval_ref: Text
+    text: Text
+    evidence: MemoryEvidence
+    next_offset: Annotated[int, Field(ge=0)] | None
+
+
+MEMORY_SOURCES = ServiceKey[Callable[[MemorySourceQuery], Awaitable[MemorySourceReadout]]]("memory.sources.v1")

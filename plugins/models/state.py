@@ -1961,7 +1961,7 @@ class ModelsState:
                 descriptor,
                 driver.bind_embedding(descriptor, model.driver_config),
             )
-            _ = await bound.embed(("Akashic embedding setup check",))
+            _ = await bound.embed(("Kirakira embedding setup check",))
         else:
             raise ModelUnavailableError("模型用途尚未验证，不能保存。").exception()
 

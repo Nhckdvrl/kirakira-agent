@@ -135,7 +135,7 @@ def _git_value(checkout: Path, *arguments: str) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Verify Akashic runtime identity")
+    parser = argparse.ArgumentParser(description="Verify Kirakira runtime identity")
     parser.add_argument("--runtime-info", type=Path, required=True)
     parser.add_argument("--release-manifest", type=Path, required=True)
     parser.add_argument("--expected-commit", required=True)

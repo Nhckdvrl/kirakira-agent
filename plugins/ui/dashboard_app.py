@@ -57,7 +57,7 @@ def _install_dashboard_access_log_filter() -> None:
 
 def create_dashboard_app(static_dir: Path) -> FastAPI:
     """只读取固定代码制品中的构建资产；缺少入口时明确返回不可用。"""
-    app = FastAPI(title="Akashic Dashboard API")
+    app = FastAPI(title="Kirakira Dashboard API")
 
     @app.middleware("http")
     async def static_cache_contract(request: Request, call_next):

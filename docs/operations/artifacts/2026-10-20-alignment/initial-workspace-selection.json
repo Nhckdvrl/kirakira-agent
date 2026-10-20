@@ -1,4 +1,0 @@
-{
-  "scope": "startup/integration failure preserved before correction",
-  "error": "RuntimeError: Native model command rejected: {'detail': 'model driver 不可用: local-embedding'}"
-}

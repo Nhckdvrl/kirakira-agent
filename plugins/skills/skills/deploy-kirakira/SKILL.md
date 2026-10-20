@@ -1,9 +1,9 @@
 ---
-name: deploy-akashic
-description: 用户明确授权 Akashic 合并 PR 并更新当前 Docker 实例时，通过 Shell 提交宿主部署任务，正常回复后结束回合。
+name: deploy-kirakira
+description: 用户明确授权 Kirakira 合并 PR 并更新当前 Docker 实例时，通过 Shell 提交宿主部署任务，正常回复后结束回合。
 ---
 
-# 部署当前 Akashic
+# 部署当前 Kirakira
 
 本回合负责检查、合并和提交。宿主负责等待回复送达、停止、迁移与启动。
 成功接单不等于更新成功；提交之后不再操作，让本回合正常结束。

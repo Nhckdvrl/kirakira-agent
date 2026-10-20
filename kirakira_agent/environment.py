@@ -5,6 +5,12 @@ import sys
 from pathlib import Path
 
 
+def configure_plugin_home():
+    """CLI and embedded Runtime share the same default plugin artifact home."""
+    os.environ.setdefault("AKASHIC_PLUGIN_HOME", os.environ.get(
+        "KIRAKIRA_PLUGIN_HOME", str(Path.home() / ".kirakira/plugins")))
+
+
 def select_host_python():
     if sys.prefix == sys.base_prefix:
         return

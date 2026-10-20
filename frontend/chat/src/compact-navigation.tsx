@@ -85,7 +85,7 @@ export function CompactNavigation(props: DesktopSidebarProps) {
           returnFocus.current = null;
         }}
       >
-        <DialogTitle className="sr-only">Akashic 导航</DialogTitle>
+        <DialogTitle className="sr-only">Kirakira 导航</DialogTitle>
         <DesktopSidebar
           {...props}
           groups={navigationGroups ? {

@@ -1,1 +1,1 @@
-"""Akashic plugin runtime implementation package."""
+"""Kirakira plugin runtime implementation package."""

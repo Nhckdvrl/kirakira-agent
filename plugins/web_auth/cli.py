@@ -19,7 +19,7 @@ async def login_main(arguments: tuple[str, ...], *, workspace: Path, config_path
     """打印一条一次性登录链接；首次进入后仍需设置自己的密码。"""
     parser = argparse.ArgumentParser(prog="web-login", description=login_main.__doc__)
     parser.add_argument("--url", default=f"http://localhost:{os.environ.get('AKASHIC_WEB_PORT', '2236')}",
-                        help="浏览器访问 Akashic 的地址")
+                        help="浏览器访问 Kirakira 的地址")
     options = parser.parse_args(arguments)
     ticket = _auth(workspace).issue_ticket()
     print(f"一次性登录链接（{TICKET_S // 60} 分钟内有效，只能使用一次）：")

@@ -69,7 +69,7 @@ class DurableDeliveryStore:
                 )
 
     def recover_interrupted_provider_calls(self) -> int:
-        """Freeze external calls while leaving Session-first Akashic rows resumable."""
+        """Freeze external calls while leaving Session-first Kirakira rows resumable."""
 
         now = _utc_now()
         with self._transaction(write=True) as connection:
@@ -86,7 +86,7 @@ class DurableDeliveryStore:
     def mark_akashic_session_recovered(
         self, logical_delivery_id: str, message_id: str
     ) -> dict[str, object]:
-        """Finish an Akashic row whose Session commit survived a process crash."""
+        """Finish a Kirakira row whose Session commit survived a process crash."""
 
         logical_id = _identity("logical_delivery_id", logical_delivery_id)
         projected = _identity("message_id", message_id)
@@ -112,7 +112,7 @@ class DurableDeliveryStore:
             )
             if cursor.rowcount != 1:
                 raise RuntimeError(
-                    f"Akashic delivery recovery transition invalid: {logical_id}"
+                    f"Kirakira delivery recovery transition invalid: {logical_id}"
                 )
             return self._required(connection, logical_id)
 

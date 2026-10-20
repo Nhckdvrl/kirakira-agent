@@ -1,7 +1,7 @@
-"""Compare pinned source origins against a real, fixed Akashic Git checkout.
+"""Compare pinned source origins against a real, fixed reference Git checkout.
 
 This checks source coverage. Runtime activation and acceptance remain separate
-columns in docs/status/akashic-gap.md; a matching hash never proves deployment.
+columns in docs/status/roadmap.md; a matching hash never proves deployment.
 """
 
 import argparse
@@ -86,11 +86,11 @@ def compare(reference):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--reference", required=True, type=Path)
-    parser.add_argument("--write", action="store_true")
+    parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     value = compare(args.reference)
-    if args.write:
-        (ROOT / "docs/status/upstream-diff.json").write_text(
+    if args.output:
+        args.output.write_text(
             json.dumps(value, indent=2) + "\n"
         )
     print(json.dumps(value, indent=2))

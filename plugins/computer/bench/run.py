@@ -1,4 +1,4 @@
-"""通过正式 Gateway 驱动完整 Akashic，运行固定版本 MiniWoB。"""
+"""通过正式 Gateway 驱动完整 Kirakira，运行固定版本 MiniWoB。"""
 import argparse
 import asyncio
 import hashlib

@@ -1,4 +1,4 @@
-"""Akashic clients 的窄服务合同。
+"""Kirakira clients 的窄服务合同。
 
 这个模块只描述客户端插件消费的结构能力。宿主可以用任意实现提供这些
 Protocol；客户端插件不导入 bootstrap、Core runtime 或其他插件实现。

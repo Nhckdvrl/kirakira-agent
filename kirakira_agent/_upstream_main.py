@@ -24,7 +24,7 @@ from uuid import uuid4
 
 _DISTRIBUTION_COMMANDS = frozenset({"dashboard", "workload-controller"})
 _MANAGEMENT_COMMANDS = frozenset({"plugin-install", "plugin-status", "plugin-uninstall"})
-_DEFAULT_WORKSPACE = "~/.akashic/workspace"
+_DEFAULT_WORKSPACE = "~/.kirakira/workspace"
 _PLUGIN_ROLLOUT_OWNER_TURN_ENV = "AKASHIC_PLUGIN_ROLLOUT_OWNER_TURN"
 _AGENT_INTERNAL_PLUGIN_COMMANDS = frozenset(
     {

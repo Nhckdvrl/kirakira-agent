@@ -1,0 +1,1134 @@
+--- a/agent/migrations/context.py
++++ b/agent/migrations/context.py
+@@ -53,5 +53,5 @@
+ def current_migration_context() -> MigrationContext:
+     context = _CURRENT_CONTEXT.get()
+     if context is None:
+-        raise RuntimeError("migration callback 缺少 Akashic installation context")
++        raise RuntimeError("migration callback 缺少 Kirakira installation context")
+     return context
+--- a/agent/plugins/__init__.py
++++ b/agent/plugins/__init__.py
+@@ -1 +1 @@
+-"""Akashic plugin runtime implementation package."""
++"""Kirakira plugin runtime implementation package."""
+--- a/agent/runtime_identity.py
++++ b/agent/runtime_identity.py
+@@ -135,7 +135,7 @@
+ 
+ 
+ def main() -> None:
+-    parser = argparse.ArgumentParser(description="Verify Akashic runtime identity")
++    parser = argparse.ArgumentParser(description="Verify Kirakira runtime identity")
+     parser.add_argument("--runtime-info", type=Path, required=True)
+     parser.add_argument("--release-manifest", type=Path, required=True)
+     parser.add_argument("--expected-commit", required=True)
+--- a/bootstrap/web_shell.py
++++ b/bootstrap/web_shell.py
+@@ -700,7 +700,7 @@
+ def _runtime_unavailable(*, html: bool = False, code: str = "runtime_unavailable",
+                          message: str = "Runtime 尚未就绪") -> Response:
+     if html:
+-        return HTMLResponse("<!doctype html><meta charset=utf-8><title>Akashic</title>"
++        return HTMLResponse("<!doctype html><meta charset=utf-8><title>Kirakira</title>"
+                             f"<main><h1>{message}</h1><p>服务恢复后刷新此页面。</p></main>",
+                             status_code=503, headers={"Retry-After": "1", "Cache-Control": "no-store"})
+     return JSONResponse(status_code=503,
+--- a/core/common/diagnostic_log.py
++++ b/core/common/diagnostic_log.py
+@@ -109,7 +109,7 @@
+ 
+ 
+ class AkashicJsonFormatter(JsonFormatter):
+-    """Apply the Akashic field and redaction policy before library serialization."""
++    """Apply the Kirakira field and redaction policy before library serialization."""
+ 
+     def process_log_record(self, log_data: dict[str, Any]) -> dict[str, Any]:
+         """Reduce library-extracted data to the owned diagnostic schema."""
+--- a/frontend/chat/harness/index.html
++++ b/frontend/chat/harness/index.html
+@@ -3,7 +3,7 @@
+   <head>
+     <meta charset="UTF-8" />
+     <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
+-    <title>Akashic Chat 夹具</title>
++    <title>Kirakira Chat 夹具</title>
+     <!-- 聊天插件模块与外壳里一样经 import map 取共享运行时；必须早于任何模块脚本。 -->
+     <script type="importmap">
+     {
+--- a/frontend/chat/src/browser-uuid.ts
++++ b/frontend/chat/src/browser-uuid.ts
+@@ -10,7 +10,7 @@
+   return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`;
+ }
+ 
+-/** Create a UUIDv7 whose identity is valid on every Akashic client. */
++/** Create a UUIDv7 whose identity is valid on every Kirakira client. */
+ export function createUuidV7(
+   source: BrowserCrypto = globalThis.crypto,
+   now = Date.now(),
+--- a/frontend/chat/src/compact-navigation.tsx
++++ b/frontend/chat/src/compact-navigation.tsx
+@@ -85,7 +85,7 @@
+           returnFocus.current = null;
+         }}
+       >
+-        <DialogTitle className="sr-only">Akashic 导航</DialogTitle>
++        <DialogTitle className="sr-only">Kirakira 导航</DialogTitle>
+         <DesktopSidebar
+           {...props}
+           groups={navigationGroups ? {
+--- a/frontend/chat/src/desktop-chat-view.tsx
++++ b/frontend/chat/src/desktop-chat-view.tsx
+@@ -384,7 +384,7 @@
+     wasGenerating.current = generating;
+     const apply = () => {
+       if (!document.hidden) unseen.current = false;
+-      document.title = `${unseen.current ? "● " : ""}${title ? `${title} · ` : ""}Akashic`;
++      document.title = `${unseen.current ? "● " : ""}${title ? `${title} · ` : ""}Kirakira`;
+     };
+     apply();
+     document.addEventListener("visibilitychange", apply);
+@@ -412,7 +412,7 @@
+       <p>服务可能正在启动、已停用或启动失败。连接恢复后，这个页面会自动更新。</p>
+       <a href="/">查看管理面板</a>
+     </div> : shellStatus === "starting" ? <div className="model-connection-state">
+-      <span>正在启动</span><h1>Akashic 正在准备对话</h1>
++      <span>正在启动</span><h1>Kirakira 正在准备对话</h1>
+       <p>这个页面会自动恢复，不需要切换端口或刷新浏览器。</p>
+       <a href="/#models">查看模型设置</a>
+     </div> : shellStatus === null ? (
+--- a/frontend/chat/src/desktop-sidebar.tsx
++++ b/frontend/chat/src/desktop-sidebar.tsx
+@@ -527,7 +527,7 @@
+         <div className="chat-sidebar__brand-row">
+           <span className="chat-sidebar__brand">
+             <span className="chat-sidebar__mark" style={brandMask} aria-hidden="true" />
+-            <strong>Akashic</strong>
++            <strong>Kirakira</strong>
+           </span>
+           <button type="button" className="chat-sidebar__new" aria-label="新会话" title={`新会话（${SHORTCUT_MOD}+Shift+O）`} onClick={newChat}>
+             <MessageSquarePlus size={18} strokeWidth={1.75} aria-hidden="true" />
+--- a/frontend/chat/src/message-actions.tsx
++++ b/frontend/chat/src/message-actions.tsx
+@@ -62,9 +62,9 @@
+       type="button"
+       onClick={onNavigate}
+       disabled={unavailable && !canLoad}
+-      aria-label={`查看引用的 ${author ?? (role === "assistant" ? "Akashic" : "你")} 消息`}
++      aria-label={`查看引用的 ${author ?? (role === "assistant" ? "Kirakira" : "你")} 消息`}
+     >
+-      <span>{author ?? (role === "assistant" ? "Akashic" : "你")}</span>
++      <span>{author ?? (role === "assistant" ? "Kirakira" : "你")}</span>
+       <p aria-live="polite">{unavailable ? "原消息不在当前记录中" : preview}</p>
+     </button>
+   );
+@@ -73,7 +73,7 @@
+ // 引用条显示给人看的名字：内部角色名不外露，其它来源（渠道用户名等）原样显示。
+ function replyAuthorLabel(author: string | undefined, role: ReplyRole | undefined): string {
+   const who = author ?? role;
+-  if (who === "assistant") return "Akashic";
++  if (who === "assistant") return "Kirakira";
+   if (who === "user" || who === undefined) return "你";
+   return who;
+ }
+--- a/frontend/chat/src/verify-composer-flow.mjs
++++ b/frontend/chat/src/verify-composer-flow.mjs
+@@ -161,7 +161,7 @@
+   await reply.hover();
+   await reply.getByRole('button', { name: '引用此消息' }).click();
+   await page.waitForFunction(() => document.activeElement === document.querySelector('.composer textarea'));
+-  assert.equal(await page.locator('.composer-reply strong').innerText(), '回复 Akashic');
++  assert.equal(await page.locator('.composer-reply strong').innerText(), '回复 Kirakira');
+   await page.getByRole('button', { name: '取消引用' }).click();
+   await page.locator('.composer textarea').fill('');
+   report.checks.push({ case: 'reply focuses composer with readable author' });
+--- a/frontend/chat/src/web-chat-data.ts
++++ b/frontend/chat/src/web-chat-data.ts
+@@ -49,7 +49,7 @@
+ 
+ export function errorMessage(error: unknown): string {
+   if (error instanceof TypeError && error.message === "Failed to fetch") {
+-    return "无法连接 Akashic。请确认服务仍在运行，然后重试。";
++    return "无法连接 Kirakira。请确认服务仍在运行，然后重试。";
+   }
+   return error instanceof Error ? error.message : String(error);
+ }
+--- a/frontend/dashboard/index.html
++++ b/frontend/dashboard/index.html
+@@ -5,7 +5,7 @@
+   <link rel="icon" type="image/svg+xml" sizes="any" href="../theme/src/akashic-brand.svg">
+   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <meta name="color-scheme" content="light">
+-  <title>Akashic Dashboard</title>
++  <title>Kirakira Dashboard</title>
+   <script>
+     // bootstrap 预热：HTML 解析到这里就发请求，与整个模块图的下载求值并行，不再等
+     // dashboard 入口 eval 完才发起（慢链路下省一个多 RTT 的串行段）。消费方是
+--- a/frontend/design.md
++++ b/frontend/design.md
+@@ -1,4 +1,4 @@
+-# Akashic 前端设计合同（design.md）
++# Kirakira 前端设计合同（design.md）
+ 
+ 本文件是所有前端工作的唯一设计入口：修改 `frontend/**/src`、插件 web UI（`frontend/plugins/`）或 `plugins/*/web_module.*` 前必读。它规定可观察的几何、token 和反模式；品牌理由与迁移历史见 [0043](../docs/decisions/0043-paper-brand-tokens-replace-material-visual-semantics.md) 与[纸张品牌系统](../docs/design/akashic-paper-brand-system.md)，窄屏行为细节见[共享 Web 窄屏阅读设计](../docs/design/web-narrow-reading.md)。规则冲突时以本文件的几何合同为准，以决策记录的理由为准。
+ 
+@@ -85,7 +85,7 @@
+ 
+ 消息操作等次要操作默认 `opacity: 0`，父消息容器 `:hover` / `:focus-within` 时在 `--ak-sys-duration-short` 内显现。时间戳与操作同属一条元信息行：有悬停的宽屏只有最新一条消息常驻，更早的消息整行随悬停/聚焦显现；该行固定 28px，40px 操作热区上下透明溢出，显隐只改透明度、不推动正文。窄屏（≤36rem）同理只留最新一条，点按消息显示该条。触控断点（≤820px 或 `hover: none`）hover 不存在，次要操作常驻可见。透明状态不得把按钮移出 Tab 序（禁用 `visibility: hidden` / `display: none`），键盘 Tab 到达时经 `focus-within` 必然可见。键盘焦点统一是 2px `--ak-rule-focus` 墨线、外偏 2px：`styles.css` 开头有一条 `:where()` 零特异性兜底，没写焦点样式的控件也不会落回浏览器默认的 1px 蓝环；组件需要别的焦点形态时自己写 `:focus-visible` 覆盖。
+ 
+-用户自己的提问额外有"放回输入框编辑"（排在引用、复制之前）：原文接在已有草稿之后（空行分隔），不覆盖正在写的内容；聚焦到末尾并按溢出展开输入卡。它不改写历史、不分叉会话，只是"改一改再问"的快捷方式；回复与工具结果不提供。键盘等价物：输入框为空（且无附件）时按 ↑ 取回当前会话最后一条提问，光标置于末尾；有内容时 ↑ 仍是移动光标。选了"引用此消息"后焦点直接进输入框（触屏弹出键盘），引用条显示"回复 Akashic / 回复 你"，内部角色名不外露；引用目标与草稿一样按会话保留（切走再切回仍在，发出或取消后清除，不跟到别的会话）；针对一句追问：鼠标在同一条消息里选中文字后，选区上方浮出墨色反白的"引用"小药丸，点击把选中内容转成 Markdown 引用块（`> `）接到草稿后面并聚焦输入框；跨消息、在可编辑区域里选中不出现，滚动、Esc、选区清空即隐藏；高亮代码在 shadow DOM 里，选区经 `getComposedRanges` 取回真实端点（兼容旧的剩余参数签名）、越过 shadow 边界找所属消息；代码块连着后面正文的跨树选区按树切段（shadow 内剩余部分、宿主之间的文档、另一 shadow 的开头）分别量行，两端都滚出视口的长选区也能定位；按钮落在选区可见部分——标题条之下、输入卡之上（按两者实际几何扣除），优先首个可见行上方，放不下就到末个可见行下方，再压回可见区；触屏有系统选择菜单，不叠加。所有 `:hover` 样式（底色、颜色、显隐）都写在 `@media (hover: hover)` 里：触屏的 hover 会粘在最后点过的元素上；按下反馈用 `:active`，与 `:focus-visible` 一起留在媒体块外；靠悬停才显出的控件（附件移除钮等）在 `(hover: none)` 下常显。生成中焦点在输入框时按 Esc 停止本轮（与停止按钮同一入口，排队内容随之退回）；输入法组合中的 Esc 属于输入法；停止按钮的提示与 `aria-keyshortcuts` 标明该快捷键。
++用户自己的提问额外有"放回输入框编辑"（排在引用、复制之前）：原文接在已有草稿之后（空行分隔），不覆盖正在写的内容；聚焦到末尾并按溢出展开输入卡。它不改写历史、不分叉会话，只是"改一改再问"的快捷方式；回复与工具结果不提供。键盘等价物：输入框为空（且无附件）时按 ↑ 取回当前会话最后一条提问，光标置于末尾；有内容时 ↑ 仍是移动光标。选了"引用此消息"后焦点直接进输入框（触屏弹出键盘），引用条显示"回复 Kirakira / 回复 你"，内部角色名不外露；引用目标与草稿一样按会话保留（切走再切回仍在，发出或取消后清除，不跟到别的会话）；针对一句追问：鼠标在同一条消息里选中文字后，选区上方浮出墨色反白的"引用"小药丸，点击把选中内容转成 Markdown 引用块（`> `）接到草稿后面并聚焦输入框；跨消息、在可编辑区域里选中不出现，滚动、Esc、选区清空即隐藏；高亮代码在 shadow DOM 里，选区经 `getComposedRanges` 取回真实端点（兼容旧的剩余参数签名）、越过 shadow 边界找所属消息；代码块连着后面正文的跨树选区按树切段（shadow 内剩余部分、宿主之间的文档、另一 shadow 的开头）分别量行，两端都滚出视口的长选区也能定位；按钮落在选区可见部分——标题条之下、输入卡之上（按两者实际几何扣除），优先首个可见行上方，放不下就到末个可见行下方，再压回可见区；触屏有系统选择菜单，不叠加。所有 `:hover` 样式（底色、颜色、显隐）都写在 `@media (hover: hover)` 里：触屏的 hover 会粘在最后点过的元素上；按下反馈用 `:active`，与 `:focus-visible` 一起留在媒体块外；靠悬停才显出的控件（附件移除钮等）在 `(hover: none)` 下常显。生成中焦点在输入框时按 Esc 停止本轮（与停止按钮同一入口，排队内容随之退回）；输入法组合中的 Esc 属于输入法；停止按钮的提示与 `aria-keyshortcuts` 标明该快捷键。
+ 
+ 全局快捷键不依赖常驻侧栏可见：紧凑断点（平板竖屏接键盘）下 `Ctrl/⌘ + Shift + O` 与 `Ctrl/⌘ + /` 照常生效，`Ctrl/⌘ + K` 打开导航抽屉并聚焦其中的搜索框；关上抽屉回到按快捷键前的焦点（输入框里的光标位置不丢），原处在打开期间被隐藏（拉宽离开断点）时退到打开按钮、再退到输入框。快捷键集中列在一个面板里（`Ctrl/⌘ + /` 或侧栏底部主题行右端的键盘图标打开；键盘图标只在 `(hover: hover) and (pointer: fine)` 出现）。不用 `?` 打开——阅读时直接打字会把它送进输入框。面板没有固定触发按钮：打开前记下焦点与光标区间，关闭后放回原处（从输入框打开就回到原光标位置接着写）。新增或改动快捷键时同步更新面板，按键用发丝线小方块（技术字体），不做彩色胶囊。"引用此消息""放回输入框编辑"与选区引用写入草稿时走浏览器编辑命令（`execCommand("insertText")`）整段替换，进原生撤销栈：误点后 Ctrl+Z 撤回、Ctrl+Shift+Z 重做；已有草稿时追加在后，不覆盖。焦点在输入框时 PageUp/PageDown 翻对话（参考 Slack、Discord）：发送后焦点留在输入框，不必先点进消息区才能往回读；一页是标题条与输入卡之间的可见高度减 48px 重叠；往回翻先解除贴底跟随；草稿本身长到能滚动时仍交给输入框；输入法组合中（`isComposing` 或 `keyCode === 229`）PageUp/PageDown 翻的是候选页，不接管。
+ 
+@@ -186,7 +186,7 @@
+ 
+ ### 3.19 连接与错误状态合同
+ 
+-- 标签页标题是"会话标题 · Akashic"（项目会话带项目名，空白新会话只写 Akashic），开着几个标签也分得清；页面在后台时本轮答完，标题前加"●"，回到页面即清除。不弹系统通知、不闪标题。
++- 标签页标题是"会话标题 · Kirakira"（项目会话带项目名，空白新会话只写 Kirakira），开着几个标签也分得清；页面在后台时本轮答完，标题前加"●"，回到页面即清除。不弹系统通知、不闪标题。
+ - 会自己恢复的状态（自动重连中）用输入框下方的安静状态行：次要墨色 + 警示色呼吸点 + 文字按钮"立即重试"。不用错误色、不用实心按钮，用户此时多半什么都不用做。
+ - 需要用户动手的状态（重连失败、请求出错）才用错误行（错误色 + 重试按钮）。发送失败（上传附件或投递出错）例外：草稿与附件已放回输入框，发送钮本身就是重试入口，错误行只说"没有发出：原因。内容还在输入框里，可以直接再发。"，不给"重试"（它是重连并重新加载，不会重发，放在这里会误导）；再次发出后错误行自动撤下。HTTP 错误没有服务端说明时统一写"请求失败（状态码）"，与功能设置页同一格式。
+ - 同一根因只说一次：聊天连接断开时，宿主执行状态无从确认，宿主提示静默，交给连接状态行。
+--- a/frontend/plugins/akasha/src/plugin-ui.css
++++ b/frontend/plugins/akasha/src/plugin-ui.css
+@@ -1,4 +1,11 @@
+ @import "../../../../plugins/akasha/plugin_ui.css";
++
++.akasha-plugin-ui-evidence {
++  display: block;
++  margin-block-end: 4px;
++  color: var(--ak-color-text-secondary);
++  font-size: 0.6875rem;
++}
+ 
+ .akasha-plugin-ui-query-status {
+   margin-block: 8px;
+--- a/frontend/plugins/akasha/src/plugin-ui.js
++++ b/frontend/plugins/akasha/src/plugin-ui.js
+@@ -4,6 +4,13 @@
+ const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
+   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+ })[character]);
++
++const sourceTime = value => {
++  if (typeof value !== "string" || !value) return "";
++  const date = new Date(value);
++  return Number.isNaN(date.getTime()) ? String(value ?? "")
++    : date.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
++};
+ 
+ /** 聚合事实在服务端确认闭合前仍可变化，不进入页面结果缓存。 */
+ async function readRecall(context, isActive) {
+@@ -62,15 +69,24 @@
+ /** 先计算展示内容；相同快照不改写真实卡片、选择与焦点。 */
+ function renderRecall(result) {
+   return result.items.length ? `<div class="akasha-plugin-ui-recall-group">${[
+-    ["dense", "左脑 · 精确回忆", "precise"], ["completion", "右脑 · 模式补全", "completion"],
++    ["dense", "语义匹配", "precise"], ["completion", "关联补全", "completion"],
+   ].map(([lane, title, style]) => {
+     // 多次真实查询可以命中同一回忆；卡片按消息成员展示一次，原查询留在 Inspector。
+-    const hits = [...new Map(result.items.flatMap((item) => item.hits.filter((hit) => hit.lane === lane))
+-      .map((hit) => [JSON.stringify(hit.messages.map((message) => message.message_id)), hit])).values()];
++    const merged = new Map();
++    for (const hit of result.items.flatMap(item => item.hits.filter(hit => hit.lane === lane))) {
++      const key = JSON.stringify(hit.messages.map(message => message.message_id));
++      const previous = merged.get(key);
++      merged.set(key, previous ? { ...hit, messages: hit.messages.map(message => {
++        const earlier = previous.messages.find(item => item.message_id === message.message_id);
++        return earlier?.presented && !message.presented ? earlier : message;
++      }) } : hit);
++    }
++    const hits = [...merged.values()];
++    const presented = hits.filter(hit => hit.messages.some(message => message.presented)).length;
+     return `<details data-lane="${lane}" class="akasha-plugin-ui-recall akasha-plugin-ui-recall--${style}">
+-      <summary><span>${title}</span><b>${hits.length}</b></summary>
+-      <ol class="akasha-plugin-ui-memories">${hits.map((hit) => `<li><div>${hit.messages.map((message) =>
+-        `<p>${escapeHtml(message.preview || "（非文本消息）")}${message.truncated ? "…" : ""}</p>`).join("")}</div></li>`).join("")
++      <summary><span>${title}</span><b title="至少一次编入召回材料的经历 / 检索候选；不代表模型已经接收">已选 ${presented} / ${hits.length}</b></summary>
++      <ol class="akasha-plugin-ui-memories">${hits.map((hit) => `<li><div>${hit.messages.filter(message => message.preview).map((message) =>
++        `<p><small class="akasha-plugin-ui-evidence" title="${escapeHtml(message.recorded_at || "")}">${message.presented ? (message.excerpt ? `入选片段 [${escapeHtml(message.excerpt.start)}:${escapeHtml(message.excerpt.end)}]` : "入选原文") : "候选 · 未入选"} · ${escapeHtml(message.author || "")} · ${escapeHtml(sourceTime(message.recorded_at))}</small>${escapeHtml(message.preview)}${message.truncated ? "…" : ""}</p>`).join("")}</div></li>`).join("")
+         || '<li class="akasha-plugin-ui-empty">本次没有命中</li>'}</ol></details>`;
+   }).join("")}</div>` : "";
+ }
+--- a/frontend/plugins/onboarding/src/index.tsx
++++ b/frontend/plugins/onboarding/src/index.tsx
+@@ -210,7 +210,7 @@
+ function Surface({children, onCancel}: {children: React.ReactNode; onCancel: () => void}) {
+   const ref = useRef<HTMLDialogElement>(null);
+   useEffect(() => { const dialog = ref.current!; dialog.showModal(); return () => dialog.close(); }, []);
+-  return <dialog ref={ref} className="onboarding-surface" aria-label="Akashic 新手引导"
++  return <dialog ref={ref} className="onboarding-surface" aria-label="Kirakira 新手引导"
+     onCancel={event => { event.preventDefault(); onCancel(); }}>{children}</dialog>;
+ }
+ 
+@@ -218,7 +218,7 @@
+   const middle = phases.length - 2;
+   const showProgress = at > 0 && at < phases.length - 1;
+   return <header className="onboarding-top">
+-    <span className="onboarding-brand"><i className="onboarding-mark" style={brandMask} aria-hidden="true" /><span>Akashic</span></span>
++    <span className="onboarding-brand"><i className="onboarding-mark" style={brandMask} aria-hidden="true" /><span>Kirakira</span></span>
+     {showProgress ? <div className="onboarding-progress" role="progressbar" aria-label="引导进度" aria-valuemin={1} aria-valuemax={middle} aria-valuenow={at}>
+       {Array.from({length: middle}, (_, i) => <i key={i} className={i + 1 < at ? "is-done" : i + 1 === at ? "is-now" : ""} />)}
+     </div> : <span />}
+@@ -248,7 +248,7 @@
+   const required = catalog.groups.filter(group => group.required);
+   return <div className="onboarding-welcome">
+     <i className="onboarding-mark is-large" style={brandMask} aria-hidden="true" />
+-    <h2 tabIndex={-1}>你好，我是 Akashic</h2>
++    <h2 tabIndex={-1}>你好，我是 Kirakira</h2>
+     <p className="onboarding-lead">先花两三分钟让我能说话，其余能力随时可以再开。</p>
+     <ol className="onboarding-promise">
+       {required.map(group => <li key={group.key}><span>{group.pitch || group.title}</span><em>必需</em></li>)}
+--- a/frontend/plugins/projects/src/plugin-ui.tsx
++++ b/frontend/plugins/projects/src/plugin-ui.tsx
+@@ -149,7 +149,7 @@
+   // 必要 effect：打开即读取起始目录，卸载时作废仍在途的读取。
+   useEffect(() => { void browse("~"); return () => { request.current += 1; }; }, []); // eslint-disable-line react-hooks/exhaustive-deps
+   return <div className="projects-ui-browser">
+-    <p className="projects-ui-muted">目录来自运行 Akashic 工具的执行主机。连接远程服务时，不是当前浏览器所在电脑的目录。</p>
++    <p className="projects-ui-muted">目录来自运行 Kirakira 工具的执行主机。连接远程服务时，不是当前浏览器所在电脑的目录。</p>
+     <label className="projects-ui-open">
+       <span>执行主机路径</span>
+       <span><input value={path} disabled={busy} onChange={(event) => { request.current += 1; setPath(event.target.value); setPage(null); onPage(null); setLoading(false); }}
+--- a/frontend/plugins/shell_ui/src/brand.ts
++++ b/frontend/plugins/shell_ui/src/brand.ts
+@@ -1,2 +1,2 @@
+-/** Akashic Dashboard 使用的透明品牌图形。 */
++/** Kirakira Dashboard 使用的透明品牌图形。 */
+ export const akashicBrandIcon = "data:image/png;base64,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";
+--- a/frontend/plugins/shell_ui/src/index.tsx
++++ b/frontend/plugins/shell_ui/src/index.tsx
+@@ -446,10 +446,10 @@
+   const showBand = bandEntries.length > 1;
+   return <div className={`unified-shell${showBand ? " has-band" : ""}`}>
+     {withdrawn && <p role="status" className="config-hint">所选页面暂不可用，已自动切换至默认页面。可在功能设置中查看已安装功能。</p>}
+-    {showBand && <header className="product-band" aria-label="Akashic 主导航">
+-      <div className="product-band__brand" title="Akashic">
++    {showBand && <header className="product-band" aria-label="Kirakira 主导航">
++      <div className="product-band__brand" title="Kirakira">
+         <img src={akashicBrandIcon} alt="" />
+-        <strong>Akashic</strong>
++        <strong>Kirakira</strong>
+       </div>
+       <nav
+         className="product-band__nav"
+--- a/frontend/theme/src/brand-tokens.css
++++ b/frontend/theme/src/brand-tokens.css
+@@ -1,5 +1,5 @@
+ /*
+- * Akashic paper brand contract.
++ * Kirakira paper brand contract.
+  *
+  * Components consume these semantic axes instead of naming a visual component
+  * such as a card, chip, or Material surface. The older color namespaces remain
+--- a/frontend/theme/src/material-tokens.css
++++ b/frontend/theme/src/material-tokens.css
+@@ -10,7 +10,7 @@
+ }
+ 
+ :root {
+-  /* Akashic owns these Material 3 system values; components only consume them. */
++  /* Kirakira owns these Material 3 system values; components only consume them. */
+   /* 英文使用 Source Serif 4，中文由 Noto Serif SC 承接。 */
+   --md-ref-typeface-brand: "Source Serif 4", "Noto Serif SC", "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", Georgia, serif;
+   --md-ref-typeface-plain: "Source Serif 4", "Noto Serif SC", "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", Georgia, serif;
+--- a/plugins/akashic_clients/attachments.py
++++ b/plugins/akashic_clients/attachments.py
+@@ -1,4 +1,4 @@
+-"""Filesystem staging owned by the Akashic clients plugin."""
++"""Filesystem staging owned by the Kirakira clients plugin."""
+ 
+ from __future__ import annotations
+ 
+--- a/plugins/akashic_clients/capabilities.py
++++ b/plugins/akashic_clients/capabilities.py
+@@ -1,4 +1,4 @@
+-"""Independent composition keys consumed by the Akashic client plugin.
++"""Independent composition keys consumed by the Kirakira client plugin.
+ 
+ The client plugin names the capabilities it uses by their stable ServiceKey
+ identity.  It does not import another plugin's implementation.  The channel
+--- a/plugins/akashic_clients/chat_api.py
++++ b/plugins/akashic_clients/chat_api.py
+@@ -132,7 +132,7 @@
+     async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
+         yield
+ 
+-    app = FastAPI(title="Akashic Chat API", lifespan=lifespan)
++    app = FastAPI(title="Kirakira Chat API", lifespan=lifespan)
+     app.state.workspace = workspace
+     app.state.channel = channel
+ 
+--- a/plugins/akashic_clients/config.py
++++ b/plugins/akashic_clients/config.py
+@@ -1,4 +1,4 @@
+-"""Akashic Web client plugin configuration."""
++"""Kirakira Web client plugin configuration."""
+ 
+ from __future__ import annotations
+ 
+--- a/plugins/akashic_clients/migrations/akashic_clients_migrations/__init__.py
++++ b/plugins/akashic_clients/migrations/akashic_clients_migrations/__init__.py
+@@ -1 +1 @@
+-"""Akashic clients configuration migration bundle."""
++"""Kirakira clients configuration migration bundle."""
+--- a/plugins/akashic_clients/migrations/akashic_clients_migrations/helpers/__init__.py
++++ b/plugins/akashic_clients/migrations/akashic_clients_migrations/helpers/__init__.py
+@@ -1 +1 @@
+-"""Private helpers owned by the Akashic clients migration bundle."""
++"""Private helpers owned by the Kirakira clients migration bundle."""
+--- a/plugins/akashic_clients/migrations/akashic_clients_migrations/helpers/config.py
++++ b/plugins/akashic_clients/migrations/akashic_clients_migrations/helpers/config.py
+@@ -125,7 +125,7 @@
+         channel_name = chat_values["channel_name"]
+         if channel_name not in {"", "web", "akashic"}:
+             raise ValueError(
+-                "channels.chat.channel_name 不是 Akashic clients 的可迁移身份: "
++                "channels.chat.channel_name 不是 Kirakira clients 的可迁移身份: "
+                 f"{channel_name!r}"
+             )
+     if "socket_path" in chat_values and not isinstance(chat_values["socket_path"], str):
+--- a/plugins/akashic_clients/navigation.py
++++ b/plugins/akashic_clients/navigation.py
+@@ -24,7 +24,7 @@
+             if self.id != self.id.strip() or self.id == "default" or len(self.id) > 128:
+                 raise ValueError("维度值无效")
+         elif not self.id.startswith("akashic:") or not self.id.removeprefix("akashic:").strip() or self.id != self.id.strip():
+-            raise ValueError("需要完整的 Akashic 会话 ID")
++            raise ValueError("需要完整的 Kirakira 会话 ID")
+         return self
+ 
+ 
+--- a/plugins/akashic_clients/notifications.py
++++ b/plugins/akashic_clients/notifications.py
+@@ -57,7 +57,7 @@
+         "message_id": message.message_id,
+         "seq": message.seq,
+         "recorded_at": message.recorded_at.isoformat(),
+-        "title": _clip(title, 40) or "Akashic",
++        "title": _clip(title, 40) or "Kirakira",
+         "preview": _clip(_text_of(body.parts), 160),
+     }
+ 
+--- a/plugins/akashic_clients/plugin.py
++++ b/plugins/akashic_clients/plugin.py
+@@ -17,8 +17,8 @@
+ api_version = 3
+ name = "akashic_clients"
+ version = "1.0.0"
+-desc = "Web Akashic client channel"
+-author = "Akashic"
++desc = "Web Kirakira client channel"
++author = "Kirakira"
+ # Every dependency is a separate composition capability.  In particular,
+ # there is no client-wide service bus for Core to assemble.
+ inject = (CHANNELS, CHANNEL_INPUT, OWNER_STATE, *CLIENT_CAPABILITIES)
+--- a/plugins/akashic_clients/services.py
++++ b/plugins/akashic_clients/services.py
+@@ -1,4 +1,4 @@
+-"""Akashic clients 的窄服务合同。
++"""Kirakira clients 的窄服务合同。
+ 
+ 这个模块只描述客户端插件消费的结构能力。宿主可以用任意实现提供这些
+ Protocol；客户端插件不导入 bootstrap、Core runtime 或其他插件实现。
+--- a/plugins/akashic_sender/plugin.py
++++ b/plugins/akashic_sender/plugin.py
+@@ -17,7 +17,7 @@
+ 
+ @dataclass(frozen=True, slots=True)
+ class SendResult:
+-    """Akashic provider 的本地结果；Delivery 在注册边界重新校验它。"""
++    """Kirakira provider 的本地结果；Delivery 在注册边界重新校验它。"""
+ 
+     status: Literal["delivered", "rejected", "failed"]
+     provider_ids: tuple[str, ...] = ()
+@@ -43,7 +43,7 @@
+     async def send(self, key: str, address: str, message: Message) -> SendResult:
+         # Delivery 只传入已提交的原 Message；这里核对它是否属于收件地址。
+         if message.session_id != "akashic:" + address:
+-            return SendResult(status="rejected", error="消息未保存在 Akashic 收件地址对应的 Session")
++            return SendResult(status="rejected", error="消息未保存在 Kirakira 收件地址对应的 Session")
+         return SendResult(status="delivered", provider_ids=(message.message_id,))
+ 
+     async def query(self, key: str, address: str) -> SendResult | None:
+--- a/plugins/channels/plugin.py
++++ b/plugins/channels/plugin.py
+@@ -19,9 +19,9 @@
+     async def contribute(child: Context):
+         await child.require(ONBOARDING).group(child, "channels", "聊天渠道", Ability(
+             pitch="在聊天软件里找到它",
+-            benefit="在手机上直接给 Akashic 发消息，不用打开网页；主动消息也会发到这里。",
++            benefit="在手机上直接给 Kirakira 发消息，不用打开网页；主动消息也会发到这里。",
+             preview=(PreviewLine("你 · Telegram", "帮我记一下，周五下午三点看牙。"),
+-                     PreviewLine("Akashic", "记下了：周五 15:00 看牙。前一天晚上提醒你？")),
++                     PreviewLine("Kirakira", "记下了：周五 15:00 看牙。前一天晚上提醒你？")),
+         ))
+     await ctx.inject((ONBOARDING,), contribute, name="onboarding")
+ 
+--- a/plugins/codex/plugin.py
++++ b/plugins/codex/plugin.py
+@@ -16,7 +16,7 @@
+ name = "codex"
+ version = "1.0.0"
+ desc = "ChatGPT login, Codex catalog, and Responses transport"
+-author = "Akashic Core"
++author = "Kirakira Core"
+ inject = (MODEL_DRIVERS, PROCESSES)
+ workspace_roots = ()
+ workspace_files = ()
+--- a/plugins/computer/bench/README.md
++++ b/plugins/computer/bench/README.md
+@@ -8,7 +8,7 @@
+ ```text
+ 固定任务 / seed ──→ 页面初始化 ──→ Gateway 输入
+                                       │
+-                           Akashic → 模型 → Computer
++                           Kirakira → 模型 → Computer
+                                       │
+ 页面 reward ←── 可信判分端 ←──────────┘
+ ```
+--- a/plugins/computer/bench/run.py
++++ b/plugins/computer/bench/run.py
+@@ -1,4 +1,4 @@
+-"""通过正式 Gateway 驱动完整 Akashic，运行固定版本 MiniWoB。"""
++"""通过正式 Gateway 驱动完整 Kirakira，运行固定版本 MiniWoB。"""
+ import argparse
+ import asyncio
+ import hashlib
+--- a/plugins/computer/plugin.py
++++ b/plugins/computer/plugin.py
+@@ -144,7 +144,7 @@
+ name = "computer"
+ version = "2.0.0"
+ desc = "The user's logged-in browser: tabs, anonymous contexts, and visual control"
+-author = "Akashic Core"
++author = "Kirakira Core"
+ inject = (UI,
+     INSTALLED_ASSETS,
+     MCP_SERVERS,
+--- a/plugins/computer/skills/computer/SKILL.md
++++ b/plugins/computer/skills/computer/SKILL.md
+@@ -17,7 +17,7 @@
+ If the tool is not visible, call `load_tools` with `{"plugin":"computer"}`. Its exact tool name is
+ `computer`.
+ 
+-Bindings persist within this Akashic Session while Computer is awake; a timeout, cancellation, reset,
++Bindings persist within this Kirakira Session while Computer is awake; a timeout, cancellation, reset,
+ idle sleep, or workload restart invalidates them. First use wakes the saved personal profile.
+ An active Turn prevents sleep. After the Turn and identity refresh finish, 10 minutes without
+ actual input stops the browser. A panel left open does not keep it alive.
+@@ -96,7 +96,7 @@
+    useful output with `await tab.markDeliverable()`. Never close a human tab without explicitly claiming it.
+ 6. The driver releases remaining input when the call ends. A cancelled action may already have changed the page; observe before retrying.
+ 7. Do not launch Chromium yourself, alter profile files, or bypass the Workload owner. Use the Computer
+-   panel for human login and takeover. File chooser paths refer to the container, not the Akashic host.
++   panel for human login and takeover. File chooser paths refer to the container, not the Kirakira host.
+ 
+ ```js
+ await tab.playwright.getByRole("textbox", {name: "Name"}).fill("花月");
+@@ -117,7 +117,7 @@
+ the configured vision model and returns text. If that role is unavailable, report the missing capability;
+ do not keep taking screenshots or claim to have seen pixels. Never infer visual access from a path alone.
+ AX state is currently full text; its formatting and compression are not claimed identical to the original WASM.
+-The returned screenshot path belongs to Akashic, not the Computer container's filesystem.
++The returned screenshot path belongs to Kirakira, not the Computer container's filesystem.
+ Do not open it with `require('fs')` inside Computer. For a small visual
+ target, emit a clipped screenshot with `tab.screenshot({clip:{x,y,width,height}})` and inspect it
+ before probing image libraries. Coordinates are relative to the tab viewport. Refresh geometry after
+--- a/plugins/computer/web/agent-cursor.ts
++++ b/plugins/computer/web/agent-cursor.ts
+@@ -115,7 +115,7 @@
+     this.glyph.innerHTML = `<svg viewBox="0 0 24 24"><path class="computer-agent-arrow"
+       d="M3 2 L10 21 L12.6 13.4 L20 11 Z"/></svg>`;
+     this.badge.className = "computer-agent-badge";
+-    this.badge.innerHTML = `<i></i><span>Akashic</span>`;
++    this.badge.innerHTML = `<i></i><span>Kirakira</span>`;
+     this.pointer.append(this.glyph, this.badge);
+     this.layer.append(this.glow, this.ripple, this.pointer);
+     this.notice.className = "computer-cursor-notice";
+--- a/plugins/computer/web/display.ts
++++ b/plugins/computer/web/display.ts
+@@ -95,7 +95,7 @@
+   /** 只从当前 generation 读取客户端，再交入同一身份的完整 WebSocket 地址。 */
+   private async load() {
+     if (!window.isSecureContext) {
+-      throw new Error("Computer 需要安全连接。请通过 HTTPS 地址打开 Akashic；局域网 HTTP 地址无法显示桌面。");
++      throw new Error("Computer 需要安全连接。请通过 HTTPS 地址打开 Kirakira；局域网 HTTP 地址无法显示桌面。");
+     }
+     // 1. 资源与 WebSocket 必须来自同一 activation。
+     const response = await this.ctx.http.request("/api/dashboard/computer/stream-client", {
+--- a/plugins/computer/web/panel-state.ts
++++ b/plugins/computer/web/panel-state.ts
+@@ -65,12 +65,12 @@
+ 
+ // 没有画面的情况：运行时未就绪、连接未建立或已失效。按严重程度从高到低判断。
+ function withoutScreen(f: PanelFacts): PanelView | null {
+-  if (f.link === "stale") return blank("warn", "Akashic 已更新", "刷新页面后才能继续看画面",
++  if (f.link === "stale") return blank("warn", "Kirakira 已更新", "刷新页面后才能继续看画面",
+     { icon: "refresh", text: "刷新页面后才能继续看画面，浏览器里的任务不受影响。",
+       actions: [{ id: "reload", label: "刷新页面", emphasis: "primary" }] });
+   // 读不到状态时不猜运行时和连接；已连上的画面不依赖轮询，继续显示。
+   if (f.statusError && f.link !== "connected") return blank("warn", "读不到浏览器状态", "每秒自动重试",
+-    { icon: "alert", text: "Akashic 暂时没有返回浏览器状态，正在每秒重试。持续出现时请确认浏览器容器在运行。",
++    { icon: "alert", text: "Kirakira 暂时没有返回浏览器状态，正在每秒重试。持续出现时请确认浏览器容器在运行。",
+       actions: [], details: f.statusError });
+   if (f.restartRequested && f.runtime !== "ready") return blank("busy", "正在重启浏览器", "会先结束卡住的进程，再重新启动",
+     { icon: "spinner", text: "正在结束卡住的进程并重新启动浏览器…", actions: [] });
+--- a/plugins/drift/plugin.py
++++ b/plugins/drift/plugin.py
+@@ -14,7 +14,7 @@
+ name = "drift"
+ version = "3.0.0"
+ desc = "Durable Drift proposal state"
+-author = "Akashic Core"
++author = "Kirakira Core"
+ inject = ()
+ workspace_roots = ()
+ workspace_files = ()
+--- a/plugins/eventmail/plugin.py
++++ b/plugins/eventmail/plugin.py
+@@ -20,7 +20,7 @@
+ name = "eventmail"
+ version = "4.1.0"
+ desc = "Immutable Content, Alert, and Context mailbox"
+-author = "Akashic Core"
++author = "Kirakira Core"
+ inject = ()
+ workspace_roots = ()
+ workspace_files = ()
+--- a/plugins/gateway/service.py
++++ b/plugins/gateway/service.py
+@@ -111,11 +111,11 @@
+ 
+     async def send_message(self, request: MessageSendParams) -> dict[str, object]:
+         """在传输边界构造原始输入；重投使用相同消息 ID，由唯一 writer 核对正文。"""
+-        # 1. 控制端是 Akashic 客户端，不接受来源、作者或内部会话属性覆盖。
++        # 1. 控制端是 Kirakira 客户端，不接受来源、作者或内部会话属性覆盖。
+         if self._closed:
+             raise RuntimeError("控制服务已关闭")
+         if not request.session_id.startswith("akashic:") or not request.session_id[8:]:
+-            raise ValueError("控制端输入需要 Akashic Session")
++            raise ValueError("控制端输入需要 Kirakira Session")
+         if not request.text.strip() and not request.attachment_ids and request.retry_of is None:
+             raise ValueError("text 与 attachment_ids 不能同时为空")
+         if request.retry_of is not None and (
+--- a/plugins/gemini/plugin.py
++++ b/plugins/gemini/plugin.py
+@@ -8,7 +8,7 @@
+ name = "gemini"
+ version = "1.0.0"
+ desc = "Gemini 原生 GenerateContent 驱动"
+-author = "Akashic Core"
++author = "Kirakira Core"
+ inject = (MODEL_DRIVERS,)
+ workspace_roots = ()
+ workspace_files = ()
+--- a/plugins/host_execution/bridge/doctor.py
++++ b/plugins/host_execution/bridge/doctor.py
+@@ -44,7 +44,7 @@
+ 
+ 
+ async def main(arguments: tuple[str, ...], *, workspace: Path, config_path: Path) -> int:
+-    parser = argparse.ArgumentParser(description="Probe the Akashic Host Bridge")
++    parser = argparse.ArgumentParser(description="Probe the Kirakira Host Bridge")
+     parser.add_argument("--socket", type=Path, required=True)
+     parser.add_argument("--token", required=True)
+     parser.add_argument("--expected-release-commit", required=True)
+--- a/plugins/host_execution/bridge/server.py
++++ b/plugins/host_execution/bridge/server.py
+@@ -844,7 +844,7 @@
+ 
+ async def main(arguments: tuple[str, ...], *, workspace: Path, config_path: Path) -> int:
+     configure_logging()
+-    parser = argparse.ArgumentParser(description="Run the Akashic Host Bridge")
++    parser = argparse.ArgumentParser(description="Run the Kirakira Host Bridge")
+     parser.add_argument("--socket", type=Path, required=True)
+     parser.add_argument("--token-file", type=Path, required=True)
+     parser.add_argument("--lease-timeout", type=float, default=10.0)
+--- a/plugins/host_execution/controller.py
++++ b/plugins/host_execution/controller.py
+@@ -1414,7 +1414,7 @@
+ 
+ 
+ async def main(arguments: tuple[str, ...], *, workspace: Path, config_path: Path) -> int:
+-    parser = argparse.ArgumentParser(description="Akashic Workload Controller")
++    parser = argparse.ArgumentParser(description="Kirakira Workload Controller")
+     parser.add_argument("--workspace", type=Path, default=workspace)
+     parser.add_argument("--socket", type=Path, required=True)
+     parser.add_argument(
+--- a/plugins/ledger/contract.py
++++ b/plugins/ledger/contract.py
+@@ -995,7 +995,7 @@
+ APPEND_CHECKS = ServiceKey[AppendChecks]("ledger.append_checks.v1")
+ 
+ def detect_supported_image_mime(head: bytes) -> str | None:
+-    """根据文件签名识别 Akashic 支持的图片格式。"""
++    """根据文件签名识别 Kirakira 支持的图片格式。"""
+ 
+     if head.startswith(b"\x89PNG\r\n\x1a\n"):
+         return "image/png"
+--- a/plugins/ledger/durable_delivery_store.py
++++ b/plugins/ledger/durable_delivery_store.py
+@@ -69,7 +69,7 @@
+                 )
+ 
+     def recover_interrupted_provider_calls(self) -> int:
+-        """Freeze external calls while leaving Session-first Akashic rows resumable."""
++        """Freeze external calls while leaving Session-first Kirakira rows resumable."""
+ 
+         now = _utc_now()
+         with self._transaction(write=True) as connection:
+@@ -86,7 +86,7 @@
+     def mark_akashic_session_recovered(
+         self, logical_delivery_id: str, message_id: str
+     ) -> dict[str, object]:
+-        """Finish an Akashic row whose Session commit survived a process crash."""
++        """Finish a Kirakira row whose Session commit survived a process crash."""
+ 
+         logical_id = _identity("logical_delivery_id", logical_delivery_id)
+         projected = _identity("message_id", message_id)
+@@ -112,7 +112,7 @@
+             )
+             if cursor.rowcount != 1:
+                 raise RuntimeError(
+-                    f"Akashic delivery recovery transition invalid: {logical_id}"
++                    f"Kirakira delivery recovery transition invalid: {logical_id}"
+                 )
+             return self._required(connection, logical_id)
+ 
+--- a/plugins/markdown_memory/documents.py
++++ b/plugins/markdown_memory/documents.py
+@@ -13,7 +13,7 @@
+ TOPICS = "topics"
+ SCOPE_FILE = "_scope.md"
+ MEMORY_HEADINGS = ("# 用户长期记忆", "## 用户事实", "## 用户偏好", "## 用户明确要求长期记住的关键内容")
+-SELF_HEADINGS = ("# Akashic 的自我认知", "## 人格与形象", "## 我对当前用户的理解", "## 我们关系的定义")
++SELF_HEADINGS = ("# Kirakira 的自我认知", "## 人格与形象", "## 我对当前用户的理解", "## 我们关系的定义")
+ # 这些章节记录用户本人或关系判断，只能以用户原话为证据。
+ USER_SECTIONS: dict[str, frozenset[str]] = {MEMORY: frozenset(MEMORY_HEADINGS[1:]), SELF: frozenset(SELF_HEADINGS[2:])}
+ USER_HEADINGS: dict[str, tuple[str, ...]] = {MEMORY: MEMORY_HEADINGS[1:], SELF: SELF_HEADINGS[1:]}
+@@ -321,7 +321,7 @@
+ def render_memory(root: str, workspace: Workspace, others: Mapping[str, str]) -> str:
+     folder = workspace.folder()
+     parts = [_usage(root, workspace.scope, folder)]
+-    for title, doc in (("Akashic 自我认知", SELF), ("用户长期记忆", MEMORY)):
++    for title, doc in (("Kirakira 自我认知", SELF), ("用户长期记忆", MEMORY)):
+         if text := workspace.texts.get(doc, "").strip():
+             parts.append(f"## {title}（{doc}）\n\n{text}")
+     if folder is not None:
+--- a/plugins/markdown_memory/plugin.py
++++ b/plugins/markdown_memory/plugin.py
+@@ -422,7 +422,7 @@
+ 
+ def _consolidation_prompt(workspace: Workspace, docs: tuple[str, ...]) -> str:
+     files = "\n\n".join(f"### {doc}\n{workspace.texts[doc].strip()}" for doc in docs)
+-    return f"""你在整理 Akashic 的长期 Markdown 记忆。只合并已有条目，不新增事实。
++    return f"""你在整理 Kirakira 的长期 Markdown 记忆。只合并已有条目，不新增事实。
+ 
+ 只返回 JSON：{{"ops":[{{"op":"merge","doc":"文件","olds":["- 旧条目原文","- 另一条旧条目原文"],"line":"- 合并后的一条"}}]}}；没有需要整理的内容时返回 {{"ops":[]}}。
+ - 合并同一文件中重复或可以合成一句的条目。
+@@ -456,7 +456,7 @@
+ 
+ def _profile_prompt(workspace: Workspace, source: str) -> str:
+     files = "\n\n".join(f"### {doc}\n{text.strip() or '（空）'}" for doc, text in workspace.texts.items())
+-    return f"""你维护 Akashic 的长期 Markdown 记忆。根据本次已提交的精确对话，只返回需要的文件操作。
++    return f"""你维护 Kirakira 的长期 Markdown 记忆。根据本次已提交的精确对话，只返回需要的文件操作。
+ 
+ 只返回 JSON：{{"ops":[...]}}；没有值得长期保存的内容时返回 {{"ops":[]}}。可用操作：
+ - {{"op":"add","doc":"MEMORY.md","section":"## 用户偏好","line":"- 条目","message_ids":["完整 message_id"]}}：MEMORY.md 与 SELF.md 必须给出所在二级标题；主题文件不写 section
+@@ -467,7 +467,7 @@
+ 
+ 写到哪里：
+ - MEMORY.md：跨对话稳定的用户事实、偏好、明确要求记住的内容。标题只有 {"、".join(MEMORY_HEADINGS[1:])}。总量有配额，满了就 supersede 合并，或写进 topics/。
+-- SELF.md：Akashic 的人格与形象、对用户的理解、关系定义。大多数事实不应改变它。
++- SELF.md：Kirakira 的人格与形象、对用户的理解、关系定义。大多数事实不应改变它。
+ - topics/<名>.md：全局参考信息与经验，按主题归并，优先写进已有主题而不是新建。
+ - topics/<文件夹>/<名>.md：只属于当前 scope 的约定、决策、环境与经验。{_scope_line(workspace)}
+ 
+--- a/plugins/markdown_memory/store.py
++++ b/plugins/markdown_memory/store.py
+@@ -21,10 +21,10 @@
+     """叠加期间文件被其他 writer 持续修改；draft 保留待处理，由调用者稍后重试。"""
+ 
+ 
+-DEFAULT_SELF_MD = """# Akashic 的自我认知
++DEFAULT_SELF_MD = """# Kirakira 的自我认知
+ 
+ ## 人格与形象
+-- 我是 Akashic，一个直接、温暖、主动参与思考的长期协作伙伴。
++- 我是 Kirakira，一个直接、温暖、主动参与思考的长期协作伙伴。
+ - 我优先给出结论，再补充必要细节；不把自己伪装成没有立场的工具。
+ 
+ ## 我对当前用户的理解
+--- a/plugins/models/plugin.py
++++ b/plugins/models/plugin.py
+@@ -43,7 +43,7 @@
+ name = "models"
+ version = "1.0.0"
+ desc = "Provider-neutral model connections, selection, and execution"
+-author = "Akashic Core"
++author = "Kirakira Core"
+ inject = ()
+ workspace_roots = ()
+ workspace_files = ("model-registry.sqlite3",)
+@@ -100,7 +100,7 @@
+     async def contribute(child: Context):
+         await child.require(ONBOARDING).group(child, "models", "模型连接", Ability(
+             pitch="连接一个对话模型",
+-            benefit="Akashic 本身不带模型。选一个你已经有账号的服务，连上之后它就能回答你。",
++            benefit="Kirakira 本身不带模型。选一个你已经有账号的服务，连上之后它就能回答你。",
+             required=True,
+         ))
+         await child.require(ONBOARDING).register(child, Step("connect", "模型连接", "models", "models", status))
+--- a/plugins/models/state.py
++++ b/plugins/models/state.py
+@@ -1961,7 +1961,7 @@
+                 descriptor,
+                 driver.bind_embedding(descriptor, model.driver_config),
+             )
+-            _ = await bound.embed(("Akashic embedding setup check",))
++            _ = await bound.embed(("Kirakira embedding setup check",))
+         else:
+             raise ModelUnavailableError("模型用途尚未验证，不能保存。").exception()
+ 
+--- a/plugins/openai_compatible/driver.py
++++ b/plugins/openai_compatible/driver.py
+@@ -402,7 +402,7 @@
+         async with asyncio.timeout(30):
+             payload = await _request_limited_json(
+                 connection, credential, "POST", "/embeddings",
+-                body={"model": model, "input": ["Akashic embedding setup check", "Akashic embedding order check"]},
++                body={"model": model, "input": ["Kirakira embedding setup check", "Kirakira embedding order check"]},
+                 max_bytes=4 * 1024 * 1024,
+             )
+     except TimeoutError as error:
+--- a/plugins/openai_compatible/plugin.py
++++ b/plugins/openai_compatible/plugin.py
+@@ -10,7 +10,7 @@
+ name = "openai-compatible"
+ version = "1.0.0"
+ desc = "OpenAI-compatible Chat Completions and embeddings"
+-author = "Akashic Core"
++author = "Kirakira Core"
+ inject = (MODEL_DRIVERS,)
+ workspace_roots = ()
+ workspace_files = ()
+--- a/plugins/opencode_go/plugin.py
++++ b/plugins/opencode_go/plugin.py
+@@ -10,7 +10,7 @@
+ name = "opencode-go"
+ version = "1.0.0"
+ desc = "OpenCode Go Chat Completions models and local login import"
+-author = "Akashic Core"
++author = "Kirakira Core"
+ inject = (MODEL_DRIVERS,)
+ workspace_roots = ()
+ workspace_files = ()
+--- a/plugins/plugin_update/skills/plugin-system/SKILL.md
++++ b/plugins/plugin_update/skills/plugin-system/SKILL.md
+@@ -1,11 +1,11 @@
+ ---
+ name: plugin-system
+-description: 当用户要求安装、更新、卸载 Akashic 插件，改变 agent 能力，或询问插件何时生效、如何检查结果时使用。说明正式入口、局部换代、状态核对与数据保留。
++description: 当用户要求安装、更新、卸载 Kirakira 插件，改变 agent 能力，或询问插件何时生效、如何检查结果时使用。说明正式入口、局部换代、状态核对与数据保留。
+ when_to_use: 安装插件、更新插件、卸载插件、停用能力、插件自更新、Skill 或 MCP 更新、确认插件是否生效或已移除。
+ metadata: {"akashic": {"always": false}}
+ ---
+ 
+-# 安装、更新和卸载 Akashic 插件
++# 安装、更新和卸载 Kirakira 插件
+ 
+ 先确认用户要改变哪个插件、目标源码版本及允许的副作用。只读询问只查询，不顺手安装、卸载或重启。Skill 只提供说明，不增加权限；只使用本次实际可见的工具。
+ 
+--- a/plugins/prompt/VEDA.md
++++ b/plugins/prompt/VEDA.md
+@@ -1,6 +1,6 @@
+ # Veda
+ 
+-你是 Akashic。
++你是 Kirakira。
+ 
+ 你是用户的长期 AI 伙伴，不是客服播报器。
+ 
+--- a/plugins/runtime_diagnostics/README.md
++++ b/plugins/runtime_diagnostics/README.md
+@@ -48,7 +48,7 @@
+ 真正退出，任务才结束；等待不阻塞事件循环，重复取消也不会提前返回。线程 2 秒仍未退出
+ （例如卡在 `/proc` 读取）时打一行 WARNING，继续等待，不当作卸载成功。
+ 
+-cgroup 不一定专属于 Akashic；本地运行时可能包含同组其他程序。进程和 cgroup
++cgroup 不一定专属于 Kirakira；本地运行时可能包含同组其他程序。进程和 cgroup
+ 不能相加。同期操作只帮助定位，不能用并发操作前后的 RSS 差值计算插件独占内存。
+ 
+ ## 只读扩展接口
+--- a/plugins/sites_tab/plugin.py
++++ b/plugins/sites_tab/plugin.py
+@@ -6,7 +6,7 @@
+ name = "sites_tab"
+ version = "1.0.0"
+ desc = "在对话工作台的“网站”标签里打开 Agent 发布的网页，切换手机、平板与自适应宽度"
+-author = "Akashic Core"
++author = "Kirakira Core"
+ inject = (UI,)
+ 
+ 
+--- a/plugins/telegram_channel/plugin.py
++++ b/plugins/telegram_channel/plugin.py
+@@ -21,7 +21,7 @@
+ name = "telegram_channel"
+ version = "3.0.0"
+ desc = "Telegram inbound and outbound v3 channel adapter"
+-author = "Akashic"
++author = "Kirakira"
+ function_inject = (CHANNELS, CHANNEL_INPUT, CREDENTIALS, MESSAGE_CATALOG, SOURCE_INTERRUPT)
+ Config = TelegramChannelConfig
+ 
+--- a/plugins/ui/dashboard_app.py
++++ b/plugins/ui/dashboard_app.py
+@@ -57,7 +57,7 @@
+ 
+ def create_dashboard_app(static_dir: Path) -> FastAPI:
+     """只读取固定代码制品中的构建资产；缺少入口时明确返回不可用。"""
+-    app = FastAPI(title="Akashic Dashboard API")
++    app = FastAPI(title="Kirakira Dashboard API")
+ 
+     @app.middleware("http")
+     async def static_cache_contract(request: Request, call_next):
+--- a/plugins/wake/settings.py
++++ b/plugins/wake/settings.py
+@@ -121,7 +121,7 @@
+         await child.require(ONBOARDING).group(child, "proactive", "Wake 主动联系", Ability(
+             pitch="在合适的时候主动找你",
+             benefit="有具体理由时它会先开口，比如你提过的事有了进展。消息发到你选择的聊天渠道。",
+-            preview=(PreviewLine("Akashic · 主动消息", "你周三说想等那本书降价，现在电子版打五折了。"),),
++            preview=(PreviewLine("Kirakira · 主动消息", "你周三说想等那本书降价，现在电子版打五折了。"),),
+         ))
+         await child.require(ONBOARDING).register(child, Step("configure", "Wake 主动联系", "proactive", "wake-settings", settings.read, (function.fiber_id,)))
+     await ctx.inject((ONBOARDING,), contribute, name="onboarding")
+--- a/plugins/web_auth/app.py
++++ b/plugins/web_auth/app.py
+@@ -2,6 +2,7 @@
+ from __future__ import annotations
+ 
+ from collections.abc import Mapping
++from html import escape
+ import logging
+ from pathlib import Path
+ import secrets
+@@ -13,7 +14,7 @@
+ 
+ from core.common.file_io import run_file_io
+ 
+-from .state import COOKIE, REMEMBER_S, USERNAME, OwnerAuth
++from .state import COOKIE, REMEMBER_S, OwnerAuth
+ 
+ logger = logging.getLogger(__name__)
+ 
+@@ -110,7 +111,8 @@
+ 
+     @app.get("/_auth/login")
+     async def login_page() -> HTMLResponse:
+-        return HTMLResponse(html, headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
++        username = await run_file_io(auth.username)
++        return HTMLResponse(html.replace("__OWNER_USERNAME__", escape(username, quote=True)), headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
+                                            "Content-Security-Policy": _PAGE_POLICY})
+ 
+     @app.get("/_auth/state")
+@@ -157,7 +159,7 @@
+             return JSONResponse({"code": "unauthorized"}, 401)
+         body = await request.json()
+         if not await run_file_io(auth.must_change) and not await run_file_io(
+-                lambda: auth.check_password(USERNAME, str(body.get("current", "")))):
++                lambda: auth.check_password(auth.username(), str(body.get("current", "")))):
+             return JSONResponse({"code": "invalid_credentials"}, 401)
+         try:
+             await run_file_io(lambda: auth.set_password(str(body.get("password", "")), keep=token))
+--- a/plugins/web_auth/cli.py
++++ b/plugins/web_auth/cli.py
+@@ -19,7 +19,7 @@
+     """打印一条一次性登录链接；首次进入后仍需设置自己的密码。"""
+     parser = argparse.ArgumentParser(prog="web-login", description=login_main.__doc__)
+     parser.add_argument("--url", default=f"http://localhost:{os.environ.get('AKASHIC_WEB_PORT', '2236')}",
+-                        help="浏览器访问 Akashic 的地址")
++                        help="浏览器访问 Kirakira 的地址")
+     options = parser.parse_args(arguments)
+     ticket = _auth(workspace).issue_ticket()
+     print(f"一次性登录链接（{TICKET_S // 60} 分钟内有效，只能使用一次）：")
+--- a/plugins/web_auth/login.html
++++ b/plugins/web_auth/login.html
+@@ -4,7 +4,7 @@
+ <meta charset="utf-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+ <meta name="referrer" content="no-referrer">
+-<title>登录 · Akashic</title>
++<title>登录 · Kirakira</title>
+ <style>
+ :root { --paper: #f5f4ed; --field: #faf9f5; --ink: #141413; --ink-2: #504e49; --ink-3: #6b6a64; --rule: rgb(20 20 19 / .22); --accent: #1b365d; --accent-ink: #faf9f5; --accent-soft: rgb(27 54 93 / .08); --bad: #8c2c24; }
+ @media (prefers-color-scheme: dark) { :root { --paper: #181816; --field: #1e1e1b; --ink: #ecebe4; --ink-2: #bab8af; --ink-3: #929088; --rule: rgb(236 235 228 / .26); --accent: #96b4e2; --accent-ink: #12161e; --accent-soft: rgb(150 180 226 / .12); --bad: #e48c80; color-scheme: dark; } }
+@@ -32,10 +32,10 @@
+ </head>
+ <body>
+ <form id="login" hidden>
+-  <div class="brand"><i></i>Akashic</div>
++  <div class="brand"><i></i>Kirakira</div>
+   <h1>登录</h1>
+-  <p id="hint">这台 Akashic 只对主人开放。</p>
+-  <label>用户名<input id="username" type="text" autocomplete="username" value="akashic" spellcheck="false" required></label>
++  <p id="hint">这台 Kirakira 只对主人开放。</p>
++  <label>用户名<input id="username" type="text" autocomplete="username" value="__OWNER_USERNAME__" spellcheck="false" required></label>
+   <label>密码<input id="password" type="password" autocomplete="current-password" required autofocus></label>
+   <label class="check"><input id="remember" type="checkbox" checked><span>记住这台设备<small>90 天内免登录。在别人的电脑上请取消勾选。</small></span></label>
+   <button type="submit">登录</button>
+@@ -45,15 +45,15 @@
+     <p>第一次使用时，初始密码在启动日志里。也可以在服务器上运行下面的命令，免密进入或重置：</p>
+     <pre>python main.py web-login      # 打印一次性登录链接
+ python main.py web-passwd     # 重置为临时密码，所有设备退出
+-docker compose exec akashic python main.py web-login</pre>
+-    <p>也可以在 Telegram/QQ 里让 Akashic 帮你重置网页密码。</p>
++kirakira-agent web-login --workspace /path/to/workspace</pre>
++    <p>也可以在 Telegram/QQ 里让 Kirakira 帮你重置网页密码。</p>
+   </details>
+ </form>
+ <form id="change" hidden>
+-  <div class="brand"><i></i>Akashic</div>
++  <div class="brand"><i></i>Kirakira</div>
+   <h1>设置你自己的密码</h1>
+   <p>初始或临时密码出现在日志或聊天里，保存新密码后就会失效。以后在任何设备上都用这个密码登录。</p>
+-  <input type="text" autocomplete="username" value="akashic" hidden>
++  <input type="text" autocomplete="username" value="__OWNER_USERNAME__" hidden>
+   <label>新密码<input id="new1" type="password" autocomplete="new-password" minlength="10" required></label>
+   <label>再输入一次<input id="new2" type="password" autocomplete="new-password" required></label>
+   <p>至少 10 个字符。不要求大小写或符号，长一点比复杂更有用。</p>
+@@ -111,7 +111,7 @@
+   show(status === 401 ? "login" : "change", body.message || "登录已失效，请重新登录。");
+ });
+ 
+-boot().catch(() => show("login", "无法连接 Akashic，请稍后刷新。"));
++boot().catch(() => show("login", "无法连接 Kirakira，请稍后刷新。"));
+ </script>
+ </body>
+ </html>
+--- a/plugins/web_auth/state.py
++++ b/plugins/web_auth/state.py
+@@ -12,7 +12,7 @@
+ import time
+ from collections.abc import Iterator
+ 
+-USERNAME = "akashic"
++USERNAME = "kirakira"
+ COOKIE = "akashic_session"
+ REMEMBER_S = 90 * 86400
+ BROWSER_SESSION_S = 86400
+@@ -79,8 +79,12 @@
+ 
+     def _store_password(self, password: str, *, must_change: bool) -> None:
+         salt = secrets.token_bytes(16)
+-        self._write("account.json", json.dumps({"username": USERNAME, "salt": salt.hex(),
++        self._write("account.json", json.dumps({"username": self.username(), "salt": salt.hex(),
+             "hash": _hash_password(password, salt), "mustChange": must_change}))
++
++    def username(self) -> str:
++        """New accounts use the product name; existing identities stay intact."""
++        return str(self._read("account.json").get("username", USERNAME))
+ 
+     def local_secret(self) -> str:
+         return (self.root / "secret").read_text(encoding="utf-8").strip()
+@@ -94,7 +98,7 @@
+             return False
+         expected = str(account["hash"])
+         actual = _hash_password(password, bytes.fromhex(str(account["salt"])))
+-        return secrets.compare_digest(username.encode(), USERNAME.encode()) & secrets.compare_digest(actual, expected)
++        return secrets.compare_digest(username.encode(), str(account["username"]).encode()) & secrets.compare_digest(actual, expected)
+ 
+     # 设置主人自己的密码：初始密码文件删除，除 keep 这个会话之外全部退出。
+     def set_password(self, password: str, *, keep: str | None) -> None:
+--- a/plugins/workspace_changes/plugin.py
++++ b/plugins/workspace_changes/plugin.py
+@@ -16,7 +16,7 @@
+ name = "workspace_changes"
+ version = "1.0.0"
+ desc = "查看会话工作目录（git 仓库）的改动，回复下方给出每轮的摘要"
+-author = "Akashic Core"
++author = "Kirakira Core"
+ inject = (PROCESSES, WORKING_DIRECTORY, MESSAGE_CATALOG, OWNER_STATE, TURN_PROJECTION)
+ workspace_roots = ()
+ workspace_files = ()
+--- a/sdk/python/README.md
++++ b/sdk/python/README.md
+@@ -1,12 +1,13 @@
+-# Akashic Python SDK
++# Kirakira Python SDK
+ 
+ SDK 使用 Message v2 协议，连接已运行的 Gateway。发送返回原始消息的持久化 ACK；模型回复与工具结果随后追加到同一 Session。
++公开入口随 `kirakira-agent` 分发，使用项目同一个 Python 环境。
+ 
+ ```python
+ from uuid import uuid4
+-from akashic_sdk import Akashic
++from kirakira_agent.client import Client
+ 
+-with Akashic.connect("/path/to/workspace/akashic.sock") as client:
++with Client.connect("/path/to/workspace/akashic.sock") as client:
+     session_id = client.session_create()["session_id"]
+     message_id = uuid4().hex  # 在发送前保存；网络失败重投时复用同一个 ID。
+     ack = client.message_send(session_id, "整理最近的上下文", message_id=message_id)
+@@ -19,9 +20,9 @@
+ 异步订阅使用 `session_follow()`；同步客户端具有相同方法：
+ 
+ ```python
+-from akashic_sdk import AsyncAkashic
++from kirakira_agent.client import AsyncClient
+ 
+-async with await AsyncAkashic.connect(endpoint) as client:
++async with await AsyncClient.connect(endpoint) as client:
+     async with await client.session_follow(session_id, after_seq=saved_seq) as feed:
+         async for event in feed.events():
+             if event["type"] == "messages.appended":
+@@ -44,7 +45,7 @@
+ loopback TCP 需传入 `workspace_token`：
+ 
+ ```python
+-client = await AsyncAkashic.connect("127.0.0.1:2236", workspace_token=token)
++client = await AsyncClient.connect("127.0.0.1:2236", workspace_token=token)
+ ```
+ 
+ SDK 不启动 workspace owner。父进程托管可运行 `python main.py app-server --stdio` 并使用 JSON-RPC NDJSON；当前 Python 客户端使用 Unix socket 或 loopback TCP。服务端只接受 v2，旧 Thread/Turn 方法没有兼容入口。请求参数见 [协议 schema](../../schema/app-server-v2.json)。
+--- a/kirakira_agent/_upstream_main.py
++++ b/kirakira_agent/_upstream_main.py
+@@ -24,7 +24,7 @@
+ 
+ _DISTRIBUTION_COMMANDS = frozenset({"dashboard", "workload-controller"})
+ _MANAGEMENT_COMMANDS = frozenset({"plugin-install", "plugin-status", "plugin-uninstall"})
+-_DEFAULT_WORKSPACE = "~/.akashic/workspace"
++_DEFAULT_WORKSPACE = "~/.kirakira/workspace"
+ _PLUGIN_ROLLOUT_OWNER_TURN_ENV = "AKASHIC_PLUGIN_ROLLOUT_OWNER_TURN"
+ _AGENT_INTERNAL_PLUGIN_COMMANDS = frozenset(
+     {
+--- a/plugins/step_plan/transport.py
++++ b/plugins/step_plan/transport.py
+@@ -402,7 +402,7 @@
+         async with asyncio.timeout(30):
+             payload = await _request_limited_json(
+                 connection, credential, "POST", "/embeddings",
+-                body={"model": model, "input": ["Akashic embedding setup check", "Akashic embedding order check"]},
++                body={"model": model, "input": ["Kirakira embedding setup check", "Kirakira embedding order check"]},
+                 max_bytes=4 * 1024 * 1024,
+             )
+     except TimeoutError as error:
+--- a/plugins/skills/skills/deploy-kirakira/SKILL.md
++++ b/plugins/skills/skills/deploy-kirakira/SKILL.md
+@@ -1,9 +1,9 @@
+ ---
+-name: deploy-akashic
+-description: 用户明确授权 Akashic 合并 PR 并更新当前 Docker 实例时，通过 Shell 提交宿主部署任务，正常回复后结束回合。
++name: deploy-kirakira
++description: 用户明确授权 Kirakira 合并 PR 并更新当前 Docker 实例时，通过 Shell 提交宿主部署任务，正常回复后结束回合。
+ ---
+ 
+-# 部署当前 Akashic
++# 部署当前 Kirakira
+ 
+ 本回合负责检查、合并和提交。宿主负责等待回复送达、停止、迁移与启动。
+ 成功接单不等于更新成功；提交之后不再操作，让本回合正常结束。

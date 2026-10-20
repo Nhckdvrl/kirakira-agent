@@ -1,1 +1,1 @@
-"""Akashic clients configuration migration bundle."""
+"""Kirakira clients configuration migration bundle."""

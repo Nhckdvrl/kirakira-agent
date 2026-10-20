@@ -844,7 +844,7 @@ def _materialize_runtime_cli(
 
 async def main(arguments: tuple[str, ...], *, workspace: Path, config_path: Path) -> int:
     configure_logging()
-    parser = argparse.ArgumentParser(description="Run the Akashic Host Bridge")
+    parser = argparse.ArgumentParser(description="Run the Kirakira Host Bridge")
     parser.add_argument("--socket", type=Path, required=True)
     parser.add_argument("--token-file", type=Path, required=True)
     parser.add_argument("--lease-timeout", type=float, default=10.0)

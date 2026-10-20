@@ -1,0 +1,410 @@
+{
+  "source_coverage": {
+    "reference_commit": "94027a5cce9fc494f20bb7931fddf26f1e15e8df",
+    "pinned_commit": "94027a5cce9fc494f20bb7931fddf26f1e15e8df",
+    "same_revision": true,
+    "verified_local_pins": 929,
+    "unique_imported_origins": 928,
+    "expected_runtime_origins": 928,
+    "missing_runtime_files": [],
+    "different_origin_bytes": [],
+    "recorded_local_patches": [
+      "agent/migrations/context.py",
+      "agent/plugins/__init__.py",
+      "agent/runtime_identity.py",
+      "bootstrap/web_shell.py",
+      "core/common/diagnostic_log.py",
+      "frontend/chat/harness/index.html",
+      "frontend/chat/src/browser-uuid.ts",
+      "frontend/chat/src/compact-navigation.tsx",
+      "frontend/chat/src/desktop-chat-view.tsx",
+      "frontend/chat/src/desktop-sidebar.tsx",
+      "frontend/chat/src/message-actions.tsx",
+      "frontend/chat/src/verify-composer-flow.mjs",
+      "frontend/chat/src/web-chat-data.ts",
+      "frontend/dashboard/index.html",
+      "frontend/design.md",
+      "frontend/plugins/akasha/src/plugin-ui.css",
+      "frontend/plugins/akasha/src/plugin-ui.js",
+      "frontend/plugins/onboarding/src/index.tsx",
+      "frontend/plugins/projects/src/plugin-ui.tsx",
+      "frontend/plugins/shell_ui/src/brand.ts",
+      "frontend/plugins/shell_ui/src/index.tsx",
+      "frontend/theme/src/brand-tokens.css",
+      "frontend/theme/src/material-tokens.css",
+      "kirakira_agent/_upstream_main.py",
+      "package.json",
+      "plugins/akasha/contract.py",
+      "plugins/akasha/infrastructure/persistence.py",
+      "plugins/akasha/inspector.py",
+      "plugins/akasha/message_ui.css",
+      "plugins/akasha/plugin.py",
+      "plugins/akasha/recall_tool.py",
+      "plugins/akasha/recalls.py",
+      "plugins/akasha/runtime.py",
+      "plugins/akasha/settings.py",
+      "plugins/akashic_clients/attachments.py",
+      "plugins/akashic_clients/capabilities.py",
+      "plugins/akashic_clients/chat_api.py",
+      "plugins/akashic_clients/config.py",
+      "plugins/akashic_clients/migrations/akashic_clients_migrations/__init__.py",
+      "plugins/akashic_clients/migrations/akashic_clients_migrations/helpers/__init__.py",
+      "plugins/akashic_clients/migrations/akashic_clients_migrations/helpers/config.py",
+      "plugins/akashic_clients/navigation.py",
+      "plugins/akashic_clients/notifications.py",
+      "plugins/akashic_clients/plugin.py",
+      "plugins/akashic_clients/services.py",
+      "plugins/akashic_sender/plugin.py",
+      "plugins/channels/plugin.py",
+      "plugins/codex/plugin.py",
+      "plugins/computer/bench/README.md",
+      "plugins/computer/bench/run.py",
+      "plugins/computer/plugin.py",
+      "plugins/computer/skills/computer/SKILL.md",
+      "plugins/computer/web/agent-cursor.ts",
+      "plugins/computer/web/display.ts",
+      "plugins/computer/web/panel-state.ts",
+      "plugins/drift/plugin.py",
+      "plugins/eventmail/plugin.py",
+      "plugins/gateway/service.py",
+      "plugins/gemini/plugin.py",
+      "plugins/host_execution/bridge/doctor.py",
+      "plugins/host_execution/bridge/server.py",
+      "plugins/host_execution/controller.py",
+      "plugins/host_execution/shell_runtime.py",
+      "plugins/ledger/contract.py",
+      "plugins/ledger/durable_delivery_store.py",
+      "plugins/markdown_memory/documents.py",
+      "plugins/markdown_memory/plugin.py",
+      "plugins/markdown_memory/store.py",
+      "plugins/models/plugin.py",
+      "plugins/models/state.py",
+      "plugins/openai_compatible/driver.py",
+      "plugins/openai_compatible/plugin.py",
+      "plugins/opencode_go/plugin.py",
+      "plugins/plugin_update/skills/plugin-system/SKILL.md",
+      "plugins/prompt/VEDA.md",
+      "plugins/runtime_diagnostics/README.md",
+      "plugins/sites_tab/plugin.py",
+      "plugins/skills/skills/deploy-kirakira/SKILL.md",
+      "plugins/step_plan/transport.py",
+      "plugins/telegram_channel/plugin.py",
+      "plugins/ui/dashboard_app.py",
+      "plugins/wake/settings.py",
+      "plugins/web_auth/app.py",
+      "plugins/web_auth/cli.py",
+      "plugins/web_auth/login.html",
+      "plugins/web_auth/state.py",
+      "plugins/workspace_changes/plugin.py",
+      "sdk/python/README.md"
+    ],
+    "recorded_generated_assets": [
+      "plugins/akasha/message_ui.js",
+      "plugins/computer/web_module.js",
+      "plugins/onboarding/web_module.js",
+      "plugins/projects/plugin_ui.js",
+      "plugins/shell_ui/web_module.js"
+    ],
+    "outside_runtime_pin": {
+      "docker/": 144,
+      "systemd/": 2,
+      "benchmark/": 27,
+      "private_runtime": 1,
+      "scripts/": 217,
+      "tests/": 61,
+      "skills/": 13,
+      "docs/": 265,
+      "_handbook/": 2,
+      ".github/": 9
+    },
+    "excluded_non_runtime_files": {
+      "assets/akashic-qq.jpg": "Upstream contact QR image; not consumed by runtime, frontend, SDK or build."
+    },
+    "local_plugins": [
+      "step-plan",
+      "local-embedding",
+      "event-ingress"
+    ],
+    "boundary": "source comparison only; activation, accounts, external devices and functional evidence are separate"
+  },
+  "source_identity": {
+    "kirakira_agent/runtime.py": "e9d10d8b6eb0f4bb3b2aa87022097843665c3f7538b9956f39788999c2f166b4",
+    "kirakira_agent/setup.py": "965d281ee9acd6dcb6a029dbc8858490806ad635c13361b1dcfd79746c0f928e",
+    "kirakira_agent/environment.py": "d7a2c67bb5c6efb2ef2d2c8ef011c958e012a25e87a19fb7e1cbf3bc31b88c05",
+    "kirakira_agent/client.py": "d1470e188346ae1013cb31453b0a04968fd604a99c90713edd3d5610399c7880",
+    "eval/models.py": "d91c01535afff8f9f3ed3c35673283d3b7b9fdd7696fb0b564a6341c8b36fe65",
+    "plugins/akasha/contract.py": "db9dfbf35357832de114fb325f03f588a792acaae61b8e5400e46a0f4db6d94e",
+    "plugins/akasha/plugin.py": "e8d31031ef0630fb3116068f7efa5c62c898cfec7ecc54571ace8c09ecfbf762",
+    "plugins/akasha/query.py": "63f76a66293b0563162254958fae4895d93e66e6c661527f0c9b392048641212",
+    "plugins/akasha/recalls.py": "9f8a404c33fcfe5a5211109fffaf651b501945aaaf72f44c4e31d2bb890c41ac",
+    "plugins/akasha/recall_tool.py": "df3ecbdab41d3b0ab6d9d6f16f30712916499ae62a182260217d1a580967769d",
+    "plugins/akasha/runtime.py": "09a955b57c3c4ac8f17168e96e7ae71c020d26f7a0eb8ff3a2d108197a4fbf2c",
+    "plugins/akasha/excerpts.py": "9a408c9017de5722d68265c7012268bc4801c516137c8cd17b010fdbad19da7d",
+    "plugins/akasha/source_tool.py": "7492776a7e4aa66456d5b68b369b373cb5f61e20f447c01fb8afa3a67a7523fe",
+    "UPSTREAM.json": "9b980ffc53422fdf0a6748997a286d17309618f6d2dc68241bb4f6bfd74ad151",
+    "patches/akasha-empty-rebuild.patch": "acc310c996d2590d54fe89f1147072e0c2fabb909ad17d779c48cd65c95e4230",
+    "patches/distribution-branding.patch": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+    "patches/memory-query-api.patch": "aa3900c92c855aaa2958cb4f5c1e178fe673bfcf61be08a32dddcc97419f24ea",
+    "patches/stage-web-assets.patch": "29e7550a216fd1aacfd614dde4c32d19f7bb216fa244c5bfdf0c3ff3e3510288",
+    "patches/zsh-snapshot-aliases.patch": "a2d4a1cd3635d62edd6ca11a8b2e7ace6b68d0dbec908feeb4bf4a17e1354f55"
+  },
+  "regression": {
+    "passed": 97,
+    "total": 97,
+    "result": "........................................................................ [ 74%]\n.........................                                                [100%]\n97 passed in 39.99s"
+  },
+  "style": {
+    "passed": true,
+    "scope": "distribution facade, evaluation and maintenance modules, modified tests, new memory query/source/excerpt modules; inherited native modules not globally reformatted"
+  },
+  "frontend": {
+    "full_build": true,
+    "plugin_build": true,
+    "typecheck": true,
+    "memory_ui_component": {
+      "passed": true,
+      "actual_inspector_fixture": true,
+      "scope_settings_stubbed": true,
+      "candidate_presented_labels": true,
+      "multiple_query_merge": true,
+      "html_escaped": true,
+      "unmount_unsubscribed": true
+    }
+  },
+  "package": {
+    "passed": true,
+    "wheel_files": 1428,
+    "new_memory_modules_and_web_assets": true,
+    "license_notices": true,
+    "no_nested_dependencies_or_runtime_databases": true,
+    "source_archive_provenance": true,
+    "all_packaged_python_matches_current_source": true,
+    "private_credential_absent": true,
+    "artifacts": {
+      "kirakira_agent-0.1.0-py3-none-any.whl": "6c33a5309dff025f3b2764df79200fd8a978ab9bb1ed1e59a1fe77900df029da",
+      "kirakira_agent-0.1.0.tar.gz": "c1bfe502ad093184c010a32bfcafe72d80955f65406858f7ffeb6bd0099aaa3d"
+    }
+  },
+  "installed_wheel_runtime": {
+    "model_config": {
+      "model": "step-5-preview",
+      "endpoint": "https://api.stepfun.com/step_plan/v1",
+      "driver_id": "openai-compatible",
+      "model_id": "arbitrary-chat-id",
+      "context_window": 32768,
+      "max_output_tokens": 4096,
+      "reasoning_effort": "low"
+    },
+    "source_identity": {
+      "kirakira_agent/runtime.py": "e9d10d8b6eb0f4bb3b2aa87022097843665c3f7538b9956f39788999c2f166b4",
+      "kirakira_agent/setup.py": "965d281ee9acd6dcb6a029dbc8858490806ad635c13361b1dcfd79746c0f928e",
+      "kirakira_agent/environment.py": "d7a2c67bb5c6efb2ef2d2c8ef011c958e012a25e87a19fb7e1cbf3bc31b88c05",
+      "kirakira_agent/client.py": "d1470e188346ae1013cb31453b0a04968fd604a99c90713edd3d5610399c7880",
+      "eval/models.py": "d91c01535afff8f9f3ed3c35673283d3b7b9fdd7696fb0b564a6341c8b36fe65",
+      "plugins/akasha/contract.py": "db9dfbf35357832de114fb325f03f588a792acaae61b8e5400e46a0f4db6d94e",
+      "plugins/akasha/plugin.py": "e8d31031ef0630fb3116068f7efa5c62c898cfec7ecc54571ace8c09ecfbf762",
+      "plugins/akasha/query.py": "63f76a66293b0563162254958fae4895d93e66e6c661527f0c9b392048641212",
+      "plugins/akasha/recalls.py": "9f8a404c33fcfe5a5211109fffaf651b501945aaaf72f44c4e31d2bb890c41ac",
+      "plugins/akasha/recall_tool.py": "df3ecbdab41d3b0ab6d9d6f16f30712916499ae62a182260217d1a580967769d",
+      "plugins/akasha/runtime.py": "09a955b57c3c4ac8f17168e96e7ae71c020d26f7a0eb8ff3a2d108197a4fbf2c",
+      "plugins/akasha/excerpts.py": "9a408c9017de5722d68265c7012268bc4801c516137c8cd17b010fdbad19da7d",
+      "plugins/akasha/source_tool.py": "7492776a7e4aa66456d5b68b369b373cb5f61e20f447c01fb8afa3a67a7523fe"
+    },
+    "workspace": "/var/tmp/kirakira-evaluations/wheel-native-ship",
+    "cases": [
+      {
+        "name": "native_reply",
+        "passed": true,
+        "detail": {
+          "answer": "BASIC_8c99ccc017"
+        },
+        "duration_s": 1.964
+      },
+      {
+        "name": "bound_file_roundtrip",
+        "passed": true,
+        "detail": {
+          "answer": "写好了，读回来确认是 FILE_8c99ccc017。\n\nToken: FILE_8c99ccc017",
+          "facts": 6
+        },
+        "duration_s": 6.424
+      },
+      {
+        "name": "managed_process_mcp",
+        "passed": true,
+        "detail": {
+          "answer": "返回了：\n\n- value: MCP_8c99ccc017\n- ready: true\n- managed_pid: 3671258\n- python: 3.14.6\n\nmanaged_pid 是 3671258。",
+          "results": 1
+        },
+        "duration_s": 3.747
+      },
+      {
+        "name": "native_shell",
+        "passed": true,
+        "detail": {
+          "answer": "stdout:\n\n```\nSHELL_8c99ccc017\n```\n\nexit 0。"
+        },
+        "duration_s": 3.654
+      },
+      {
+        "name": "tool_error_repair",
+        "passed": true,
+        "detail": {
+          "answer": "文件确实不存在，报错是：`文件不存在：/var/tmp/kirakira-evaluations/wheel-native-ship/missing-8c99ccc017`。\n\nnative_probe 的真实返回：\n\n```\n{\"value\": \"REPAIRED_8c99ccc017\", \"ready\": true, \"managed_pid\": 3671258, \"python\": [3, 14, 6]}\n```\n\n服务是 ready 的，进程 3671258，Python 3.14.6。"
+        },
+        "duration_s": 6.729
+      },
+      {
+        "name": "native_subagent",
+        "passed": true,
+        "detail": {
+          "answer": "子任务跑完了，退出原因 completed。\n\n结果：**CHILD_8c99ccc017**\n\nprofile 用的 scripting，同步跑的，没走后台。",
+          "child_sessions": [
+            "subagent:36288ae934cb45c59dcd9aee1c46cb00"
+          ]
+        },
+        "duration_s": 6.968
+      },
+      {
+        "name": "driver_local_reload",
+        "passed": true,
+        "detail": {
+          "answer": "RELOADED_8c99ccc017",
+          "same_root": true
+        },
+        "duration_s": 1.848
+      },
+      {
+        "name": "task_bound_steer_withdraw",
+        "passed": true,
+        "detail": {
+          "answer": "probe 返回了：\n\n```\n{\"value\": \"ORIGINAL_8c99ccc017\", \"ready\": true, \"managed_pid\": 3671258, \"python\": [3, 14, 6]}\n```\n\nSTEER_8c99ccc017",
+          "accepted_inputs": 2
+        },
+        "duration_s": 7.147
+      },
+      {
+        "name": "source_pause_resume_no_effect_replay",
+        "passed": true,
+        "detail": {
+          "answer": "写好了，只写了一次。\n\n文件内容：ONCE_8c99ccc017",
+          "write_effects": 1,
+          "tool_results": 2
+        },
+        "duration_s": 6.09
+      },
+      {
+        "name": "new_input_revokes_old_source_task",
+        "passed": true,
+        "detail": {
+          "answer": "好，不重复调了，用刚才那次的结果。\n\nnative_probe 返回：\n\n- value: FIRST_8c99ccc017\n- ready: true\n- managed_pid: 3671258\n- python: 3.14.6\n\n调用时间 2026-10-21 03:55 左右（delay=3 已等待完成）。\n\nSUPERSEDE_8c99ccc017",
+          "effect_results": 1
+        },
+        "duration_s": 9.993
+      },
+      {
+        "name": "immutable_attachment_projection",
+        "passed": true,
+        "detail": {
+          "answer": "ATTACHMENT_8c99ccc017",
+          "artifact_id": "854ea00ed47e47a68c73245624c03d8e"
+        },
+        "duration_s": 1.836
+      },
+      {
+        "name": "scheduler_native_source_delivery",
+        "passed": true,
+        "detail": {
+          "answer": "TIMER_8c99ccc017",
+          "created_jobs": 1,
+          "delivered_fires": 1,
+          "source": "scheduler:b470a3d676321f578a0abc013e46076c1def5b1cc8a49e30c8da4438e2755c8d",
+          "parent_reasoning_effort": "medium"
+        },
+        "duration_s": 8.208
+      },
+      {
+        "name": "restart_reuses_native_history",
+        "passed": true,
+        "detail": {
+          "answer": "读到了，里面是 FILE_8c99ccc017。"
+        },
+        "duration_s": 2.929
+      }
+    ],
+    "summary": {
+      "passed": 13,
+      "total": 13,
+      "python": "3.14.6",
+      "recorded_business_model_calls": 30,
+      "model_states": {
+        "success": 30
+      },
+      "driver_ids": [
+        "openai-compatible"
+      ],
+      "endpoints": [
+        "https://api.stepfun.com/step_plan/v1"
+      ],
+      "input_tokens": 210622,
+      "output_tokens": 1742,
+      "coverage": "native Models business-call ledger; connection/model setup probes are additional calls"
+    }
+  },
+  "package_failures_and_resolution": [
+    {
+      "error": "no setuptools in active environment for --no-build-isolation",
+      "resolution": "install declared build backend into the same Python environment"
+    },
+    {
+      "error": "wheel package data lost executable bits on trusted evaluation scripts",
+      "resolution": "restore entry-point user execution bits in the writable fixture copy before freezing its plugin artifact"
+    },
+    {
+      "error": "explicit absolute interpreter and unbound python command were rejected by native artifact validation",
+      "resolution": "retain the original artifact-relative shebang entry points and native Python/runtime permission contracts"
+    },
+    {
+      "error": "repository source manifest is absent from installed wheel root",
+      "resolution": "hash installed implementation modules; include root provenance only when available; source archive and license metadata retain attribution"
+    }
+  ],
+  "scope": "wheel installed with --no-deps --target into a temporary import directory; same Python 3.14.6 and dependencies; complete provider exercises started from installed modules, not a second environment",
+  "cleanup": {
+    "dry_run": false,
+    "paths": [
+      "kirakira_agent.egg-info",
+      "kirakira_agent/__pycache__",
+      ".cache/ruff",
+      ".cache/pytest",
+      "agent/__pycache__",
+      "agent/migrations/__pycache__",
+      "agent/plugins/__pycache__",
+      "agent/plugin_composition/__pycache__",
+      "core/__pycache__",
+      "core/common/__pycache__",
+      "infra/__pycache__",
+      "infra/persistence/__pycache__",
+      "bootstrap/__pycache__",
+      "plugins/models/__pycache__",
+      "plugins/ledger/__pycache__",
+      "plugins/channels/__pycache__",
+      "plugins/host_execution/__pycache__",
+      "plugins/host_execution/bridge/__pycache__",
+      "utils/__pycache__"
+    ],
+    "bytes": 1477731,
+    "empty_directories": 2,
+    "failures": []
+  },
+  "discarded_private_build_directories": [
+    "package-verified",
+    "package-final",
+    "package-release",
+    "package-delivery",
+    "wheel-import-verified",
+    "wheel-final-import",
+    "wheel-installed-final",
+    "wheel-installed-release"
+  ]
+}

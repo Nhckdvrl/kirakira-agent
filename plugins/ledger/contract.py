@@ -995,7 +995,7 @@ CHANNEL_ATTACHMENT_READ = ServiceKey[ChannelAttachmentRead]("ledger.channel_atta
 APPEND_CHECKS = ServiceKey[AppendChecks]("ledger.append_checks.v1")
 
 def detect_supported_image_mime(head: bytes) -> str | None:
-    """根据文件签名识别 Akashic 支持的图片格式。"""
+    """根据文件签名识别 Kirakira 支持的图片格式。"""
 
     if head.startswith(b"\x89PNG\r\n\x1a\n"):
         return "image/png"

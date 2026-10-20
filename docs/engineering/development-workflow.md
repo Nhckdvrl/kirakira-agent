@@ -1,8 +1,8 @@
-# Akashic 风格的 Agent Runtime 开发工作流
+# Kirakira 开发与验证工作流
 
 ## 固定工作基线
 
-使用单一 Python 环境、依赖锁与明确的上游版本。先定位具体组件的 `plugin.py`、
+使用单一 Python 环境、依赖锁与明确的源码版本。先定位具体组件的 `plugin.py`、
 `contract.py`、实现文件和已有场景，再写代码。实现的来源、许可证、补丁与生成资产必须可追溯。
 
 工作开始时确认当前分支、未提交改动和任务涉及的数据目录。生产 workspace、模型凭据与
@@ -51,7 +51,7 @@
 测试从正式来源入口接纳输入，经过消息、任务、回复、模型、工具、执行设施与投递。
 仅在测试真正需要的资源边界提供夹具；模型输出、工具授权和持久事实不绕过正式实现。
 
-真实 API 测试要固定模型、专用端点、账户边界和配置。Step5 使用 Token Plan 驱动；
+真实 API 测试要固定模型、专用端点、账户边界和配置。
 连接和模型验证调用与业务调用账本分别说明计数范围。
 
 每个场景保留输入、结果、消息或数据库证明与运行版本。
@@ -71,7 +71,7 @@
 
 - 架构：`docs/architecture/overview.md`
 - 运行与迁移：`docs/handbook/start.md`
-- 上游来源：`UPSTREAM.json`
+- 代码来源：`UPSTREAM.json`
 - 确定性回归：`tests/`、`eval/upstream/`
-- 真实 Step5：`eval/native_runtime.py`、`eval/native_web.py`、`eval/native_alignment.py`、`eval/native_proactive.py`
+- 真实模型：`eval/native_runtime.py`、`eval/native_web.py`、`eval/native_alignment.py`、`eval/native_proactive.py`
 - 当前验证证据：`docs/operations/evaluations/`、`docs/operations/artifacts/`

@@ -1,4 +1,4 @@
-"""Independent composition keys consumed by the Akashic client plugin.
+"""Independent composition keys consumed by the Kirakira client plugin.
 
 The client plugin names the capabilities it uses by their stable ServiceKey
 identity.  It does not import another plugin's implementation.  The channel

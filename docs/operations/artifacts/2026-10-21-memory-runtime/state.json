@@ -1,0 +1,62 @@
+{
+  "scope": "synthetic vectors; state consistency, not language quality",
+  "publication": {
+    "turns": 272,
+    "logical_state_sha256": "126103b8b9be60b10c1ec0225cf4d9d119a1c26b206a0e40442d71cb958a6e77",
+    "recalls_sha256": "575f6dd9f5b49c2f9cf4ca9ef5ed7a2128b454ba3d799102e5f104912002f2c6",
+    "incremental_seconds": [
+      0.03485867753624916,
+      0.050069576129317284,
+      0.03708190284669399,
+      0.028102872893214226,
+      0.0506430696696043,
+      0.047707393765449524,
+      0.031369708478450775,
+      0.0327376089990139,
+      0.035071706399321556,
+      0.03639906272292137,
+      0.03442505560815334,
+      0.037828875705599785,
+      0.034533100202679634,
+      0.04412394016981125,
+      0.048001864925026894,
+      0.04822546988725662
+    ],
+    "all_tables_equal": true,
+    "query_unchanged": true,
+    "faults": [
+      {
+        "boundary": "file-sync",
+        "published_new": false
+      },
+      {
+        "boundary": "replace",
+        "published_new": false
+      },
+      {
+        "boundary": "directory-sync",
+        "published_new": true
+      }
+    ]
+  },
+  "crash_replay": {
+    "turns": 300,
+    "publish_every": 16,
+    "crash_at": 87,
+    "replayed_tail": 7,
+    "every_turn": "1d71308c30a632523ba88b912418fb6ecdf439269ad8faaec4169cfe8ffc1b86",
+    "batched_with_crash": "1d71308c30a632523ba88b912418fb6ecdf439269ad8faaec4169cfe8ffc1b86",
+    "rebuild": "1d71308c30a632523ba88b912418fb6ecdf439269ad8faaec4169cfe8ffc1b86",
+    "equal": true
+  },
+  "derived_recovery": {
+    "learned_turns": 3,
+    "rebuilt_vectors": 6,
+    "same_nonempty_recall": true,
+    "warm_query_no_reembedding": true,
+    "online_restore": true,
+    "invalid_progress_fails": true,
+    "messages_bytes_unchanged": true,
+    "graph_bytes_unchanged": true
+  }
+}

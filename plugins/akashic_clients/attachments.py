@@ -1,4 +1,4 @@
-"""Filesystem staging owned by the Akashic clients plugin."""
+"""Filesystem staging owned by the Kirakira clients plugin."""
 
 from __future__ import annotations
 

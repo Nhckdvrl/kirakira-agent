@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import cast
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from plugins.ledger.contract import Bindings
 from plugins.models.contract import BoundEmbeddingModel
@@ -23,25 +23,18 @@ from .application.snapshot import read_memory
 from .domain.model import MemoryConfig
 from .learning import AKASHA_LEARNING, Learning, LearningConfig
 from .scopes import MemoryDisabled
-from .contract import ProgramSource, Recall, ToolSource
-from .recalls import RecallRecords, query_memory, render_materials
+from .contract import ProgramSource, Recall, RecallQuery, ToolSource
+from .recalls import RecallRecords, query_memory, render_materials, record_materials
+from .source_tool import SourceProof
 
 
-class RecallArguments(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    query: str = Field(min_length=1, max_length=32000)
-    limit: int = Field(default=10, ge=1, le=40)
-
-    @field_validator("query")
-    @classmethod
-    def check_query(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("召回问题不能为空白")
-        return value
+class RecallArguments(RecallQuery):
+    pass
 
 
 class PreparedRecall(RecallArguments):
     source: ToolSource | None
+    program_session: str | None = None
     learning_binding: str = Field(min_length=1)
     embedding_binding: str = Field(min_length=1)
     max_chars: int = Field(gt=0)
@@ -72,7 +65,7 @@ def tool_references(
         if not isinstance(result, ToolResult) or result.outcome != "success":
             continue
         for part in result.parts:
-            if part.kind != "akasha.recall":
+            if part.kind not in {"akasha.recall", "akasha.source"}:
                 continue
             request = by_id[call_ref.message_id]
             if not isinstance(request.body, Output):
@@ -84,6 +77,18 @@ def tool_references(
             tool = metadata["tool"]
             if not isinstance(tool, Mapping) or tool["owner"] != learning.owner:
                 raise ValueError("其他工具不能伪造 Akasha 召回出处")
+            if part.kind == "akasha.source":
+                proof = SourceProof.model_validate_json(json.dumps(json_value(part.value)))
+                parent = records.read(proof.retrieval_ref)
+                if (tool["name"] != "read_memory_source" or proof.call_ref != call_ref
+                    or proof.caller_session_id != request.session_id or parent is None
+                    or proof.span.message_id not in parent.presented_message_ids):
+                    raise ValueError("原文展开出处不属于实际工具调用")
+                references[proof.span.message_id] = {
+                    "ref": proof.span.message_id, "resolved_ref": proof.span.message_id,
+                    "retrieval_ref": proof.retrieval_ref,
+                }
+                continue
             marker = RecallReference.model_validate_json(json.dumps(json_value(part.value)))
             recall = records.read(marker.retrieval_ref)
             if (recall is None or not isinstance(recall.source, ToolSource)
@@ -124,21 +129,23 @@ class RecallTool:
 
     async def prepare(
         self, arguments: Mapping[str, object], source: CallSource | None = None,
+        *, session_id: str | None = None,
     ) -> Mapping[str, object] | str:
         """只固定用户查询和实际 CallRef；后来输入不会改变参数出处。"""
         try:
-            request = RecallArguments.model_validate(json_value(arguments))
+            request = RecallArguments.model_validate_json(json.dumps(json_value(arguments)))
         except ValidationError as error:
             return str(error)
         origin = None if source is None else ToolSource(
             session_id=source.messages[0].session_id, call_ref=source.call_ref,
         )
         try:
-            _ = self._memory(None if origin is None else origin.session_id)
+            _ = self._memory(session_id if origin is None else origin.session_id)
         except MemoryDisabled as error:
             return str(error)
         binding, model_id = self._select_learning()
         return PreparedRecall(**request.model_dump(), source=origin,
+                              program_session=session_id if origin is None else None,
                               learning_binding=binding,
                               embedding_binding=model_id,
                               max_chars=self._max_chars).model_dump(mode="json")
@@ -150,7 +157,7 @@ class RecallTool:
             return existing
         request = PreparedRecall.model_validate_json(json.dumps(json_value(arguments)))
         identity = "tool:" + key
-        source = request.source or ProgramSource(key=key, query=request.query)
+        source = request.source or ProgramSource(key=key, query=request.query, session_id=request.program_session)
         # 1. 打开工具实际固定的学习规则；读副本也校验图的 embedding 空间。
         async with self._bindings.open(request.learning_binding, AKASHA_LEARNING) as (learning, metadata):
             rule = LearningConfig.model_validate(dict(metadata))
@@ -161,7 +168,7 @@ class RecallTool:
                     return [list(vector) for vector in (await model.embed(texts)).vectors]
             # 调用所在 Session 决定读取哪张图；显式程序没有 Session 时读 default 图。
             async with read_memory(
-                self._memory(None if request.source is None else request.source.session_id), catalog=self._catalog,
+                self._memory(request.program_session if request.source is None else request.source.session_id), catalog=self._catalog,
                 embeddings=self._embeddings, bindings=self._bindings, config=self._config,
                 embedding_space=(rule.embedding_model, rule.dimension),
                 restore_embeddings=restore_embeddings,
@@ -183,15 +190,15 @@ class RecallTool:
                 recall = await run_memory_job(lambda: query_memory(
                     cycle, state, learning_binding=request.learning_binding, text=request.query,
                     dense=dense, stamp=stamp, source=source, limit=request.limit,
+                    time_start=request.time_start, time_end=request.time_end,
+                    selection=request.selection,
+                    presentation=request.presentation,
                 ))
             # 2. 材料和呈现出处固定后一次发布；失败不能暴露成功 Result。
             material = await run_memory_job(lambda: render_materials(
                 identity, recall, learning, self._catalog, max_chars=request.max_chars,
             ))
-            recall = recall.model_copy(update={
-                "max_chars": request.max_chars,
-                "presented_message_ids": tuple(dict.fromkeys(ref["ref"] for ref in cast(tuple[Mapping[str, str], ...], material["references"]))),
-            })
+            recall = record_materials(recall, material, max_chars=request.max_chars)
             _ = await run_memory_job(lambda: self._records.save(identity, recall))
             return self._result(identity, recall, tuple(ContentPart("text", part["text"]) for part in cast(tuple[Mapping[str, str], ...], material["reminders"])))
 
@@ -207,6 +214,8 @@ class RecallTool:
             ))
         if tuple(dict.fromkeys(ref["ref"] for ref in cast(tuple[Mapping[str, str], ...], material["references"]))) != recall.presented_message_ids:
             raise ValueError("原查询呈现的材料发生变化，不能用当前结果冒充恢复")
+        if recall.rendering_version == 3 and record_materials(recall, material, max_chars=recall.max_chars).presented_spans != recall.presented_spans:
+            raise ValueError("原查询的片段边界发生变化，不能冒充恢复")
         return self._result(identity, recall, tuple(ContentPart("text", part["text"]) for part in cast(tuple[Mapping[str, str], ...], material["reminders"])))
 
     @staticmethod

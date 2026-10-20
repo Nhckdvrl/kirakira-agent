@@ -28,7 +28,7 @@ def inventory():
 def verify_inventory():
     count = verify()
     value = inventory()
-    if json.loads((ROOT / "docs/status/akashic-features.json").read_text()) != value:
+    if json.loads((ROOT / "docs/status/plugin-inventory.json").read_text()) != value:
         raise RuntimeError("native inventory is stale; run --write")
     assert sum(row["upstream"] for row in value["plugins"]) == 70
     for path in ("agent/composition/root.py", "plugins/sources/admission.py", "plugins/reply_program/store.py",
@@ -45,11 +45,11 @@ def main():
     args = parser.parse_args()
     if args.write:
         value = inventory()
-        (ROOT / "docs/status/akashic-features.json").write_text(json.dumps(value, indent=2) + "\n")
-        rows = ["# 原生插件组合", "", "所有上游生产插件的实现已移植。此表记录源码与默认组合；外部提供方仍需独立配置和验证。", "",
-                "| 插件 | 来源 | headless 选择 |", "| --- | --- | --- |"]
-        rows.extend(f"| {row['id']} | {'Akashic' if row['upstream'] else 'Kirakira'} | {'是' if row['headless_selected'] else '可选'} |" for row in value["plugins"])
-        (ROOT / "docs/status/akashic-features.md").write_text("\n".join(rows) + "\n")
+        (ROOT / "docs/status/plugin-inventory.json").write_text(json.dumps(value, indent=2) + "\n")
+        rows = ["# 插件组合", "", "此表记录随发行版提供的组件和默认选择；外部提供方需要独立配置与验证。", "",
+                "| 插件 | 组件类型 | headless 选择 |", "| --- | --- | --- |"]
+        rows.extend(f"| {row['id']} | {'运行组件' if row['upstream'] else '发行扩展'} | {'是' if row['headless_selected'] else '可选'} |" for row in value["plugins"])
+        (ROOT / "docs/status/plugin-inventory.md").write_text("\n".join(rows) + "\n")
     print(json.dumps(verify_inventory()))
 
 

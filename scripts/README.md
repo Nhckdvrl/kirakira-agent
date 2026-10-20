@@ -14,4 +14,4 @@
 运行数据使用仓库外的工作区；历史评测结果由 Git 保留，当前结果统一进入
 `docs/operations/`，不在根目录或 `eval/results/` 另留副本。
 
-完整运行说明见 `docs/handbook/start.md`；在线 Step5 验证入口为 `eval.native_runtime`。
+完整运行说明见 `docs/handbook/start.md`；真实模型验证入口和实验条件见 `eval/README.md`。

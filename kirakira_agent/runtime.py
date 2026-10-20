@@ -1,4 +1,4 @@
-"""Small distribution facade over Akashic's formal PluginManager and Root.
+"""Small distribution facade over Kirakira's formal PluginManager and Root.
 
 This module selects plugins and offers a Python entry point. Task admission,
 source policy, persistence, tool execution and recovery live in native providers.
@@ -66,8 +66,9 @@ def initialize_workspace(workspace, *, profile="headless"):
 
 @asynccontextmanager
 async def runtime(workspace, *, extensions=()):
-    from .environment import select_host_python
+    from .environment import configure_plugin_home, select_host_python
     select_host_python()
+    configure_plugin_home()
     workspace = Path(workspace).resolve()
     # Reject an old database before a native provider can acquire resources.
     import sqlite3
@@ -114,47 +115,63 @@ async def rpc(core, method, payload):
     return result
 
 
-async def configure_step_plan(core, key_file, *, reasoning_effort="low", max_output_tokens=4096):
+async def configure_chat_model(
+    core, key_file, *, model, endpoint, driver_id="openai-compatible",
+    model_id="main", connection_id="main", context_window=32768,
+    max_output_tokens=4096, reasoning_effort=None,
+):
+    """Configure a chat role through the provider-independent Models contract."""
     from plugins.models.contract import MODEL_CATALOG
-    from plugins.step_plan.driver import BASE_URL, DRIVER_ID, MODEL
+
+    if not model.strip() or not endpoint.strip() or context_window <= max_output_tokens or max_output_tokens <= 0:
+        raise ValueError("model, endpoint and a valid context/output budget are required")
     root = core.plugin_manager.live_root
     if root is None:
-        raise RuntimeError("native Root is not ready")
+        raise RuntimeError("runtime is not ready")
     catalog = root.context.require(MODEL_CATALOG)
     snapshot = catalog.snapshot()
-    existing = next((model for model in snapshot.models if model.model_id == "step5"), None)
+    existing = next((item for item in snapshot.models if item.model_id == model_id), None)
     if existing is not None:
-        if (existing.kind != "chat" or existing.model != MODEL
-                or snapshot.connection(existing.connection_id).driver_id != DRIVER_ID):
-            raise ValueError("step5 identity already belongs to another model or driver")
-        if snapshot.role_bindings.get("default") != "step5":
-            await rpc(core, "models/command", {"type": "set_default", "expected_revision": snapshot.revision,
-                                               "role": "default", "model_id": "step5"})
-        return
-    revision = snapshot.revision
-    # Use the provider's public JSON RPC. Private command dataclasses belong to
-    # their exact plugin generation and must not cross the import boundary.
-    await rpc(core, "models/command", {
-        "type": "create_connection_with_model",
-        "connection": {
-            "expected_revision": revision, "connection_id": "step-plan", "name": "Step Token Plan",
-            "driver_id": DRIVER_ID, "endpoint": BASE_URL, "auth_identity": "step-plan-key",
-            "credential": {"api_key": Path(key_file).read_text().strip()},
-            "driver_config": {"format_version": 1, "max_attempts": 3, "read_timeout": 180.0},
-        },
-        "model": {
-            "expected_revision": revision, "model_id": "step5", "connection_id": "step-plan",
-            "kind": "chat", "model": MODEL, "default_reasoning_effort": reasoning_effort,
-            "capabilities": {"context_window": 32768, "max_output_tokens": max_output_tokens,
-                             "supports_tool_calls": True, "supports_parallel_tool_calls": True,
-                             "supported_reasoning_efforts": ["low", "medium", "high"]},
-            "capability_sources": {"context_window": "user", "max_output_tokens": "user",
-                                   "tool_calls": "driver", "parallel_tool_calls": "driver",
-                                   "reasoning_efforts": "driver"},
-        },
-    })
-    await rpc(core, "models/command", {"type": "set_default", "expected_revision": catalog.snapshot().revision,
-                                       "role": "default", "model_id": "step5"})
+        if (existing.kind != "chat" or existing.model != model
+                or snapshot.connection(existing.connection_id).driver_id != driver_id):
+            raise ValueError("model identity already belongs to another model or driver")
+    else:
+        capabilities = {"context_window": context_window, "max_output_tokens": max_output_tokens,
+                        "supports_tool_calls": True, "supports_parallel_tool_calls": True}
+        sources = {"context_window": "user", "max_output_tokens": "user",
+                   "tool_calls": "driver", "parallel_tool_calls": "driver"}
+        if reasoning_effort is not None:
+            capabilities["supported_reasoning_efforts"] = ["low", "medium", "high"]
+            sources["reasoning_efforts"] = "user"
+        await rpc(core, "models/command", {
+            "type": "create_connection_with_model",
+            "connection": {
+                "expected_revision": snapshot.revision, "connection_id": connection_id,
+                "name": connection_id, "driver_id": driver_id, "endpoint": endpoint,
+                "auth_identity": connection_id + "-key",
+                "credential": {"api_key": Path(key_file).read_text().strip()},
+                "driver_config": {"format_version": 1, "max_attempts": 3, "read_timeout": 180.0},
+            },
+            "model": {
+                "expected_revision": snapshot.revision, "model_id": model_id,
+                "connection_id": connection_id, "kind": "chat", "model": model,
+                "default_reasoning_effort": reasoning_effort,
+                "capabilities": capabilities, "capability_sources": sources,
+            },
+        })
+    current = catalog.snapshot()
+    if current.role_bindings.get("default") != model_id:
+        await rpc(core, "models/command", {"type": "set_default", "expected_revision": current.revision,
+                                           "role": "default", "model_id": model_id})
+
+
+async def configure_step_plan(core, key_file, *, reasoning_effort="low", max_output_tokens=4096):
+    """Optional subscription driver; the execution and memory contracts stay generic."""
+    from plugins.step_plan.driver import BASE_URL, DRIVER_ID, MODEL
+
+    await configure_chat_model(core, key_file, model=MODEL, endpoint=BASE_URL,
+        driver_id=DRIVER_ID, model_id="step5", connection_id="step-plan",
+        max_output_tokens=max_output_tokens, reasoning_effort=reasoning_effort)
 
 
 async def submit(core, session_id, message_id, text, *, timeout=180, metadata=None, attachments=()):

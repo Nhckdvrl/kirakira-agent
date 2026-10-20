@@ -1,20 +1,121 @@
 # 评测
 
-`python -m eval.native_runtime --key-file FILE --workspace NEW_DIR --output REPORT.json`
-使用完整生产插件图和 Step5 Token Plan。每次使用新目录，模型响应不替换为夹具。
-`eval/fixtures/native_extension` 提供真实托管 HTTP 进程和 stdio MCP 服务，不连接外部收件人。
+评测使用项目同一个 `.venv` / Python 3.14.6。工作区、数据集、模型权重和临时结果放仓库外的本机磁盘；正式结果统一进入 `docs/operations/`。
 
-原生确定性验收：
+```sh
+uv sync --frozen --group dev --group eval --extra providers
+```
+
+## 模型条件
+
+真实模型评测接受 `--model-config /private/path/model.json` 和 `--key-file /private/path/model.key`。配置文件不含密钥：
+
+```json
+{
+  "driver_id": "openai-compatible",
+  "model_id": "evaluation",
+  "model": "YOUR_MODEL",
+  "endpoint": "YOUR_API_BASE",
+  "context_window": 32768,
+  "max_output_tokens": 4096
+}
+```
+
+按实际模型填写能力和预算；支持时可设置 `reasoning_effort`。业务链路不依赖模型 ID 或供应商。省略配置只为兼容既有私有订阅测试命令；新实验应显式提供配置。订阅测试必须填写订阅端点，不得换成现金端点。
+
+报告记录实际模型、驱动、端点与输入条件。同一模型的两个驱动路径不算跨模型验证。日志可能包含首次登录信息，只能留在私有输出目录；不要上传整个工作区或凭据库。
+
+## 功能验证
+
+每次使用不存在或全新的隔离工作区：
+
+```sh
+python -m eval.native_runtime \
+  --model-config /private/path/model.json --key-file /private/path/model.key \
+  --workspace /local-disk/eval/core-new --output /local-disk/eval/core.json
+
+python -m eval.native_alignment \
+  --model-config /private/path/model.json --key-file /private/path/model.key \
+  --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json \
+  --workspace /local-disk/eval/features-new --output /local-disk/eval/features.json
+
+python -m eval.memory_runtime \
+  --model-config /private/path/model.json --key-file /private/path/model.key \
+  --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json \
+  --workspace /local-disk/eval/memory-new --output /local-disk/eval/memory.json
+
+python -m eval.native_web \
+  --model-config /private/path/model.json --key-file /private/path/model.key \
+  --workspace /local-disk/eval/web-new --output /local-disk/eval/web.json
+```
+
+| 入口 | 验证范围 |
+| --- | --- |
+| `native_runtime` | 生产插件图中的对话、文件、Shell、MCP、子任务、取消、恢复、附件、调度和投递 |
+| `native_alignment` | 在线记忆学习、诊断、事件跳过/投递/去重、实际插件安装、压缩与重启 |
+| `memory_runtime` | 真实渠道学习到查询、RPC、Agent 工具、原文展开、项目提醒、显式反馈和重启 |
+| `native_web` | 认证后的工作台/聊天 HTTP、import map、项目作用域与实际文件工具 |
+
+`eval/fixtures/native_extension` 提供真实托管 HTTP 进程和 stdio MCP 服务；事件投递目标为隔离的本地会话。它们是受控集成验收，不是外部账号、所有设备或所有可选提供方的部署认证。
+
+记忆向量资产先通过 `configure-memory --download` 显式准备，参见[配置指南](../docs/handbook/memory-proactive.md)。生产运行不临时下载。中文功能场景与英文公开基准使用各自固定的向量空间，不混库。
+
+## 公开历史中的记忆质量
+
+[LongMemEval 官方仓库](https://github.com/xiaowu0162/LongMemEval)和[数据集](https://huggingface.co/datasets/xiaowu0162/longmemeval)另行下载，不把整个历史数据集提交进项目。当前实验文件为 `longmemeval_s_cleaned.json`，SHA256：
+
+```text
+d6f21ea9d60a0d56f34a05b609c79c88a451d2ae03597821ea3d5a9678c3a442
+```
+
+每题导入完整 haystack，包括干扰会话；参考答案和 `has_answer` 标签只参与评分。离线导入生成真实 Ledger 消息，由正式 Learning、MessageConsumer 和检索/呈现组件处理；reader/judge 走 Models 服务。这个组件实验与上面的实时渠道验收分别记录。
+
+```sh
+python -m eval.memory \
+  --dataset /local-disk/data/longmemeval_s_cleaned.json \
+  --model-config /private/path/model.json --key-file /private/path/model.key \
+  --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-en-v1.5.json \
+  --seed kirakira-memory-v1 --per-category 2 --offset 0 \
+  --candidates 15 --max-chars 12000 --reader-format text --parallel 2 \
+  --systems no-memory recent dense hybrid-rrf akasha akasha-fused \
+    akasha-fused-excerpts dense-excerpts hybrid-excerpts \
+  --output /local-disk/eval/quality-partition-0
+```
+
+使用相同 seed 和 `--offset 2`、`--offset 4` 生成另外两组，各 14 题。按类别内 `SHA256(seed:question_id)` 排序后固定取题，三个分区的题目不重叠；背景历史可能重叠。七类各取六题形成均衡子集，不代表完整基准的类别权重。
+
+所有方案共用编码器、reader、judge、候选上限和包含说明的字符上限。向量基线直接检索闭段的消息向量；混合基线对向量和 BM25 排名融合。原通道、融合与摘录分别保留，不能把加大材料预算当作算法改进。无记忆和近期历史也保留，以检查收益究竟来自哪里。
+
+默认 reader 返回普通文本与消息 ID 引用，独立 judge 按题型判断回答。自定义 judge 不是官方评测器；记录同模型评分的限制。检索指标包括支持会话与带答案标签的消息覆盖；消息覆盖不保证片段包含答案。引用 ID 合法不保证每句话都由证据支持。
+
+失败尝试保留在分母，评分无效也按失败计；不因重试而覆盖已经完成的答案。`--resume` 只继续未启动的组合。`--reuse-index DIR` 可复用同一数据/向量空间下的冻结索引，使用 SQLite backup 包含已提交 WAL，并核对图摘要。
+
+同一私有端点的评测通过跨进程共享槽限制并发；这只管理评测请求，不进入产品 Runtime。
+
+完成后可在相同条件的命令上增加 `--resume --verify-evidence`：不调用 reader/judge，重新检查候选、入选消息和材料长度，保存来源范围及材料摘要。首次运行已记录摘要时还核对字节摘要；历史运行缺少摘要时，不能追溯证明它当时的材料字节完全相同。
+
+合并完整分区与探索记录：
+
+```sh
+python -m eval.memory_report \
+  --runs /local-disk/eval/quality-partition-0 /local-disk/eval/quality-partition-2 /local-disk/eval/quality-partition-4 \
+  --exploratory /local-disk/eval/exploratory-run \
+  --output /local-disk/eval/quality-report.json
+```
+
+合并器拒绝不完整主实验、重复题目、不同数据/预算/模型条件；输出逐题结果、分项、配对胜负和调用账本。探索实验与主实验分开，不混合不同 reader 格式。
+
+## 状态一致性和确定性链路
 
 ```sh
 python -m scripts.message_wake_scenario
-python -m scripts.scheduler_tools_scenario --output /tmp/new-scheduler-contract
+python -m scripts.scheduler_tools_scenario --output /local-disk/eval/scheduler-new
 python -m scripts.ledger_runtime_scenario
+python -m eval.upstream.akasha_cost_scenario --source . --output /local-disk/eval/state-new
+python -m eval.upstream.akasha_publish_replay_scenario --help
+python -m eval.upstream.akasha_derived_recovery_scenario --help
 ```
 
-Scheduler 场景使用本地确定性模型 HTTP 对端，验证工具权限、调度来源、交付、用户抢占与取消。
-它与真实 Step5 评测分开记录。
+这些入口检查提交、授权、调度、物理退出、图发布、消费进度和重建。Scheduler 使用本地确定性模型 HTTP 对端。记忆状态场景使用合成向量，适合证明一致性，不能证明真实语言理解或公开数据集上的质量。
 
-当前量化结果及原始证据统一放在 `docs/operations/evaluations/` 和
-`docs/operations/artifacts/`。旧主链的评测程序与过期结果只保留在 Git 历史中。
-新运行使用仓库外的临时工作区和输出路径，正式记录再纳入对应评测文档。
+当前结果、保留的失败与限制见[验证入口](../docs/operations/verification.md)。

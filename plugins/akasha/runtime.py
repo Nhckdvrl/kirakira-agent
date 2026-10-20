@@ -17,7 +17,7 @@ from .application.cycle import MemoryCycle
 from .infrastructure.consumption import Consumption
 from .projection import input_features
 from .contract import ContextSource
-from .recalls import RecallRecords, context_identity, query_memory, render_materials
+from .recalls import RecallRecords, context_identity, query_memory, render_materials, record_materials
 from .recall_tool import tool_references
 
 MaterialData = Mapping[str, object]
@@ -172,7 +172,11 @@ async def prepare_materials(
     tool_refs = await run_memory_job(lambda: tool_references(snapshot, source, learning, bindings, records))
     references.update((cast(str, ref["ref"]), ref) for ref in tool_refs)
     result = dict(material)
-    result["references"] = tuple(references.values())
+    # Character ranges belong to memory receipts/proofs. Content's reference
+    # protocol carries only stable reference identities, never memory fields.
+    result["references"] = tuple({key: value for key, value in ref.items()
+                                 if key in {"ref", "resolved_ref", "retrieval_ref"}}
+                                for ref in references.values())
     return result
 
 
@@ -213,13 +217,6 @@ async def query_inputs(
     material = await run_memory_job(lambda: render_materials(
         identity, recall, learning, catalog, max_chars=max_chars,
     ))
-    recall = recall.model_copy(update={
-        "max_chars": max_chars,
-        "presented_message_ids": tuple(
-            dict.fromkeys(
-                cast(str, ref["ref"]) for ref in _reference_rows(material)
-            )
-        ),
-    })
+    recall = record_materials(recall, material, max_chars=max_chars)
     _ = await run_memory_job(lambda: records.save(identity, recall))
     return material

@@ -6,7 +6,7 @@ api_version = 3
 name = "sites_tab"
 version = "1.0.0"
 desc = "在对话工作台的“网站”标签里打开 Agent 发布的网页，切换手机、平板与自适应宽度"
-author = "Akashic Core"
+author = "Kirakira Core"
 inject = (UI,)
 
 

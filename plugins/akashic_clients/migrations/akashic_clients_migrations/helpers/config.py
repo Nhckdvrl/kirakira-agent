@@ -125,7 +125,7 @@ def _build_client_config(
         channel_name = chat_values["channel_name"]
         if channel_name not in {"", "web", "akashic"}:
             raise ValueError(
-                "channels.chat.channel_name 不是 Akashic clients 的可迁移身份: "
+                "channels.chat.channel_name 不是 Kirakira clients 的可迁移身份: "
                 f"{channel_name!r}"
             )
     if "socket_path" in chat_values and not isinstance(chat_values["socket_path"], str):

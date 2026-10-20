@@ -53,5 +53,5 @@ def bind_migration_context(
 def current_migration_context() -> MigrationContext:
     context = _CURRENT_CONTEXT.get()
     if context is None:
-        raise RuntimeError("migration callback 缺少 Akashic installation context")
+        raise RuntimeError("migration callback 缺少 Kirakira installation context")
     return context

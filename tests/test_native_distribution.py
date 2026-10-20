@@ -174,6 +174,41 @@ def test_step_plan_rejects_cash_redirect_and_credential_urls():
             validate_endpoint(endpoint)
 
 
+@pytest.mark.asyncio
+async def test_web_branding_keeps_existing_account_identity_and_password_rotation(tmp_path):
+    """A renamed default must not lock out an existing workspace owner."""
+    import httpx
+
+    from plugins.web_auth.app import create_app
+    from plugins.web_auth.state import OwnerAuth
+
+    auth = OwnerAuth(tmp_path / "auth")
+    initial = auth.ensure()
+    assert auth.check_password("kirakira", initial)
+    account_path = auth.root / "account.json"
+    account = json.loads(account_path.read_text())
+    account["username"] = "existing-owner"
+    account_path.write_text(json.dumps(account))
+    assert auth.check_password("existing-owner", initial)
+    assert not auth.check_password("kirakira", initial)
+    auth.set_password("a-new-owner-password", keep=None)
+    assert auth.username() == "existing-owner"
+    assert auth.check_password("existing-owner", "a-new-owner-password")
+    page = Path(__file__).parents[1] / "plugins/web_auth/login.html"
+    app = create_app(auth, page)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://testserver") as client:
+        response = await client.get("/_auth/login")
+        assert 'value="existing-owner"' in response.text
+        assert "__OWNER_USERNAME__" not in response.text
+        token = auth.create_session(remember=False, label="test")
+        from plugins.web_auth.state import COOKIE
+        client.cookies.set(COOKIE, token)
+        result = await client.post("/_auth/password", headers={"origin": "http://testserver", "x-akashic-host": "testserver"},
+                                   json={"current": "a-new-owner-password", "password": "rotated-owner-password"})
+        assert result.status_code == 200
+        assert auth.check_password("existing-owner", "rotated-owner-password")
+
+
 def test_zsh_snapshot_can_parse_alias_function_name_and_restore_option(tmp_path):
     zsh = shutil.which("zsh")
     if zsh is None:
@@ -188,3 +223,23 @@ def test_zsh_snapshot_can_parse_alias_function_name_and_restore_option(tmp_path)
                             check=False, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "actual"
+
+
+def test_frozen_memory_corpus_preserves_duplicate_sources_without_labels(tmp_path):
+    from eval.memory_corpus import import_history
+
+    rows = [{"role": "user", "content": "original source", "has_answer": True},
+            {"role": "assistant", "content": "original reply"}]
+    case = {"question_id": "fixed", "answer": "GOLD_NEVER_INDEXED", "answer_session_ids": ["source"],
+            "haystack_session_ids": ["source", "source"],
+            "haystack_dates": ["2023/05/23 (Tue) 05:09", "2023/05/24 (Wed) 05:53"],
+            "haystack_sessions": [rows, rows]}
+    directory = tmp_path / "history"
+    messages, gold, sessions = import_history(case, directory)
+    assert len(messages) == 4 and len({m.message_id for m in messages}) == 4
+    assert len({m.session_id for m in messages}) == 2 and len(gold) == 2 and sessions == {"source"}
+    assert messages[-1].metadata["evaluation_session_id"] == "source"
+    with sqlite3.connect(directory / "sessions.db") as db:
+        body = json.dumps(db.execute("SELECT body,metadata FROM messages").fetchall())
+        assert "GOLD_NEVER_INDEXED" not in body and "has_answer" not in body
+    assert import_history(case, directory, existing=True)[0] == messages

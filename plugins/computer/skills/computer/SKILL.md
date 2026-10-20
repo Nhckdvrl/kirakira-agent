@@ -17,7 +17,7 @@ There is no desktop: only one Chromium, whose tabs the user watches in the Brows
 If the tool is not visible, call `load_tools` with `{"plugin":"computer"}`. Its exact tool name is
 `computer`.
 
-Bindings persist within this Akashic Session while Computer is awake; a timeout, cancellation, reset,
+Bindings persist within this Kirakira Session while Computer is awake; a timeout, cancellation, reset,
 idle sleep, or workload restart invalidates them. First use wakes the saved personal profile.
 An active Turn prevents sleep. After the Turn and identity refresh finish, 10 minutes without
 actual input stops the browser. A panel left open does not keep it alive.
@@ -96,7 +96,7 @@ never write a byte array as JSON. Methods such as `tab.ax.write()` already emit 
    useful output with `await tab.markDeliverable()`. Never close a human tab without explicitly claiming it.
 6. The driver releases remaining input when the call ends. A cancelled action may already have changed the page; observe before retrying.
 7. Do not launch Chromium yourself, alter profile files, or bypass the Workload owner. Use the Computer
-   panel for human login and takeover. File chooser paths refer to the container, not the Akashic host.
+   panel for human login and takeover. File chooser paths refer to the container, not the Kirakira host.
 
 ```js
 await tab.playwright.getByRole("textbox", {name: "Name"}).fill("花月");
@@ -117,7 +117,7 @@ does not receive images, use `read_image_vision` with that path and a specific v
 the configured vision model and returns text. If that role is unavailable, report the missing capability;
 do not keep taking screenshots or claim to have seen pixels. Never infer visual access from a path alone.
 AX state is currently full text; its formatting and compression are not claimed identical to the original WASM.
-The returned screenshot path belongs to Akashic, not the Computer container's filesystem.
+The returned screenshot path belongs to Kirakira, not the Computer container's filesystem.
 Do not open it with `require('fs')` inside Computer. For a small visual
 target, emit a clipped screenshot with `tab.screenshot({clip:{x,y,width,height}})` and inspect it
 before probing image libraries. Coordinates are relative to the tab viewport. Refresh geometry after

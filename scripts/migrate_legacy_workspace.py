@@ -176,7 +176,7 @@ def _migrate_locked(source, destination, *, profile):
                   "archived_files": len(files), "messages": len(imported), "sessions": len(session_map),
                   "session_map": session_map, "bodies": dict(counts), "history": history_counts, **file_counts,
                   "policy": "native history, profiles, skills and directory snapshots; no imported execution grants",
-                  "model_status": "requires configure-step-plan or --key-file"}
+                  "model_status": "requires model configuration and verification"}
         (staging / "migration.json").write_text(json.dumps(report, indent=2) + "\n")
         (staging / "config.toml").write_text("[runtime]\nworkspace = " + json.dumps(str(destination)) + "\n")
         os.rename(staging, destination)
@@ -210,18 +210,20 @@ def activate(config_path, workspace):
         lock.release()
 
 
-async def configure_and_verify(workspace, key_file):
+async def configure_and_verify(workspace, key_file, *, model_config=None):
     from uuid import uuid4
 
-    from kirakira_agent.runtime import configure_step_plan, runtime, submit
+    from eval.models import EvaluationModel
+    from kirakira_agent.runtime import runtime, submit
     from plugins.ledger.contract import MESSAGE_CATALOG
     from plugins.models.contract import MODEL_CATALOG
+    model_config = model_config or EvaluationModel.read(None)
     report_path = workspace / "migration.json"
     report = json.loads(report_path.read_text())
     os.environ.setdefault("AKASHIC_PLUGIN_HOME", os.environ.get(
         "KIRAKIRA_PLUGIN_HOME", str(Path.home() / ".kirakira/plugins")))
     async with runtime(workspace) as core:
-        await configure_step_plan(core, key_file, max_output_tokens=8192)
+        await model_config.configure(core, key_file)
         root = core.plugin_manager.live_root
         catalog = root.context.require(MESSAGE_CATALOG)
         for session in report["session_map"].values():
@@ -231,14 +233,15 @@ async def configure_and_verify(workspace, key_file):
                               "Reply with exactly " + marker + ". Do not call tools.")
         text = "".join(part.value for part in answer.body.parts if isinstance(part, ContentPart) and part.kind == "text")
         if text.strip() != marker:
-            raise ValueError("Step5 migration smoke check failed")
+            raise ValueError("model migration verification failed")
         models = root.context.require(MODEL_CATALOG).snapshot()
-        connection = models.connection(models.model("step5").connection_id)
+        connection = models.connection(models.model(model_config.model_id).connection_id)
         with closing(sqlite3.connect((workspace / "model-registry.sqlite3").as_uri() + "?mode=ro", uri=True)) as database:
             endpoint = database.execute("SELECT base_url FROM model_connections WHERE id=?", (connection.connection_id,)).fetchone()[0]
-        report["verification"] = {"step5_reply": True, "driver": connection.driver_id,
+        assert endpoint == model_config.endpoint
+        report["verification"] = {"model_reply": True, "model_config": model_config.description(), "driver": connection.driver_id,
                                   "endpoint": endpoint, "legacy_sessions_readable": len(report["session_map"])}
-    report["model_status"] = "step5 configured and verified on Step Token Plan"
+    report["model_status"] = "configured and verified"
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
     return report
 
@@ -250,12 +253,15 @@ def main():
     parser.add_argument("--profile", choices=("headless", "web"), default="web")
     parser.add_argument("--key-file", type=Path)
     parser.add_argument("--activate-config", type=Path)
+    parser.add_argument("--model-config", type=Path)
     args = parser.parse_args()
     if args.activate_config and not args.key_file:
-        parser.error("--activate-config requires --key-file and successful native/Step5 verification")
+        parser.error("--activate-config requires --key-file and successful model/runtime verification")
     report = migrate(args.source, args.destination, profile=args.profile)
     if args.key_file:
-        report = asyncio.run(configure_and_verify(args.destination.resolve(), args.key_file))
+        from eval.models import EvaluationModel
+        report = asyncio.run(configure_and_verify(args.destination.resolve(), args.key_file,
+            model_config=EvaluationModel.read(args.model_config)))
     if args.activate_config:
         activate(args.activate_config, args.destination)
         report["activated"] = True

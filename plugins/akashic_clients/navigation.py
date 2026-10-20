@@ -24,7 +24,7 @@ class PinReference(BaseModel):
             if self.id != self.id.strip() or self.id == "default" or len(self.id) > 128:
                 raise ValueError("维度值无效")
         elif not self.id.startswith("akashic:") or not self.id.removeprefix("akashic:").strip() or self.id != self.id.strip():
-            raise ValueError("需要完整的 Akashic 会话 ID")
+            raise ValueError("需要完整的 Kirakira 会话 ID")
         return self
 
 

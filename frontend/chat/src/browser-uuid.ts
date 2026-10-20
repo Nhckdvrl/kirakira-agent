@@ -10,7 +10,7 @@ export function createUuid(source: BrowserCrypto = globalThis.crypto): string {
   return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`;
 }
 
-/** Create a UUIDv7 whose identity is valid on every Akashic client. */
+/** Create a UUIDv7 whose identity is valid on every Kirakira client. */
 export function createUuidV7(
   source: BrowserCrypto = globalThis.crypto,
   now = Date.now(),

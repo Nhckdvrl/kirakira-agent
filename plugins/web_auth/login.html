@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<title>登录 · Akashic</title>
+<title>登录 · Kirakira</title>
 <style>
 :root { --paper: #f5f4ed; --field: #faf9f5; --ink: #141413; --ink-2: #504e49; --ink-3: #6b6a64; --rule: rgb(20 20 19 / .22); --accent: #1b365d; --accent-ink: #faf9f5; --accent-soft: rgb(27 54 93 / .08); --bad: #8c2c24; }
 @media (prefers-color-scheme: dark) { :root { --paper: #181816; --field: #1e1e1b; --ink: #ecebe4; --ink-2: #bab8af; --ink-3: #929088; --rule: rgb(236 235 228 / .26); --accent: #96b4e2; --accent-ink: #12161e; --accent-soft: rgb(150 180 226 / .12); --bad: #e48c80; color-scheme: dark; } }
@@ -32,10 +32,10 @@ pre { margin: 8px 0; padding: 8px 10px; border-radius: 7px; background: var(--ac
 </head>
 <body>
 <form id="login" hidden>
-  <div class="brand"><i></i>Akashic</div>
+  <div class="brand"><i></i>Kirakira</div>
   <h1>登录</h1>
-  <p id="hint">这台 Akashic 只对主人开放。</p>
-  <label>用户名<input id="username" type="text" autocomplete="username" value="akashic" spellcheck="false" required></label>
+  <p id="hint">这台 Kirakira 只对主人开放。</p>
+  <label>用户名<input id="username" type="text" autocomplete="username" value="__OWNER_USERNAME__" spellcheck="false" required></label>
   <label>密码<input id="password" type="password" autocomplete="current-password" required autofocus></label>
   <label class="check"><input id="remember" type="checkbox" checked><span>记住这台设备<small>90 天内免登录。在别人的电脑上请取消勾选。</small></span></label>
   <button type="submit">登录</button>
@@ -45,15 +45,15 @@ pre { margin: 8px 0; padding: 8px 10px; border-radius: 7px; background: var(--ac
     <p>第一次使用时，初始密码在启动日志里。也可以在服务器上运行下面的命令，免密进入或重置：</p>
     <pre>python main.py web-login      # 打印一次性登录链接
 python main.py web-passwd     # 重置为临时密码，所有设备退出
-docker compose exec akashic python main.py web-login</pre>
-    <p>也可以在 Telegram/QQ 里让 Akashic 帮你重置网页密码。</p>
+kirakira-agent web-login --workspace /path/to/workspace</pre>
+    <p>也可以在 Telegram/QQ 里让 Kirakira 帮你重置网页密码。</p>
   </details>
 </form>
 <form id="change" hidden>
-  <div class="brand"><i></i>Akashic</div>
+  <div class="brand"><i></i>Kirakira</div>
   <h1>设置你自己的密码</h1>
   <p>初始或临时密码出现在日志或聊天里，保存新密码后就会失效。以后在任何设备上都用这个密码登录。</p>
-  <input type="text" autocomplete="username" value="akashic" hidden>
+  <input type="text" autocomplete="username" value="__OWNER_USERNAME__" hidden>
   <label>新密码<input id="new1" type="password" autocomplete="new-password" minlength="10" required></label>
   <label>再输入一次<input id="new2" type="password" autocomplete="new-password" required></label>
   <p>至少 10 个字符。不要求大小写或符号，长一点比复杂更有用。</p>
@@ -111,7 +111,7 @@ document.getElementById("change").addEventListener("submit", async (event) => {
   show(status === 401 ? "login" : "change", body.message || "登录已失效，请重新登录。");
 });
 
-boot().catch(() => show("login", "无法连接 Akashic，请稍后刷新。"));
+boot().catch(() => show("login", "无法连接 Kirakira，请稍后刷新。"));
 </script>
 </body>
 </html>

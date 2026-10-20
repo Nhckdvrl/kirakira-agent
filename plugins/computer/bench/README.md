@@ -8,7 +8,7 @@ Web 聊天入口和 subagent 关闭；其他默认插件照常装配，任何启
 ```text
 固定任务 / seed ──→ 页面初始化 ──→ Gateway 输入
                                       │
-                           Akashic → 模型 → Computer
+                           Kirakira → 模型 → Computer
                                       │
 页面 reward ←── 可信判分端 ←──────────┘
 ```

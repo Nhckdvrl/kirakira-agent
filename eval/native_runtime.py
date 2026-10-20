@@ -1,4 +1,4 @@
-"""Step5 Token Plan exercises through the formal production plugin graph."""
+"""Real-provider exercises through the production plugin graph."""
 import argparse
 import asyncio
 import json
@@ -10,9 +10,9 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
+from eval.models import EvaluationModel, source_identity
 from kirakira_agent.runtime import (
     ROOT,
-    configure_step_plan,
     initialize_workspace,
     runtime,
     submit,
@@ -32,13 +32,21 @@ def text(message):
                      if isinstance(part, ContentPart) and part.kind == "text")
 
 
-async def evaluate(workspace, key_file, output):
+async def evaluate(workspace, key_file, output, *, model_config=None):
+    model_config = model_config or EvaluationModel.read(None)
     initialize_workspace(workspace)
     extensions = workspace.parent / (workspace.name + "-fixtures")
     shutil.copytree(ROOT / "eval/fixtures/native_extension", extensions / "native_extension",
                     ignore=shutil.ignore_patterns("__pycache__"))
+    # Package data may lose executable bits. Restore the trusted fixture's
+    # entry points before the plugin manager freezes its immutable artifact.
+    # Their shebang uses the active environment selected by runtime().
+    for name in ("health.py", "mcp_server.py"):
+        entry = extensions / "native_extension" / name
+        entry.chmod(entry.stat().st_mode | 0o100)
     results = []
     nonce = uuid4().hex[:10]
+    sources = source_identity()
 
     async def record(name, operation):
         start = time.monotonic()
@@ -52,12 +60,12 @@ async def evaluate(workspace, key_file, output):
         row["duration_s"] = round(time.monotonic() - start, 3)
         results.append(row)
         output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(json.dumps({"billing_surface": "step_plan", "model": "step-5-preview",
+        output.write_text(json.dumps({"model_config": model_config.description(), "source_identity": sources,
                                       "workspace": str(workspace), "cases": results}, indent=2) + "\n")
         print(json.dumps({k: v for k, v in row.items() if k != "detail"}), flush=True)
 
     async with runtime(workspace, extensions=(extensions,)) as core:
-        await configure_step_plan(core, key_file)
+        await model_config.configure(core, key_file)
         root = core.plugin_manager.live_root
         catalog = root.context.require(MESSAGE_CATALOG)
 
@@ -115,10 +123,10 @@ async def evaluate(workspace, key_file, output):
         async def model_reload():
             from agent.plugin_composition.config_input import save_config
             token = root.instance_token
-            before = core.plugin_manager.read_config_input("step-plan")["input_ref"]
-            save_config(workspace / "plugin-data/step-plan-builtin", {"evaluation_revision": 1})
-            await core.plugin_manager.reconcile_changed(plugin_ids=frozenset({"step-plan"}))
-            after = core.plugin_manager.read_config_input("step-plan")["input_ref"]
+            before = core.plugin_manager.read_config_input(model_config.driver_id)["input_ref"]
+            save_config(workspace / ("plugin-data/" + model_config.driver_id + "-builtin"), {"evaluation_revision": 1})
+            await core.plugin_manager.reconcile_changed(plugin_ids=frozenset({model_config.driver_id}))
+            after = core.plugin_manager.read_config_input(model_config.driver_id)["input_ref"]
             assert before != after
             assert core.plugin_manager.live_root.instance_token is token
             answer = await submit(core, "akashic:reload", "reload-1", "Reply exactly RELOADED_" + nonce + ". No tools.")
@@ -245,7 +253,7 @@ async def evaluate(workspace, key_file, output):
                 "text='Reply exactly TIMER_" + nonce + ", without tools'. Once the tool confirms registration, "
                 "do not call load_tools or schedule again; acknowledge once and finish.",
                 metadata={"input_parts": [{"kind": "model.selection", "value": {
-                    "model_id": "step5", "reasoning_effort": "medium"}}]})
+                    "model_id": model_config.model_id, "reasoning_effort": "medium" if model_config.reasoning_effort is not None else None}}]})
             ending = await wait_fact(session, lambda row: row.source.startswith("scheduler:")
                 and isinstance(row.body, Output) and row.body.finish == "complete")
             assert "TIMER_" + nonce in text(ending), text(ending)
@@ -261,7 +269,7 @@ async def evaluate(workspace, key_file, output):
                 raise AssertionError("scheduler delivery receipt did not settle")
             count = await delivered()
             return {"answer": text(ending), "created_jobs": created, "delivered_fires": count,
-                    "source": ending.source, "parent_reasoning_effort": "medium"}
+                    "source": ending.source, "parent_reasoning_effort": "medium" if model_config.reasoning_effort is not None else None}
         await record("scheduler_native_source_delivery", scheduler)
 
     async with runtime(workspace, extensions=(extensions,)) as core:
@@ -273,10 +281,9 @@ async def evaluate(workspace, key_file, output):
     with sqlite3.connect((workspace / "model-registry.sqlite3").as_uri() + "?mode=ro", uri=True) as database:
         calls = database.execute("SELECT binding_json,state,usage_json FROM model_calls").fetchall()
         endpoints = [row[0] for row in database.execute("SELECT base_url FROM model_connections")]
-    from plugins.step_plan.driver import validate_endpoint
-    assert endpoints and all(validate_endpoint(endpoint) for endpoint in endpoints)
+    assert endpoints and all(endpoint == model_config.endpoint for endpoint in endpoints)
     drivers = {json.loads(row[0])["driver_id"] for row in calls}
-    assert drivers == {"step-plan"}, drivers
+    assert drivers == {model_config.driver_id}, drivers
     usages = [json.loads(row[2]) for row in calls if row[2] is not None]
     report = json.loads(output.read_text())
     report["summary"] = {"passed": sum(row["passed"] for row in results), "total": len(results),
@@ -292,12 +299,13 @@ async def evaluate(workspace, key_file, output):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--model-config", type=Path)
     parser.add_argument("--key-file", type=Path, required=True)
     parser.add_argument("--workspace", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     os.environ.setdefault("AKASHIC_PLUGIN_HOME", str(args.workspace.parent / (args.workspace.name + "-home")))
-    results = asyncio.run(evaluate(args.workspace.resolve(), args.key_file, args.output))
+    results = asyncio.run(evaluate(args.workspace.resolve(), args.key_file, args.output, model_config=EvaluationModel.read(args.model_config)))
     raise SystemExit(0 if all(row["passed"] for row in results) else 1)
 
 

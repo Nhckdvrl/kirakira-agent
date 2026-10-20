@@ -1,6 +1,6 @@
 {
   "repository": "https://github.com/kachofugetsu09/akashic-agent",
-  "commit": "d8761bb9000a7be8701c65e049b0978879cc6889",
+  "commit": "94027a5cce9fc494f20bb7931fddf26f1e15e8df",
   "license": "UPSTREAM-LICENSE",
   "files": {
     "agent/background/__init__.py": "e148993b0fb0ece03bd59cc367538b7e60d2def9e54fdcebcd996238849c7ff0",
@@ -138,8 +138,8 @@
     "frontend/chat/src/message-rendering-policy.ts": "6b3927a86fd1731e9c14bbf3bdcb08b618734167b6ff9f0c49e0cdfeb1338bfe",
     "frontend/chat/src/message-timeline.ts": "9f493c71b0e8ef5d200acd8185e7d7325c9856352fb8e4d8843bec8087de2ce7",
     "frontend/chat/src/message-view.css": "f66c57445f1e9b4eb5e5060817b7787a8b2a6a56d5cc5e171129beb0cf2e08d3",
-    "frontend/chat/src/message-view.tsx": "00419a4dfc33a8890f31c629e2454b38ea63b6b21768a5e1abcf2fad3302e701",
-    "frontend/chat/src/mount.tsx": "440cddca8e05e76e43702f9c1dced946c2bcf5aa73701651fb55e5abaa04b3ae",
+    "frontend/chat/src/message-view.tsx": "3a4fa7f2a296109229d899dd0df1e9cffa41666e01cc6a99fa8ee2fa94e44e87",
+    "frontend/chat/src/mount.tsx": "16ddceae7750763b564b5910a28e99dc846598ebb3347d2353660aa44023041a",
     "frontend/chat/src/navigation-groups.tsx": "e177765ca89dd71e8d37626af2a9358b221ab498cb4ea61e1200f4c5f2861e4a",
     "frontend/chat/src/navigation-row-menu.tsx": "7ab0c3eccb7101e3f6f3a6915ec888ce986f921e23d6d35a7c36b8441d9ae1c6",
     "frontend/chat/src/new-chat-scope.tsx": "577d6a9ddba9c02d8eaf4e0a07a6c6be83b56d49e83bf7dec6264adb77c609c7",
@@ -185,7 +185,7 @@
     "frontend/chat/src/web-turn-trace.ts": "4b76af54c49bdcea2c2c5423c1ab76f2c44e4f47a99a8b3147ba96dda9af6aa8",
     "frontend/chat/src/webui-error-boundary.tsx": "e781a0817aad2b042ae222d24690c0d4983f55e4f5bab7c19b35c74fabe35ce8",
     "frontend/chat/tailwind.config.cjs": "aff72b741c499aae6017fae08d31e62bbb90ac6c9256a9ad69366cb596409d9c",
-    "frontend/chat/vite.config.ts": "823bce5605813345a851302865efa237c18a7ad221ae7e6ad372bfc3ad022b21",
+    "frontend/chat/vite.config.ts": "70b32aa98b9e535d0bea8b27c097137b3c2225e20d0afbfea177eb1f8a09dca7",
     "frontend/chat/vite.harness.config.ts": "c4517cb622de1489a750af11025a8c81acb3a910b460d23ee0e049c2e606a35f",
     "frontend/dashboard/index.html": "902101d10d358fddc9489ce28bcbe76208ce3a46b290717b3d2e58e9f95d15f3",
     "frontend/dashboard/postcss.config.cjs": "587d8d7d74b3e84f001237c5d18aa07d80842a9eac837e8d62b0055a12da1b35",
@@ -199,7 +199,7 @@
     "frontend/dashboard/src/fonts/JetBrainsMono-latin.woff2": "83c005d49d8a6a50474c73a5a36ac0468076e9c4a29da7bdb14995d80560a5be",
     "frontend/dashboard/src/main.tsx": "fe05b2294732681df224adfe222c9dab28f8165b246decdccfe52a9043f6ae88",
     "frontend/dashboard/src/styles.css": "a35182270654f71b8d0f84532803af96e2877b08222fd4f385891955aae757c6",
-    "frontend/dashboard/src/webHost.ts": "e59c066f0075742ecc5aaa0d31335ba40bef85da97886635b3ddabb4f326da4c",
+    "frontend/dashboard/src/webHost.ts": "4ee356eb32d736eb6d9ceeec6a903e6a0ce7a5fa3b69486d545eec3766c6df3f",
     "frontend/dashboard/tailwind.config.ts": "64f77ae3c6c9a83880ad5a7ebb26af99de119d8e2f931eec6db73888d92d6982",
     "frontend/dashboard/vite.config.ts": "a51e4e70f83ce1b0c7186bcde91a567f17da5e4c33b9510d108c530fca48f48d",
     "frontend/design.md": "7996a5c27b5280caeefe212585bc6080359271f960a45f5d00eee7035ba2c3df",
@@ -412,7 +412,7 @@
     "plugins/akashic_clients/attachments.py": "164c74e5362476ccf6f7ca26961cb41da74c6ffee605f4f6553acc3f282433b2",
     "plugins/akashic_clients/capabilities.py": "b275dac622f9857bf401a69b16dfd1cfa6858f25366b1adeff36a4436a460b28",
     "plugins/akashic_clients/channel.py": "7fe0a02725b5b3958f5c1ceb60105bf4aad807cf82dcada246e9bdbbf0b83b1e",
-    "plugins/akashic_clients/chat_api.py": "5a7cacdc8296c0b3ea691ede742db6e48d2cec0ea952d64638c65b8f515a45df",
+    "plugins/akashic_clients/chat_api.py": "b1cab2a38ef8363e3ee06ba21f6759111479631aebd5b27a22aef727c96cab79",
     "plugins/akashic_clients/config.py": "6a123c2ad2a08b769ea2b32ad7cd80d2363ac23b2c2083bd6c17f341790639f3",
     "plugins/akashic_clients/migration.catalog.toml": "153594a63fe5da3205ac755c450f998b27f4004a3bbead788131332792aec27b",
     "plugins/akashic_clients/migrations/akashic_clients_migrations/20260913_01_akashic_clients_config.py": "fe1247c4a0a223e68e5122fd89551e4f96012f7f5144edf3a9f15ff1ead0b08b",
@@ -424,7 +424,7 @@
     "plugins/akashic_clients/notifications.py": "918502b29365654beffe5d9c8f5e08284de099b3b1bf4ac46192105a2df9d27e",
     "plugins/akashic_clients/plugin.py": "4ef1d104c70a83a547029c802acd64649bb2afe54ded0b913111c578e1ebd8f4",
     "plugins/akashic_clients/read_marks.py": "2ad1fa4b1df71a2f8139e022ca01b199e248d1a7af5f85a7d6006726684fe46c",
-    "plugins/akashic_clients/scoped_capabilities.py": "15f654b930fca6a12d6c1e5f362fd2dd439ac66306234e3c155f551f91b324f2",
+    "plugins/akashic_clients/scoped_capabilities.py": "c814450592bbaf1c647f83e120115318da1c0c2722bac56dc84339b33eb89691",
     "plugins/akashic_clients/services.py": "bad522e38cbd67ab79f31c4503534edb372cfffc867908640c912b00da072d86",
     "plugins/akashic_clients/session_activity.py": "67189813325ae3147c98c29c9feac6fea276d9433d1a5f400bdd403446be287a",
     "plugins/akashic_clients/static.py": "24a3b3a00e04dc3b148916853fd3faee99be13e9cd0d42cd7759ec2a28a1ffd5",
@@ -701,7 +701,7 @@
     "plugins/prompt/persona.py": "eeb79bff3629b8b818a1208328d37eb1efbdf548ddc0f8e262a2a7626183b758",
     "plugins/prompt/plugin.py": "c0cf4c6d60e889ff20809cf83bb32d9708dfeaccce35c81b096538cc26269c55",
     "plugins/prompt/requirements.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "plugins/prompt/text.py": "937cd644a77a77aa03e1a7ff88eb53df1be8b47b603f50488c3aced7562fa06c",
+    "plugins/prompt/text.py": "db9ccd2633fa992d4fbf580da16e73e6db761bd221a5728715c077b6f15fde68",
     "plugins/react/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "plugins/react/contract.py": "ce614bcb2b368f0542fd3b653d3706b03714744ed98b020c00cdb5e253940099",
     "plugins/react/plugin.py": "8cff19babe620287007e35727a67cabd73cf463959e4fe3c2f007a868959b7c7",
@@ -770,7 +770,6 @@
     "plugins/skills/plugin_ui.js": "36d6ebb06fff0513466885e20bc80312a1b281fb360433ce8d160ca9d27fd27b",
     "plugins/skills/skill_catalog.py": "72350dac34ea994ea66e1916cc4ca6d3845837bc58efb1cf4c117966ad668133",
     "plugins/skills/skills.py": "b6fe7d745d30dcd4fbfc5d494bcbc07df37d3340d6423d65cfef7cefcbddc95b",
-    "plugins/skills/skills/deploy-akashic/SKILL.md": "6a1c28bc802a67d05c5683a48e70e95df85f37c6618cad121aa8958a8cef99b0",
     "plugins/sources/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "plugins/sources/contract.py": "f11bc7981edb581b682f57087446aca3daabc4ec0e675065597aaa99d87e5895",
     "plugins/sources/plugin.py": "eecbece2ecb673bd2c87aebaba6b4d591fd6139019b2a9c9183bedd72c61bb32",
@@ -832,16 +831,16 @@
     "plugins/turn_projection/contract.py": "a6a63bc1599b1260baded180a570b8a756f51cea278f4ead8a9553a7043a661d",
     "plugins/turn_projection/plugin.py": "b3c7811bba7322568670c663650730bd173bbca3020a6829fb2753bfcf0f49f0",
     "plugins/ui/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "plugins/ui/contract.py": "cb0151164a22af4c570e4fc2764874c0bb9f31645aad20ee380639e78aaf32b1",
+    "plugins/ui/contract.py": "ff7bac991183690f613bd279fa3339f042da868626d3523e4ed31c595a5871c6",
     "plugins/ui/dashboard.py": "ba3c0f19a415092f9d94c82ba2e192f82d552462189e02c904b4b3db588e1b3c",
     "plugins/ui/dashboard_app.py": "808dd575bf3ecdd7377c13a5f76de70bd4c65428c0ba2909245d1f08b10d7594",
     "plugins/ui/dashboard_host.py": "2bb3f5b13beec036d22bf05b2696478105ac11ddb2d7c7e39c8a5472b5f7145d",
     "plugins/ui/dashboard_server.py": "d232bed47a7da99eff57747af36f6e078f58811ff4d336aeff06200c150febe7",
     "plugins/ui/message_display.py": "d8967317712b06dc6e7de27fe66c068d6011e3811a79c789e06574fea216f763",
-    "plugins/ui/plugin.py": "d37e1860130d6cbf913d45dc871f472ddae38c21aff505772848088180279bb4",
+    "plugins/ui/plugin.py": "68c9a44158549b82f9e841275066822d16c6e4c82e50ef0c97c5349b1e6ef840",
     "plugins/ui/plugin_ui.py": "4441286c014c093b131a16d18bee0065da8c6e10493dac12c447d838f02574f8",
     "plugins/ui/queries.py": "03196fdea5cb1d20cbbadd597d86b4db9ac2e4b3759972a503dc2636e225cf25",
-    "plugins/ui/web.py": "0831c344e207519de6796f7fbfbc76d3ee3915d4ce960e7d890d8bff37ea1075",
+    "plugins/ui/web.py": "68f01834fdcc31df5a5462273d4d3e252deeae0db61306f7025cad4a7aa9e814",
     "plugins/vision/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "plugins/vision/_tool_boundary.py": "59c2316aeb39a986b467a33b6ebf5093541a2dff3aa88eb3feef7eaafb0c0615",
     "plugins/vision/plugin.py": "cde745c4ef96ecf71b890106d148d6728ae5be38f96a7314d83d2f0c976416fe",
@@ -931,14 +930,153 @@
     "package-lock.json": "27d6c456bebb18903eb2101b834871cb7ac851aa7446d1f488b2a59b346fec39",
     "components.json": "e2113eacfd8ec132c2318025cca96ddd8022ea2f0de19d8793471b78a07894af",
     "tsconfig.json": "2c40ada127bdc7aa75629684ae3347ba70929fe2668e001bf3b7596bfd2cbbb5",
-    "eslint.config.js": "4d214d2c2465f5d1684017b23a1b19e1b80d7832f8bf6b7ad757cf6d05145cc7"
+    "eslint.config.js": "4d214d2c2465f5d1684017b23a1b19e1b80d7832f8bf6b7ad757cf6d05145cc7",
+    "plugins/skills/skills/deploy-kirakira/SKILL.md": "6a1c28bc802a67d05c5683a48e70e95df85f37c6618cad121aa8958a8cef99b0"
   },
   "patches": {
-    "plugins/host_execution/shell_runtime.py": {
-      "sha256": "90c6b6e9b2b21b4531f3b7ad4f07f0bd1ca2802f5c1c57b7a33f746f58fc2065",
-      "patch": "patches/zsh-snapshot-aliases.patch",
-      "reason": "Preserve zsh alias option while parsing function snapshots; actual local and HostBridge shell regressions.",
-      "patch_sha256": "a2d4a1cd3635d62edd6ca11a8b2e7ace6b68d0dbec908feeb4bf4a17e1354f55"
+    "agent/migrations/context.py": {
+      "sha256": "94972c3844877eb4b0f0642d1bfbc5757336d7e811dbbb8c17c64ae639433aeb",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "agent/plugins/__init__.py": {
+      "sha256": "d6510cbac83783f4395cae28cd6ad135229e6df70ce627a4cbcb29b0f2251748",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "agent/runtime_identity.py": {
+      "sha256": "30ac109c9de39bde539e89892baf3403a909fe11c999ae1b041f17ce8ca1131a",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "bootstrap/web_shell.py": {
+      "sha256": "4dfd11b3366cb2ac72404f58ea4706bb8bcd5b831e3956ccb4c74a8b47702e9b",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "core/common/diagnostic_log.py": {
+      "sha256": "ed28b0c6c20016fd7ed5b804db19283b57e06181eaf72b7396bf7b90f4410594",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "frontend/chat/harness/index.html": {
+      "sha256": "972f35940d06a27d321bb86e0cedd11c760be2cfd372120823d8366c975dc032",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "frontend/chat/src/browser-uuid.ts": {
+      "sha256": "15fa30340c06db5315cbae32ec5926483ce37261a9e36a24f367bd7c505bbd07",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "frontend/chat/src/compact-navigation.tsx": {
+      "sha256": "1ee16d73eeada6660ed4f572a1945c038d7d96d1a1ee1c3bb8219c3106f6de01",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "frontend/chat/src/desktop-chat-view.tsx": {
+      "sha256": "a3787b6ce4007ae6a0df634fcd8b87e3687eb4ca1bc2a6a76c865f60ca50083a",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "frontend/chat/src/desktop-sidebar.tsx": {
+      "sha256": "4cc40dd58078e129301ba3c2bcd2d51de30db8a96c0024183a9ad2b80fe343ed",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "frontend/chat/src/message-actions.tsx": {
+      "sha256": "b60beb65cec4a8e0fb549cbdb28afadf5b0752484a2ae8d1ef29fcd42154b67c",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "frontend/chat/src/verify-composer-flow.mjs": {
+      "sha256": "8ef30c2cc027c805a51c65277f3244daa654f42ae90cce7119548d2f19decc70",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "frontend/chat/src/web-chat-data.ts": {
+      "sha256": "0602fd26d8ec9f663d8162eec79ddc1fcac2884c3541f270995ce461c33c34ca",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "frontend/dashboard/index.html": {
+      "sha256": "90406c5859992d7bb839900fe01a7f21843a7323dd84f37095bf1f116d56752d",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "frontend/design.md": {
+      "sha256": "81256616d0b65b76967a77f5b0772118647fb311caad9cc478fd25696d84b9b4",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "frontend/plugins/akasha/src/plugin-ui.css": {
+      "sha256": "fb49e78b390397a55ce1029b462819d8b4d470bd1805cd188eab4c5e69742996",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "frontend/plugins/akasha/src/plugin-ui.js": {
+      "sha256": "6fb0e26ff750482719657ab79a27b3a4375a25a02971c6435c99685d22d9fc6d",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "frontend/plugins/onboarding/src/index.tsx": {
+      "sha256": "bb2a35e18c10f0cd7385e1e9e5f253154c503f67094c59e7bc04812d02932d0e",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "frontend/plugins/projects/src/plugin-ui.tsx": {
+      "sha256": "a0dd619fce5586e97c82aa4f9c9d595f8eca987ff4f0180ff7fe575bfab70644",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "frontend/plugins/shell_ui/src/brand.ts": {
+      "sha256": "f18dd123b2f1acdc8343dbba192a6e09a1a48beeea37572567f374c658a70de5",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "frontend/plugins/shell_ui/src/index.tsx": {
+      "sha256": "a55ea0129174c28687ccf4114273c800e5bc022654c7ac279ab8ee5c09e1d04b",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "frontend/theme/src/brand-tokens.css": {
+      "sha256": "bc7776547b10ec430d6cb9a59f8cb04d0fb0938c58af2bc9402823a59aca84ab",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "frontend/theme/src/material-tokens.css": {
+      "sha256": "73ee4edcb232f704647ede6317d69c221df0b950a73aa49564e6808e8fa9f1d2",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "kirakira_agent/_upstream_main.py": {
+      "sha256": "690c9658cd35cbcd9b759ef9f045f1823660a8bd21f877d7ff4fdcd0e4e5630e",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "package.json": {
       "sha256": "0d326503ea9e83bf810900383745253d84de9b1a9c06b44b6caf291ae163f516",
@@ -946,23 +1084,420 @@
       "patch_sha256": "29e7550a216fd1aacfd614dde4c32d19f7bb216fa244c5bfdf0c3ff3e3510288",
       "reason": "Distribution build must stage dashboard/chat output inside their owning native plugin artifacts; avoid serving stale assets."
     },
+    "plugins/akasha/contract.py": {
+      "sha256": "db9dfbf35357832de114fb325f03f588a792acaae61b8e5400e46a0f4db6d94e",
+      "patch": "patches/memory-query-api.patch",
+      "patch_sha256": "aa3900c92c855aaa2958cb4f5c1e178fe673bfcf61be08a32dddcc97419f24ea",
+      "reason": "Session-scoped evidence queries, dated receipts and bounded presentation."
+    },
     "plugins/akasha/infrastructure/persistence.py": {
       "sha256": "8e4f1a267c49c24955d95626945d77dfcc72a32cec70800105e958ca6c4d529e",
       "patch": "patches/akasha-empty-rebuild.patch",
       "patch_sha256": "acc310c996d2590d54fe89f1147072e0c2fabb909ad17d779c48cd65c95e4230",
       "reason": "Native rebuild explicitly supports zero turns; accept a valid zero snapshot while still rejecting negative counts."
+    },
+    "plugins/akasha/inspector.py": {
+      "sha256": "12046fce3b9a2382bd0f4d0fab4f9c15f6d9024a4a453a9e72c18b9645631b65",
+      "patch": "patches/memory-query-api.patch",
+      "patch_sha256": "aa3900c92c855aaa2958cb4f5c1e178fe673bfcf61be08a32dddcc97419f24ea",
+      "reason": "Session-scoped evidence queries, dated receipts and bounded presentation."
+    },
+    "plugins/akasha/message_ui.css": {
+      "sha256": "3367654964949f0d33a6e4dc1785c4cb157e50bfa522a16fc6c6a21e4a120212",
+      "patch": "patches/memory-query-api.patch",
+      "patch_sha256": "aa3900c92c855aaa2958cb4f5c1e178fe673bfcf61be08a32dddcc97419f24ea",
+      "reason": "Session-scoped evidence queries, dated receipts and bounded presentation."
+    },
+    "plugins/akasha/plugin.py": {
+      "sha256": "e8d31031ef0630fb3116068f7efa5c62c898cfec7ecc54571ace8c09ecfbf762",
+      "patch": "patches/memory-query-api.patch",
+      "patch_sha256": "aa3900c92c855aaa2958cb4f5c1e178fe673bfcf61be08a32dddcc97419f24ea",
+      "reason": "Session-scoped evidence queries, dated receipts and bounded presentation."
+    },
+    "plugins/akasha/recall_tool.py": {
+      "sha256": "df3ecbdab41d3b0ab6d9d6f16f30712916499ae62a182260217d1a580967769d",
+      "patch": "patches/memory-query-api.patch",
+      "patch_sha256": "aa3900c92c855aaa2958cb4f5c1e178fe673bfcf61be08a32dddcc97419f24ea",
+      "reason": "Session-scoped evidence queries, dated receipts and bounded presentation."
+    },
+    "plugins/akasha/recalls.py": {
+      "sha256": "9f8a404c33fcfe5a5211109fffaf651b501945aaaf72f44c4e31d2bb890c41ac",
+      "patch": "patches/memory-query-api.patch",
+      "patch_sha256": "aa3900c92c855aaa2958cb4f5c1e178fe673bfcf61be08a32dddcc97419f24ea",
+      "reason": "Session-scoped evidence queries, dated receipts and bounded presentation."
+    },
+    "plugins/akasha/runtime.py": {
+      "sha256": "09a955b57c3c4ac8f17168e96e7ae71c020d26f7a0eb8ff3a2d108197a4fbf2c",
+      "patch": "patches/memory-query-api.patch",
+      "patch_sha256": "aa3900c92c855aaa2958cb4f5c1e178fe673bfcf61be08a32dddcc97419f24ea",
+      "reason": "Session-scoped evidence queries, dated receipts and bounded presentation."
+    },
+    "plugins/akasha/settings.py": {
+      "sha256": "2694b869a35645a12a9e9851e2034bcc166e234483ac5cdb1ed2648b9f35f8de",
+      "patch": "patches/memory-query-api.patch",
+      "patch_sha256": "aa3900c92c855aaa2958cb4f5c1e178fe673bfcf61be08a32dddcc97419f24ea",
+      "reason": "Session-scoped evidence queries, dated receipts and bounded presentation."
+    },
+    "plugins/akashic_clients/attachments.py": {
+      "sha256": "b536d76a60a2f02478c45cd9fd45c5b4758ad849ca18b680cf5f9046f2ff35a3",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/akashic_clients/capabilities.py": {
+      "sha256": "6abbbd440286dfd4eba002ddf53347cd8467c203be110fbd40389b767f1eb6f2",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/akashic_clients/chat_api.py": {
+      "sha256": "8ec3ec6bbdc81f7ea8ca65cc668d745dd890a46d05616e2c9c0aff908a552b5c",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/akashic_clients/config.py": {
+      "sha256": "42156e3e0bb2a01cefdc598a4eedd2faaee23642ff510ab2110182c414c5a352",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/akashic_clients/migrations/akashic_clients_migrations/__init__.py": {
+      "sha256": "28239033f560eaa2915b62bb967103089ea958c3ca0a0470b86f7f4d54206942",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/akashic_clients/migrations/akashic_clients_migrations/helpers/__init__.py": {
+      "sha256": "ae5dd6ff9b77e587074816b1df141fe15206cacb0ef40e247446a3938866b8ad",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/akashic_clients/migrations/akashic_clients_migrations/helpers/config.py": {
+      "sha256": "4f99c78dfd3738007c05d80a84ef1d2e84ea183edcb4074d02376aafeeae1d4b",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/akashic_clients/navigation.py": {
+      "sha256": "3657822bd6dc31b2bae6f6f1b4174ad02c49bc7164fa606f8820ac322937be50",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/akashic_clients/notifications.py": {
+      "sha256": "ec69625b0a27471adac10bd5d42d7084aa80eb5e540bd7fca00b395bcaba9836",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/akashic_clients/plugin.py": {
+      "sha256": "0631d7ea35577485802e5e49880b5a9735fba5e77478341b97dd379541bf9482",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/akashic_clients/services.py": {
+      "sha256": "5d0916e3afa7fee9b40906c528656b9983090c73fa6ed47178da345219eac773",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/akashic_sender/plugin.py": {
+      "sha256": "e80625e7f802df72a642d6cd5eba07e5820844c4c0376947b25d381977c5bd56",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/channels/plugin.py": {
+      "sha256": "20825abbc41bf9f6188f2538820d3e4f5279c265bb7f1e8108fc0e2827a6d5da",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/codex/plugin.py": {
+      "sha256": "328f82862faac53d87008760855de582308ec292e50c8272afb8ab8a81ded82b",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/computer/bench/README.md": {
+      "sha256": "18791eebd806dc436292a8afb73ee29e0714eadd0d1cfd92e68e4d8307113a99",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/computer/bench/run.py": {
+      "sha256": "e0e3db8d48a41f0f224c3433e054acb14efb46a2f83d4bedf9709d77e7485896",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/computer/plugin.py": {
+      "sha256": "d8e50534ef02581bb17f227d2c2d52460f19fe8a9a09a7be742741baded8e07b",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/computer/skills/computer/SKILL.md": {
+      "sha256": "c3330ecabd9be311f912943717e0d1061db76371c0b54d6de353c82c7ae6598a",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/computer/web/agent-cursor.ts": {
+      "sha256": "beec6b8c5f43fc183b2a7318ff3c6d666466c51a14fc8dec683de896df8fb52b",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/computer/web/display.ts": {
+      "sha256": "a1c052368acc248ce5f0d0029d4039c9ff27c3c1a2184ef68d9561b5a91051a3",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/computer/web/panel-state.ts": {
+      "sha256": "7cc2d4a316192055a6948c20dc2e258b2d2f348803325f9a952ee77d02fe7cbd",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/drift/plugin.py": {
+      "sha256": "ba91336e3a8f7b71612a4102f623f896e99cffff6820f469f08cccea101ee233",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/eventmail/plugin.py": {
+      "sha256": "49af1f0abd187a5552afabadc28b5e9d9c258eaffe93af08672fe6b2330f86d0",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/gateway/service.py": {
+      "sha256": "acbe1277b54f27d9493b22f9a213449ca26844cf7d37fb10e5893329bfd9c43f",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/gemini/plugin.py": {
+      "sha256": "30974f0b096aa2999a82430b37ecd00be31164c19bf295c2e4bc5b33684178b8",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/host_execution/bridge/doctor.py": {
+      "sha256": "992b95a9b722dc422a6adaaa8d1fedd74296535e84ab68fe56d678b9554e5637",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/host_execution/bridge/server.py": {
+      "sha256": "fd48742cc38ffc4c4f09f22e422ed1b661e5c8b1c6ceb3605cb05ce4f67097a1",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/host_execution/controller.py": {
+      "sha256": "89f55ec49963ef776d57a6968cc7bd73b7757a39e00025a99c21140f93cc39d0",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/host_execution/shell_runtime.py": {
+      "sha256": "90c6b6e9b2b21b4531f3b7ad4f07f0bd1ca2802f5c1c57b7a33f746f58fc2065",
+      "patch": "patches/zsh-snapshot-aliases.patch",
+      "reason": "Preserve zsh alias option while parsing function snapshots; actual local and HostBridge shell regressions.",
+      "patch_sha256": "a2d4a1cd3635d62edd6ca11a8b2e7ace6b68d0dbec908feeb4bf4a17e1354f55"
+    },
+    "plugins/ledger/contract.py": {
+      "sha256": "e0db88e03c4e52aa0a4405d6b97a2358e36e78cd8b33f2ae7e92271902e5ea17",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/ledger/durable_delivery_store.py": {
+      "sha256": "94b1a7092ab65b6f6d8173c94d1709be4af3c06e1255d0032c232e3a6d74cd00",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/markdown_memory/documents.py": {
+      "sha256": "3bdf064a3f02bdc82b3658884a7cbdc73f02c69e006c8b33544b654de749e4f6",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/markdown_memory/plugin.py": {
+      "sha256": "bad3fd46faab92fc424b4aa8911c60db3360706a739028ebb6fe4a71a54425cc",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/markdown_memory/store.py": {
+      "sha256": "e10a6f08dacdefaf9e82f16ba0160cdc38a2915f5fad33b740b4676bcec137d2",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/models/plugin.py": {
+      "sha256": "2b1b26577be67a59da78223b14229392f6d526af73c370de7b42437fe7600639",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/models/state.py": {
+      "sha256": "82f18e7ee2668910e9fc9137c8e8d9b49ede7367c55181fef5336c4c2341601a",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/openai_compatible/driver.py": {
+      "sha256": "eaf6bb507d320d8b7bd7802c58e987e45118c4b00eb7775f216e212134da55e6",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/openai_compatible/plugin.py": {
+      "sha256": "0125239dceb5ad5b74285be263e3b9a5ca3fb9e75ec0fded41223df328e8e560",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/opencode_go/plugin.py": {
+      "sha256": "8aee2e2ddffc309c640a9a8ee0fe076d397cc4a7a172168bdcac5a54be10923b",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/plugin_update/skills/plugin-system/SKILL.md": {
+      "sha256": "de07942e2234f6391be7ef0819f408ef270e4ba082eaa710e2ced34011a784e4",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/prompt/VEDA.md": {
+      "sha256": "786829afe5a9ee4570ae652b9380bd77b7fd3907431d928c7591364a2dddbebb",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/runtime_diagnostics/README.md": {
+      "sha256": "0721d4edab3dc8e78675e737bb0398231c18faae2cb9fd3c8db7b1f288c335b0",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/sites_tab/plugin.py": {
+      "sha256": "ba6dab901da91e2f299784fcb406680e30608aa2dd5767d3fd297378ceab81e9",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/skills/skills/deploy-kirakira/SKILL.md": {
+      "sha256": "df96ad9bcb00acf1e27327ade4f3c201d423aba5d47a13aaad9a77d0c7a4fbb0",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/step_plan/transport.py": {
+      "sha256": "eaf6bb507d320d8b7bd7802c58e987e45118c4b00eb7775f216e212134da55e6",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/telegram_channel/plugin.py": {
+      "sha256": "e9b19eabb579526efa74a5e00876d9c44be54d502861c84f1955cfbe815b9401",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/ui/dashboard_app.py": {
+      "sha256": "edfc5ac5b17935ad419716b4170fbd8d3e85d8cb742aacebab6659d4d12a9111",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/wake/settings.py": {
+      "sha256": "408f29c5ea86b5d85bc935567ddb69a4358ef0545885c18a0b8db385edea8ae0",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/web_auth/app.py": {
+      "sha256": "cfe61b6ac4f8ba9a2ca0a3e7c985ac37f6e69e98f2052084f77047ac100fa588",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/web_auth/cli.py": {
+      "sha256": "20ba59c64a177e9af8e13b36747cfefb59a26c26bd3d83379f98c8c7dd4213e3",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/web_auth/login.html": {
+      "sha256": "b8c4fdabd055f9ee89ec9879535af07cd815fef77f8f15ff9b4c51cc4f51fb51",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/web_auth/state.py": {
+      "sha256": "1de7296a672b984dd1b6739dbf0ddeaec9ef6a7714e5e74498eb03102daf7f03",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/workspace_changes/plugin.py": {
+      "sha256": "381ff56f030d472b634d03841f8c7c2c32e08824174aaa6a09be57fdbf68d017",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "sdk/python/README.md": {
+      "sha256": "42596bb34dc5269251fa287e416e95ac014ee269fa041f3318f48eb20b3bd209",
+      "patch": "patches/distribution-branding.patch",
+      "patch_sha256": "53e166d8df4b9ae2bb3a18f9bc8c2432309dff9098d3de2b8215c2762a9c0f1c",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     }
   },
   "source_paths": {
     "kirakira_agent/_upstream_main.py": "main.py",
-    "plugins/step_plan/transport.py": "plugins/openai_compatible/driver.py"
+    "plugins/step_plan/transport.py": "plugins/openai_compatible/driver.py",
+    "plugins/skills/skills/deploy-kirakira/SKILL.md": "plugins/skills/skills/deploy-akashic/SKILL.md"
   },
   "generated": {
     "plugins/akasha/message_ui.js": {
-      "sha256": "8abb4e34258c62f013cce6ef93a3d84c596cb3ae2d293e298265a3bd04248cf9",
+      "sha256": "ba4f015c4e10337f13ca0d7b386e8bdbaed73692a02bde3a841298c579309e72",
       "input": "frontend/plugins/akasha/src/plugin-ui.js",
       "lock_sha256": "27d6c456bebb18903eb2101b834871cb7ac851aa7446d1f488b2a59b346fec39",
-      "reason": "Rebuilt from the pinned upstream frontend source and npm lock; imported generated file was stale."
+      "reason": "Built from registered frontend sources and the pinned npm lock."
+    },
+    "plugins/computer/web_module.js": {
+      "sha256": "5da95aca287392112271b6806c8e832b4891997a12d05b5c4c7c807b4a60a6f6",
+      "input": "plugins/computer/web/index.tsx",
+      "lock_sha256": "27d6c456bebb18903eb2101b834871cb7ac851aa7446d1f488b2a59b346fec39",
+      "reason": "Built from registered frontend sources and the pinned npm lock."
+    },
+    "plugins/onboarding/web_module.js": {
+      "sha256": "4900fe4605cb081340cf27a9ac1d0257053700e3a10512abda3d14050fca2889",
+      "input": "frontend/plugins/onboarding/src/index.tsx",
+      "lock_sha256": "27d6c456bebb18903eb2101b834871cb7ac851aa7446d1f488b2a59b346fec39",
+      "reason": "Built from registered frontend sources and the pinned npm lock."
+    },
+    "plugins/projects/plugin_ui.js": {
+      "sha256": "319297f2ff7d4a5c05d98ac2ec6346281264af4258087e25dfeaa2166115a643",
+      "input": "frontend/plugins/projects/src/plugin-ui.tsx",
+      "lock_sha256": "27d6c456bebb18903eb2101b834871cb7ac851aa7446d1f488b2a59b346fec39",
+      "reason": "Built from registered frontend sources and the pinned npm lock."
+    },
+    "plugins/shell_ui/web_module.js": {
+      "sha256": "19d660a3d9e5470146016cce095d5adbccfeb147336d544fd299f1ffd73ce9d2",
+      "input": "frontend/plugins/shell_ui/src/index.tsx",
+      "lock_sha256": "27d6c456bebb18903eb2101b834871cb7ac851aa7446d1f488b2a59b346fec39",
+      "reason": "Built from registered frontend sources and the pinned npm lock."
     }
   },
   "excluded": {

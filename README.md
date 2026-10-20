@@ -28,9 +28,10 @@
 
 ## What is Kirakira?
 
-Kirakira is a local-first, multi-channel AI-agent runtime. It brings conversation,
-proactive interaction, long-term memory, and tool execution into one extensible
-runtime. Sessions and runtime state stay in the selected local workspace by default.
+Kirakira connects past decisions with ongoing work. It can recover a project’s
+updated plan and constraints from earlier conversations, investigate an incoming
+event, and send a reminder whose history and delivery can be traced.
+Conversation, memory, tools and proactive tasks run in one local-first runtime.
 
 Its episodic memory keeps original conversations as the source of truth. Semantic
 recall and associative graph completion recover related experiences across sessions,
@@ -40,6 +41,12 @@ holds explicit notes and preferences alongside those experiences.
 Proactive interaction starts with events and context: the agent can investigate new
 information, decide whether it warrants a message, and deliver it to a configured
 session. Conversations and proactive tasks share models, tools, and memory.
+
+A tested workflow: confirm a release plan, correct it in another session, then
+receive a release-check event that contains none of those decisions. The agent
+recovers the updated schedule, owner and data restrictions before sending a reminder.
+See the [memory design](docs/architecture/memory.md) and
+[verification record](docs/operations/verification.md) for evidence and limits.
 
 ## At a glance
 
@@ -52,7 +59,7 @@ session. Conversations and proactive tasks share models, tools, and memory.
 | How is it extended? | Plugins, MCP servers, skills, tools, and event sources |
 | How is context managed? | Context projection and compaction keep requests within budget while preserving stored messages |
 | How is execution inspected? | Model usage, tool results, task state, and delivery receipts are recorded |
-| Is it tied to one model? | Model providers are plugins; Step5 Token Plan and local embeddings are included |
+| Is it tied to one model? | Chat and embedding providers are independently configurable plugins |
 
 ## Built for ongoing work
 
@@ -86,12 +93,11 @@ npm ci
 npm run build
 
 uv run kirakira-agent init --workspace /absolute/path/to/workspace --profile web
-uv run kirakira-agent configure-step-plan --workspace /absolute/path/to/workspace --key-file /private/path/step-plan.key
 uv run kirakira-agent gateway --config /absolute/path/to/workspace/config.toml --workspace /absolute/path/to/workspace
 ```
 
 Replace the example paths with your own. Keep the workspace on a local disk and
-the API key in a private file. The Step5 driver uses the Step Token Plan endpoint.
+configure your preferred provider in the Web workspace. Model credentials stay private.
 For a headless workspace, choose `--profile headless` and skip the frontend build.
 
 To enable local memory or configure a proactive target, follow the
@@ -103,10 +109,10 @@ Existing workspaces have separate [upgrade](docs/handbook/memory-proactive.md) a
 
 ```bash
 uv run pytest -q
-uv run kirakira-verify-online --key-file /private/path/step-plan.key --workspace /tmp/new-eval --output /tmp/native-eval.json
+uv run kirakira-verify-online --model-config /private/path/model.json --key-file /private/path/model.key --workspace /tmp/new-eval --output /tmp/native-eval.json
 ```
 
-The online verifier runs real Step5 requests in an isolated workspace. It exercises
+The online verifier calls the configured model provider in an isolated workspace. It exercises
 messages, files, Shell, MCP, managed processes, child agents, interruption, restart,
 and plugin updates. Memory and proactive experiments, including their measured
 results and conditions, are documented in the [verification record](docs/operations/verification.md).

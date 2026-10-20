@@ -1,4 +1,4 @@
-"""Akashic Web client plugin configuration."""
+"""Kirakira Web client plugin configuration."""
 
 from __future__ import annotations
 

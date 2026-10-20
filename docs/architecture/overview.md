@@ -1,8 +1,8 @@
 # Runtime 架构
 
-Kirakira 的执行主干移植自 Akashic `d8761bb9000a7be8701c65e049b0978879cc6889`。
-完整来源与摘要在根目录 `UPSTREAM.json`，许可证在 `UPSTREAM-LICENSE`。
-CLI、初始化、历史导入、Step Token Plan 驱动与本地评测位于这份清单之外。
+Kirakira 以统一的任务生命周期组织对话、工具、记忆和主动执行。
+原始消息保存在 Ledger，派生状态由各自的插件管理；来源与许可证集中记录在
+[第三方声明](../../THIRD_PARTY.md)。
 
 ```mermaid
 flowchart TD
@@ -60,35 +60,36 @@ Workloads 分别拥有实际资源及借用生命周期。Workload 的容器 con
 ## Kirakira 装配
 
 `kirakira_agent/runtime.py` 只选择发行版组合、初始化 workspace 并提供 Python 调用入口。
-`kirakira_agent/cli.py` 将执行交给原生宿主 CLI。
+`kirakira_agent/cli.py` 将执行交给宿主 CLI。
 没有旧 ConversationService、ProgramStore、自建 TurnAdmission 或另一套依赖图参与运行。
-Step5 是普通 Models driver，固定订阅端点且不跟随重定向。
-它使用的原生 OpenAI 传输代码固定在自己的插件制品内，由同一 owner 的来源摘要覆盖。
+模型通过 Models driver 接入。聊天模型和 embedding 独立配置，执行程序只依赖角色、能力与固定绑定。
 Akasha 消息界面由固定的前端源码和 npm lock 重建，生成摘要单独记录。
 
-移植代码保留一处运行修复：zsh 函数快照解析期间关闭别名展开，随后恢复原选项。
+Shell 的运行修复：zsh 函数快照解析期间关闭别名展开，随后恢复原选项。
 补丁和摘要在 `patches/zsh-snapshot-aliases.patch` 与 `UPSTREAM.json` 中。
 
 ## 记忆与主动交互
 
 Markdown Memory 拥有显式档案；Akasha 从 Ledger 的完整闭段学习，原文仍由 Ledger 唯一持有。
-消息向量进入可重建的 sessions-derived.db；图、消费进度和召回证据进入 Akasha 派生快照。
-查询会话可通过原生 SessionAttributes 排除学习，避免评测答案污染历史。
+消息向量进入可重建的 sessions-derived.db；图与消费进度一同发布到 Akasha 派生快照。
+召回回执由 Ledger OwnerState 保存，只记录出处、选择与呈现范围，不复制另一份事实正文。
+自动上下文、工具与程序读取共用查询逻辑；原文展开沿已有回执读取 Ledger，并留下实际调用出处。
+查询会话可通过 SessionAttributes 排除学习，避免评测答案污染历史。
 local-embedding 是普通 Models driver，使用本地 ONNX 权重和固定资产摘要，运行时不下载或请求现金 API。
 
-EventMail 分别接纳 Content、Alert、Context；Wake 按原生兴趣池与规则决定是否执行、调查和分享。
+EventMail 分别接纳 Content、Alert、Context；Wake 按兴趣池与规则决定是否执行、调查和分享。
 Alert 使用真实 Delivery 回执完成结算；Content 不足以触发时记录可观察的 content_insufficient。
-event-ingress 只把已认证 Gateway RPC 转到原生绑定来源，不另建事件队列或任务调度器。
+event-ingress 只把已认证 Gateway RPC 转到绑定来源，不另建事件队列或任务调度器。
 Drift 的公开插件保存提案状态并提供 Wake/Delivery 窄合同；当前组合没有空闲提案生成提供方。
 不能将其源码存在表述为完整的第二主动生成流程已上线。
 
-运行诊断和插件安装也是原生插件。新工作区默认选中；既有工作区使用显式 upgrade 命令，
-保留其余插件选择并备份原选择。各功能启用与验证状态见[差距文档](../status/akashic-gap.md)。
+运行诊断和插件安装也是插件。新工作区默认选中；既有工作区使用显式 upgrade 命令，
+保留其余插件选择并备份原选择。各功能启用与验证状态见[差距文档](../status/roadmap.md)。
 
 发行构建另有 `patches/stage-web-assets.patch`：npm build 最后把 dashboard/chat 产物移入所属插件制品目录，
 避免源码已更新、运行时却读取旧构建。补丁、来源摘要与本地摘要均登记在 UPSTREAM.json。
 
-原生空图重建已登记 `patches/akasha-empty-rebuild.patch`：只允许合法零节点通过既有发布分支，负数仍拒绝。
+空图重建已登记 `patches/akasha-empty-rebuild.patch`：只允许合法零节点通过既有发布分支，负数仍拒绝。
 旧历史的本地向量补算属于显式运维入口，只写 Ledger 派生缓存；Akasha 保持唯一学习与重建 owner。
-既有工作区升级通过原生 prepare_plugin_input / PluginSelection CAS 更新已选输入，
+既有工作区升级通过 prepare_plugin_input / PluginSelection CAS 更新已选输入，
 不会通过删除稳定选择或重建另一张依赖图来升级。

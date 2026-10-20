@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from html import escape
 import logging
 from pathlib import Path
 import secrets
@@ -13,7 +14,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 
 from core.common.file_io import run_file_io
 
-from .state import COOKIE, REMEMBER_S, USERNAME, OwnerAuth
+from .state import COOKIE, REMEMBER_S, OwnerAuth
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +111,8 @@ def create_app(auth: OwnerAuth, page: Path) -> FastAPI:
 
     @app.get("/_auth/login")
     async def login_page() -> HTMLResponse:
-        return HTMLResponse(html, headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
+        username = await run_file_io(auth.username)
+        return HTMLResponse(html.replace("__OWNER_USERNAME__", escape(username, quote=True)), headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
                                            "Content-Security-Policy": _PAGE_POLICY})
 
     @app.get("/_auth/state")
@@ -157,7 +159,7 @@ def create_app(auth: OwnerAuth, page: Path) -> FastAPI:
             return JSONResponse({"code": "unauthorized"}, 401)
         body = await request.json()
         if not await run_file_io(auth.must_change) and not await run_file_io(
-                lambda: auth.check_password(USERNAME, str(body.get("current", "")))):
+                lambda: auth.check_password(auth.username(), str(body.get("current", "")))):
             return JSONResponse({"code": "invalid_credentials"}, 401)
         try:
             await run_file_io(lambda: auth.set_password(str(body.get("password", "")), keep=token))

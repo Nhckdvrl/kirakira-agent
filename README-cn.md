@@ -28,14 +28,18 @@
 
 ## Kirakira 是什么
 
-Kirakira 是一个本地优先、多渠道的 AI Agent Runtime。它把对话、主动交互、长期记忆和工具执行
-放在同一个可扩展的运行时中；会话和运行状态默认保存在本地 workspace。
+Kirakira 把过去确认的决定接到持续进行的工作中：从以前的对话中找回项目最新安排和约束，
+调查新到达的事件，再发出可以追溯历史依据和投递结果的提醒。
+对话、记忆、工具与主动任务运行在同一个本地优先的 Runtime 中。
 
 事件记忆以完整原始对话为事实源，将语义召回与图式联想补全结合，恢复跨会话相关经历。
 模型可以沿来源引用展开原文，核对历史上下文；Markdown 记忆则保存明确的档案、偏好和笔记。
 
 主动交互从事件和背景信息出发：Agent 可以调查新信息，判断是否值得发起交互，再投递到指定会话。
 日常对话与主动任务共用模型、工具和记忆。
+
+一个已经实测的流程：先确认发布安排，在另一个会话中更正并补充数据约束；之后收到一条没有携带这些历史决定的发布检查事件，Agent 找回最新安排、负责人和约束，再发送提醒。
+实现与证据见[记忆架构](docs/architecture/memory.md)及[验证记录](docs/operations/verification.md)。
 
 ## 一分钟了解
 
@@ -48,7 +52,7 @@ Kirakira 是一个本地优先、多渠道的 AI Agent Runtime。它把对话、
 | 如何扩展 | 通过 Plugin、MCP、Skill、Tool 和事件来源增加能力 |
 | 如何控制上下文 | 上下文投影与压缩管理请求预算，完整历史仍保留在消息库中 |
 | 如何排查运行过程 | 记录模型用量、工具结果、任务状态与投递回执 |
-| 模型是否绑定 | 模型提供方以插件接入，内置 Step5 Token Plan 和本地向量提供方 |
+| 模型是否绑定 | 聊天模型与向量模型独立配置，运行链路使用统一能力接口 |
 
 ## 为长期任务准备的能力
 
@@ -75,12 +79,10 @@ npm ci
 npm run build
 
 uv run kirakira-agent init --workspace /absolute/path/to/workspace --profile web
-uv run kirakira-agent configure-step-plan --workspace /absolute/path/to/workspace --key-file /private/path/step-plan.key
 uv run kirakira-agent gateway --config /absolute/path/to/workspace/config.toml --workspace /absolute/path/to/workspace
 ```
 
-将示例路径替换为自己的目录。工作区使用本机磁盘，API key 放在私有文件中；Step5 驱动使用
-Step Token Plan 专用端点。无界面运行时选择 `--profile headless`，可以跳过前端构建。
+将示例路径替换为自己的目录。工作区使用本机磁盘，在 Web 工作台连接自己选择的模型。凭据保存在私有配置中。无界面运行时选择 `--profile headless`，可以跳过前端构建。
 
 启用本地记忆、配置主动投递目标，见[记忆与主动交互指南](docs/handbook/memory-proactive.md)。
 既有工作区分别按[升级说明](docs/handbook/memory-proactive.md)或[旧数据迁移指南](docs/handbook/start.md)处理。
@@ -89,10 +91,10 @@ Step Token Plan 专用端点。无界面运行时选择 `--profile headless`，�
 
 ```bash
 uv run pytest -q
-uv run kirakira-verify-online --key-file /private/path/step-plan.key --workspace /tmp/new-eval --output /tmp/native-eval.json
+uv run kirakira-verify-online --model-config /private/path/model.json --key-file /private/path/model.key --workspace /tmp/new-eval --output /tmp/native-eval.json
 ```
 
-在线验证在隔离工作区调用真实 Step5，覆盖消息、文件、Shell、MCP、托管进程、子 Agent、
+在线验证在隔离工作区调用配置的真实模型，覆盖消息、文件、Shell、MCP、托管进程、子 Agent、
 插话、重启和插件更新。记忆与主动交互实验的量化结果、运行条件见[验证记录](docs/operations/verification.md)。
 
 ## 目录

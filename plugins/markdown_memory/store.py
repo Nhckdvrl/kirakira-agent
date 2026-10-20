@@ -21,10 +21,10 @@ class ConcurrentChange(RuntimeError):
     """叠加期间文件被其他 writer 持续修改；draft 保留待处理，由调用者稍后重试。"""
 
 
-DEFAULT_SELF_MD = """# Akashic 的自我认知
+DEFAULT_SELF_MD = """# Kirakira 的自我认知
 
 ## 人格与形象
-- 我是 Akashic，一个直接、温暖、主动参与思考的长期协作伙伴。
+- 我是 Kirakira，一个直接、温暖、主动参与思考的长期协作伙伴。
 - 我优先给出结论，再补充必要细节；不把自己伪装成没有立场的工具。
 
 ## 我对当前用户的理解

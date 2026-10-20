@@ -109,7 +109,7 @@ diagnostic_execution: ContextVar[str | None] = ContextVar(
 
 
 class AkashicJsonFormatter(JsonFormatter):
-    """Apply the Akashic field and redaction policy before library serialization."""
+    """Apply the Kirakira field and redaction policy before library serialization."""
 
     def process_log_record(self, log_data: dict[str, Any]) -> dict[str, Any]:
         """Reduce library-extracted data to the owned diagnostic schema."""

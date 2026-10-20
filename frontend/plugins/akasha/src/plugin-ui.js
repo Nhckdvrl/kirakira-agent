@@ -5,6 +5,13 @@ const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
 })[character]);
 
+const sourceTime = value => {
+  if (typeof value !== "string" || !value) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value ?? "")
+    : date.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+};
+
 /** 聚合事实在服务端确认闭合前仍可变化，不进入页面结果缓存。 */
 async function readRecall(context, isActive) {
   const query = async (messageId, offset) => {
@@ -62,15 +69,24 @@ function saveOpenedView(key, lanes) {
 /** 先计算展示内容；相同快照不改写真实卡片、选择与焦点。 */
 function renderRecall(result) {
   return result.items.length ? `<div class="akasha-plugin-ui-recall-group">${[
-    ["dense", "左脑 · 精确回忆", "precise"], ["completion", "右脑 · 模式补全", "completion"],
+    ["dense", "语义匹配", "precise"], ["completion", "关联补全", "completion"],
   ].map(([lane, title, style]) => {
     // 多次真实查询可以命中同一回忆；卡片按消息成员展示一次，原查询留在 Inspector。
-    const hits = [...new Map(result.items.flatMap((item) => item.hits.filter((hit) => hit.lane === lane))
-      .map((hit) => [JSON.stringify(hit.messages.map((message) => message.message_id)), hit])).values()];
+    const merged = new Map();
+    for (const hit of result.items.flatMap(item => item.hits.filter(hit => hit.lane === lane))) {
+      const key = JSON.stringify(hit.messages.map(message => message.message_id));
+      const previous = merged.get(key);
+      merged.set(key, previous ? { ...hit, messages: hit.messages.map(message => {
+        const earlier = previous.messages.find(item => item.message_id === message.message_id);
+        return earlier?.presented && !message.presented ? earlier : message;
+      }) } : hit);
+    }
+    const hits = [...merged.values()];
+    const presented = hits.filter(hit => hit.messages.some(message => message.presented)).length;
     return `<details data-lane="${lane}" class="akasha-plugin-ui-recall akasha-plugin-ui-recall--${style}">
-      <summary><span>${title}</span><b>${hits.length}</b></summary>
-      <ol class="akasha-plugin-ui-memories">${hits.map((hit) => `<li><div>${hit.messages.map((message) =>
-        `<p>${escapeHtml(message.preview || "（非文本消息）")}${message.truncated ? "…" : ""}</p>`).join("")}</div></li>`).join("")
+      <summary><span>${title}</span><b title="至少一次编入召回材料的经历 / 检索候选；不代表模型已经接收">已选 ${presented} / ${hits.length}</b></summary>
+      <ol class="akasha-plugin-ui-memories">${hits.map((hit) => `<li><div>${hit.messages.filter(message => message.preview).map((message) =>
+        `<p><small class="akasha-plugin-ui-evidence" title="${escapeHtml(message.recorded_at || "")}">${message.presented ? (message.excerpt ? `入选片段 [${escapeHtml(message.excerpt.start)}:${escapeHtml(message.excerpt.end)}]` : "入选原文") : "候选 · 未入选"} · ${escapeHtml(message.author || "")} · ${escapeHtml(sourceTime(message.recorded_at))}</small>${escapeHtml(message.preview)}${message.truncated ? "…" : ""}</p>`).join("")}</div></li>`).join("")
         || '<li class="akasha-plugin-ui-empty">本次没有命中</li>'}</ol></details>`;
   }).join("")}</div>` : "";
 }

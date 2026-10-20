@@ -111,11 +111,11 @@ class ControlService:
 
     async def send_message(self, request: MessageSendParams) -> dict[str, object]:
         """在传输边界构造原始输入；重投使用相同消息 ID，由唯一 writer 核对正文。"""
-        # 1. 控制端是 Akashic 客户端，不接受来源、作者或内部会话属性覆盖。
+        # 1. 控制端是 Kirakira 客户端，不接受来源、作者或内部会话属性覆盖。
         if self._closed:
             raise RuntimeError("控制服务已关闭")
         if not request.session_id.startswith("akashic:") or not request.session_id[8:]:
-            raise ValueError("控制端输入需要 Akashic Session")
+            raise ValueError("控制端输入需要 Kirakira Session")
         if not request.text.strip() and not request.attachment_ids and request.retry_of is None:
             raise ValueError("text 与 attachment_ids 不能同时为空")
         if request.retry_of is not None and (

@@ -13,7 +13,7 @@ SELF = "SELF.md"
 TOPICS = "topics"
 SCOPE_FILE = "_scope.md"
 MEMORY_HEADINGS = ("# 用户长期记忆", "## 用户事实", "## 用户偏好", "## 用户明确要求长期记住的关键内容")
-SELF_HEADINGS = ("# Akashic 的自我认知", "## 人格与形象", "## 我对当前用户的理解", "## 我们关系的定义")
+SELF_HEADINGS = ("# Kirakira 的自我认知", "## 人格与形象", "## 我对当前用户的理解", "## 我们关系的定义")
 # 这些章节记录用户本人或关系判断，只能以用户原话为证据。
 USER_SECTIONS: dict[str, frozenset[str]] = {MEMORY: frozenset(MEMORY_HEADINGS[1:]), SELF: frozenset(SELF_HEADINGS[2:])}
 USER_HEADINGS: dict[str, tuple[str, ...]] = {MEMORY: MEMORY_HEADINGS[1:], SELF: SELF_HEADINGS[1:]}
@@ -321,7 +321,7 @@ PINNED_CHARS = 4000
 def render_memory(root: str, workspace: Workspace, others: Mapping[str, str]) -> str:
     folder = workspace.folder()
     parts = [_usage(root, workspace.scope, folder)]
-    for title, doc in (("Akashic 自我认知", SELF), ("用户长期记忆", MEMORY)):
+    for title, doc in (("Kirakira 自我认知", SELF), ("用户长期记忆", MEMORY)):
         if text := workspace.texts.get(doc, "").strip():
             parts.append(f"## {title}（{doc}）\n\n{text}")
     if folder is not None:

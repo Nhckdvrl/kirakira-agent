@@ -12,7 +12,7 @@ import secrets
 import time
 from collections.abc import Iterator
 
-USERNAME = "akashic"
+USERNAME = "kirakira"
 COOKIE = "akashic_session"
 REMEMBER_S = 90 * 86400
 BROWSER_SESSION_S = 86400
@@ -79,8 +79,12 @@ class OwnerAuth:
 
     def _store_password(self, password: str, *, must_change: bool) -> None:
         salt = secrets.token_bytes(16)
-        self._write("account.json", json.dumps({"username": USERNAME, "salt": salt.hex(),
+        self._write("account.json", json.dumps({"username": self.username(), "salt": salt.hex(),
             "hash": _hash_password(password, salt), "mustChange": must_change}))
+
+    def username(self) -> str:
+        """New accounts use the product name; existing identities stay intact."""
+        return str(self._read("account.json").get("username", USERNAME))
 
     def local_secret(self) -> str:
         return (self.root / "secret").read_text(encoding="utf-8").strip()
@@ -94,7 +98,7 @@ class OwnerAuth:
             return False
         expected = str(account["hash"])
         actual = _hash_password(password, bytes.fromhex(str(account["salt"])))
-        return secrets.compare_digest(username.encode(), USERNAME.encode()) & secrets.compare_digest(actual, expected)
+        return secrets.compare_digest(username.encode(), str(account["username"]).encode()) & secrets.compare_digest(actual, expected)
 
     # 设置主人自己的密码：初始密码文件删除，除 keep 这个会话之外全部退出。
     def set_password(self, password: str, *, keep: str | None) -> None:

@@ -149,7 +149,7 @@ function DirectoryBrowser({ query, busy, onPage, children }: {
   // 必要 effect：打开即读取起始目录，卸载时作废仍在途的读取。
   useEffect(() => { void browse("~"); return () => { request.current += 1; }; }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return <div className="projects-ui-browser">
-    <p className="projects-ui-muted">目录来自运行 Akashic 工具的执行主机。连接远程服务时，不是当前浏览器所在电脑的目录。</p>
+    <p className="projects-ui-muted">目录来自运行 Kirakira 工具的执行主机。连接远程服务时，不是当前浏览器所在电脑的目录。</p>
     <label className="projects-ui-open">
       <span>执行主机路径</span>
       <span><input value={path} disabled={busy} onChange={(event) => { request.current += 1; setPath(event.target.value); setPage(null); onPage(null); setLoading(false); }}

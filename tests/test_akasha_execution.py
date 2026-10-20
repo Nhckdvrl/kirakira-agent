@@ -2,29 +2,166 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-import threading
 
 import pytest
 
 from agent.plugin_composition import CompositionRoot, Context
-from plugins.ledger.bindings import Bindings
 from plugins.akasha.application.consumer import MessageConsumer
 from plugins.akasha.domain.model import MemoryConfig
 from plugins.akasha.infrastructure.consumption import Consumption
 from plugins.akasha.infrastructure.lease import WriterLease
-from plugins.akasha.infrastructure.persistence import load_consumption, logical_state_sha256
+from plugins.akasha.infrastructure.persistence import (
+    load_consumption,
+    logical_state_sha256,
+)
 from plugins.akasha.learning import AKASHA_LEARNING, Learning, LearningConfig
 from plugins.akasha.recalls import RecallRecords
 from plugins.akasha.runtime import MessageMemory
 from plugins.content.api import legacy_post_commit_effect
 from plugins.content.plugin import check_text
-from plugins.turn_projection.plugin import TurnProjection
+from plugins.ledger.bindings import Bindings
+from plugins.ledger.contract import ContentPart, Input, Output
 from plugins.ledger.embedding_store import MessageEmbeddings
 from plugins.ledger.log import MessageLog, SessionAttributes
-from plugins.ledger.contract import ContentPart, Input, Output
+from plugins.turn_projection.plugin import TurnProjection
+
+
+@pytest.mark.asyncio
+async def test_program_memory_query_preserves_graph_budget_and_retry_identity(tmp_path: Path) -> None:
+    """A public read uses actual sources, a dated window and one durable receipt."""
+    from types import SimpleNamespace
+
+    from plugins.akasha.contract import MemoryQuery, MemorySourceQuery
+    from plugins.akasha.query import MemoryQueries
+    from plugins.akasha.recall_tool import RecallTool
+    from plugins.models.contract import EmbeddingResult
+
+    async with memory_fixture(tmp_path) as (memory, consumer, learning, bindings, log, embeddings, _, _):
+        for number in range(3):
+            append_pair(log, embeddings, learning, number,
+                        user_text=("🙂 unrelated filler. " * 500 + "needleproject resolution RELEASE_FRIDAY.") if number == 0 else None)
+        assert await memory.consume() == 3
+        before = logical_state_sha256(consumer.path)
+        stamp = log.reader("conversation").get("user-0").recorded_at
+        encoded = []
+
+        @asynccontextmanager
+        async def open_embedding(_binding):
+            async def embed(texts):
+                encoded.extend(texts)
+                return EmbeddingResult(tuple((1.0, 0.0, 0.0) for _ in texts))
+            yield SimpleNamespace(descriptor=SimpleNamespace(identity="fixed", dimensions=3), embed=embed)
+
+        records = lambda: RecallRecords(log.owner("query-records"))
+
+        @asynccontextmanager
+        async def open_recall(_captured):
+            yield RecallTool(memory=lambda _session: consumer.path, config=MemoryConfig(),
+                catalog=log.catalog(), embeddings=embeddings, bindings=bindings,
+                select_learning=lambda: ("fixed-learning", "fixed-embedding"), records=records(),
+                open_embedding=open_embedding)
+
+        queries = MemoryQueries(capture=lambda _: {}, open_recall=open_recall,
+                                catalog=log.catalog(), records=records,
+                                check_scope=lambda session: tmp_path / ("other" if session == "other" else "memory"))
+        request = MemoryQuery(key="dated-read", session_id="conversation", query="remember episode",
+                              limit=3, max_chars=256, time_start=stamp, time_end=stamp)
+        results = await asyncio.gather(*(queries.recall(request) for _ in range(3)))
+        assert results[0] == results[1] == results[2]
+        result = results[0]
+        assert encoded == [request.query]
+        assert len(result.material) <= 256 and "时间：" in result.material
+        assert {hit.node_id for hit in result.record.hits} == {0}
+        assert {ref.message_id for ref in result.evidence} == set(result.record.presented_message_ids)
+        assert set(result.record.presented_message_ids) <= {"user-0", "assistant-0"}
+        assert result.record.source.session_id == "conversation"
+        assert len(records().list()) == 1
+        assert logical_state_sha256(consumer.path) == before
+        with pytest.raises(ValueError, match="different request"):
+            await queries.recall(request.model_copy(update={"query": "changed query"}))
+        assert encoded == [request.query]
+        fused = await queries.recall(request.model_copy(update={
+            "key": "fused-read", "selection": "fused", "time_start": None, "time_end": None, "limit": 2,
+        }))
+        assert fused.record.selection == "fused" and len(fused.record.hits) <= 2
+        assert logical_state_sha256(consumer.path) == before
+        with pytest.raises(ValueError, match="different request"):
+            await queries.recall(request.model_copy(update={"selection": "fused"}))
+        excerpt_request = request.model_copy(update={"key": "bounded-excerpts", "presentation": "excerpts",
+            "selection": "fused", "query": "needleproject resolution", "max_chars": 512})
+        excerpt = await queries.recall(excerpt_request)
+        assert "RELEASE_FRIDAY" in excerpt.material and len(excerpt.material) <= 512
+        assert excerpt.record.presented_spans
+        for evidence in excerpt.evidence:
+            raw = learning.text(log.reader(evidence.session_id).get(evidence.message_id))
+            span = evidence.excerpt
+            assert span is not None and span.source_chars == len(raw)
+            assert raw[span.start:span.end] in excerpt.material
+        assert await queries.recall(excerpt_request) == excerpt
+        assert logical_state_sha256(consumer.path) == before
+        from plugins.akasha.inspector import RecallInspector
+        inspector = RecallInspector(read=records().read, legacy_page=records().legacy_page, catalog=log.catalog())
+        detail = inspector._detail(excerpt.retrieval_ref, excerpt.record)
+        shown = [message for hit in detail["hits"] for message in hit["messages"] if message["presented"]]
+        assert shown and all(message["excerpt"] is not None for message in shown)
+        assert any("RELEASE_FRIDAY" in message["preview"] for message in shown)
+        source_request = MemorySourceQuery(session_id="conversation", retrieval_ref=excerpt.retrieval_ref,
+            message_id="user-0", offset=len(learning.text(log.reader("conversation").get("user-0"))) - 60, length=60)
+        reads_before = len(encoded)
+        original = await queries.source(source_request)
+        assert "RELEASE_FRIDAY" in original.text and original.next_offset is None
+        assert await queries.source(source_request) == original
+        assert len(encoded) == reads_before and logical_state_sha256(consumer.path) == before
+        with pytest.raises(ValueError, match="not presented"):
+            await queries.source(source_request.model_copy(update={"message_id": "user-1"}))
+        log.ensure_session("other", SessionAttributes())
+        with pytest.raises(ValueError, match="another memory scope"):
+            await queries.source(source_request.model_copy(update={"session_id": "other"}))
+        from plugins.akasha._boundaries import TOOLS, CallSource
+        from plugins.akasha.recall_tool import tool_references
+        from plugins.akasha.source_tool import SourceTool, check_source
+        from plugins.content.api import decode_reference
+        from plugins.ledger.contract import CallRef, ToolCall, ToolResult
+        log.save_binding("source-binding", {"version": 1, "service": TOOLS.name, "root_ref": "fixture-archive",
+            "metadata": {"tool": {"owner": "akasha", "name": "read_memory_source"}}})
+        args = source_request.model_dump(mode="json", exclude={"session_id"})
+        log.writer("conversation", author="user", source="conversation", body_types=(Input,),
+                   content={"text": check_text}).append("read-input", Input((ContentPart("text", "Expand the source"),)))
+        call = log.writer("conversation", author="assistant", source="conversation", body_types=(Output,),
+            content={"text": check_text}, check_call=lambda _: None).append("read-call", Output((ToolCall("source-binding", args),), "continue"))
+        tool = SourceTool(queries.source)
+        prepared = await tool.prepare(args, CallSource(CallRef(call.message_id, 0), log.reader("conversation").snapshot()))
+        assert not isinstance(prepared, str)
+        result = await tool.invoke("read-call-key", prepared)
+        log.writer("conversation", author="assistant", source="conversation", body_types=(ToolResult,),
+            content={"text": check_text, "akasha.source": check_source}, call_ref=CallRef(call.message_id, 0)).append("read-result",
+                ToolResult(CallRef(call.message_id, 0), result.outcome, result.parts))
+        refs = tool_references(log.reader("conversation").snapshot(), "conversation", learning, bindings, records())
+        assert refs and all(decode_reference(ref).resolved_ref == "user-0" for ref in refs)
+
+
+@pytest.mark.asyncio
+async def test_program_memory_query_checks_scope_before_receipt_replay(tmp_path: Path) -> None:
+    """A cached answer cannot bypass a current recall denial or invent a session."""
+    from plugins.akasha.contract import MemoryQuery
+    from plugins.akasha.query import MemoryQueries
+    from plugins.akasha.scopes import MemoryDisabled
+
+    async with memory_fixture(tmp_path) as (_, _, _, _, log, _, _, _):
+        def deny(_session):
+            raise MemoryDisabled("recall disabled")
+
+        queries = MemoryQueries(capture=lambda _: pytest.fail("must not bind a model"),
+            open_recall=lambda _: pytest.fail("must not open a graph"), catalog=log.catalog(),
+            records=lambda: pytest.fail("must not read receipts"), check_scope=deny)
+        with pytest.raises(MemoryDisabled, match="recall disabled"):
+            await queries.recall(MemoryQuery(key="cached", session_id="conversation", query="history"))
+        with pytest.raises(ValueError, match="existing session"):
+            await queries.recall(MemoryQuery(key="unknown", session_id="missing", query="history"))
 
 
 class WorkerGate:
@@ -101,10 +238,10 @@ async def memory_fixture(path: Path) -> AsyncIterator[tuple[MessageMemory, Messa
         log.close()
 
 
-def append_pair(log: MessageLog, embeddings: MessageEmbeddings, learning: Learning, number: int) -> None:
+def append_pair(log: MessageLog, embeddings: MessageEmbeddings, learning: Learning, number: int, *, user_text: str | None = None) -> None:
     """真实已提交问答和固定向量是学习的唯一输入。"""
     for author, kind, body in (
-        ("user", Input, Input((ContentPart("text", f"remember episode {number}"),))),
+        ("user", Input, Input((ContentPart("text", user_text if user_text is not None else f"remember episode {number}"),))),
         ("assistant", Output, Output((ContentPart("text", f"episode {number} happened"),), "complete")),
     ):
         message = log.writer("conversation", author=author, source="conversation",

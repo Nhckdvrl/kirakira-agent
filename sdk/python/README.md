@@ -1,12 +1,13 @@
-# Akashic Python SDK
+# Kirakira Python SDK
 
 SDK 使用 Message v2 协议，连接已运行的 Gateway。发送返回原始消息的持久化 ACK；模型回复与工具结果随后追加到同一 Session。
+公开入口随 `kirakira-agent` 分发，使用项目同一个 Python 环境。
 
 ```python
 from uuid import uuid4
-from akashic_sdk import Akashic
+from kirakira_agent.client import Client
 
-with Akashic.connect("/path/to/workspace/akashic.sock") as client:
+with Client.connect("/path/to/workspace/akashic.sock") as client:
     session_id = client.session_create()["session_id"]
     message_id = uuid4().hex  # 在发送前保存；网络失败重投时复用同一个 ID。
     ack = client.message_send(session_id, "整理最近的上下文", message_id=message_id)
@@ -19,9 +20,9 @@ with Akashic.connect("/path/to/workspace/akashic.sock") as client:
 异步订阅使用 `session_follow()`；同步客户端具有相同方法：
 
 ```python
-from akashic_sdk import AsyncAkashic
+from kirakira_agent.client import AsyncClient
 
-async with await AsyncAkashic.connect(endpoint) as client:
+async with await AsyncClient.connect(endpoint) as client:
     async with await client.session_follow(session_id, after_seq=saved_seq) as feed:
         async for event in feed.events():
             if event["type"] == "messages.appended":
@@ -44,7 +45,7 @@ async with await AsyncAkashic.connect(endpoint) as client:
 loopback TCP 需传入 `workspace_token`：
 
 ```python
-client = await AsyncAkashic.connect("127.0.0.1:2236", workspace_token=token)
+client = await AsyncClient.connect("127.0.0.1:2236", workspace_token=token)
 ```
 
 SDK 不启动 workspace owner。父进程托管可运行 `python main.py app-server --stdio` 并使用 JSON-RPC NDJSON；当前 Python 客户端使用 Unix socket 或 loopback TCP。服务端只接受 v2，旧 Thread/Turn 方法没有兼容入口。请求参数见 [协议 schema](../../schema/app-server-v2.json)。
