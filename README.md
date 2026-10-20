@@ -1,54 +1,140 @@
-# Kirakira Agent
+<p align="center">
+  <img src="./docs/assets/readme/kirakira-agent-icon.png" alt="Kirakira Agent icon" width="96">
+</p>
 
-具备主动交互和长期记忆的多渠道 Agent Runtime。
+<h1 align="center">Kirakira Agent</h1>
 
-当前运行主干移植自 [Akashic Agent](https://github.com/kachofugetsu09/akashic-agent) 的
-`d8761bb9000a7be8701c65e049b0978879cc6889`，采用完整原生插件与执行架构。
-来源、文件摘要及许可证见 [UPSTREAM.json](UPSTREAM.json)、[THIRD_PARTY.md](THIRD_PARTY.md)。
+<p align="center">
+  <strong>A local-first, continuously running, multi-channel AI Agent Runtime</strong><br>
+  <sub>Passive turns · Proactive execution · Memory · Plugins · MCP</sub>
+</p>
 
-消息接纳、来源任务、回复程序、模型、工具、记忆、主动交互、投递和界面由独立插件拥有。
-同一 CompositionRoot 负责 Context/Fiber/Effect 生命周期；Task 管理接纳、撤权与物理排空。
-Ledger 提供唯一消息事实、窄读写权限、同库 owner 事务与固定 provider bindings。
-工具执行使用 prepared 目标，支持本地进程、HostBridge、MCP、托管进程和可选 Workload controller。
+<p align="center">
+  <a href="./README.md"><b>English</b></a> ·
+  <a href="./README-cn.md">简体中文</a> ·
+  <a href="./docs/INDEX.md">Documentation</a>
+</p>
 
-## 开始使用
+<p align="center">
+  <a href="https://github.com/Nhckdvrl/kirakira-agent/stargazers"><img src="https://img.shields.io/github/stars/Nhckdvrl/kirakira-agent?style=flat&color=f29ab2" alt="GitHub Stars"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/Nhckdvrl/kirakira-agent?color=738bd7" alt="MIT License"></a>
+  <img src="https://img.shields.io/badge/Python-3.14.6-64a8df" alt="Python 3.14.6">
+  <img src="https://img.shields.io/badge/runtime-local--first-f2b84b" alt="Local-first runtime">
+</p>
 
-项目只使用 Python 3.14.6 和一个 `.venv`：
+<p align="center">
+  <img src="./docs/assets/readme/kirakira-agent-hero.png" alt="Kirakira Agent: an empty stage, instruments, starlight, and three execution paths" width="100%">
+</p>
 
-```sh
-uv sync --frozen --group dev --extra providers
-uv run kirakira-agent init --workspace /absolute/path/to/workspace --profile headless
+## What is Kirakira?
+
+Kirakira is a local-first, multi-channel AI-agent runtime. It brings conversation,
+proactive interaction, long-term memory, and tool execution into one extensible
+runtime. Sessions and runtime state stay in the selected local workspace by default.
+
+Its episodic memory keeps original conversations as the source of truth. Semantic
+recall and associative graph completion recover related experiences across sessions,
+with references the agent can follow back to the original exchange. Markdown memory
+holds explicit notes and preferences alongside those experiences.
+
+Proactive interaction starts with events and context: the agent can investigate new
+information, decide whether it warrants a message, and deliver it to a configured
+session. Conversations and proactive tasks share models, tools, and memory.
+
+## At a glance
+
+| Question | Kirakira's approach |
+| --- | --- |
+| How does the agent run? | Conversation and proactive tasks share a persistent runtime |
+| Where does data live? | Messages, memory, configuration, and execution state stay in the selected local workspace |
+| Can sessions work in different repos? | Projects and session working directories carry repository context into file tools, Shell, and child agents |
+| How does it remember? | Semantic recall, associative completion, and Markdown notes, with original-message evidence |
+| How is it extended? | Plugins, MCP servers, skills, tools, and event sources |
+| How is context managed? | Context projection and compaction keep requests within budget while preserving stored messages |
+| How is execution inspected? | Model usage, tool results, task state, and delivery receipts are recorded |
+| Is it tied to one model? | Model providers are plugins; Step5 Token Plan and local embeddings are included |
+
+## Built for ongoing work
+
+**Conversation and tools.** Streaming replies, ReAct tool execution, file operations,
+Shell and terminal sessions, managed processes, MCP, and child agents work within
+the same task lifecycle. Sessions support interruption, cancellation, and recovery.
+
+**Memory with evidence.** Akasha learns from completed conversation segments.
+Embeddings and graph state are derived from the message history and can be rebuilt;
+retrieved evidence remains traceable to its source. The local embedding provider
+runs on CPU after an explicit model download.
+
+**Proactive interaction.** Content, Alert, and Context events feed the agent's
+interest and wake decisions. Investigation, sharing, duplicate handling, and delivery
+confirmation are part of the execution flow. Local integrations can submit events
+through authenticated RPC.
+
+**A runtime you can extend.** Models, tools, memory, channels, and the Web workspace
+are plugins. Configuration and state belong to each plugin, and selected plugins
+can be updated within the running composition.
+
+## Start
+
+Use Python 3.14.6, [uv](https://docs.astral.sh/uv/), and Node.js/npm for the Web
+workspace. Python commands use the single project `.venv` and the pinned `uv.lock`.
+Run these commands from the repository root:
+
+```bash
+uv sync --frozen --group dev --group eval --extra providers
+npm ci
+npm run build
+
+uv run kirakira-agent init --workspace /absolute/path/to/workspace --profile web
 uv run kirakira-agent configure-step-plan --workspace /absolute/path/to/workspace --key-file /private/path/step-plan.key
 uv run kirakira-agent gateway --config /absolute/path/to/workspace/config.toml --workspace /absolute/path/to/workspace
 ```
 
-Step5 驱动固定使用 Step Token Plan 专用地址，不跟随重定向或回退其他计费路由。
-主配置只保留 `[runtime].workspace`，业务设置归各插件的数据目录。
-使用 `--profile web` 加入工作台，并运行 `npm ci && npm run build` 构建界面。
+Replace the example paths with your own. Keep the workspace on a local disk and
+the API key in a private file. The Step5 driver uses the Step Token Plan endpoint.
+For a headless workspace, choose `--profile headless` and skip the frontend build.
 
-本地记忆、主动事件入口与既有工作区升级见[记忆与主动交互](docs/handbook/memory-proactive.md)。
+To enable local memory or configure a proactive target, follow the
+[memory and proactive setup guide](docs/handbook/memory-proactive.md).
+Existing workspaces have separate [upgrade](docs/handbook/memory-proactive.md) and
+[migration](docs/handbook/start.md) instructions.
 
-旧 Kirakira 工作区需要显式导入新目录，原目录保留：
+## Verification
 
-```sh
-uv run python -m scripts.migrate_legacy_workspace --source /old/workspace --destination /new/workspace
-```
-
-迁移合并 SQL、JSON 和旧索引，转换记忆、人格、Skill 与会话目录，保留私有原文快照。
-加 `--key-file` 和 `--activate-config` 可在真实 Step5 验证后切换入口；工作区放在本机磁盘。
-旧程序和授权不自动重放；尚无转换器的非空旧状态会明确阻止迁移。
-具体设置和迁移范围见[启动指南](docs/handbook/start.md)。
-
-## 验证
-
-```sh
-uv run python -m scripts.check_upstream_kernel
+```bash
 uv run pytest -q
 uv run kirakira-verify-online --key-file /private/path/step-plan.key --workspace /tmp/new-eval --output /tmp/native-eval.json
 ```
 
-在线评测使用实际生产插件图和真实 Step5，覆盖消息、文件、Shell、MCP、托管进程、子代理、
-局部更新、插话、暂停恢复、来源抢占、附件和重启。
-可选外部提供方需要单独配置；验证范围见[当前状态](docs/status/current.md)和[验证记录](docs/operations/verification.md)。
+The online verifier runs real Step5 requests in an isolated workspace. It exercises
+messages, files, Shell, MCP, managed processes, child agents, interruption, restart,
+and plugin updates. Memory and proactive experiments, including their measured
+results and conditions, are documented in the [verification record](docs/operations/verification.md).
 
-[差距与实施清单](docs/status/akashic-gap.md) · [架构](docs/architecture/overview.md) · [文档目录](docs/INDEX.md) · [SDK](sdk/)
+## Layout
+
+```text
+agent/            composition, lifecycle, configuration, and supervisor
+bootstrap/        host resources and application startup
+plugins/          conversation, models, tools, memory, proactive interaction, and channels
+frontend/         shared Web interface and theme
+kirakira_agent/   public CLI, workspace setup, and distribution integration
+sdk/              programmatic client
+eval/             functional verification and memory experiments
+tests/            runtime and integration contracts
+scripts/          build, migration, and verification tools
+docs/             architecture, guides, and evaluation records
+```
+
+## Documentation
+
+[Documentation index](docs/INDEX.md) ·
+[Getting started](docs/handbook/start.md) ·
+[Memory and proactive interaction](docs/handbook/memory-proactive.md) ·
+[Architecture](docs/architecture/overview.md) ·
+[Verification](docs/operations/verification.md) ·
+[SDK](sdk/python/README.md)
+
+## License
+
+MIT. See [LICENSE](LICENSE).
