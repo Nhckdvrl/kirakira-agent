@@ -48,7 +48,9 @@ def compare(reference):
         ["git", "-C", str(reference), "ls-tree", "-r", "--name-only", "HEAD"], text=True
     ).splitlines()
     imported = {pin["source_paths"].get(name, name): name for name in pin["files"]}
-    expected = {name for name in names if name.startswith(SCOPES) or name in ROOT_FILES}
+    excluded = pin.get("excluded", {})
+    expected = {name for name in names if (name.startswith(SCOPES) or name in ROOT_FILES)
+                and name not in excluded}
     different = [
         name
         for name, target in imported.items()
@@ -75,6 +77,7 @@ def compare(reference):
         "recorded_local_patches": sorted(pin.get("patches", {})),
         "recorded_generated_assets": sorted(pin.get("generated", {})),
         "outside_runtime_pin": outside,
+        "excluded_non_runtime_files": excluded,
         "local_plugins": ["step-plan", "local-embedding", "event-ingress"],
         "boundary": "source comparison only; activation, accounts, external devices and functional evidence are separate",
     }

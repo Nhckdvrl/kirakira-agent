@@ -1,8 +1,0 @@
-{
-  "dataset_sha256": "d6f21ea9d60a0d56f34a05b609c79c88a451d2ae03597821ea3d5a9678c3a442",
-  "script_sha256": "7982009cdc8cc1f9cbade110fa653f7455b2a81cd24cb9488e53bfd3c16799d2",
-  "cases": 36,
-  "context_chars": 24000,
-  "max_turns": 10,
-  "warning": "label-assisted answer-span oracle, not valid retrieval performance"
-}

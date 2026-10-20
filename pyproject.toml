@@ -77,7 +77,7 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 where = [".", "sdk/python/src"]
-include = ["assets*", "bundles*", "packages*", "schema*", "types*", "agent*", "akashic_sdk*", "bootstrap*", "core*", "eval*", "frontend*", "infra*", "kirakira_agent*", "migrations*", "plugins*", "scripts*", "utils*"]
+include = ["bundles*", "packages*", "schema*", "skills*", "types*", "agent*", "akashic_sdk*", "bootstrap*", "core*", "eval*", "frontend*", "infra*", "kirakira_agent*", "migrations*", "plugins*", "scripts*", "utils*"]
 
 exclude = ["tests*", "node_modules*", "**.node_modules*", "**.__pycache__*"]
 

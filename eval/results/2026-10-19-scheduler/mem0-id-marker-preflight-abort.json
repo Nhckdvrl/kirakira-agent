@@ -1,9 +1,0 @@
-{
-  "status": "aborted_before_qa",
-  "excluded_from_quality_scores": true,
-  "planned_cases": 12,
-  "terminal_cases": 8,
-  "terminal_successes": 8,
-  "reason": "session IDs can encode answer/noise fixture categories; remove them from all model-visible headers and restart ALL fixed cases; retain metadata only for bookkeeping",
-  "no_case_selection_or_score_mixing": true
-}

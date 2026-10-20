@@ -76,3 +76,6 @@ frontend/dashboard/static/
 # Derived web assets are shipped by the package build, never source control.
 /plugins/ui/static/
 /plugins/akashic_clients/static/
+
+# Ephemeral runs; published evaluation evidence lives under docs/operations/.
+/eval/results/

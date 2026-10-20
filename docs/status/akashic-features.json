@@ -1,6 +1,6 @@
 {
   "upstream_commit": "d8761bb9000a7be8701c65e049b0978879cc6889",
-  "native_files": 930,
+  "native_files": 929,
   "scope": "production implementation and architecture; external integrations need separate configuration and validation",
   "plugins": [
     {

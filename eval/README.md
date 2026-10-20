@@ -15,5 +15,6 @@ python -m scripts.ledger_runtime_scenario
 Scheduler 场景使用本地确定性模型 HTTP 对端，验证工具权限、调度来源、交付、用户抢占与取消。
 它与真实 Step5 评测分开记录。
 
-`eval/results/` 和 `docs/operations/artifacts/` 中的历史记录对应各自原始提交。
-旧主链的评测程序已退出当前运行目录；历史实现和复现入口保存在 Git 历史中。
+当前量化结果及原始证据统一放在 `docs/operations/evaluations/` 和
+`docs/operations/artifacts/`。旧主链的评测程序与过期结果只保留在 Git 历史中。
+新运行使用仓库外的临时工作区和输出路径，正式记录再纳入对应评测文档。

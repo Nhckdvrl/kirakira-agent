@@ -8,5 +8,5 @@ recursive-include plugins *.js *.css *.html *.json *.svg *.png *.woff2 *.build *
 recursive-include scripts *.mjs
 recursive-include schema *
 recursive-include sdk *.py *.toml *.md *.ts *.json LICENSE
-recursive-include assets *
+recursive-include skills *.md
 recursive-include patches *.patch

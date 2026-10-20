@@ -7,7 +7,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def main():
-    files = [ROOT / name for name in ("README.md", "THIRD_PARTY.md")]
+    files = [ROOT / name for name in ("README.md", "README-cn.md", "THIRD_PARTY.md",
+                                    "eval/README.md", "scripts/README.md")]
     files.extend(sorted((ROOT / "docs").rglob("*.md")))
     failures = []
     count = 0

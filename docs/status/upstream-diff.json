@@ -2,9 +2,9 @@
   "reference_commit": "d8761bb9000a7be8701c65e049b0978879cc6889",
   "pinned_commit": "d8761bb9000a7be8701c65e049b0978879cc6889",
   "same_revision": true,
-  "verified_local_pins": 930,
-  "unique_imported_origins": 929,
-  "expected_runtime_origins": 929,
+  "verified_local_pins": 929,
+  "unique_imported_origins": 928,
+  "expected_runtime_origins": 928,
   "missing_runtime_files": [],
   "different_origin_bytes": [],
   "recorded_local_patches": [
@@ -26,6 +26,9 @@
     "docs/": 265,
     "_handbook/": 2,
     ".github/": 9
+  },
+  "excluded_non_runtime_files": {
+    "assets/akashic-qq.jpg": "Upstream contact QR image; not consumed by runtime, frontend, SDK or build."
   },
   "local_plugins": [
     "step-plan",

@@ -1,9 +1,0 @@
-{
-  "plugins": 70,
-  "statuses": {
-    "partial": 54,
-    "missing": 16
-  },
-  "extra_surfaces": 3,
-  "reference": "21b38f0e102d9e1bdc5576725635dce29f135c0c"
-}

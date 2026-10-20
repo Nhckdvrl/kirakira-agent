@@ -64,7 +64,6 @@
     "agent/restart.py": "9cf13ce8e5b3285129e4b2f096da8993e23789133b5a5897631c725e1f61c108",
     "agent/runtime_identity.py": "dcfc131424f0a75c43e63fa2edea8cbf946ffe543364629cf46b5264152c282a",
     "agent/supervisor.py": "e70601a5d30e711718aba9d2d7015bff8ec9f5cce2c6c080eed9e2a37dbd8a45",
-    "assets/akashic-qq.jpg": "f1c70a2f703a20f4dfdd9385b50082f07e2b138517b2d0ef843bf46d69a78a2c",
     "bootstrap/__init__.py": "a1b5e48da9d83043469a3f0f392819357fff1376683242c7d9516242a6c1d62b",
     "bootstrap/app.py": "15642b683e43c786fb8626be482b1f93d8cf097cae2ef14c7d905c83447db894",
     "bootstrap/cleanup.py": "4ad06a41b3d6d6cd3bdaf445ac268aae4b048b984a587add9ef6193b33435761",
@@ -965,5 +964,8 @@
       "lock_sha256": "27d6c456bebb18903eb2101b834871cb7ac851aa7446d1f488b2a59b346fec39",
       "reason": "Rebuilt from the pinned upstream frontend source and npm lock; imported generated file was stale."
     }
+  },
+  "excluded": {
+    "assets/akashic-qq.jpg": "Upstream contact QR image; not consumed by runtime, frontend, SDK or build."
   }
 }
