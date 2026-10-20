@@ -1,43 +1,24 @@
 ---
 name: manage-workspace-mcp
-description: 安装、注册、更新、移除和诊断 kirakira 的独立 workspace MCP server。用户要求把 binary、CLI、脚本或本地项目做成常驻 MCP，询问 MCP 热重载、MCP 工具为何没出现，或需要查看非插件 MCP 状态时使用。插件自带 MCP 改用 plugin-system。
-when_to_use: 需要把独立 binary/CLI/脚本注册为常驻 workspace MCP、排查 MCP 热重载或工具未出现的问题时。
-metadata: {"skill": {"always": false}}
+description: 为当前原生 Kirakira Runtime 接入、更新或排查 MCP 服务时使用。
 ---
 
-# 管理 Workspace MCP
+# MCP 接入
 
-使用声明式管理工具完成非插件 MCP 的全生命周期，不直接编辑运行时配置。
+MCP 由原生插件声明和注册。不再读取旧 mcp/servers/*.toml，
+也没有 mcp_apply、mcp_status、mcp_remove 工具。
 
-## 路由
+先确认目标服务的所属插件及本代际运行状态。开发扩展时参考
+plugins/mcp/contract.py：通过 inject 声明 MCP_SERVERS，使用
+McpServerDefinition 提供 argv、cwd、env、required_tools，然后调用
+MCP_SERVERS.register(ctx, definition)。消费者通过 open(ctx, name)
+取得服务；catalog、failures 用于诊断。
 
-- 独立 binary、CLI、脚本、本地项目：使用本 skill。
-- 已安装插件自带的 MCP：加载 `plugin-system`，修改插件源码并重新安装。
-- 不确定归属时，先用 `mcp_status` 查看；不要根据现有 MCP 工具名前缀猜注册方式。
+命令必须非交互并遵守 MCP stdio 协议，协议 stdout 不能混入普通日志。
+长期服务先通过 managed_processes 或 workloads 合同取得服务句柄，
+再声明端点依赖。参考 eval/fixtures/native_extension/plugin.py。
 
-## 工作流
-
-1. 确认入口命令可以非交互启动，并通过 stdio 实现 MCP；不要把单独启动后等待 `initialize` 当成失败。
-2. 用 `tool_search` 解锁 `mcp_apply` 和 `mcp_status`（这几个工具是 deferred，需先搜索）。
-3. 调用 `mcp_apply`；优先使用稳定的绝对可执行路径。`cwd` 与 `watch_paths` 必须位于 workspace 的 `mcp/` 根内。声明写入 `<workspace>/mcp/servers/<name>.toml`。
-4. 检查返回的 `status` 与 `effectiveFrom`。发布失败时工具会自动回滚声明，保留真实错误，旧代际继续服务。
-5. 告知用户新 MCP 工具从下一轮开始可用；当前 turn 固定使用进入时的旧快照，不要在本轮反复搜索新工具。
-6. 下一轮用 `mcp_status` 确认 active，再按返回的准确工具名执行真实调用。
-
-删除时解锁并调用 `mcp_remove`。删除前工具会写一份 `<name>.toml.removed.bak` 备份；旧 generation 会等已有 turn 释放 lease 后排空，不要额外重启。
-
-## 禁止旧路径
-
-- 不要添加 `[mcp_servers]` 到 `config.toml`。
-- 不要读写 `mcp_servers.json`。
-- 不要搜索或调用 `mcp_add`、`mcp_list`；这些工具不存在。可用的只有 `mcp_apply`、`mcp_remove`、`mcp_status`。
-- 不要为了独立 MCP 创建 `plugin.json`、插件目录或修改插件缓存。
-- MCP 和插件改动可热重载，不要重启 Agent。
-
-## 参数原则
-
-- `name` 使用稳定的小写名称，匹配 `[a-z][a-z0-9_-]*`。
-- `command` 是 argv 数组，不是 shell 字符串；不要嵌入 `&`、管道或重定向。
-- Node wrapper 若依赖不稳定的 `PATH`，使用绝对 `node` 路径加脚本路径。
-- `env` 只写 server 必需值；`mcp_status` 只展示环境变量键名，绝不展示值。
-- 代码内容变化需要触发重载时，把对应文件或目录放进 `watch_paths`。
+配置结构写入扩展源码；密钥使用私有配置或凭据引用。
+发布遵循 plugin-system，核对新代际与工具目录后执行真实工具调用。
+失败时保留旧代际和诊断，不跳过依赖健康检查。
+本地 Python 命令沿用项目唯一 .venv 的解释器。

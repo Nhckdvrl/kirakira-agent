@@ -1,0 +1,52 @@
+{
+  "passed": true,
+  "checks": [
+    {
+      "name": "all_22_directory_snapshots",
+      "passed": true
+    },
+    {
+      "name": "continue_imported_history",
+      "passed": true,
+      "seconds": 4.79
+    },
+    {
+      "name": "persisted_memory_in_new_session",
+      "passed": true,
+      "seconds": 2.31
+    },
+    {
+      "name": "relative_file_write_read_from_old_session",
+      "passed": true,
+      "seconds": 14.1
+    },
+    {
+      "name": "native_skill_catalog",
+      "passed": true,
+      "visible": 7
+    },
+    {
+      "name": "dashboard",
+      "passed": true,
+      "status": 200
+    },
+    {
+      "name": "web-chat",
+      "passed": true,
+      "status": 200
+    }
+  ],
+  "python": "3.14.6",
+  "call_count": 8,
+  "model_states": {
+    "success": 8
+  },
+  "driver_ids": [
+    "step-plan"
+  ],
+  "endpoints": [
+    "https://api.stepfun.com/step_plan/v1"
+  ],
+  "input_tokens": 140484,
+  "output_tokens": 519
+}

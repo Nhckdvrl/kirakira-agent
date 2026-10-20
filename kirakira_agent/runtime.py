@@ -108,7 +108,7 @@ async def rpc(core, method, payload):
     return await operation.invoke(operation.params.model_validate(payload), None)
 
 
-async def configure_step_plan(core, key_file, *, reasoning_effort="low"):
+async def configure_step_plan(core, key_file, *, reasoning_effort="low", max_output_tokens=4096):
     from plugins.models.contract import MODEL_CATALOG
     from plugins.step_plan.driver import BASE_URL, DRIVER_ID, MODEL
     root = core.plugin_manager.live_root
@@ -139,7 +139,7 @@ async def configure_step_plan(core, key_file, *, reasoning_effort="low"):
         "model": {
             "expected_revision": revision, "model_id": "step5", "connection_id": "step-plan",
             "kind": "chat", "model": MODEL, "default_reasoning_effort": reasoning_effort,
-            "capabilities": {"context_window": 32768, "max_output_tokens": 4096,
+            "capabilities": {"context_window": 32768, "max_output_tokens": max_output_tokens,
                              "supports_tool_calls": True, "supports_parallel_tool_calls": True,
                              "supported_reasoning_efforts": ["low", "medium", "high"]},
             "capability_sources": {"context_window": "user", "max_output_tokens": "user",

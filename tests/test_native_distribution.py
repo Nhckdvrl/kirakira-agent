@@ -1,5 +1,6 @@
 """Distribution boundaries not already covered by imported native contracts."""
 import hashlib
+import json
 import shutil
 import sqlite3
 import subprocess
@@ -18,7 +19,7 @@ from plugins.ledger.contract import (
 )
 from plugins.ledger.log import MessageLog
 from plugins.step_plan.driver import validate_endpoint
-from scripts.migrate_legacy_workspace import migrate
+from scripts.migrate_legacy_workspace import activate, migrate
 
 
 def legacy_workspace(path, *, broken_result=False):
@@ -62,6 +63,92 @@ def test_migration_rejects_invalid_reference_without_partial_publication(tmp_pat
         migrate(old, new)
     assert not new.exists()
     assert not list(tmp_path.glob(".kirakira-migration-*"))
+
+
+def test_complete_workspace_migration_merges_json_wal_and_profiles_and_activates(tmp_path):
+    old, new = tmp_path / "old", tmp_path / "new"
+    old.mkdir()
+    (old / "config.toml").write_text('[runtime]\nworkspace="."\n[agent]\nsystem_prompt="Kirakira persona"\nmax_iterations=20\nmax_tokens=8192\n[channels.telegram]\nenabled=false\n')
+    (old / "sessions").mkdir()
+    document = {"key": "cli:old", "created_at": "2026-07-20T12:00:00+00:00",
+                "updated_at": "2026-07-20T12:00:01+00:00", "metadata": {"turn_count": 1},
+                "messages": [{"role": "user", "content": "remember cedar", "timestamp": "2026-07-20T12:00:00+00:00"},
+                             {"role": "assistant", "content": "cedar remembered", "timestamp": "2026-07-20T12:00:01+00:00", "reasoning_content": "original reasoning"}]}
+    (old / "sessions/chat.json").write_text(json.dumps(document))
+    (old / "memory").mkdir()
+    (old / "memory/items.json").write_text(json.dumps([{"id": "mem1", "content": "user prefers cedar", "source_ref": "cli:old:0", "memory_type": "preference"}]))
+    (old / "memory/PENDING.md").write_text("# Pending\n- original pending note\n")
+    (old / "skills/local").mkdir(parents=True)
+    (old / "skills/local/SKILL.md").write_text("---\nname: local\ndescription: local task\n---\noriginal skill\n")
+    with sqlite3.connect(old / "sessions.db") as db:
+        db.execute("PRAGMA journal_mode=WAL")
+        db.execute("CREATE TABLE messages(id TEXT,session_key TEXT,seq INTEGER,ts TEXT,role TEXT,content TEXT)")
+        db.execute("INSERT INTO messages VALUES('sql0','web:old',0,'2026-07-20T12:00:00+00:00','user','SQL original')")
+        db.commit()
+        report = migrate(old, new)
+        db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    assert report["messages"] == 3 and report["sessions"] == 2
+    assert report["history"]["json_added"] == 2
+    assert report["active_memory_items"] == 1 and report["skills"] == 1
+    assert "user prefers cedar" in (new / "memory/MEMORY.md").read_text()
+    assert (new / "memory/VEDA.md").read_text() == "Kirakira persona\n"
+    assert not (new / "memory/PENDING.md").exists()
+    assert "original pending note" in (new / "memory/topics/legacy-pending.md").read_text()
+    log = MessageLog(new / "sessions.db")
+    try:
+        rows = log.reader("akashic:legacy:cli:old").snapshot()
+        assert [r.message_id for r in rows] == ["cli:old:0", "cli:old:1"]
+        assert rows[1].body.parts[1].value["extra"] == json.dumps({"reasoning_content": "original reasoning"})
+        assert log.owner("plugin:working_directory").read("directory:akashic:legacy:cli:old").value["path"] == str(old)
+        with sqlite3.connect(new / "sessions.db") as db:
+            metadata = json.loads(db.execute("SELECT metadata FROM sessions WHERE key='akashic:legacy:cli:old'").fetchone()[0])
+            assert metadata["legacy_metadata"] == {"turn_count": 1}
+    finally:
+        log.close()
+    activate(old / "config.toml", new)
+    assert (old / "config.toml").read_text() == (new / "config.toml").read_text()
+    assert "max_iterations" in (new / "legacy/config.toml").read_text()
+    with pytest.raises(ValueError, match="changed after snapshot"):
+        activate(old / "config.toml", new)
+
+
+def test_cutover_refuses_messages_committed_after_the_import(tmp_path):
+    old, new = tmp_path / "old", tmp_path / "new"
+    legacy_workspace(old)
+    migrate(old, new)
+    original_config = (old / "config.toml").read_bytes()
+    with sqlite3.connect(old / "sessions.db") as db:
+        db.execute("UPDATE ledger_messages SET metadata_json=? WHERE message_id='m0'", ('{"new_fact":true}',))
+    with pytest.raises(ValueError, match="data changed after snapshot"):
+        activate(old / "config.toml", new)
+    assert (old / "config.toml").read_bytes() == original_config
+    assert (new / "legacy/sessions.db").exists()
+
+
+@pytest.mark.parametrize("failure", ["conflicting-history", "unsupported-state", "active-owner"])
+def test_migration_refuses_loss_or_live_workspace(tmp_path, failure):
+    from bootstrap.workspace_lock import WorkspaceInstanceLock
+    old, new = tmp_path / "old", tmp_path / "new"
+    legacy_workspace(old)
+    lock = None
+    if failure == "conflicting-history":
+        (old / "sessions").mkdir()
+        (old / "sessions/chat.json").write_text(json.dumps({"key": "akashic:legacy", "messages": [
+            {"role": "user", "content": "different", "timestamp": "2026-09-01T12:30:00+00:00"}]}))
+    elif failure == "unsupported-state":
+        (old / "mcp").mkdir()
+        (old / "mcp/server.toml").write_text("legacy declaration")
+    else:
+        lock = WorkspaceInstanceLock(old)
+        lock.acquire()
+    try:
+        with pytest.raises((ValueError, RuntimeError)):
+            migrate(old, new)
+        assert not new.exists()
+        assert not list(tmp_path.glob(".kirakira-migration-*"))
+    finally:
+        if lock is not None:
+            lock.release()
 
 
 @pytest.mark.asyncio

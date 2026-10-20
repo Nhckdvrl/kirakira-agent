@@ -76,9 +76,13 @@ py-modules = ["main"]
 include-package-data = true
 
 [tool.setuptools.packages.find]
-include = ["agent*", "bootstrap*", "core*", "eval*", "frontend*", "infra*", "kirakira_agent*", "migrations*", "plugins*", "scripts*", "utils*"]
+where = [".", "sdk/python/src"]
+include = ["agent*", "akashic_sdk*", "bootstrap*", "core*", "eval*", "frontend*", "infra*", "kirakira_agent*", "migrations*", "plugins*", "scripts*", "utils*"]
 
 exclude = ["tests*", "node_modules*", "**.node_modules*", "**.__pycache__*"]
+
+[tool.setuptools.package-dir]
+akashic_sdk = "sdk/python/src/akashic_sdk"
 
 [tool.setuptools.package-data]
 "*" = ["*.toml", "*.json", "*.js", "*.css", "*.svg", "*.html", "*.md", "*.txt", "*.sh", "*.png", "*.woff2", "*.build", "*.ico", "LICENSE", "*.LICENSE", "*.NOTICE"]

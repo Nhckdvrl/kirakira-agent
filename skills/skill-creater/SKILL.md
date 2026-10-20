@@ -14,7 +14,7 @@ metadata: {"skill": {"always": false}}
   scripts/                         ← 可选，放辅助脚本
   references/                      ← 可选，放参考文档
 
-<项目>/skills/{skill-name}/        ← 内置技能
+<插件制品>/skills/{skill-name}/    ← 由 INSTALLED_ASSETS 注册的插件技能
   SKILL.md
 ```
 

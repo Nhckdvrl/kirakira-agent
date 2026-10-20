@@ -32,12 +32,39 @@ Step5 使用 `https://api.stepfun.com/step_plan/v1`、`step-5-preview`。
 uv run python -m scripts.migrate_legacy_workspace --source /old/workspace --destination /new/workspace
 ```
 
-原工作区保持原样。新目录 `legacy/sessions.db` 是包含已提交 WAL 内容的完整快照，
-旧配置备份只允许当前用户读取。消息 ID、顺序、时间、正文和工具引用保留。
-导入消息使用 `legacy:` 来源，作为可读取历史，不自动重放旧程序或恢复旧工具授权。
-记忆图、未完成的外部效果和旧任务状态保留在原工作区或快照中，不能当作当前原生状态直接启用。
-旧项目归属和目录默认值也不自动转换为新会话的固定属性。
-随后使用 `configure-step-plan` 配置新 Models。
+完整迁移并验证、切换实际入口：
+
+```sh
+uv run python -m scripts.migrate_legacy_workspace \
+  --source /old/workspace --destination /local-disk/new-workspace --profile web \
+  --key-file /private/path/step-plan.key --activate-config /old/workspace/config.toml
+```
+
+工作区数据库应位于本机磁盘；源码和项目目录可以位于共享 NFS。
+迁移期间取得原 Runtime 的实例锁；读取 SQLite 备份 API 生成的已提交快照，
+合并 SQL、JSON 会话和旧索引，发现同一消息位置内容冲突时中止。
+原始 ID、顺序、时间、正文、工具引用和 JSON 附加信息保留。
+旧地址转换为 `akashic:legacy:<原地址>`，工作台可直接打开并继续对话；
+`migration.json` 保存完整地址映射。原生 `akashic:` 地址保持不变。
+
+旧长期记忆条目转换为原生 MEMORY.md，原始 Markdown 文档进入 topics/；
+人格进入 VEDA.md，本地 Skill 与 uploads 一并复制，既有会话的工作目录固定为原工作区。
+原始数据、配置、空向量库和索引另存于私有 `legacy/`，逐文件保存摘要。
+已有的旧备份目录继续保留，不重复递归复制。
+
+纯旧对话采用原生 `legacy-unattributed` 来源并带出处证明；
+旧类型化消息采用 `legacy:<原来源>`，都不会重新取得执行授权。
+记忆插件可以读取导入来源。旧参数转换到 Reply，模型切换到 Step5 Token Plan。
+旧外部渠道的停用状态保持停用，不产生外发消息。
+
+迁移器遇到非空旧向量图、owner 状态、项目 scope、主动任务或 MCP/插件声明时会拒绝发布，
+要求补充对应的显式转换，不能把数据仅存档后宣称迁移成功。
+当前本地工作区经检查没有这些非空状态。
+
+只有原生启动、全部历史读回及真实 Step5 回复通过，且全部源文件与快照仍一致时，
+才原子替换 `--activate-config`。验证失败时入口保持原配置，新工作区和备份保留供排查。
+回退旧实现时先停止新实例，使用迁移前提交 `65c8181`，再恢复 `legacy/config.toml`。
+旧格式需配合旧实现读取；原始数据库没有被覆盖。原生快照可恢复到本机数据盘后继续使用当前实现。
 
 ## 验证
 

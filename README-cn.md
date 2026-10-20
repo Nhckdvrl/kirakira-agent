@@ -32,7 +32,9 @@ Step5 驱动固定使用 Step Token Plan 专用地址，不跟随重定向或回
 uv run python -m scripts.migrate_legacy_workspace --source /old/workspace --destination /new/workspace
 ```
 
-导入保留原始消息、时间和工具引用，旧程序和授权不自动重放；记忆图仍保留在原工作区。
+迁移合并 SQL、JSON 和旧索引，转换记忆、人格、Skill 与会话目录，保留私有原文快照。
+加 `--key-file` 和 `--activate-config` 可在真实 Step5 验证后切换入口；工作区放在本机磁盘。
+旧程序和授权不自动重放；尚无转换器的非空旧状态会明确阻止迁移。
 具体设置和迁移范围见[启动指南](docs/handbook/start.md)。
 
 ## 验证

@@ -1,0 +1,10 @@
+{
+  "wheel_sdk_and_migration_modules_exact": true,
+  "sdist_sdk_present": true,
+  "web_assets_present": true,
+  "key_matches": 0,
+  "wheel_sha256": "c4d25c5cc1c4b603d3d7dde47645e8bc647737717370083be4f83267dbb3703b",
+  "sdist_sha256": "d191d8f6b5291e6e0fb5d997a03e4ab9b5aa34d9d530033c71120882178a8950",
+  "sdist_pinned_files_exact": 924,
+  "isolated_wheel_gateway_sdk_import": true
+}
