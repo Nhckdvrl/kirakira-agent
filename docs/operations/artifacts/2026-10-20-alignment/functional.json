@@ -1,0 +1,87 @@
+{
+  "upstream": "d8761bb9000a7be8701c65e049b0978879cc6889",
+  "source_report": "reader-binding-failure.json",
+  "scope": "non-reader functional cases from the same preserved run",
+  "cases": [
+    {
+      "name": "native_memory_learning",
+      "passed": true,
+      "detail": {
+        "complete_turns": 12,
+        "published_nodes": 12,
+        "raw_message_ids_bound": 24
+      },
+      "seconds": 338.306
+    },
+    {
+      "name": "native_runtime_diagnostics",
+      "passed": true,
+      "detail": {
+        "samples": 110,
+        "events": 0,
+        "stalls": 0
+      },
+      "seconds": 0.001
+    },
+    {
+      "name": "native_alert_delivery_and_duplicate",
+      "passed": true,
+      "detail": {
+        "notifications": 1,
+        "duplicate_report_extra_messages": 0,
+        "receipt": "delivered"
+      },
+      "seconds": 5.797
+    },
+    {
+      "name": "native_content_insufficient_is_observable",
+      "passed": true,
+      "detail": {
+        "processed": true,
+        "outcome": "content_insufficient",
+        "unrelated_messages_sent": 0
+      },
+      "seconds": 0.324
+    },
+    {
+      "name": "native_context_event",
+      "passed": true,
+      "detail": {
+        "active_context_events": 1
+      },
+      "seconds": 0.006
+    },
+    {
+      "name": "agent_installs_and_activates_real_git_plugin",
+      "passed": true,
+      "detail": {
+        "installed_service": "INSTALLED",
+        "install_tool_calls": 1
+      },
+      "seconds": 11.449
+    },
+    {
+      "name": "open_source_compaction_preserves_current_input",
+      "passed": true,
+      "detail": {
+        "summary_created": true,
+        "open_source_excluded_from_summary": true,
+        "old_facts_unchanged": true
+      },
+      "seconds": 28.097
+    },
+    {
+      "name": "restart_retains_vectors_delivery_and_installed_plugin",
+      "passed": true,
+      "detail": {
+        "duplicate_notifications": 0,
+        "persisted_training_vectors_unchanged": 12
+      },
+      "seconds": 1.002
+    }
+  ],
+  "summary": {
+    "passed": 8,
+    "total": 8
+  }
+}

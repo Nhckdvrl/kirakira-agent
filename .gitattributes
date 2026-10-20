@@ -6,3 +6,6 @@ plugins/ledger/admissions.py whitespace=-blank-at-eof
 plugins/ledger/bindings.py whitespace=-blank-at-eof
 plugins/scheduler/schedule.py whitespace=-blank-at-eof
 plugins/working_directory/contract.py whitespace=-blank-at-eof
+# Preserve unified-diff context and verbatim evaluation output.
+patches/*.patch -whitespace
+docs/operations/artifacts/**/*.log -whitespace

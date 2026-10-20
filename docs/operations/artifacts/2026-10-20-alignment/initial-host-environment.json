@@ -1,0 +1,4 @@
+{
+  "scope": "startup/integration failure preserved before correction",
+  "error": "RuntimeError: native provider failed: native-eval: 执行环境键由宿主固定，调用方不得提供: PATH"
+}

@@ -1,0 +1,5 @@
+{
+  "scope": "native-eval provider rejected the absolute artifact command before model setup",
+  "started": false,
+  "error": "RuntimeError: native provider failed: native-eval: managed process command 不得声明绝对 artifact 路径"
+}

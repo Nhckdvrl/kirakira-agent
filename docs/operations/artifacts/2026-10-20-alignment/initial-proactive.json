@@ -1,0 +1,67 @@
+{
+  "scope": "controlled producer scores, real native model/decision/delivery pipeline",
+  "cases": [
+    {
+      "name": "sdk_ingress_rejects_forged_source_and_naive_time",
+      "passed": true,
+      "detail": {
+        "forged_source_rejected": true,
+        "naive_datetime_rejected": true
+      },
+      "seconds": 0.002
+    },
+    {
+      "name": "real_remember_tool_is_consumed_with_turn",
+      "passed": false,
+      "error": "TimeoutError: ",
+      "seconds": 109.452
+    },
+    {
+      "name": "content_screen_investigate_share_delivery",
+      "passed": true,
+      "detail": {
+        "delivered": 1,
+        "screen_tool": true,
+        "share_tool": true,
+        "producer_preprocess_score": 0.999,
+        "score_is_controlled_not_quality_metric": true
+      },
+      "seconds": 55.643
+    },
+    {
+      "name": "producer_settlement_and_duplicate_ack",
+      "passed": true,
+      "detail": {
+        "pending_after_ack": 0,
+        "repeated_ack_is_idempotent": true
+      },
+      "seconds": 0.011
+    },
+    {
+      "name": "real_forget_feedback_preserves_source_fact",
+      "passed": true,
+      "detail": {
+        "published_forget_feedback": 1,
+        "original_message_preserved": true
+      },
+      "seconds": 11.569
+    }
+  ],
+  "models": {
+    "remote_chat_calls": 10,
+    "local_embedding_ledger_calls": 0,
+    "embedding_metering": "native model_calls records chat only; vectors verified separately",
+    "remote_states": {
+      "success": 10
+    },
+    "remote_endpoints": [
+      "https://api.stepfun.com/step_plan/v1"
+    ],
+    "input_tokens": 65549,
+    "output_tokens": 3754
+  },
+  "summary": {
+    "passed": 4,
+    "total": 5
+  }
+}

@@ -24,6 +24,7 @@ HEADLESS = frozenset({
     "managed_processes", "mcp", "commands", "projects", "models", "content",
     "context", "turn_projection", "sources", "tools", "tool_search", "assets",
     "working_directory", "vision", "skills", "shell", "files", "runtime_inspection",
+    "runtime_diagnostics", "plugin_update", "local-embedding", "event-ingress",
     "prompt", "compaction", "markdown_memory", "react", "conversation",
     "reply_program", "reply", "jobs", "eventmail", "delivery", "delivery_policy",
     "message_push", "programmatic", "akashic_sender", "scheduler", "subagent", "drift", "wake",
@@ -65,6 +66,8 @@ def initialize_workspace(workspace, *, profile="headless"):
 
 @asynccontextmanager
 async def runtime(workspace, *, extensions=()):
+    from .environment import select_host_python
+    select_host_python()
     workspace = Path(workspace).resolve()
     # Reject an old database before a native provider can acquire resources.
     import sqlite3
@@ -105,7 +108,10 @@ async def rpc(core, method, payload):
     from plugins.gateway.contract import RpcMethod
     root = core.plugin_manager.live_root
     operation = root.context.require(RpcMethod.key(method))
-    return await operation.invoke(operation.params.model_validate(payload), None)
+    result = await operation.invoke(operation.params.model_validate(payload), None)
+    if method == "models/command" and isinstance(result, dict) and result.get("status", 200) >= 400:
+        raise RuntimeError("Native model command rejected: " + str(result.get("body")))
+    return result
 
 
 async def configure_step_plan(core, key_file, *, reasoning_effort="low", max_output_tokens=4096):

@@ -1,0 +1,138 @@
+{
+  "upstream": "d8761bb9000a7be8701c65e049b0978879cc6889",
+  "scope": "controlled functional acceptance, not a public-dataset memory benchmark",
+  "cases": [
+    {
+      "name": "native_memory_learning",
+      "passed": true,
+      "detail": {
+        "complete_turns": 12,
+        "published_nodes": 12,
+        "raw_message_ids_bound": 24
+      },
+      "seconds": 232.881
+    },
+    {
+      "name": "memory_compare_r0_0",
+      "passed": false,
+      "error": "CompositionError: 授权需要当前 Context 的 OwnerCall 或生命周期借用",
+      "seconds": 0.0
+    },
+    {
+      "name": "memory_compare_r0_1",
+      "passed": false,
+      "error": "CompositionError: 授权需要当前 Context 的 OwnerCall 或生命周期借用",
+      "seconds": 0.0
+    },
+    {
+      "name": "memory_compare_r0_2",
+      "passed": false,
+      "error": "CompositionError: 授权需要当前 Context 的 OwnerCall 或生命周期借用",
+      "seconds": 0.0
+    },
+    {
+      "name": "memory_compare_r0_3",
+      "passed": false,
+      "error": "CompositionError: 授权需要当前 Context 的 OwnerCall 或生命周期借用",
+      "seconds": 0.0
+    },
+    {
+      "name": "memory_compare_r0_4",
+      "passed": false,
+      "error": "CompositionError: 授权需要当前 Context 的 OwnerCall 或生命周期借用",
+      "seconds": 0.0
+    },
+    {
+      "name": "memory_compare_r0_5",
+      "passed": false,
+      "error": "CompositionError: 授权需要当前 Context 的 OwnerCall 或生命周期借用",
+      "seconds": 0.0
+    },
+    {
+      "name": "native_runtime_diagnostics",
+      "passed": true,
+      "detail": {
+        "samples": 51,
+        "events": 0,
+        "stalls": 0
+      },
+      "seconds": 0.0
+    },
+    {
+      "name": "native_alert_delivery_and_duplicate",
+      "passed": false,
+      "error": "AssertionError: ",
+      "seconds": 5.826
+    },
+    {
+      "name": "native_content_insufficient_is_observable",
+      "passed": true,
+      "detail": {
+        "processed": true,
+        "outcome": "content_insufficient",
+        "unrelated_messages_sent": 0
+      },
+      "seconds": 0.271
+    },
+    {
+      "name": "native_context_event",
+      "passed": true,
+      "detail": {
+        "active_context_events": 1
+      },
+      "seconds": 0.007
+    },
+    {
+      "name": "agent_installs_and_activates_real_git_plugin",
+      "passed": true,
+      "detail": {
+        "installed_service": "INSTALLED",
+        "install_tool_calls": 1
+      },
+      "seconds": 17.203
+    },
+    {
+      "name": "open_source_compaction_preserves_current_input",
+      "passed": false,
+      "error": "CompositionError: 授权需要当前 Context 的 OwnerCall 或生命周期借用",
+      "seconds": 0.0
+    },
+    {
+      "name": "restart_retains_vectors_delivery_and_installed_plugin",
+      "passed": true,
+      "detail": {
+        "duplicate_notifications": 0,
+        "historical_vectors_regenerated": 0
+      },
+      "seconds": 1.004
+    }
+  ],
+  "memory": [],
+  "repeats": 1,
+  "before_restart": {
+    "notification_ids": [
+      "wake-notification:254d14f1974c31679f220dae257e2cda"
+    ],
+    "embedding_calls": 0
+  },
+  "models": {
+    "remote_chat_calls": 58,
+    "local_embedding_calls": 0,
+    "remote_states": {
+      "success": 58
+    },
+    "remote_endpoints": [
+      "https://api.stepfun.com/step_plan/v1"
+    ],
+    "input_tokens": 397894,
+    "output_tokens": 8838
+  },
+  "summary": {
+    "passed": 6,
+    "total": 14,
+    "memory_trials": 0,
+    "memory_questions": 6,
+    "median_case_seconds": 0.0
+  },
+  "memory_summary": {}
+}

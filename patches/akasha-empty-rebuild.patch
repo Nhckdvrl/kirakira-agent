@@ -1,0 +1,13 @@
+--- a/plugins/akasha/infrastructure/persistence.py
++++ b/plugins/akasha/infrastructure/persistence.py
+@@ -836,8 +836,8 @@
+     if row is None:
+         raise ValueError("memory snapshot is missing turn_count metadata")
+     count = int(row[0])
+-    if count <= 0:
+-        raise ValueError("memory snapshot turn_count must be positive")
++    if count < 0:
++        raise ValueError("memory snapshot turn_count must be nonnegative")
+     return count
+ 
+ 

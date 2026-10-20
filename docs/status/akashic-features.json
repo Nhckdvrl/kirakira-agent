@@ -1,6 +1,6 @@
 {
-  "upstream_commit": "e1628ddc8a33c2840e5b4558ff3b66af207eec2a",
-  "native_files": 924,
+  "upstream_commit": "d8761bb9000a7be8701c65e049b0978879cc6889",
+  "native_files": 930,
   "scope": "production implementation and architecture; external integrations need separate configuration and validation",
   "plugins": [
     {
@@ -140,6 +140,14 @@
       "pinned_files": 4
     },
     {
+      "id": "event-ingress",
+      "directory": "plugins/event_ingress",
+      "api_version": 3,
+      "upstream": false,
+      "headless_selected": true,
+      "pinned_files": 0
+    },
+    {
       "id": "eventmail",
       "directory": "plugins/eventmail",
       "api_version": 3,
@@ -202,6 +210,14 @@
       "upstream": true,
       "headless_selected": true,
       "pinned_files": 2
+    },
+    {
+      "id": "local-embedding",
+      "directory": "plugins/local_embedding",
+      "api_version": 3,
+      "upstream": false,
+      "headless_selected": true,
+      "pinned_files": 0
     },
     {
       "id": "managed_processes",
@@ -272,7 +288,7 @@
       "directory": "plugins/plugin_update",
       "api_version": 3,
       "upstream": true,
-      "headless_selected": false,
+      "headless_selected": true,
       "pinned_files": 5
     },
     {
@@ -328,7 +344,7 @@
       "directory": "plugins/runtime_diagnostics",
       "api_version": 3,
       "upstream": true,
-      "headless_selected": false,
+      "headless_selected": true,
       "pinned_files": 9
     },
     {

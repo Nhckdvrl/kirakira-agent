@@ -1,0 +1,141 @@
+{
+  "billing_surface": "step_plan",
+  "model": "step-5-preview",
+  "workspace": "/tmp/kirakira-gap-core1",
+  "cases": [
+    {
+      "name": "native_reply",
+      "passed": true,
+      "detail": {
+        "answer": "BASIC_a6a84e0b40"
+      },
+      "duration_s": 2.597
+    },
+    {
+      "name": "bound_file_roundtrip",
+      "passed": true,
+      "detail": {
+        "answer": "\u5199\u597d\u4e86\uff0c\u8bfb\u56de\u6765\u5185\u5bb9\u4e00\u81f4\uff0c\u5c31\u662f FILE_a6a84e0b40\u3002\n\ntoken\uff1aFILE_a6a84e0b40",
+        "facts": 6
+      },
+      "duration_s": 14.576
+    },
+    {
+      "name": "managed_process_mcp",
+      "passed": false,
+      "error": "AssertionError: ",
+      "duration_s": 6.37
+    },
+    {
+      "name": "native_shell",
+      "passed": true,
+      "detail": {
+        "answer": "\u5b9e\u9645 stdout\uff1a\n\n```\nSHELL_a6a84e0b40\n```\n\n\u9000\u51fa\u7801 0\uff0cprocess_status \u4e3a succeeded\u3002"
+      },
+      "duration_s": 5.389
+    },
+    {
+      "name": "tool_error_repair",
+      "passed": true,
+      "detail": {
+        "answer": "\u6587\u4ef6\u786e\u5b9e\u4e0d\u5b58\u5728\uff0c\u9519\u8bef\u662f\uff1a\u6587\u4ef6\u4e0d\u5b58\u5728\uff1a/tmp/kirakira-gap-core1/missing-a6a84e0b40\u3002\n\nnative_probe \u7684\u771f\u5b9e\u8fd4\u56de\uff1a\n\n{\"value\": \"REPAIRED_a6a84e0b40\", \"ready\": true, \"managed_pid\": 2973066, \"python\": [3, 10, 12]}\n\nready \u662f true\uff0c\u503c\u539f\u6837\u56de\u663e\u4e86\u3002"
+      },
+      "duration_s": 5.721
+    },
+    {
+      "name": "native_subagent",
+      "passed": true,
+      "detail": {
+        "answer": "\u5b50\u4efb\u52a1\u5df2\u5b8c\u6210\uff0c\u9000\u51fa\u539f\u56e0 completed\uff0c\u8fd4\u56de\u5185\u5bb9\uff1a\n\nCHILD_a6a84e0b40",
+        "child_sessions": [
+          "subagent:24f6037694ba48ed986da3e7ca8ecbf7"
+        ]
+      },
+      "duration_s": 10.736
+    },
+    {
+      "name": "driver_local_reload",
+      "passed": true,
+      "detail": {
+        "answer": "RELOADED_a6a84e0b40",
+        "same_root": true
+      },
+      "duration_s": 1.633
+    },
+    {
+      "name": "task_bound_steer_withdraw",
+      "passed": true,
+      "detail": {
+        "answer": "probe \u8fd4\u56de\u503c\uff1aORIGINAL_a6a84e0b40\uff0cready \u4e3a true\uff0cmanaged_pid 2973066\uff0cpython 3.10.12\u3002\n\nSTEER_a6a84e0b40",
+        "accepted_inputs": 2
+      },
+      "duration_s": 10.451
+    },
+    {
+      "name": "source_pause_resume_no_effect_replay",
+      "passed": true,
+      "detail": {
+        "answer": "\u5199\u597d\u4e86\u3002\n\n\u5185\u5bb9\uff1a\n\n`ONCE_a6a84e0b40`",
+        "write_effects": 1,
+        "tool_results": 1
+      },
+      "duration_s": 5.231
+    },
+    {
+      "name": "new_input_revokes_old_source_task",
+      "passed": true,
+      "detail": {
+        "answer": "\u7528\u521a\u624d\u90a3\u6b21 pending \u7684\u7ed3\u679c\uff0c\u6ca1\u518d\u8c03\u3002\n\nnative_probe \u8fd4\u56de\uff1a`FIRST_a6a84e0b40`\uff0cready \u4e3a true\uff0cmanaged_pid 2973066\uff0cpython [3, 10, 12]\u3002\n\n\u6807\u8bb0\uff1aSUPERSEDE_a6a84e0b40",
+        "effect_results": 1
+      },
+      "duration_s": 16.899
+    },
+    {
+      "name": "immutable_attachment_projection",
+      "passed": true,
+      "detail": {
+        "answer": "ATTACHMENT_a6a84e0b40",
+        "artifact_id": "260a421f2d404f25a39dead90549f134"
+      },
+      "duration_s": 2.596
+    },
+    {
+      "name": "scheduler_native_source_delivery",
+      "passed": true,
+      "detail": {
+        "answer": "TIMER_a6a84e0b40",
+        "created_jobs": 1,
+        "delivered_fires": 1,
+        "source": "scheduler:ca875450270b53621d89f209df6685bcb95454bf9b8a47587a7ef6830730a29d",
+        "parent_reasoning_effort": "medium"
+      },
+      "duration_s": 14.636
+    },
+    {
+      "name": "restart_reuses_native_history",
+      "passed": true,
+      "detail": {
+        "answer": "FILE_a6a84e0b40"
+      },
+      "duration_s": 6.994
+    }
+  ],
+  "summary": {
+    "passed": 12,
+    "total": 13,
+    "python": "3.14.6",
+    "recorded_business_model_calls": 28,
+    "model_states": {
+      "success": 28
+    },
+    "driver_ids": [
+      "step-plan"
+    ],
+    "endpoints": [
+      "https://api.stepfun.com/step_plan/v1"
+    ],
+    "input_tokens": 186324,
+    "output_tokens": 1604,
+    "coverage": "native Models business-call ledger; connection/model setup probes are additional calls"
+  }
+}

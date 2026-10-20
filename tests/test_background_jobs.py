@@ -169,7 +169,7 @@ def _shell_sources(sources: Path) -> None:
     provider = sources / "test_provider/plugin.py"
     provider.write_text(provider.read_text().replace(
         'ToolCall("provider-call", "start_job", {})',
-        'ToolCall("provider-call", "shell", {"command": "sleep 1; echo background-done", '
+        'ToolCall("provider-call", "shell", {"command": "sleep 1; echo background-done", "shell": "bash", "login": False, '
         '"description": "fixture background", "run_in_background": True, "yield_time_ms": 250})',
     ))
 

@@ -1,0 +1,50 @@
+{
+  "upstream": "d8761bb9000a7be8701c65e049b0978879cc6889",
+  "source_comparison": "../../../status/upstream-diff.json",
+  "unit_tests": {
+    "passed": 93,
+    "total": 93
+  },
+  "core": {
+    "passed": 13,
+    "total": 13
+  },
+  "alignment_functional": {
+    "passed": 8,
+    "total": 8
+  },
+  "proactive": {
+    "passed": 6,
+    "total": 6
+  },
+  "authenticated_workbench": true,
+  "memory_reader": {
+    "unique_questions": 6,
+    "repeats": 2,
+    "budget": 1024,
+    "dense_em": 1.0,
+    "akasha_em": 1.0,
+    "no_memory_em": 0.0
+  },
+  "implementation_sha256": {
+    "UPSTREAM.json": "a577005f3fc15799779864fca577ef54d2de01dfb7d97714bfe7a908dc298881",
+    "pyproject.toml": "0371f12e8f06b9ac48118ba5206dbc4debf2c1adccf87883d7bc450f2d23341c",
+    "package.json": "0d326503ea9e83bf810900383745253d84de9b1a9c06b44b6caf291ae163f516",
+    "kirakira_agent/cli.py": "647a180a8a451ff91b14ae7a14d5311cb5fd4bd54fe2e639dfbc982275472e99",
+    "kirakira_agent/runtime.py": "e4f9b7dba8ad3c59a8c87a97226de601da0b066cf8b315fab4b5653e44e6756e",
+    "kirakira_agent/environment.py": "95d84cac783f1160326b11ba4133d8ec721b02497857a84c304debb31c9b5cdb",
+    "kirakira_agent/setup.py": "965d281ee9acd6dcb6a029dbc8858490806ad635c13361b1dcfd79746c0f928e",
+    "plugins/local_embedding/driver.py": "33aa395d77bb9bb4b4d4b4cd1b95877136a30e43524052e252684a32e9b5d4ef",
+    "plugins/local_embedding/plugin.py": "eb2403718f67af2ee5385bcfd95ae53924e97e14c1f2e1b57f52d4d78f2bdc26",
+    "plugins/event_ingress/plugin.py": "f3ce2e721b96388bebc0f643ed6f46de6c2c626554b2631d6a5613e26b007a85",
+    "eval/native_alignment.py": "3d07ef4c636f5d7cba21d804aca6b41bd68cbe27f33a55b17dd5489748a61ea3",
+    "eval/native_proactive.py": "0da90ef68defe1815d94d7b4bde69d244258893fda4618d6cb4fbd6bc093e8ac",
+    "eval/native_web.py": "692294a48a68416bb591967685851ee68ad5774fb68f353726a89c5cf6197e63",
+    "tests/test_background_jobs.py": "4f5e2ed4de53f954be3c4d98a6b26a7188d9ec39e2f513222064558bc3e2d6fa"
+  },
+  "limitations": [
+    "controlled small corpus; no superiority over Dense or Mem0 established",
+    "Drift producer and external deployment/accounts remain separate work"
+  ],
+  "chat_ledger_calls": 455
+}

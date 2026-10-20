@@ -1,0 +1,10 @@
+{
+  "repository": "https://github.com/kachofugetsu09/akashic-agent",
+  "commit": "d8761bb9000a7be8701c65e049b0978879cc6889",
+  "source_directory": "scripts",
+  "files": {
+    "akasha_publish_replay_scenario.py": "b9dc289d55ceccf87fb36c68ea2a448d669ddee2de9d69369cb79ec08b48d147",
+    "akasha_cost_scenario.py": "f84892eec7c0972488fe2b8359f04bddc14abef314356a8f3057d46d67faa6ef",
+    "akasha_derived_recovery_scenario.py": "6c278f1c43dc0e37786761054896467edcc874844278f9cd41a1f5960c18d5b7"
+  }
+}

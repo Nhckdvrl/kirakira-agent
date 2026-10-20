@@ -1,0 +1,9 @@
+{
+  "scope": "actual wheel contents before namespace data fix",
+  "sdk_modules_present": true,
+  "native_bundles_present": false,
+  "assets_present": false,
+  "schema_present": false,
+  "full_runtime_startable": false,
+  "error": "wheel omitted native distribution bundles"
+}

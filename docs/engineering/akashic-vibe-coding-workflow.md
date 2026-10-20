@@ -72,6 +72,6 @@
 - 架构：`docs/architecture/overview.md`
 - 运行与迁移：`docs/handbook/start.md`
 - 上游来源：`UPSTREAM.json`
-- 确定性回归：`tests/`、`scripts/*_scenario.py`
-- 真实 Step5：`eval/native_runtime.py`、`eval/native_web.py`
-- 历史与当前结果：`docs/operations/evaluations/`、`docs/operations/artifacts/`
+- 确定性回归：`tests/`、`eval/upstream/`
+- 真实 Step5：`eval/native_runtime.py`、`eval/native_web.py`、`eval/native_alignment.py`、`eval/native_proactive.py`
+- 当前验证证据：`docs/operations/evaluations/`、`docs/operations/artifacts/`

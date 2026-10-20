@@ -1,2 +1,0 @@
-RECOVERED
-{"commit_before_kill": true, "recovery_no_duplicate": true, "four_rounds": true, "ledger_replaced_and_removed": true, "observer_unchanged": true, "rows_preserved": true, "write_during_drain": true, "live_admission_survives_drain": true, "admissions_released": true}

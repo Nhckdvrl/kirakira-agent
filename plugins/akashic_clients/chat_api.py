@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import gzip
 import hashlib
 import json
 from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
@@ -14,8 +15,10 @@ from fastapi import FastAPI, HTTPException, Query, Request, WebSocket
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from core.common.file_io import run_file_io
+
 from .static import current_chat_build, register_chat_assets
-from plugins.ui.contract import PluginUiSlot, read_message_rows, session_row
+from plugins.ui.contract import PluginUiSlot, accepts_gzip_header, read_message_rows, session_row
 from .navigation import NavigationPreferences, PinUpdate, session_pin_row
 from .notifications import NotificationFeed, NotificationRequest, notification_events
 from .read_marks import ReadMarks
@@ -67,6 +70,22 @@ class WebUiProvider(Protocol):
     async def bootstrap(self) -> bytes: ...
 
     async def state(self) -> dict[str, str | bool]: ...
+
+
+# bootstrap 载荷按目录身份缓存(plugins/ui/plugin.py);同一载荷的 gzip 结果也缓存。
+# plugin-ui 模块同样按内容哈希(sha256 参数即内容指纹)缓存压缩结果。
+# 容量覆盖当前目录的模块数量加 bootstrap,内容更新后旧条目随即被淘汰。
+_gzip_cache: dict[str, bytes] = {}
+
+
+def _gzip_cached(payload_sha256: str, payload: bytes) -> bytes:
+    body = _gzip_cache.get(payload_sha256)
+    if body is None:
+        body = gzip.compress(payload, compresslevel=6, mtime=0)
+        _gzip_cache[payload_sha256] = body
+        while len(_gzip_cache) > 24:
+            del _gzip_cache[next(iter(_gzip_cache))]
+    return body
 
 
 class ReadMarkUpdate(BaseModel):
@@ -199,17 +218,27 @@ def create_chat_app(
                 detail="Web 插件界面服务暂不可用",
             ) from error
         # 每次仍读取当前 snapshot；只有完整响应字节相同才复用浏览器缓存。
-        etag = f'"{hashlib.sha256(payload).hexdigest()}"'
+        payload_sha256 = hashlib.sha256(payload).hexdigest()
+        compressed = accepts_gzip_header(request.headers.get("accept-encoding", ""))
+        etag = f'"{payload_sha256}{"-gzip" if compressed else ""}"'
         headers = {
             "Cache-Control": "private, no-cache",
             "ETag": etag,
+            "Vary": "Accept-Encoding",
             "X-Content-Type-Options": "nosniff",
         }
         # 压缩代理可能把强 ETag 改为弱 ETag；GET 的条件校验按弱比较匹配。
         validators = request.headers.get("if-none-match", "").split(",")
         if any(value.strip().removeprefix("W/") in {"*", etag} for value in validators):
             return Response(status_code=304, headers=headers)
-        return Response(content=payload, media_type="application/json", headers=headers)
+        # 目录字节是 JSON 内嵌的压缩模块,线上约 1MB;gzip 后约剩 1/4。
+        # 强 ETag 区分编码；固定 gzip 时间戳，让相同载荷跨进程仍得到相同字节。
+        body = payload
+        if compressed:
+            # 首次压缩约 35ms,排水到文件 worker,不占用事件循环;命中缓存的线程往返可忽略。
+            body = await run_file_io(lambda: _gzip_cached(payload_sha256, payload))
+            headers["Content-Encoding"] = "gzip"
+        return Response(content=body, media_type="application/json", headers=headers)
 
     @app.get("/api/chat/web-ui/state")
     async def web_ui_state() -> Response:
@@ -358,6 +387,7 @@ def create_chat_app(
 
     @app.get("/api/chat/plugin-ui/asset")
     async def plugin_ui_asset(
+        request: Request,
         plugin_id: str = Query(..., min_length=1, max_length=128),
         plugin_revision: str = Query(..., min_length=1, max_length=128),
         kind: Literal["module", "stylesheet"] = Query(...),
@@ -381,10 +411,20 @@ def create_chat_app(
                 )
         except (PluginUiPluginUnavailable, PluginUiStaleRevision) as error:
             raise _plugin_ui_http_error(error) from error
+        headers = {
+            "Cache-Control": "private, max-age=31536000, immutable",
+            "Vary": "Accept-Encoding",
+        }
+        # 模块字节以 sha256 参数为内容指纹且 immutable;接受 gzip 时送缓存的压缩变体。
+        content = str(asset["content"])
+        body: str | bytes = content
+        if accepts_gzip_header(request.headers.get("accept-encoding", "")):
+            body = await run_file_io(lambda: _gzip_cached(sha256, content.encode("utf-8")))
+            headers["Content-Encoding"] = "gzip"
         return Response(
-            content=str(asset["content"]),
+            content=body,
             media_type="text/javascript" if kind == "module" else "text/css",
-            headers={"Cache-Control": "private, max-age=31536000, immutable"},
+            headers=headers,
         )
 
     @app.post("/api/chat/plugin-ui/query")

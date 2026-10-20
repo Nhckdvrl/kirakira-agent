@@ -3,7 +3,7 @@
 具备主动交互和长期记忆的多渠道 Agent Runtime。
 
 当前运行主干移植自 [Akashic Agent](https://github.com/kachofugetsu09/akashic-agent) 的
-`e1628ddc8a33c2840e5b4558ff3b66af207eec2a`，采用完整原生插件与执行架构。
+`d8761bb9000a7be8701c65e049b0978879cc6889`，采用完整原生插件与执行架构。
 来源、文件摘要及许可证见 [UPSTREAM.json](UPSTREAM.json)、[THIRD_PARTY.md](THIRD_PARTY.md)。
 
 消息接纳、来源任务、回复程序、模型、工具、记忆、主动交互、投递和界面由独立插件拥有。
@@ -25,6 +25,8 @@ uv run kirakira-agent gateway --config /absolute/path/to/workspace/config.toml -
 Step5 驱动固定使用 Step Token Plan 专用地址，不跟随重定向或回退其他计费路由。
 主配置只保留 `[runtime].workspace`，业务设置归各插件的数据目录。
 使用 `--profile web` 加入工作台，并运行 `npm ci && npm run build` 构建界面。
+
+本地记忆、主动事件入口与既有工作区升级见[记忆与主动交互](docs/handbook/memory-proactive.md)。
 
 旧 Kirakira 工作区需要显式导入新目录，原目录保留：
 
@@ -49,4 +51,4 @@ uv run kirakira-verify-online --key-file /private/path/step-plan.key --workspace
 局部更新、插话、暂停恢复、来源抢占、附件和重启。
 可选外部提供方需要单独配置；验证范围见[当前状态](docs/status/current.md)和[验证记录](docs/operations/verification.md)。
 
-[架构](docs/architecture/overview.md) · [文档目录](docs/INDEX.md) · [SDK](sdk/)
+[差距与实施清单](docs/status/akashic-gap.md) · [架构](docs/architecture/overview.md) · [文档目录](docs/INDEX.md) · [SDK](sdk/)

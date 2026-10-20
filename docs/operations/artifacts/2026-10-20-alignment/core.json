@@ -1,0 +1,144 @@
+{
+  "billing_surface": "step_plan",
+  "model": "step-5-preview",
+  "workspace": "/tmp/kirakira-gap-core5",
+  "cases": [
+    {
+      "name": "native_reply",
+      "passed": true,
+      "detail": {
+        "answer": "BASIC_f8c0ed5c0e"
+      },
+      "duration_s": 2.946
+    },
+    {
+      "name": "bound_file_roundtrip",
+      "passed": true,
+      "detail": {
+        "answer": "\u5199\u597d\u4e86\uff0c\u8bfb\u56de\u6765\u786e\u8ba4\u662f `FILE_f8c0ed5c0e`\u3002\n\nToken: `FILE_f8c0ed5c0e`",
+        "facts": 6
+      },
+      "duration_s": 9.632
+    },
+    {
+      "name": "managed_process_mcp",
+      "passed": true,
+      "detail": {
+        "answer": "\u8fd4\u56de\u4e86\uff1a\n\n- value: MCP_f8c0ed5c0e\n- managed_pid: 3032601\n- \u53e6\u5916\u8fd8\u5e26\u4e86 ready: true\uff0cpython \u7248\u672c 3.14.6\n\n\u5de5\u5177\u662f\u901a\u7684\u3002",
+        "results": 1
+      },
+      "duration_s": 6.251
+    },
+    {
+      "name": "native_shell",
+      "passed": true,
+      "detail": {
+        "answer": "stdout \u662f `SHELL_f8c0ed5c0e`\uff0cexit code 0\u3002"
+      },
+      "duration_s": 5.94
+    },
+    {
+      "name": "tool_error_repair",
+      "passed": true,
+      "detail": {
+        "answer": "\u8bfb\u6587\u4ef6\u5931\u8d25\u4e86\uff0c\u8def\u5f84\u786e\u5b9e\u4e0d\u5b58\u5728\uff1a`/tmp/kirakira-gap-core5/missing-f8c0ed5c0e`\uff0c\u9519\u8bef\u662f\"\u6587\u4ef6\u4e0d\u5b58\u5728\"\u3002\n\nnative_probe \u7684\u771f\u5b9e\u8fd4\u56de\uff1a\n\n```json\n{\"value\": \"REPAIRED_f8c0ed5c0e\", \"ready\": true, \"managed_pid\": 3032601, \"python\": [3, 14, 6]}\n```\n\n`ready` \u662f true\uff0c\u503c\u539f\u6837\u56de\u663e\u4e86\u3002"
+      },
+      "duration_s": 10.078
+    },
+    {
+      "name": "native_subagent",
+      "passed": true,
+      "detail": {
+        "answer": "\u5b50\u4efb\u52a1\u5df2\u5b8c\u6210\uff0c\u8fd4\u56de\u7ed3\u679c\u662f\uff1a\n\nCHILD_f8c0ed5c0e",
+        "child_sessions": [
+          "subagent:85f54eaff5b1450e8c6fc91dabecd424"
+        ]
+      },
+      "duration_s": 12.503
+    },
+    {
+      "name": "driver_local_reload",
+      "passed": true,
+      "detail": {
+        "answer": "RELOADED_f8c0ed5c0e",
+        "same_root": true
+      },
+      "duration_s": 3.251
+    },
+    {
+      "name": "task_bound_steer_withdraw",
+      "passed": true,
+      "detail": {
+        "answer": "Probe \u7ed3\u679c\uff1a\n\n```json\n{\"value\": \"ORIGINAL_f8c0ed5c0e\", \"ready\": true, \"managed_pid\": 3032601, \"python\": [3, 14, 6]}\n```\n\n\u5ef6\u8fdf 3 \u79d2\u540e\u8fd4\u56de\uff0c\u503c\u539f\u6837\u56de\u663e\uff0c\u670d\u52a1\u7aef ready\uff0cPython 3.14.6\u3002\n\nSTEER_f8c0ed5c0e",
+        "accepted_inputs": 2
+      },
+      "duration_s": 9.532
+    },
+    {
+      "name": "source_pause_resume_no_effect_replay",
+      "passed": true,
+      "detail": {
+        "answer": "\u5199\u597d\u4e86\uff0c\u5185\u5bb9\u5c31\u662f\uff1a\n\nONCE_f8c0ed5c0e\n\n\u53ea\u5199\u4e86\u4e00\u6b21\u3002",
+        "write_effects": 1,
+        "tool_results": 1
+      },
+      "duration_s": 6.976
+    },
+    {
+      "name": "new_input_revokes_old_source_task",
+      "passed": true,
+      "detail": {
+        "answer": "\u597d\uff0c\u4e0d\u91cd\u590d\u8c03\u4e86\uff0c\u7528\u521a\u624d\u90a3\u6b21\u7684\u7ed3\u679c\u3002\n\nprobe \u8fd4\u56de\uff1a\n- value: FIRST_f8c0ed5c0e\n- ready: true\n- managed_pid: 3032601\n- python: 3.14.6\n\n\u6309\u4f60\u8bf4\u7684\uff0c\u6700\u7ec8\u7b54\u6848\u5e26\u4e0a\uff1aSUPERSEDE_f8c0ed5c0e",
+        "effect_results": 1
+      },
+      "duration_s": 11.198
+    },
+    {
+      "name": "immutable_attachment_projection",
+      "passed": true,
+      "detail": {
+        "answer": "ATTACHMENT_f8c0ed5c0e",
+        "artifact_id": "b95881b7e91e45c79e86ad039c387d44"
+      },
+      "duration_s": 2.649
+    },
+    {
+      "name": "scheduler_native_source_delivery",
+      "passed": true,
+      "detail": {
+        "answer": "TIMER_f8c0ed5c0e",
+        "created_jobs": 1,
+        "delivered_fires": 1,
+        "source": "scheduler:d74baddcb203827f2575d7043cdcf0b32a95e9f600702afc182a41740092b710",
+        "parent_reasoning_effort": "medium"
+      },
+      "duration_s": 10.516
+    },
+    {
+      "name": "restart_reuses_native_history",
+      "passed": true,
+      "detail": {
+        "answer": "\u8bfb\u5230\u4e86\uff0c\u5185\u5bb9\u662f `FILE_f8c0ed5c0e`\u3002"
+      },
+      "duration_s": 4.562
+    }
+  ],
+  "summary": {
+    "passed": 13,
+    "total": 13,
+    "python": "3.14.6",
+    "recorded_business_model_calls": 29,
+    "model_states": {
+      "success": 29
+    },
+    "driver_ids": [
+      "step-plan"
+    ],
+    "endpoints": [
+      "https://api.stepfun.com/step_plan/v1"
+    ],
+    "input_tokens": 193064,
+    "output_tokens": 1548,
+    "coverage": "native Models business-call ledger; connection/model setup probes are additional calls"
+  }
+}

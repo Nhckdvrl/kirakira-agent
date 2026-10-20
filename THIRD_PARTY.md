@@ -1,6 +1,6 @@
 Kirakira imports the Akashic runtime from
 https://github.com/kachofugetsu09/akashic-agent at commit
-`e1628ddc8a33c2840e5b4558ff3b66af207eec2a` under the MIT license.
+`d8761bb9000a7be8701c65e049b0978879cc6889` under the MIT license.
 The original copyright notice and license are in [UPSTREAM-LICENSE](UPSTREAM-LICENSE).
 
 [UPSTREAM.json](UPSTREAM.json) records every imported production file and its
@@ -9,7 +9,12 @@ work. Kirakira-specific integration, migration and evaluation code is kept outsi
 those pinned files. Historical implementations and evaluation results remain
 available in Git history.
 
-One local zsh snapshot fix is recorded as a patch. The Akasha message UI asset
+A local zsh snapshot fix, the native zero-turn rebuild validation fix, and a
+distribution build staging hook are recorded as patches. The Akasha message UI asset
 is rebuilt from the pinned upstream frontend source and npm lock; its generated
 digest is recorded separately. The upstream CLI source is relocated to
 `kirakira_agent/_upstream_main.py` for the distribution entry point.
+
+The unmodified evaluation scenarios in `eval/upstream/` carry their own source
+manifest and use the same upstream license. They run against this distribution
+when passed its path with `--source`.

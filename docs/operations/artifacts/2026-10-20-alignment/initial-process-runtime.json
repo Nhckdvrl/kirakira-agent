@@ -1,0 +1,4 @@
+{
+  "scope": "startup/integration failure preserved before correction",
+  "error": "RuntimeError: native provider failed: native-eval: command 必须绑定制品 Python runtime: matches=[]"
+}

@@ -1,0 +1,80 @@
+{
+  "scope": "controlled producer scores and real HTTP evidence, native model/decision/delivery pipeline",
+  "max_output_tokens": 8192,
+  "cases": [
+    {
+      "name": "native_empty_graph_reindex",
+      "passed": true,
+      "detail": {
+        "zero_turn_rebuild_completed": true
+      },
+      "seconds": 0.049
+    },
+    {
+      "name": "sdk_ingress_rejects_forged_source_and_naive_time",
+      "passed": true,
+      "detail": {
+        "forged_source_rejected": true,
+        "naive_datetime_rejected": true
+      },
+      "seconds": 0.006
+    },
+    {
+      "name": "real_remember_tool_is_consumed_with_turn",
+      "passed": true,
+      "detail": {
+        "published_remember_feedback": 1
+      },
+      "seconds": 13.3
+    },
+    {
+      "name": "content_screen_investigate_share_delivery",
+      "passed": true,
+      "detail": {
+        "delivered": 1,
+        "screen_tool": true,
+        "share_tool": true,
+        "real_http_verifications": 1,
+        "source_link_preserved": true,
+        "producer_preprocess_score": 0.999,
+        "score_is_controlled_not_quality_metric": true
+      },
+      "seconds": 24.641
+    },
+    {
+      "name": "producer_settlement_and_duplicate_ack",
+      "passed": true,
+      "detail": {
+        "pending_after_ack": 0,
+        "repeated_ack_is_idempotent": true
+      },
+      "seconds": 0.011
+    },
+    {
+      "name": "real_forget_feedback_preserves_source_fact",
+      "passed": true,
+      "detail": {
+        "published_forget_feedback": 1,
+        "original_message_preserved": true
+      },
+      "seconds": 7.738
+    }
+  ],
+  "models": {
+    "remote_chat_calls": 11,
+    "local_embedding_ledger_calls": 0,
+    "embedding_metering": "native model_calls records chat only; vectors verified separately",
+    "remote_states": {
+      "success": 11
+    },
+    "remote_endpoints": [
+      "https://api.stepfun.com/step_plan/v1"
+    ],
+    "input_tokens": 66010,
+    "output_tokens": 1188
+  },
+  "summary": {
+    "passed": 6,
+    "total": 6
+  }
+}

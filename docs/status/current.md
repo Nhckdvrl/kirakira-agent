@@ -1,26 +1,35 @@
 # 当前状态
 
-更新：2026-10-20。
+更新：2026-10-20。原生架构固定 Akashic
+`d8761bb9000a7be8701c65e049b0978879cc6889`。
 
-运行架构采用 Akashic `e1628ddc8a33c2840e5b4558ff3b66af207eec2a` 的完整原生实现：
-宿主/插件管理、Context/Fiber/Effect/Task、Ledger、Sources、Reply/ReplyProgram、
-Context/Models/Tools、HostBridge/ManagedProcesses/MCP/Workloads，以及业务插件。
-`UPSTREAM.json` 固定 924 个生产文件，其中一处 zsh 运行修复有独立补丁记录。
+930 个本地固定生产文件覆盖 929 个唯一上游运行来源，来源无缺失、未登记的漂移为 0；zsh 修复、空图重建校验、发行构建 staging 和生成资产分别登记。
+70 个公开原生插件沿用同一个宿主与业务实现；Kirakira 增加 Step Token Plan、
+本地中文 embedding 和原生 EventMail 入口三个普通插件。
+源码校验、默认启用和功能验收的区别见[差距与实施清单](akashic-gap.md)。
 
-Kirakira 使用这一条主链。旧 ProgramStore、自建 admission、分离的 execution facts
-和兼容 SessionManager 已移除。Python 环境统一为项目 `.venv` 的 3.14.6。
+主链为 PluginManager / CompositionRoot / Context / Fiber / Effect / Task、
+Ledger / Sources / Reply / ReplyProgram / Models / Tools 与正式执行设施。
+Python 和 SDK 使用项目同一个 `.venv` / 3.14.6。
 
-[架构](../architecture/overview.md)说明实际所有权与调用链；
-[启动和迁移](../handbook/start.md)说明新配置格式、旧数据导入和 Step5。
-本地既有数据已迁入原生工作区并切换默认入口：112 条消息、22 个会话、2 条记忆和 6 个 Skill。
-原始数据和共享备份保留，详情见[迁移验证](../operations/evaluations/2026-10-20-workspace-migration.md)。
+新工作区默认启用诊断、插件安装、事件入口与本地模型 driver；既有工作区显式 upgrade。
+本地记忆模型和 Wake 投递目标分别通过正式配置接入，操作见
+[记忆与主动交互](../handbook/memory-proactive.md)。
 
-代码移植覆盖全部上游生产插件。外部模型账户、Telegram、容器 controller、浏览器等
-可选提供方需要各自配置；未执行的外部集成不能由源码摘要或离线测试推断为已验收。
-当前验证记录将明确列出实际通过范围，历史性能结果不作为本次架构完成的证明。
+公开 Drift 插件拥有提案状态和结算，当前仍缺持续生成空闲提案的生产者。
+Docker 一键发行、实际容器/设备、外部账号与公开规模 benchmark 仍需后续补齐，
+不能将全部源码存在理解为作者所有私有运行环境已复制。
 
-## 验证
+## 数据与验证
 
-当前完整测试 93 通过；原生架构移植时的最终 Step5 主链两轮 26/26、工作台与项目端到端 1/1。
-生产前端构建和 TypeScript 检查通过。原始失败、真实调用计数及范围见
-[本轮验证](../operations/evaluations/2026-10-20-native-architecture.md)。
+既有数据已迁入原生本机工作区：112 条原始消息、22 个会话、2 条 Markdown 记忆和 6 个 Skill。
+原始数据与私有备份保留；[迁移记录](../operations/evaluations/2026-10-20-workspace-migration.md)
+用于恢复该次数据切换。
+
+当前合同测试 93 项通过。在线功能、受控记忆对比、主动交互和原生恢复场景的
+具体分母、调用范围和原始结果见[当前验证](../operations/evaluations/2026-10-20-alignment.md)。
+
+实际工作区本轮已补算 118 条本地向量，由原生命令重建为 61 个闭段。
+本轮之前的 126 条事实逐条保持一致；74 份持久文件已有私有可恢复备份。
+Step5 主链 13/13、主动与反馈 6/6、认证工作台 1/1；受控记忆两种检索均为 12/12，
+不将其表述为相对其他系统的性能或质量优势。

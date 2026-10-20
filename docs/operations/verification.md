@@ -1,8 +1,8 @@
-# 验证记录
+# 验证入口
 
-当前运行架构与实际验证见 [原生 Runtime 验证](evaluations/2026-10-20-native-architecture.md)。
-完整合同测试 88 通过，最终 Step5 Token Plan 27/27，工作台构建和类型检查通过。
-[原始结果与计数范围](artifacts/2026-10-20-native-architecture/summary.json)。
+当前基线、方法、原始失败和最终结果统一记录在
+[原生对齐验证](evaluations/2026-10-20-alignment.md)。
+[差距清单](../status/akashic-gap.md)分别记录源码、启用和运行验收。
 
-历史验证保留在 `evaluations/` 与 `artifacts/`，只对应各自原始提交和当时的实现。
-旧架构、旧吞吐和旧测试计数不作为当前运行架构的证明。
+[迁移验证](evaluations/2026-10-20-workspace-migration.md)只描述其当时的数据切换与恢复点，
+不用于证明当前版本的功能、测试数或性能。退役架构和重复历史评测已删除，Git 保留历史。

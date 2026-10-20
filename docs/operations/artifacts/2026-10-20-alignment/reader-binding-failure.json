@@ -1,0 +1,184 @@
+{
+  "upstream": "d8761bb9000a7be8701c65e049b0978879cc6889",
+  "scope": "controlled functional acceptance, not a public-dataset memory benchmark",
+  "cases": [
+    {
+      "name": "native_memory_learning",
+      "passed": true,
+      "detail": {
+        "complete_turns": 12,
+        "published_nodes": 12,
+        "raw_message_ids_bound": 24
+      },
+      "seconds": 338.306
+    },
+    {
+      "name": "memory_compare_r0_0",
+      "passed": false,
+      "error": "ValueError: 推理强度必须绑定显式模型",
+      "seconds": 10.211
+    },
+    {
+      "name": "memory_compare_r0_1",
+      "passed": false,
+      "error": "ValueError: 推理强度必须绑定显式模型",
+      "seconds": 14.176
+    },
+    {
+      "name": "memory_compare_r0_2",
+      "passed": false,
+      "error": "ValueError: 推理强度必须绑定显式模型",
+      "seconds": 36.912
+    },
+    {
+      "name": "memory_compare_r0_3",
+      "passed": false,
+      "error": "ValueError: 推理强度必须绑定显式模型",
+      "seconds": 20.415
+    },
+    {
+      "name": "memory_compare_r0_4",
+      "passed": false,
+      "error": "ValueError: 推理强度必须绑定显式模型",
+      "seconds": 16.151
+    },
+    {
+      "name": "memory_compare_r0_5",
+      "passed": false,
+      "error": "ValueError: 推理强度必须绑定显式模型",
+      "seconds": 16.307
+    },
+    {
+      "name": "memory_compare_r1_0",
+      "passed": false,
+      "error": "ValueError: 推理强度必须绑定显式模型",
+      "seconds": 11.466
+    },
+    {
+      "name": "memory_compare_r1_1",
+      "passed": false,
+      "error": "ValueError: 推理强度必须绑定显式模型",
+      "seconds": 23.317
+    },
+    {
+      "name": "memory_compare_r1_2",
+      "passed": false,
+      "error": "ValueError: 推理强度必须绑定显式模型",
+      "seconds": 11.597
+    },
+    {
+      "name": "memory_compare_r1_3",
+      "passed": false,
+      "error": "ValueError: 推理强度必须绑定显式模型",
+      "seconds": 10.108
+    },
+    {
+      "name": "memory_compare_r1_4",
+      "passed": false,
+      "error": "ValueError: 推理强度必须绑定显式模型",
+      "seconds": 13.134
+    },
+    {
+      "name": "memory_compare_r1_5",
+      "passed": false,
+      "error": "ValueError: 推理强度必须绑定显式模型",
+      "seconds": 18.814
+    },
+    {
+      "name": "native_runtime_diagnostics",
+      "passed": true,
+      "detail": {
+        "samples": 110,
+        "events": 0,
+        "stalls": 0
+      },
+      "seconds": 0.001
+    },
+    {
+      "name": "native_alert_delivery_and_duplicate",
+      "passed": true,
+      "detail": {
+        "notifications": 1,
+        "duplicate_report_extra_messages": 0,
+        "receipt": "delivered"
+      },
+      "seconds": 5.797
+    },
+    {
+      "name": "native_content_insufficient_is_observable",
+      "passed": true,
+      "detail": {
+        "processed": true,
+        "outcome": "content_insufficient",
+        "unrelated_messages_sent": 0
+      },
+      "seconds": 0.324
+    },
+    {
+      "name": "native_context_event",
+      "passed": true,
+      "detail": {
+        "active_context_events": 1
+      },
+      "seconds": 0.006
+    },
+    {
+      "name": "agent_installs_and_activates_real_git_plugin",
+      "passed": true,
+      "detail": {
+        "installed_service": "INSTALLED",
+        "install_tool_calls": 1
+      },
+      "seconds": 11.449
+    },
+    {
+      "name": "open_source_compaction_preserves_current_input",
+      "passed": true,
+      "detail": {
+        "summary_created": true,
+        "open_source_excluded_from_summary": true,
+        "old_facts_unchanged": true
+      },
+      "seconds": 28.097
+    },
+    {
+      "name": "restart_retains_vectors_delivery_and_installed_plugin",
+      "passed": true,
+      "detail": {
+        "duplicate_notifications": 0,
+        "persisted_training_vectors_unchanged": 12
+      },
+      "seconds": 1.002
+    }
+  ],
+  "memory": [],
+  "repeats": 2,
+  "before_restart": {
+    "notification_ids": [
+      "wake-notification:943b85affa74d37a79ebeb145f33868d"
+    ],
+    "persisted_training_vectors": 12
+  },
+  "models": {
+    "remote_chat_calls": 107,
+    "local_embedding_ledger_calls": 0,
+    "embedding_metering": "native model_calls records chat only; vectors verified separately",
+    "remote_states": {
+      "success": 106,
+      "error": 1
+    },
+    "remote_endpoints": [
+      "https://api.stepfun.com/step_plan/v1"
+    ],
+    "input_tokens": 783946,
+    "output_tokens": 15851
+  },
+  "summary": {
+    "passed": 8,
+    "total": 20,
+    "memory_trials": 0,
+    "memory_questions": 12,
+    "median_case_seconds": 12.3655
+  },
+  "memory_summary": {}
+}

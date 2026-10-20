@@ -836,8 +836,8 @@ def memory_turn_count(memory_path: Path) -> int:
     if row is None:
         raise ValueError("memory snapshot is missing turn_count metadata")
     count = int(row[0])
-    if count <= 0:
-        raise ValueError("memory snapshot turn_count must be positive")
+    if count < 0:
+        raise ValueError("memory snapshot turn_count must be nonnegative")
     return count
 
 

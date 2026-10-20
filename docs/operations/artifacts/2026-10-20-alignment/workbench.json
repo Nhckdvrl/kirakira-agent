@@ -1,0 +1,21 @@
+{
+  "passed": true,
+  "project_scope": "p_f4659e4ef46c4a488bf9241fe33c0769",
+  "answer": "\u5199\u597d\u4e86\u3002`project-proof.txt` \u5728\u5f53\u524d\u5de5\u4f5c\u76ee\u5f55\uff0c\u5185\u5bb9\u662f `PROJECT_d54b6420f3`\uff0c18 \u5b57\u8282\u3002",
+  "project_file_verified": true,
+  "http": {
+    "dashboard": {
+      "status": 200,
+      "bytes": 4074,
+      "authenticated": true
+    },
+    "web-chat": {
+      "status": 200,
+      "bytes": 169,
+      "authenticated": true
+    }
+  },
+  "importmap_before_modules": true,
+  "plugin_ui_count": 10,
+  "fibers": 105
+}

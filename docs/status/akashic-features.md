@@ -21,6 +21,7 @@
 | delivery | Akashic | 是 |
 | delivery_policy | Akashic | 是 |
 | drift | Akashic | 是 |
+| event-ingress | Kirakira | 是 |
 | eventmail | Akashic | 是 |
 | files | Akashic | 是 |
 | gateway | Akashic | 是 |
@@ -29,6 +30,7 @@
 | jobs | Akashic | 是 |
 | ledger | Akashic | 是 |
 | ledger_invariants | Akashic | 是 |
+| local-embedding | Kirakira | 是 |
 | managed_processes | Akashic | 是 |
 | markdown_memory | Akashic | 是 |
 | mcp | Akashic | 是 |
@@ -37,14 +39,14 @@
 | onboarding | Akashic | 可选 |
 | openai-compatible | Akashic | 是 |
 | opencode-go | Akashic | 可选 |
-| plugin_update | Akashic | 可选 |
+| plugin_update | Akashic | 是 |
 | programmatic | Akashic | 是 |
 | projects | Akashic | 是 |
 | prompt | Akashic | 是 |
 | react | Akashic | 是 |
 | reply | Akashic | 是 |
 | reply_program | Akashic | 是 |
-| runtime_diagnostics | Akashic | 可选 |
+| runtime_diagnostics | Akashic | 是 |
 | runtime_inspection | Akashic | 是 |
 | scheduler | Akashic | 是 |
 | session_title | Akashic | 可选 |
