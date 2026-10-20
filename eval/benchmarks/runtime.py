@@ -296,6 +296,7 @@ async def verify(args):
                         "plugins/reply_program",
                         "plugins/sources",
                         "plugins/ledger",
+                        "plugins/turn_projection",
                         "plugins/jobs",
                         "plugins/delivery",
                         "plugins/reply",

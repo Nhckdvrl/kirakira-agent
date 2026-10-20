@@ -1,0 +1,16 @@
+[
+  {
+    "case": "timer_and_nested_notify_0",
+    "path": "/tmp/kirakira-message-ledger-20261020-proof/scheduler-workspace/timer_and_nested_notify_0/.kirakira/control.sock",
+    "path_bytes": 112,
+    "error": "OSError",
+    "detail": "AF_UNIX path too long"
+  },
+  {
+    "case": "channel_input_supersession_0",
+    "path": "/tmp/kirakira-message-ledger-20261020-proof/scheduler-workspace/channel_input_supersession_0/.kirakira/control.sock",
+    "path_bytes": 115,
+    "error": "OSError",
+    "detail": "AF_UNIX path too long"
+  }
+]

@@ -17,6 +17,8 @@ from infra.channels.host import ChannelHost
 from plugins.context.context_builder import ContextBuilder
 from plugins.conversation.service import ConversationService
 from plugins.ledger.manager import SessionManager
+from plugins.ledger.log import MessageLog
+from plugins.turn_projection.contract import TurnProjection
 from plugins.react.reasoner import ReactProgram
 from plugins.reply.follower import ReplyFollower
 from plugins.tools.hooks import ToolHook
@@ -36,6 +38,8 @@ class Application:
     reasoner: ReactProgram
     pipeline: ConversationService
     loop: ReplyFollower
+    message_log: MessageLog | None = None
+    turn_projection: TurnProjection | None = None
     channel_host: ChannelHost | None = None
     plugin_manager: Any | None = None
     mcp_watcher: Any | None = None

@@ -26,10 +26,12 @@ from plugins.scheduler import provider as scheduler_provider
 from plugins.sources import provider as source_provider
 from plugins.subagent import provider as subagent_provider
 from plugins.tools import provider as tool_provider
+from plugins.turn_projection import provider as turn_provider
 
 PROVIDERS = (
     ("transport", transport),
     ("ledger", ledger_provider),
+    ("turn_projection", turn_provider),
     ("jobs", jobs_provider),
     ("projects", project_provider),
     ("models", model_provider),
@@ -76,7 +78,7 @@ def application_fields(root):
     from plugins.conversation.contract import CONVERSATION
     from plugins.default_memory.contract import MEMORY, MEMORY_SERVICES
     from plugins.extensions.contract import EXTENSION_WATCHER, EXTENSIONS
-    from plugins.ledger.contract import SESSIONS
+    from plugins.ledger.contract import MESSAGES, SESSIONS
     from plugins.mcp.contract import MCP_WATCHER
     from plugins.proactive_flow.contract import DRIFT, PROACTIVE
     from plugins.react.contract import REACT
@@ -85,11 +87,14 @@ def application_fields(root):
     from plugins.scheduler.contract import SCHEDULER
     from plugins.subagent.contract import SUBAGENTS
     from plugins.tools.contract import TOOLS
+    from plugins.turn_projection.contract import TURN_PROJECTION
 
     contracts = {
         "bus": BUS,
         "event_bus": EVENTS,
         "session_manager": SESSIONS,
+        "message_log": MESSAGES,
+        "turn_projection": TURN_PROJECTION,
         "memory": MEMORY,
         "memory_services": MEMORY_SERVICES,
         "tools": TOOLS,

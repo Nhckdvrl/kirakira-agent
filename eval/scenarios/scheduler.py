@@ -505,7 +505,12 @@ async def verify(args):
                                 )
                     row.update(status="passed", evidence=evidence)
             except Exception as exc:
-                row.update(status="failed", error=type(exc).__name__, evidence=evidence)
+                row.update(
+                    status="failed",
+                    error=type(exc).__name__,
+                    detail=str(exc).replace(secret, "[redacted]")[:1000],
+                    evidence=evidence,
+                )
             row.update(seconds=time.monotonic() - started, requests=observed.requests)
             report["cases"].append(row)
             report["summary"] = summary(report["cases"])

@@ -249,6 +249,11 @@ METHOD_PARAMS: dict[str, ParamSpec] = {
             "metadata": Field(dict, required=False, default_factory=dict),
         }
     ),
+    "turn/steer": ParamSpec({**_THREAD_ID, "messageId": Field(str, min_length=1, max_length=128),
+                            "input": Field(str, min_length=1, max_length=1_048_576)}),
+    "turn/withdraw": ParamSpec({**_THREAD_ID, "messageId": Field(str, min_length=1, max_length=128)}),
+    "message/list": ParamSpec({**_THREAD_ID, "afterSeq": Field(int, required=False, default=-1, ge=-1)}),
+    "turn/project": ParamSpec({**_THREAD_ID, "source": Field(str, required=False, default="conversation", min_length=1)}),
     "turn/read": ParamSpec(
         {**_THREAD_ID, "turnId": Field(str, min_length=1, max_length=128)}
     ),

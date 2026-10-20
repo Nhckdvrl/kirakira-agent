@@ -1,0 +1,310 @@
+{"category": "steer_next_step", "repeat": 0, "status": "passed"}
+{"category": "steer_resume", "repeat": 0, "status": "passed"}
+{"category": "parallel_reads", "repeat": 0, "status": "passed"}
+{"category": "retry_after_effect", "repeat": 0, "status": "passed"}
+{"category": "deferred_search", "repeat": 0, "status": "passed"}
+{"category": "tool_error_repair", "repeat": 0, "status": "passed"}
+{"category": "files_restart", "repeat": 0, "status": "passed"}
+{"category": "stream_cancel", "repeat": 0, "status": "passed"}
+{"category": "compaction_restart", "repeat": 0, "status": "passed"}
+{"category": "provider_reload", "repeat": 0, "status": "passed"}
+{"category": "job_busy", "repeat": 0, "status": "passed"}
+{"category": "job_idle", "repeat": 0, "status": "passed"}
+{"category": "job_restart", "repeat": 0, "status": "passed"}
+{"category": "background_spawn", "repeat": 0, "status": "passed"}
+{"category": "job_resume", "repeat": 0, "status": "passed"}
+{"category": "job_failed", "repeat": 0, "status": "passed"}
+{"category": "jobs_reload", "repeat": 0, "status": "passed"}
+{"category": "steer_next_step", "repeat": 1, "status": "passed"}
+{"category": "steer_resume", "repeat": 1, "status": "passed"}
+{"category": "parallel_reads", "repeat": 1, "status": "passed"}
+plugin.operation.error
+Traceback (most recent call last):
+  File "/home/xiang/.local/share/uv/python/cpython-3.14.6-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py", line 488, in wait_for
+    return await fut
+           ^^^^^^^^^
+  File "/home/xiang/projects/kirakira-agent/plugins/mcp/client.py", line 80, in _connect
+    await self._request(
+    ...<7 lines>...
+    )
+  File "/home/xiang/projects/kirakira-agent/plugins/mcp/client.py", line 187, in _request
+    return await asyncio.wait_for(future, timeout=wait_timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xiang/.local/share/uv/python/cpython-3.14.6-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py", line 488, in wait_for
+    return await fut
+           ^^^^^^^^^
+asyncio.exceptions.CancelledError
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xiang/projects/kirakira-agent/agent/plugin_composition/context.py", line 1316, in _load
+    await result
+  File "/home/xiang/projects/kirakira-agent/agent/composition/root.py", line 189, in apply
+    await result
+  File "/home/xiang/projects/kirakira-agent/plugins/mcp/publisher.py", line 90, in apply
+    catalog = await self._host.prepare(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^
+        owner.generation_id, server_specs={name: spec}, required_tools={}
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/xiang/projects/kirakira-agent/plugins/mcp/host.py", line 69, in prepare
+    infos = await client.connect()
+            ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xiang/projects/kirakira-agent/plugins/mcp/client.py", line 58, in connect
+    await asyncio.wait_for(self._connect(), timeout=self.connect_timeout)
+  File "/home/xiang/.local/share/uv/python/cpython-3.14.6-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py", line 487, in wait_for
+    async with timeouts.timeout(timeout):
+               ~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/xiang/.local/share/uv/python/cpython-3.14.6-linux-x86_64-gnu/lib/python3.14/asyncio/timeouts.py", line 115, in __aexit__
+    raise TimeoutError from exc_val
+TimeoutError
+plugin.operation.error
+  + Exception Group Traceback (most recent call last):
+  |   File "/home/xiang/projects/kirakira-agent/agent/plugin_composition/context.py", line 1316, in _load
+  |     await result
+  |   File "/home/xiang/projects/kirakira-agent/agent/composition/root.py", line 189, in apply
+  |     await result
+  |   File "/home/xiang/projects/kirakira-agent/plugins/extensions/manager.py", line 358, in apply
+  |     await self.mcp_publisher.publish(
+  |         self._mcp_for(record), source="plugin:" + name
+  |     )
+  |   File "/home/xiang/projects/kirakira-agent/plugins/mcp/publisher.py", line 81, in publish
+  |     return await CompositionRoot._physical(publish())
+  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |   File "/home/xiang/projects/kirakira-agent/agent/composition/root.py", line 173, in _physical
+  |     await _join_cleanup(task)
+  |   File "/home/xiang/projects/kirakira-agent/agent/plugin_composition/effect.py", line 132, in _join_cleanup
+  |     await asyncio.shield(task)
+  |   File "/home/xiang/projects/kirakira-agent/plugins/mcp/publisher.py", line 78, in publish
+  |     raise ExceptionGroup("MCP connection update failed", errors)
+  | ExceptionGroup: MCP connection update failed (1 sub-exception)
+  +-+---------------- 1 ----------------
+    | Traceback (most recent call last):
+    |   File "/home/xiang/.local/share/uv/python/cpython-3.14.6-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py", line 488, in wait_for
+    |     return await fut
+    |            ^^^^^^^^^
+    |   File "/home/xiang/projects/kirakira-agent/plugins/mcp/client.py", line 80, in _connect
+    |     await self._request(
+    |     ...<7 lines>...
+    |     )
+    |   File "/home/xiang/projects/kirakira-agent/plugins/mcp/client.py", line 187, in _request
+    |     return await asyncio.wait_for(future, timeout=wait_timeout)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/home/xiang/.local/share/uv/python/cpython-3.14.6-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py", line 488, in wait_for
+    |     return await fut
+    |            ^^^^^^^^^
+    | asyncio.exceptions.CancelledError
+    |
+    | The above exception was the direct cause of the following exception:
+    |
+    | Traceback (most recent call last):
+    |   File "/home/xiang/projects/kirakira-agent/plugins/mcp/publisher.py", line 72, in publish
+    |     await self._open(name, desired, signature)
+    |   File "/home/xiang/projects/kirakira-agent/plugins/mcp/publisher.py", line 116, in _open
+    |     await self._root._mount(module, parent=self._parent)
+    |   File "/home/xiang/projects/kirakira-agent/agent/composition/root.py", line 227, in _mount
+    |     raise fiber.error or RuntimeError("activation failed: " + module.name)
+    |   File "/home/xiang/projects/kirakira-agent/agent/plugin_composition/context.py", line 1316, in _load
+    |     await result
+    |   File "/home/xiang/projects/kirakira-agent/agent/composition/root.py", line 189, in apply
+    |     await result
+    |   File "/home/xiang/projects/kirakira-agent/plugins/mcp/publisher.py", line 90, in apply
+    |     catalog = await self._host.prepare(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^
+    |         owner.generation_id, server_specs={name: spec}, required_tools={}
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     )
+    |     ^
+    |   File "/home/xiang/projects/kirakira-agent/plugins/mcp/host.py", line 69, in prepare
+    |     infos = await client.connect()
+    |             ^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/home/xiang/projects/kirakira-agent/plugins/mcp/client.py", line 58, in connect
+    |     await asyncio.wait_for(self._connect(), timeout=self.connect_timeout)
+    |   File "/home/xiang/.local/share/uv/python/cpython-3.14.6-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py", line 487, in wait_for
+    |     async with timeouts.timeout(timeout):
+    |                ~~~~~~~~~~~~~~~~^^^^^^^^^
+    |   File "/home/xiang/.local/share/uv/python/cpython-3.14.6-linux-x86_64-gnu/lib/python3.14/asyncio/timeouts.py", line 115, in __aexit__
+    |     raise TimeoutError from exc_val
+    | TimeoutError
+    +------------------------------------
+plugin activation failed: curated_feeds
+  + Exception Group Traceback (most recent call last):
+  |   File "/home/xiang/projects/kirakira-agent/plugins/extensions/manager.py", line 427, in reconcile_changed
+  |     await self.root._mount(
+  |         module, parent=self._activation_context
+  |     )
+  |   File "/home/xiang/projects/kirakira-agent/agent/composition/root.py", line 227, in _mount
+  |     raise fiber.error or RuntimeError("activation failed: " + module.name)
+  |   File "/home/xiang/projects/kirakira-agent/agent/plugin_composition/context.py", line 1316, in _load
+  |     await result
+  |   File "/home/xiang/projects/kirakira-agent/agent/composition/root.py", line 189, in apply
+  |     await result
+  |   File "/home/xiang/projects/kirakira-agent/plugins/extensions/manager.py", line 358, in apply
+  |     await self.mcp_publisher.publish(
+  |         self._mcp_for(record), source="plugin:" + name
+  |     )
+  |   File "/home/xiang/projects/kirakira-agent/plugins/mcp/publisher.py", line 81, in publish
+  |     return await CompositionRoot._physical(publish())
+  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |   File "/home/xiang/projects/kirakira-agent/agent/composition/root.py", line 173, in _physical
+  |     await _join_cleanup(task)
+  |   File "/home/xiang/projects/kirakira-agent/agent/plugin_composition/effect.py", line 132, in _join_cleanup
+  |     await asyncio.shield(task)
+  |   File "/home/xiang/projects/kirakira-agent/plugins/mcp/publisher.py", line 78, in publish
+  |     raise ExceptionGroup("MCP connection update failed", errors)
+  | ExceptionGroup: MCP connection update failed (1 sub-exception)
+  +-+---------------- 1 ----------------
+    | Traceback (most recent call last):
+    |   File "/home/xiang/.local/share/uv/python/cpython-3.14.6-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py", line 488, in wait_for
+    |     return await fut
+    |            ^^^^^^^^^
+    |   File "/home/xiang/projects/kirakira-agent/plugins/mcp/client.py", line 80, in _connect
+    |     await self._request(
+    |     ...<7 lines>...
+    |     )
+    |   File "/home/xiang/projects/kirakira-agent/plugins/mcp/client.py", line 187, in _request
+    |     return await asyncio.wait_for(future, timeout=wait_timeout)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/home/xiang/.local/share/uv/python/cpython-3.14.6-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py", line 488, in wait_for
+    |     return await fut
+    |            ^^^^^^^^^
+    | asyncio.exceptions.CancelledError
+    |
+    | The above exception was the direct cause of the following exception:
+    |
+    | Traceback (most recent call last):
+    |   File "/home/xiang/projects/kirakira-agent/plugins/mcp/publisher.py", line 72, in publish
+    |     await self._open(name, desired, signature)
+    |   File "/home/xiang/projects/kirakira-agent/plugins/mcp/publisher.py", line 116, in _open
+    |     await self._root._mount(module, parent=self._parent)
+    |   File "/home/xiang/projects/kirakira-agent/agent/composition/root.py", line 227, in _mount
+    |     raise fiber.error or RuntimeError("activation failed: " + module.name)
+    |   File "/home/xiang/projects/kirakira-agent/agent/plugin_composition/context.py", line 1316, in _load
+    |     await result
+    |   File "/home/xiang/projects/kirakira-agent/agent/composition/root.py", line 189, in apply
+    |     await result
+    |   File "/home/xiang/projects/kirakira-agent/plugins/mcp/publisher.py", line 90, in apply
+    |     catalog = await self._host.prepare(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^
+    |         owner.generation_id, server_specs={name: spec}, required_tools={}
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     )
+    |     ^
+    |   File "/home/xiang/projects/kirakira-agent/plugins/mcp/host.py", line 69, in prepare
+    |     infos = await client.connect()
+    |             ^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/home/xiang/projects/kirakira-agent/plugins/mcp/client.py", line 58, in connect
+    |     await asyncio.wait_for(self._connect(), timeout=self.connect_timeout)
+    |   File "/home/xiang/.local/share/uv/python/cpython-3.14.6-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py", line 487, in wait_for
+    |     async with timeouts.timeout(timeout):
+    |                ~~~~~~~~~~~~~~~~^^^^^^^^^
+    |   File "/home/xiang/.local/share/uv/python/cpython-3.14.6-linux-x86_64-gnu/lib/python3.14/asyncio/timeouts.py", line 115, in __aexit__
+    |     raise TimeoutError from exc_val
+    | TimeoutError
+    +------------------------------------
+{"category": "retry_after_effect", "repeat": 1, "status": "failed"}
+{"category": "deferred_search", "repeat": 1, "status": "passed"}
+{"category": "tool_error_repair", "repeat": 1, "status": "passed"}
+{"category": "files_restart", "repeat": 1, "status": "passed"}
+{"category": "stream_cancel", "repeat": 1, "status": "passed"}
+{"category": "compaction_restart", "repeat": 1, "status": "passed"}
+{"category": "provider_reload", "repeat": 1, "status": "passed"}
+{"category": "job_busy", "repeat": 1, "status": "passed"}
+{"category": "job_idle", "repeat": 1, "status": "passed"}
+{"category": "job_restart", "repeat": 1, "status": "passed"}
+{"category": "background_spawn", "repeat": 1, "status": "passed"}
+{"category": "job_resume", "repeat": 1, "status": "passed"}
+{"category": "job_failed", "repeat": 1, "status": "passed"}
+{"category": "jobs_reload", "repeat": 1, "status": "passed"}
+{
+  "passed": 33,
+  "total": 34,
+  "groups": {
+    "background_spawn": {
+      "passed": 2,
+      "total": 2
+    },
+    "compaction_restart": {
+      "passed": 2,
+      "total": 2
+    },
+    "deferred_search": {
+      "passed": 2,
+      "total": 2
+    },
+    "files_restart": {
+      "passed": 2,
+      "total": 2
+    },
+    "job_busy": {
+      "passed": 2,
+      "total": 2
+    },
+    "job_failed": {
+      "passed": 2,
+      "total": 2
+    },
+    "job_idle": {
+      "passed": 2,
+      "total": 2
+    },
+    "job_restart": {
+      "passed": 2,
+      "total": 2
+    },
+    "job_resume": {
+      "passed": 2,
+      "total": 2
+    },
+    "jobs_reload": {
+      "passed": 2,
+      "total": 2
+    },
+    "parallel_reads": {
+      "passed": 2,
+      "total": 2
+    },
+    "provider_reload": {
+      "passed": 2,
+      "total": 2
+    },
+    "retry_after_effect": {
+      "passed": 1,
+      "total": 2
+    },
+    "steer_next_step": {
+      "passed": 2,
+      "total": 2
+    },
+    "steer_resume": {
+      "passed": 2,
+      "total": 2
+    },
+    "stream_cancel": {
+      "passed": 2,
+      "total": 2
+    },
+    "tool_error_repair": {
+      "passed": 2,
+      "total": 2
+    }
+  },
+  "model_requests": 83,
+  "completed_requests": 76,
+  "usage": {
+    "prompt_tokens": 140168,
+    "completion_tokens": 10312,
+    "total_tokens": 150480,
+    "cached_tokens": 44544
+  },
+  "case_latency_seconds": {
+    "p50": 6.353767616674304,
+    "p95": 29.95075769163668
+  },
+  "model_latency_seconds": {
+    "p50": 1.746420156210661,
+    "p95": 7.194129372015595
+  }
+}

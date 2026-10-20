@@ -125,6 +125,7 @@ async def verify(args):
                         "plugins/conversation",
                         "plugins/delivery",
                         "plugins/ledger",
+                        "plugins/turn_projection",
                         "plugins/jobs",
                         "plugins/subagent",
                     )
@@ -132,6 +133,7 @@ async def verify(args):
                 ],
                 Path("plugins/tools/registry.py"),
                 Path("utils/async_tasks.py"),
+                Path("core/common/frozen_json.py"),
             ]
         },
         "limitations": [
@@ -211,7 +213,278 @@ async def verify(args):
                             **options,
                         )
 
-                    if category == "parallel_reads":
+                    if category == "steer_job_isolation":
+                        from bus.events import InboundMessage
+                        from plugins.control.client import ControlClient
+                        from plugins.ledger.message import Input
+
+                        ready, release = asyncio.Event(), asyncio.Event()
+                        job_started, follow_done = asyncio.Event(), asyncio.Event()
+                        original_hold = runtime.pipeline.admission.hold
+                        admissions = 0
+                        human, job_code = "HUMAN_" + nonce, "JOB_" + nonce
+
+                        @asynccontextmanager
+                        async def hold(key):
+                            nonlocal admissions
+                            admissions += 1
+                            first = admissions == 1
+                            async with original_hold(key):
+                                yield
+                            if first:
+                                await job_started.wait()
+
+                        class GatedClient:
+                            calls = 0
+                            human_answer = None
+
+                            async def call(self, streaming, args, kwargs):
+                                self.calls += 1
+                                current = self.calls
+                                if current == 2:
+                                    assert human not in json.dumps(args[0])
+                                    job_started.set()
+                                response = await (
+                                    observed.acomplete_stream(*args, **kwargs)
+                                    if streaming
+                                    else observed.acomplete(*args, **kwargs)
+                                )
+                                if current == 1:
+                                    ready.set()
+                                    await release.wait()
+                                if current == 3:
+                                    assert human in response.text
+                                    self.human_answer = response.text
+                                    follow_done.set()
+                                return response
+
+                            async def acomplete(self, *args, **kwargs):
+                                return await self.call(False, args, kwargs)
+
+                            async def acomplete_stream(self, *args, **kwargs):
+                                return await self.call(True, args, kwargs)
+
+                        gated = GatedClient()
+                        runtime.reasoner._model_io.model_client = gated
+                        runtime.pipeline.admission.hold = hold
+                        await runtime.control_server.start()
+                        steer_client = await ControlClient.connect(
+                            str(runtime.control_server.endpoint)
+                        )
+                        first = asyncio.create_task(
+                            ask("Reply with exactly FIRST_" + nonce)
+                        )
+                        job = None
+                        try:
+                            await asyncio.wait_for(ready.wait(), 90)
+                            receipt = await steer_client.request(
+                                "turn/steer",
+                                {
+                                    "threadId": "verify:main",
+                                    "messageId": "isolated-" + nonce,
+                                    "input": "Reply with exactly " + human,
+                                },
+                            )
+                            assert receipt["staged"]
+                            job = asyncio.create_task(
+                                runtime.pipeline.run(
+                                    InboundMessage(
+                                        "verify",
+                                        "job",
+                                        "main",
+                                        "Reply with exactly " + job_code,
+                                        metadata={
+                                            "source": "job:fixture",
+                                            "omit_user_turn": True,
+                                            "skip_post_memory": True,
+                                        },
+                                    ),
+                                    "verify:main",
+                                    dispatch_outbound=False,
+                                )
+                            )
+                            async with asyncio.timeout(10):
+                                while (
+                                    len(
+                                        runtime.pipeline.programs.store.list(
+                                            "verify:main"
+                                        )
+                                    )
+                                    < 2
+                                ):
+                                    await asyncio.sleep(0)
+                            release.set()
+                            await asyncio.wait_for(first, 90)
+                            result = await asyncio.wait_for(job, 90)
+                            assert (
+                                job_code in result.content
+                                and human not in result.content
+                            )
+                            await asyncio.wait_for(follow_done.wait(), 90)
+                            async with original_hold("verify:main"):
+                                messages = runtime.message_log.read("verify:main")
+                                inputs = [
+                                    m
+                                    for m in messages
+                                    if isinstance(m.body, Input)
+                                    and any(
+                                        p.kind == "text" and human in str(p.value)
+                                        for p in m.body.parts
+                                    )
+                                ]
+                                assert (
+                                    len(inputs) == 1
+                                    and inputs[0].source == "conversation"
+                                )
+                                assert (
+                                    len(
+                                        runtime.pipeline.programs.store.list(
+                                            "verify:main"
+                                        )
+                                    )
+                                    == 3
+                                )
+                                assert gated.calls == 3
+                                evidence.update(
+                                    user_input_source=inputs[0].source,
+                                    programs=3,
+                                    job_reply=result.content,
+                                    human_reply=gated.human_answer,
+                                    calls=gated.calls,
+                                )
+                        finally:
+                            release.set()
+                            job_started.set()
+                            if not first.done():
+                                first.cancel()
+                            if job is not None and not job.done():
+                                job.cancel()
+                            await asyncio.gather(
+                                first, *([job] if job else []), return_exceptions=True
+                            )
+                            await steer_client.close()
+                            runtime.pipeline.admission.hold = original_hold
+
+                    elif category in {"steer_next_step", "steer_resume"}:
+                        from plugins.control.client import ControlClient
+                        from plugins.ledger.message import Input
+                        from plugins.turn_projection.plugin import TurnProjection
+
+                        effects = []
+                        staged = asyncio.Event()
+                        await runtime.control_server.start()
+                        steer_client = await ControlClient.connect(
+                            str(runtime.control_server.endpoint)
+                        )
+                        steer_spec = ToolSpec(
+                            "read_code",
+                            "Fetch the verification code once",
+                            {
+                                "type": "object",
+                                "properties": {},
+                                "additionalProperties": False,
+                            },
+                        )
+
+                        async def read_code():
+                            effects.append(nonce)
+                            observed.first_delta.clear()
+                            for identity, text in (
+                                ("drop-" + nonce, "Answer WITHDRAWN_CODE"),
+                                (
+                                    "keep-" + nonce,
+                                    "Update: the tool is done. Reply with exactly "
+                                    + nonce
+                                    + ". Do not call any more tools.",
+                                ),
+                            ):
+                                receipt = await steer_client.request(
+                                    "turn/steer",
+                                    {
+                                        "threadId": "verify:main",
+                                        "messageId": identity,
+                                        "input": text,
+                                    },
+                                )
+                                assert (
+                                    receipt["staged"]
+                                    and receipt["messageId"] == identity
+                                )
+                            assert (
+                                await steer_client.request(
+                                    "turn/withdraw",
+                                    {
+                                        "threadId": "verify:main",
+                                        "messageId": "drop-" + nonce,
+                                    },
+                                )
+                            )["withdrawn"]
+                            staged.set()
+                            return nonce
+
+                        runtime.tools.register(steer_spec, read_code)
+                        prompt = "First call read_code exactly once. Then answer ORIGINAL_CODE unless a later user input changes the answer format."
+                        task = asyncio.create_task(ask(prompt))
+                        try:
+                            await asyncio.wait_for(staged.wait(), 90)
+                            if category == "steer_resume":
+                                await asyncio.wait_for(observed.first_delta.wait(), 90)
+                                task.cancel()
+                                try:
+                                    await task
+                                except asyncio.CancelledError:
+                                    pass
+                                else:
+                                    raise AssertionError(
+                                        "reply completed before interruption"
+                                    )
+                            else:
+                                result = await task
+                                assert (
+                                    nonce in result.content
+                                    and "ORIGINAL_CODE" not in result.content
+                                )
+                            programs = runtime.pipeline.programs.store.list(
+                                "verify:main"
+                            )
+                            assert (
+                                len(programs) == 1
+                                and len(programs[0]["steer_ids"]) == 1
+                            )
+                            assert effects == [nonce]
+                            messages = runtime.session_manager.message_log.read(
+                                "verify:main"
+                            )
+                            assert (
+                                sum(
+                                    isinstance(message.body, Input)
+                                    for message in messages
+                                )
+                                == 2
+                            )
+                            turns = TurnProjection().project(messages, "conversation")
+                            assert len(turns) == 1
+                            assert turns[0].status == (
+                                "open" if category == "steer_resume" else "complete"
+                            )
+                            assert all(
+                                "WITHDRAWN_CODE" not in str(message.body)
+                                for message in messages
+                            )
+                            evidence.update(
+                                program_id=programs[0]["id"],
+                                effects=len(effects),
+                                ledger_messages=len(messages),
+                                turn_status=turns[0].status,
+                            )
+                        finally:
+                            if not task.done():
+                                task.cancel()
+                            await asyncio.gather(task, return_exceptions=True)
+
+                            await steer_client.close()
+
+                    elif category == "parallel_reads":
                         active, peak = 0, 0
                         reads, writes = [], []
                         values = {i: (repetition + 3) * 100 + i * 7 for i in range(8)}
@@ -726,7 +999,34 @@ async def verify(args):
                         for item in rows
                     )
                     evidence["execution_statuses"] = [item["status"] for item in rows]
-                if category == "job_resume":
+                if category == "steer_resume":
+                    async with rig(work, observed) as restarted:
+
+                        def never_repeat():
+                            raise AssertionError("completed tool was replayed")
+
+                        restarted.tools.register(steer_spec, never_repeat)
+                        result = await restarted.process_direct(
+                            "",
+                            session_key="verify:main",
+                            resume_program_id=evidence["program_id"],
+                        )
+                        assert (
+                            nonce in result.content
+                            and "ORIGINAL_CODE" not in result.content
+                        )
+                        assert effects == [nonce]
+                        turns = TurnProjection().project(
+                            restarted.session_manager.message_log.read("verify:main"),
+                            "conversation",
+                        )
+                        assert len(turns) == 1 and turns[0].status == "complete"
+                        evidence.update(
+                            resumed_program_id=result.metadata["program_id"],
+                            final_turn_status=turns[0].status,
+                            replayed_effects=0,
+                        )
+                elif category == "job_resume":
                     async with rig(work, observed) as restarted:
                         result = await restarted.process_direct(
                             "",
@@ -844,6 +1144,9 @@ async def verify(args):
                 )
 
     categories = args.categories or (
+        "steer_job_isolation",
+        "steer_next_step",
+        "steer_resume",
         "parallel_reads",
         "retry_after_effect",
         "deferred_search",
@@ -884,6 +1187,9 @@ def main():
         "--categories",
         nargs="+",
         choices=(
+            "steer_job_isolation",
+            "steer_next_step",
+            "steer_resume",
             "parallel_reads",
             "retry_after_effect",
             "deferred_search",

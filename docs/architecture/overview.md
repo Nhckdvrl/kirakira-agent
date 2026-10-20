@@ -1,7 +1,7 @@
 # Runtime 架构
 
 Kirakira 使用 Akashic 的原生 Context / Fiber / Effect 内核。参考提交固定为
-[`6016befc682a037fbfc61180d39f17c219572ed6`](https://github.com/kachofugetsu09/akashic-agent/tree/6016befc682a037fbfc61180d39f17c219572ed6)。
+[`e1628ddc8a33c2840e5b4558ff3b66af207eec2a`](https://github.com/kachofugetsu09/akashic-agent/tree/e1628ddc8a33c2840e5b4558ff3b66af207eec2a)。
 `agent/plugin_composition/UPSTREAM.json` 逐文件记录来源和 SHA-256，包含原样移植的内核及其直接依赖；
 许可证随源码保留。`scripts/check_upstream_kernel.py` 在本地和 CI 检查字节一致性。
 
@@ -38,13 +38,19 @@ flowchart TD
     G --> H[Models / Tools / MCP]
     H --> G
     G --> I[Delivery 消息提交与程序结算]
+    B --> L[统一 Message 账本]
+    G --> L
+    I --> L
+    L --> T[TurnProjection 只读引用]
+    T --> P[控制协议和后续消费者]
     I --> J[渠道投递与回执]
     K[Wake / Drift / Scheduler / 子任务] --> G
 ```
 
 | Owner | 职责 |
 | --- | --- |
-| `plugins/ledger` | Session、append-only 消息、不可变输入、通用 owner 事务、消息向量缓存 |
+| `plugins/ledger` | Session、统一类型化 Message 日志、通用 owner 事务、兼容聊天历史与消息向量缓存 |
+| `plugins/turn_projection` | 从 Message 计算逻辑 Turn 的消息/工具结果引用，不保存正文或消费游标 |
 | `plugins/sources` | 来源 head/epoch、输入替代、会话准入与关闭排空 |
 | `plugins/conversation` | 接受请求、获取准入、激活程序、处理中断与终态 |
 | `plugins/reply_program` | 默认回复程序、稳定请求回执、工具效果记录、暂停和显式续跑 |
@@ -89,6 +95,27 @@ Session 最终消息和程序结算也在同一事务中完成；来源 epoch �
 上下文压缩是历史投影，不能删除原始消息。Akasha2 算法继续固定在独立的
 `d85b00c233686b68b082052b1b20123905aeab13`，本轮没有改动记忆算法或迁移旧库。
 
+## Message 与 Turn
+
+`ledger_messages` 在每个 Session 内分配严格递增的 `seq`；来源和作者独立，
+body 使用上游的 `Input / Output / ToolResult / Control`。工具结果的 `CallRef`
+指向已接纳 Output 的具体调用位置，拒绝跨会话/来源、重复结算及身份复用冲突。
+输入接纳、模型批次、效果结果分别与相应程序状态在同库事务中提交。程序记录保留
+lease、授权、执行意图和消息引用，正文由账本恢复；不能因引用缺失自动重做工具。
+
+旧 `ledger_inputs` 和程序内联正文在 owner 启动时事务迁移，输入与程序 ID 保持稳定；
+更早的非程序聊天及其工具链也导入 Message。旧聊天表、FTS、JSON 镜像和记忆发布序列
+仍是兼容面，尚未移除。显式历史删除同时清理关联账本与程序恢复引用，运行中的程序拒绝删除。
+
+`Steers` 由 Conversation owner 持有。暂存未接纳的文字可撤回，不创建第二份持久请求队列；
+下一次模型请求前，在当前程序授权下追加 Input，同轮已执行工具保留结果。模型最后一步已结束
+则接为普通后续请求，owner 退出会排空自有任务并撤回未接纳暂存。已接纳插话可跨重启续跑。
+同轮多输入尚未接上记忆消费者的一问一答合同，因此保留全部原文并跳过这类 Turn 的自动学习。
+
+控制协议提供 `turn/steer`、`turn/withdraw`、`message/list` 和 `turn/project`；
+`staged=true` 表示暂存成功，消息列表出现 Input 才表示耐久接纳。`staged=false` 时调用方
+仍持有原输入，可使用普通 `turn/start`。产品 UI 的完整交互还未接入。
+
 ## 热更新与范围
 
 替换 provider 先撤销旧激活并排空，再接入当前选择；依赖消费者由原生图重新激活，无关分支保持身份。
@@ -98,15 +125,16 @@ Session 最终消息和程序结算也在同一事务中完成；来源 epoch �
 
 ## 与当前上游的架构范围
 
-2026-10-20 核对最新 main `6016bef`：原生组合内核的 23 个固定文件及直接依赖全部逐字节一致，
-该次 main 的核心内核没有变化。另 10 个 Akasha2 固定文件仍按记忆自身版本检查。
+2026-10-20 核对 main `e1628dd`：原生组合内核的 23 个固定文件及直接依赖逐字节一致，
+包含 Task 中断升级语义。另 10 个 Akasha2 文件保留原版本；Message 值合同来自该版上游，
+TurnProjection 的合同和实现及 frozen_json 原样固定，共 37 项摘要检查。
 
 | 层 | 当前情况 | 尚未一致的合同 |
 | --- | --- | --- |
 | Context/Fiber/Effect | 原生内核一致，单一 Root 和 activation 负责依赖、实际调用和资源关闭 | 不由此推出整套宿主能力一致 |
 | 业务组合 | Ledger、Sources、Conversation、Reply Program、Context、ReAct、Models、Tools、MCP、Delivery 独立 owner；新增 Jobs | 材料服务和模型/内容等完整上游公共协议仍需逐步接入 |
-| 持久事实 | 不可变输入、消息、程序效果和 Jobs 结果在同一 Session 数据库；回复和结果消费原子提交 | 尚未全面移植上游统一 Message 的 Input/Output/Control/ToolResult 日志与投影 |
-| 同轮控制 | 程序停止、已知工具效果恢复、后台结果步间注入已接入 | 最新 main 的 steer 暂存/撤回/步间输入、latest 输入重试协议，Scheduler 工具边界让出 |
+| 持久事实 | Input/Output/ToolResult/Control 进入统一 Message 日志；ReplyProgram 保存消息引用，恢复从账本读正文；TurnProjection 原样接入 | 记忆和 compaction 仍消费兼容聊天表；附件、写入授权和完整源任务提交协议待补 |
+| 同轮控制 | steer 暂存/撤回/步间输入、末步后接续；停止与恢复写 Control，已知工具结果从消息引用恢复 | 渠道/工作台的 steer 交互、latest 输入重试公共协议、Scheduler 工具边界让出 |
 | 执行宿主 | 本地目录、Shell/PTY、MCP、子代理及资源排空已有 | 原生 Task、prepared 执行目标、HostBridge、Workload 与进程服务 |
 
 整体架构尚未完全对齐。完整功能范围仍是[70 个生产插件及 3 个跨目录面](../status/akashic-features.md)，

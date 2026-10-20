@@ -1,8 +1,8 @@
 """Production reply-program tests over real SQLite and actual tool effects."""
 
 import asyncio
-import threading
 import json
+import threading
 
 import pytest
 
@@ -862,4 +862,538 @@ async def test_deleting_active_session_is_rejected_and_completed_program_rows_ar
     finally:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
+        await runtime.stop_background([])
+
+
+@pytest.mark.asyncio
+async def test_message_facts_drive_recovery_and_turn_projection(tmp_path, monkeypatch):
+    from plugins.ledger.message import ContentPart, Input, Output, ToolResult
+    from plugins.reply_program.store import OWNER
+    from plugins.turn_projection.plugin import TurnProjection
+
+    runtime = await runtime_at(tmp_path, monkeypatch)
+    runtime.tools.register(
+        ToolSpec("fact_read", "read", {"type": "object"}), lambda: "immutable-result"
+    )
+
+    class Model:
+        calls = 0
+
+        async def acomplete(self, messages, *args, **kwargs):
+            self.calls += 1
+            return (
+                ModelResponse(tool_calls=[ToolCall("fact-1", "fact_read", {})])
+                if self.calls == 1
+                else ModelResponse(text="recorded")
+            )
+
+    model(runtime, Model())
+    try:
+        reply = await runtime.process_direct("read", session_key="test:journal")
+        identity = reply.metadata["program_id"]
+        store = runtime.pipeline.programs.store
+        raw = store.store.read(OWNER, "program:" + identity).value
+        assert "request" not in raw and "result" not in raw
+        assert "text" not in raw["batches"][0]
+        assert "result" not in next(iter(raw["effects"].values()))
+        messages = runtime.session_manager.message_log.read("test:journal")
+        assert [type(message.body) for message in messages] == [
+            Input,
+            Output,
+            ToolResult,
+            Output,
+        ]
+        assert messages[-1].message_id == reply.session_message_id
+        ledger = runtime.session_manager.message_log
+        with pytest.raises(TypeError):
+            messages[0].body.parts[0].value["sender"] = "changed"
+        before_head = ledger.head("test:journal")
+        with pytest.raises(StateConflict, match="already has"):
+            ledger.append("test:journal", "conversation", "tool", messages[2].body)
+        with pytest.raises(StateConflict, match="this source"):
+            ledger.append("other:session", "conversation", "tool", messages[2].body)
+        with pytest.raises(RuntimeError, match="rollback"):
+            with ledger.store.transaction() as tx:
+                ledger.append(
+                    "test:journal",
+                    "conversation",
+                    "assistant",
+                    Output((ContentPart("text", "not committed"),), "continue"),
+                    transaction=tx,
+                )
+                raise RuntimeError("rollback")
+        assert ledger.head("test:journal") == before_head
+        turns = TurnProjection().project(messages, "conversation")
+        assert len(turns) == 1 and turns[0].status == "complete"
+        assert turns[0].observations == (
+            (messages[2].body.call_ref, messages[2].message_id),
+        )
+        assert (
+            store.read(identity)["effects"][identity + ":0:0"]["result"]["content"]
+            == "immutable-result"
+        )
+        assert runtime.session_manager.delete_messages([reply.session_message_id]) == 1
+        assert runtime.session_manager.message_log.read("test:journal") == ()
+        with pytest.raises(ValueError, match="does not belong"):
+            store.read(identity)
+        runtime.session_manager.delete_session("test:journal")
+        assert runtime.session_manager.message_log.read("test:journal") == ()
+    finally:
+        await runtime.stop_background([])
+
+
+@pytest.mark.asyncio
+async def test_steer_accepts_at_next_step_withdraws_and_keeps_one_program(
+    tmp_path, monkeypatch
+):
+    from bus.events import InboundMessage
+    from plugins.ledger.message import Input
+    from plugins.turn_projection.plugin import TurnProjection
+
+    runtime = await runtime_at(tmp_path, monkeypatch)
+    entered, release = asyncio.Event(), asyncio.Event()
+    effects = []
+
+    async def gate():
+        effects.append("ran")
+        entered.set()
+        await release.wait()
+        return "finished"
+
+    runtime.tools.register(ToolSpec("steer_gate", "gate", {"type": "object"}), gate)
+
+    class Model:
+        calls = 0
+
+        async def acomplete(self, messages, *args, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                return ModelResponse(tool_calls=[ToolCall("gate-1", "steer_gate", {})])
+            assert [m["content"] for m in messages if m["role"] == "user"][-1].endswith(
+                "Use blue"
+            )
+            assert "withdraw me" not in json.dumps(messages)
+            return ModelResponse(text="blue")
+
+    model(runtime, Model())
+    task = asyncio.create_task(
+        runtime.process_direct("choose", session_key="test:steer")
+    )
+    try:
+        await asyncio.wait_for(entered.wait(), 5)
+
+        def message(identity, content):
+            return InboundMessage(
+                channel="test",
+                sender="human",
+                chat_id="steer",
+                content=content,
+                metadata={"client_request_id": identity},
+            )
+
+        assert (
+            runtime.pipeline.stage(message("drop", "withdraw me"), "test:steer")
+            == "drop"
+        )
+        assert runtime.pipeline.withdraw("test:steer", "drop")
+        assert (
+            runtime.pipeline.stage(message("blue", "Use blue"), "test:steer") == "blue"
+        )
+        assert len(runtime.session_manager.message_log.read("test:steer")) == 2
+        release.set()
+        reply = await task
+        assert effects == ["ran"]
+        programs = runtime.pipeline.programs.store.list("test:steer")
+        assert len(programs) == 1 and len(programs[0]["steer_ids"]) == 1
+        assert not runtime.pipeline.withdraw("test:steer", "blue")
+        messages = runtime.session_manager.message_log.read("test:steer")
+        assert sum(isinstance(message.body, Input) for message in messages) == 2
+        turns = TurnProjection().project(messages, "conversation")
+        assert len(turns) == 1 and turns[0].status == "complete"
+        assert reply.content == "blue"
+        assert [
+            m["content"]
+            for m in runtime.session_manager.get_or_create("test:steer").messages
+        ] == ["choose", "Use blue", "blue"]
+    finally:
+        release.set()
+        await asyncio.gather(task, return_exceptions=True)
+        await runtime.stop_background([])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cancel_first", [False, True])
+async def test_steer_after_last_step_becomes_owned_follow_up(
+    tmp_path, monkeypatch, cancel_first
+):
+    from bus.events import InboundMessage
+
+    runtime = await runtime_at(tmp_path, monkeypatch)
+    entered, release, followed = asyncio.Event(), asyncio.Event(), asyncio.Event()
+
+    class Model:
+        calls = 0
+
+        async def acomplete(self, messages, *args, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                entered.set()
+                await release.wait()
+                return ModelResponse(text="first answer")
+            assert messages[-1]["content"].endswith("next request")
+            followed.set()
+            return ModelResponse(text="follow-up answer")
+
+    model(runtime, Model())
+    task = asyncio.create_task(
+        runtime.process_direct("first", session_key="test:follow")
+    )
+    try:
+        await asyncio.wait_for(entered.wait(), 5)
+        message = InboundMessage(
+            channel="test", sender="human", chat_id="follow", content="next request"
+        )
+        assert runtime.pipeline.stage(message, "test:follow")
+        if cancel_first:
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        else:
+            release.set()
+            await task
+        await asyncio.wait_for(followed.wait(), 5)
+        # Wait on the same Session's actual admission to observe durable settlement.
+        async with runtime.pipeline.admission.hold("test:follow"):
+            statuses = [
+                p["status"] for p in runtime.pipeline.programs.store.list("test:follow")
+            ]
+            assert statuses == (
+                ["completed", "paused"] if cancel_first else ["completed", "completed"]
+            )
+    finally:
+        release.set()
+        await asyncio.gather(task, return_exceptions=True)
+        await runtime.stop_background([])
+
+
+@pytest.mark.asyncio
+async def test_legacy_inline_program_facts_migrate_without_changing_ids(
+    tmp_path, monkeypatch
+):
+    from plugins.ledger.owner_store import OwnerTransaction
+    from plugins.reply_program.store import OWNER
+    from plugins.turn_projection.plugin import TurnProjection
+
+    runtime = await runtime_at(tmp_path, monkeypatch)
+
+    class Model:
+        async def acomplete(self, *args, **kwargs):
+            return ModelResponse(text="legacy answer")
+
+    model(runtime, Model())
+    values = []
+    for content in ("legacy first", "legacy second"):
+        reply = await runtime.process_direct(content, session_key="test:migration")
+        values.append(
+            runtime.pipeline.programs.store.read(reply.metadata["program_id"])
+        )
+    await runtime.stop_background([])
+    from plugins.ledger.manager import SessionManager
+
+    sessions = SessionManager(tmp_path)
+    with sessions._index_lock:
+        sessions._index.execute("BEGIN IMMEDIATE")
+        tx = OwnerTransaction(sessions._index)
+        for value, input_id in zip(values, ("input_z", "input_a"), strict=True):
+            identity = value.pop("id")
+            value.pop("revision")
+            request = value.pop("request")
+            value.pop("result_message_id", None)
+            value.pop("journal_version", None)
+            value["input_id"] = input_id
+            row = tx.read(OWNER, "program:" + identity)
+            tx.save(OWNER, "program:" + identity, value, expected_version=row.version)
+            tx.save(
+                "ledger_inputs",
+                input_id,
+                {
+                    "session_key": "test:migration",
+                    "source": "conversation",
+                    "request": request,
+                    "accepted_at": value["created_at"],
+                },
+                expected_version=None,
+            )
+        sessions._index.execute("DELETE FROM ledger_messages")
+        sessions._index.commit()
+    sessions.close()
+    restarted = await runtime_at(tmp_path, monkeypatch)
+    try:
+        restored = restarted.pipeline.programs.store.read(identity, "test:migration")
+        assert restored["result"]["content"] == "legacy answer"
+        assert restored["input_id"] == "input_a"
+        assert restarted.pipeline.programs.store.store.scan("ledger_inputs") == []
+        messages = restarted.session_manager.message_log.read("test:migration")
+        assert [
+            message.body.parts[1].value
+            for message in messages
+            if message.message_id in {"input_a", "input_z"}
+        ] == ["legacy first", "legacy second"]
+        turns = TurnProjection().project(messages, "conversation")
+        assert [turn.status for turn in turns] == ["complete", "complete"]
+        assert all(len(turn.message_ids) == 2 for turn in turns)
+    finally:
+        await restarted.stop_background([])
+
+
+@pytest.mark.asyncio
+async def test_socket_steer_withdraw_and_typed_turn_readout(tmp_path, monkeypatch):
+    runtime = await runtime_at(tmp_path, monkeypatch)
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def gate():
+        entered.set()
+        await release.wait()
+        return "ready"
+
+    runtime.tools.register(ToolSpec("socket_gate", "gate", {"type": "object"}), gate)
+
+    class Model:
+        calls = 0
+
+        async def acomplete(self, messages, *args, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                return ModelResponse(
+                    tool_calls=[ToolCall("socket-gate", "socket_gate", {})]
+                )
+            assert any(
+                m["role"] == "user" and m["content"].endswith("socket correction")
+                for m in messages
+            )
+            assert "withdrawn socket text" not in str(messages)
+            return ModelResponse(text="corrected")
+
+    model(runtime, Model())
+    await runtime.control_server.start()
+    client = await ControlClient.connect(str(runtime.control_server.endpoint))
+    try:
+        thread = await client.start_thread()
+        key = thread["id"]
+        handle = await client.start_turn(key, "initial")
+        await asyncio.wait_for(entered.wait(), 5)
+        assert (
+            await client.request(
+                "turn/steer",
+                {
+                    "threadId": key,
+                    "messageId": "withdraw",
+                    "input": "withdrawn socket text",
+                },
+            )
+        )["staged"]
+        assert (
+            await client.request(
+                "turn/withdraw", {"threadId": key, "messageId": "withdraw"}
+            )
+        )["withdrawn"]
+        assert (
+            await client.request(
+                "turn/steer",
+                {"threadId": key, "messageId": "correct", "input": "socket correction"},
+            )
+        )["staged"]
+        before = await client.request("message/list", {"threadId": key})
+        assert [m["body"]["kind"] for m in before["items"]] == ["input", "output"]
+        release.set()
+        terminal = await asyncio.wait_for(handle.result(), 5)
+        assert terminal["status"] == "completed"
+        projected = await client.request("turn/project", {"threadId": key})
+        assert (
+            len(projected["items"]) == 1
+            and projected["items"][0]["status"] == "complete"
+        )
+        after = await client.request("message/list", {"threadId": key, "afterSeq": 1})
+        assert sum(m["body"]["kind"] == "input" for m in after["items"]) == 1
+        assert not (
+            await client.request(
+                "turn/withdraw", {"threadId": key, "messageId": "correct"}
+            )
+        )["withdrawn"]
+    finally:
+        release.set()
+        await client.close()
+        await runtime.stop_background([])
+
+
+def test_turn_projection_excludes_late_abandoned_results_and_other_sources(tmp_path):
+    from plugins.ledger.manager import SessionManager
+    from plugins.ledger.message import (
+        CallRef,
+        ContentPart,
+        Control,
+        Input,
+        Output,
+        ToolResult,
+    )
+    from plugins.ledger.message import ToolCall as LedgerCall
+    from plugins.turn_projection.plugin import TurnProjection
+
+    sessions = SessionManager(tmp_path)
+    ledger = sessions.message_log
+    try:
+        ledger.append(
+            "s", "conversation", "human", Input((ContentPart("text", "old"),))
+        )
+        call = ledger.append(
+            "s",
+            "conversation",
+            "assistant",
+            Output((LedgerCall("read", {}),), "continue"),
+        )
+        ledger.append("s", "conversation", "runtime", Control("abandon", call.seq))
+        ledger.append("s", "job:1", "assistant", Output((), "quiet"))
+        late = ledger.append(
+            "s",
+            "conversation",
+            "tool",
+            ToolResult(
+                CallRef(call.message_id, 0), "success", (ContentPart("text", "late"),)
+            ),
+        )
+        ledger.append(
+            "s", "conversation", "human", Input((ContentPart("text", "new"),))
+        )
+        final = ledger.append(
+            "s",
+            "conversation",
+            "assistant",
+            Output((ContentPart("text", "new answer"),), "complete"),
+        )
+        messages = ledger.read("s")
+        projection = TurnProjection()
+        turns = projection.project(messages, "conversation")
+        assert [turn.status for turn in turns] == ["abandoned", "complete"]
+        assert all(
+            not turn.observations and late.message_id not in turn.message_ids
+            for turn in turns
+        )
+        assert turns[-1].ending_message_id == final.message_id
+        assert projection.project(messages, "job:1")[0].status == "quiet"
+        with pytest.raises(ValueError, match="严格递增"):
+            projection.project(reversed(messages), "conversation")
+    finally:
+        sessions.close()
+
+
+@pytest.mark.asyncio
+async def test_pending_user_steer_is_not_adopted_by_an_intervening_job(
+    tmp_path, monkeypatch
+):
+    from contextlib import asynccontextmanager
+    from bus.events import InboundMessage
+    from plugins.ledger.message import Input
+
+    runtime = await runtime_at(tmp_path, monkeypatch)
+    entered, release = asyncio.Event(), asyncio.Event()
+    job_started, job_release, follow_done = (
+        asyncio.Event(),
+        asyncio.Event(),
+        asyncio.Event(),
+    )
+    original_hold = runtime.pipeline.admission.hold
+    admissions = 0
+
+    @asynccontextmanager
+    async def hold(key):
+        nonlocal admissions
+        admissions += 1
+        first = admissions == 1
+        async with original_hold(key):
+            yield
+        if first:
+            # Release the physical lock, then let an already queued job acquire
+            # it before the original run settles its volatile steering queue.
+            await job_started.wait()
+
+    runtime.pipeline.admission.hold = hold
+
+    class Model:
+        calls = 0
+
+        async def acomplete(self, messages, *args, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                entered.set()
+                await release.wait()
+                return ModelResponse(text="original answer")
+            if self.calls == 2:
+                assert not any(
+                    "human continuation" in str(message.get("content"))
+                    for message in messages
+                )
+                job_started.set()
+                await job_release.wait()
+                return ModelResponse(text="job report")
+            assert messages[-1]["content"].endswith("human continuation")
+            follow_done.set()
+            return ModelResponse(text="human answer")
+
+    model(runtime, Model())
+    first = asyncio.create_task(
+        runtime.process_direct("first", session_key="test:isolated")
+    )
+    job = None
+    try:
+        await asyncio.wait_for(entered.wait(), 5)
+        runtime.pipeline.stage(
+            InboundMessage("test", "human", "isolated", "human continuation"),
+            "test:isolated",
+        )
+        job = asyncio.create_task(
+            runtime.pipeline.run(
+                InboundMessage(
+                    "test",
+                    "job",
+                    "isolated",
+                    "job notification",
+                    metadata={
+                        "source": "job:fixture",
+                        "omit_user_turn": True,
+                        "skip_post_memory": True,
+                    },
+                ),
+                "test:isolated",
+                dispatch_outbound=False,
+            )
+        )
+        # Source acceptance happens before admission, so observing its queued
+        # program establishes the intended ordering without timing sleeps.
+        async with asyncio.timeout(5):
+            while len(runtime.pipeline.programs.store.list("test:isolated")) < 2:
+                await asyncio.sleep(0)
+        release.set()
+        await asyncio.wait_for(first, 5)
+        job_release.set()
+        await asyncio.wait_for(job, 5)
+        await asyncio.wait_for(follow_done.wait(), 5)
+        async with original_hold("test:isolated"):
+            messages = runtime.message_log.read("test:isolated")
+            accepted = [
+                message
+                for message in messages
+                if isinstance(message.body, Input)
+                and any(
+                    part.kind == "text" and part.value == "human continuation"
+                    for part in message.body.parts
+                )
+            ]
+            assert len(accepted) == 1 and accepted[0].source == "conversation"
+            assert len(runtime.pipeline.programs.store.list("test:isolated")) == 3
+    finally:
+        release.set()
+        job_started.set()
+        job_release.set()
+        await asyncio.gather(first, *([job] if job else []), return_exceptions=True)
+        runtime.pipeline.admission.hold = original_hold
         await runtime.stop_background([])

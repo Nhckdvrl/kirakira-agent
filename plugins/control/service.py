@@ -39,6 +39,9 @@ class ControlService:
         restart_coordinator: Any = None,
         workspace_services: Any = None,
         programs: Any = None,
+        conversation: Any = None,
+        messages: Any = None,
+        turn_projection: Any = None,
     ) -> None:
         self.runtime = runtime
         self.sessions = sessions
@@ -46,6 +49,9 @@ class ControlService:
         self.workspace = workspace.resolve()
         self.workspace_services = workspace_services
         self.programs = programs
+        self.conversation = conversation
+        self.messages = messages if messages is not None else sessions.message_log
+        self.turn_projection = turn_projection
         self._plugin_drain = plugin_drain
         self._consolidate = consolidate
         self._workspace_token = workspace_token
@@ -67,7 +73,7 @@ class ControlService:
             "capabilities": {
                 "reasoningEvents": False,
                 "turnInterrupt": True,
-                "turnSteer": False,
+                "turnSteer": self.conversation is not None,
             },
         }
 
@@ -82,6 +88,19 @@ class ControlService:
     async def workspace_request(self, method, params):
         from plugins.control.protocol.models import METHOD_PARAMS
         from utils.async_tasks import run_sync_drained
+
+        if method in {"turn/steer", "turn/withdraw", "message/list", "turn/project"}:
+            values = METHOD_PARAMS[method].validate(params)
+            if method == "turn/steer":
+                return await self.steer_turn(values)
+            if method == "turn/withdraw":
+                self._thread_record(values["threadId"])
+                return {
+                    "withdrawn": self.conversation.withdraw(
+                        values["threadId"], values["messageId"]
+                    )
+                }
+            return await run_sync_drained(self.message_call, method, values)
 
         if method == "thread/start":
             values = METHOD_PARAMS[method].validate(params)
@@ -132,6 +151,75 @@ class ControlService:
                 values["expectedRevision"],
             )
         raise ValueError("unknown program method")
+
+    def message_call(self, method, values):
+        from dataclasses import asdict
+        from plugins.ledger.message import body_to_dict
+        from plugins.turn_projection.plugin import TurnProjection
+
+        self._thread_record(values["threadId"])
+        messages = self.messages.read(
+            values["threadId"], after_seq=values.get("afterSeq", -1)
+        )
+        if method == "turn/project":
+            projection = (
+                self.turn_projection
+                if self.turn_projection is not None
+                else TurnProjection()
+            )
+            return {
+                "items": [
+                    asdict(turn)
+                    for turn in projection.project(messages, values["source"])
+                ]
+            }
+        return {
+            "items": [
+                {
+                    "messageId": message.message_id,
+                    "sessionId": message.session_id,
+                    "seq": message.seq,
+                    "recordedAt": message.recorded_at.isoformat(),
+                    "author": message.author,
+                    "source": message.source,
+                    "body": body_to_dict(message.body),
+                    "metadata": dict(message.metadata),
+                }
+                for message in messages
+            ]
+        }
+
+    async def steer_turn(self, values):
+        from bus.events import InboundMessage
+
+        key = values["threadId"]
+        self._thread_record(key)
+        if self.conversation is None:
+            raise ValueError("conversation steering is unavailable")
+
+        async def fallback(message):
+            await self.runtime.wait_thread_available(key)
+            return await self.start_turn(
+                key, message.content, {"client_request_id": values["messageId"]}
+            )
+
+        message = InboundMessage(
+            channel="control",
+            sender="control",
+            chat_id=key,
+            content=values["input"],
+            metadata={
+                "session_key_override": key,
+                "client_request_id": values["messageId"],
+                "_steer_fallback": fallback,
+            },
+        )
+        identity = self.conversation.stage(message, key)
+        if identity is None:
+            # A caller can use turn/start once idle; no success ACK for an
+            # unaccepted input and no detached, invisible control turn.
+            return {"staged": False, "messageId": values["messageId"]}
+        return {"staged": True, "messageId": identity}
 
     async def resume_program(self, thread_id, program_id):
         self._thread_record(thread_id)

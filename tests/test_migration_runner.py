@@ -17,6 +17,7 @@ PROJECT_MIGRATIONS = (
     "20261002_01_message_publications",
     "20261019_01_scheduler_v2",
     "20261019_02_workspace_owners",
+    "20261020_01_message_log",
 )
 
 

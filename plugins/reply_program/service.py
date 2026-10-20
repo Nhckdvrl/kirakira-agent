@@ -379,9 +379,10 @@ class DefaultReplyProgram:
                 )
 
             async def prepare_step():
+                inputs = binding.prepare_inputs() if binding is not None else []
                 if self.jobs is None or binding is None:
-                    return []
-                return [
+                    return inputs
+                return inputs + [
                     self.jobs.material(fact)
                     for fact in self.jobs.claim(
                         key, binding.identity, binding.value["source"]
@@ -587,6 +588,7 @@ class DefaultReplyProgram:
                         skip_post_memory=bool(item.metadata.get("skip_post_memory")),
                     )
                     ids.append(user["id"])
+            ids.extend(identity for identity in self.programs.store.project_steers(session, binding) if identity not in ids)
             partial = session.add_message(
                 "assistant",
                 "[interrupted]",

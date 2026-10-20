@@ -1,6 +1,6 @@
 # 当前状态
 
-更新日期：2026-10-20。主链参考核对至 Akashic `6016befc682a037fbfc61180d39f17c219572ed6`。
+更新日期：2026-10-20。主链参考核对至 Akashic `e1628ddc8a33c2840e5b4558ff3b66af207eec2a`。
 记忆移植继续固定 `d85b00c233686b68b082052b1b20123905aeab13`；算法、双通道与公开 cost 协议未变。
 实现合同见 [ADR0009](../decisions/0009-components-recovery-and-akasha2.md) 和
 [ADR0015](../decisions/0015-projects-and-session-directories.md)，实际运行结果见
@@ -25,9 +25,12 @@ Reply Program / Context / ReAct / Models / Tools / MCP / Delivery 分为普通 o
 
 ## 已落地
 
+- 最终 Step5 在线组 70/70、完整测试 720 项与 4 个 subtest 通过，两次千轮压力通过；数字、启动失败与性能回退见[本轮记录](../operations/evaluations/2026-10-20-message-ledger.md)。
+- 统一 Message 账本、原样 TurnProjection、原生 capability 接线，以及 steer 暂存/撤回/步间接纳和重启续跑；见[本轮记录](../operations/evaluations/2026-10-20-message-ledger.md)。
+
 - 独立 Jobs owner：后台结果持久发布、逐模型步领取、空闲原会话唤醒；消费与最终消息/程序同事务，取消与重启可回放。
 - 子代理不再直接排入合成用户消息，结果按原会话查询；移除重复的 `subagent-runs/result.json` 写入。
-- 当前主链、Jobs、Scheduler、项目/目录、Wake/Drift 最终 Step5 场景 64/64；中间失败及量化结果见[报告](../operations/evaluations/2026-10-20-background-results.md)。
+- 上一轮主链、Jobs、Scheduler、项目/目录、Wake/Drift Step5 场景 64/64；中间失败及量化结果见[报告](../operations/evaluations/2026-10-20-background-results.md)。
 - Projects 与 Session cwd 接入：稳定项目 ID、改名/归档、一次性目录默认值、创建事务快照、独立切换与回执/CAS。
 - 文件、Shell、子任务与实时 AGENTS 共用目录 owner；独占切换批次、现有进程 cwd 固定、旧会话不回填。
 - Web 项目/目录页面、项目聊天和控制协议共用同一服务及 admission；目录丢失不回退或自动重建。
@@ -66,7 +69,7 @@ Session SQLite append-only、上下文投影与 compaction ledger、Shell/PTY/st
 
 | 顺序 | 功能链 | 完成要求 |
 | --- | --- | --- |
-| 1 | 消息、来源与回复程序 | 在已接入的后台结果步间注入之上，补统一持久 Message/附件、steer 暂存/撤回、latest 输入重试及完整程序合同 |
+| 1 | 消息、来源与回复程序 | Message、TurnProjection 和 steer 已接入；继续补附件、原生来源任务写权、latest 重试及多输入记忆消费，完成渠道/工作台交互 |
 | 2 | 项目与执行宿主 | 在已接入的本地 Project/cwd 之上，补 prepared 目标、HostBridge、进程/Workload 生命周期 |
 | 3 | 双主动与投递 | Eventmail、Wake/Drift 完整状态链，Scheduler 工具边界让出，按固定来源投递和核对 |
 | 4 | 扩展与模型 | 插件发布/更新回执、资源提供方、UI 与检查能力；模型目录、角色、启停、引导及全部列出的驱动 |
@@ -76,7 +79,7 @@ Session SQLite append-only、上下文投影与 compaction ledger、Shell/PTY/st
 记忆保留当前实现与证据，继续列在全量范围内；本阶段优先补非记忆功能。
 整体吞吐、事件循环 lag 和记忆吞吐优化暂缓，历史性能结果保留，不作为功能验收替代品。
 
-本轮重构后复测发现本地主链吞吐回退：同机千轮中位数 87.19→54.15 轮/s（−37.90%）。
+前一轮重构后复测发现本地主链吞吐回退：同机千轮中位数 87.19→54.15 轮/s（−37.90%）。
 已接入功能的正确性合同通过，性能尚未恢复；见[性能复核](../operations/evaluations/2026-10-20-runtime-parity.md)。
 
 ## 尚未完成的合同
@@ -101,3 +104,6 @@ Session SQLite append-only、上下文投影与 compaction ledger、Shell/PTY/st
 cutover 后的消息，旧历史需显式重建；恢复要求原始消息仍在且向量空间一致。
 旧 v1 图继续可用，但不能由新增消息的事务收据反推全部旧历史具有重放证明。
 主动投递保持[去重窗口语义](../decisions/0004-delivery-dedup.md)，不宣称 exactly-once。
+
+本轮 Message 账本重构后，两次千轮采样为 24.86/25.71 轮/s，中位数 25.28，尚未恢复前一轮水平；
+见 [Message 验证记录](../operations/evaluations/2026-10-20-message-ledger.md)。

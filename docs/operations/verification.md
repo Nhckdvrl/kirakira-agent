@@ -33,6 +33,8 @@ Step5 Token Plan 三批 **38/38** 场景通过；最终批包含后台服务中�
 - [截至 2026-10-19 的验证记录](../archive/2026-10/verification-through-2026-10-19.md)
 - [历史专项报告](./evaluations/)与 `eval/results/` 保留原始结果及来源摘要。
 
+最新消息主链重构与原始证据见 [Message 账本与插话验证](./evaluations/2026-10-20-message-ledger.md)。
+
 ## 常用命令
 
 ```bash

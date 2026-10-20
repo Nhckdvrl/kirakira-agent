@@ -1,6 +1,6 @@
 {
   "repository": "https://github.com/kachofugetsu09/akashic-agent",
-  "commit": "6016befc682a037fbfc61180d39f17c219572ed6",
+  "commit": "e1628ddc8a33c2840e5b4558ff3b66af207eec2a",
   "files": {
     "agent/plugin_composition/__init__.py": "71afa64cc67c60956ec6383396ea61fe0febcb2d567e7039fde32186bccfbeda",
     "agent/plugin_composition/config_input.py": "ffd823aac104cdef16b4948d017bcd83fab60fe4c383b2e3e39e59e5629f2e10",
@@ -19,7 +19,7 @@
     "agent/plugin_composition/requests.py": "f5a2b76e1c90ce0295397421ec7eb667dc688adb122e83292be1bcd115a6127b",
     "agent/plugin_composition/runtime_catalog.py": "9dd3065a66f884f998ce6a804618d7a38a64556e8d99e1ce4874d2f7e8112e47",
     "agent/plugin_composition/runtime_lifecycle.py": "a4076bbf81849b53b181dfaec6d98f8cff78e027cd7599d6fffadec86ba4cd8a",
-    "agent/plugin_composition/tasks.py": "622dd36270b31467d9702ef8862d7cddc47641b6a670e6ad1685f0ef93839fb7",
+    "agent/plugin_composition/tasks.py": "a9636a113d7e8f2759e720cc7f443dc04d0ebd79290eda16a23928a4d8a674d6",
     "agent/restart.py": "9cf13ce8e5b3285129e4b2f096da8993e23789133b5a5897631c725e1f61c108",
     "agent/plugins/files.py": "1eddd4302d06de9486d564960c98a39c573c0f2896e98fa05f046093e1d9c38d",
     "core/error_context.py": "85ea7a29a598d281bb3c47d1d0b379ef3a3b7f659c609f4ada49764a5a0e5381",

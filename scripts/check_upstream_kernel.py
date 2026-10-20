@@ -1,4 +1,4 @@
-"""Verify that the native composition kernel and Akasha2 remain byte-identical."""
+"""Verify pinned kernel, Akasha2, Message values and TurnProjection digests."""
 
 import hashlib
 import json
@@ -12,6 +12,7 @@ def verify():
     for directory, relative in (
         ("agent/plugin_composition", False),
         ("plugins/akasha2", True),
+        ("plugins/ledger", False),
     ):
         base = ROOT / directory
         pin = json.loads((base / "UPSTREAM.json").read_text())

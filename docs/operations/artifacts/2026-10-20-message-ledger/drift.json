@@ -1,0 +1,94 @@
+{
+  "endpoint": "https://api.stepfun.com/step_plan/v1",
+  "model": "step-5-preview",
+  "billing_surface": "step_plan",
+  "reasoning_effort": "medium",
+  "cases": [
+    {
+      "name": "silent",
+      "status": "passed",
+      "proposal_status": "completed",
+      "received": [],
+      "runs": [
+        {
+          "skill": "verify",
+          "run_at": "2026-10-20T00:10:37.542106+00:00",
+          "status": "completed",
+          "briefing": "后台小任务已完成：本地后台程序处于静默运行状态，已按技能指南将进度记录为 \"verified silent work\"（未发送任何主动消息），确认空闲模式工作正常，可随时结束。",
+          "message_result": "silent"
+        }
+      ],
+      "executions": [
+        {
+          "scope": "verify",
+          "status": "terminal_tool"
+        }
+      ]
+    },
+    {
+      "name": "delivered",
+      "status": "passed",
+      "proposal_status": "completed",
+      "received": [
+        "KIRAKIRA_DRIFT_OK"
+      ],
+      "runs": [
+        {
+          "skill": "verify",
+          "run_at": "2026-10-20T00:10:44.782673+00:00",
+          "status": "completed",
+          "briefing": "Drift 空闲模式后台验证任务已完成：向待发送队列推送了 KIRAKIRA_DRIFT_OK 消息，未使用任何 shell/file/web/scheduling/network 工具，符合工具约束。",
+          "message_result": "sent"
+        }
+      ],
+      "executions": [
+        {
+          "scope": "verify",
+          "status": "terminal_tool"
+        }
+      ]
+    },
+    {
+      "name": "superseded",
+      "status": "passed",
+      "proposal_status": "superseded",
+      "received": [],
+      "runs": [
+        {
+          "skill": "verify",
+          "run_at": "2026-10-20T00:10:55.214862+00:00",
+          "status": "paused",
+          "briefing": "conversation superseded this run",
+          "message_result": "silent"
+        }
+      ],
+      "executions": [
+        {
+          "scope": "verify",
+          "status": "terminal_tool"
+        }
+      ]
+    },
+    {
+      "name": "paused",
+      "status": "passed",
+      "proposal_status": "paused",
+      "received": [],
+      "runs": [
+        {
+          "skill": "verify",
+          "run_at": "2026-10-20T00:11:05.237418+00:00",
+          "status": "paused",
+          "briefing": "needs next pass",
+          "message_result": "silent"
+        }
+      ],
+      "executions": [
+        {
+          "scope": "verify",
+          "status": "terminal_tool"
+        }
+      ]
+    }
+  ]
+}

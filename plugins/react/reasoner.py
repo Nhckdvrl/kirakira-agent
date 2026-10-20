@@ -276,12 +276,20 @@ class ReactProgram:
                 compactor.acknowledge_committed_checkpoint(row.generation)
             return prepared
 
+        prepared_ids = set()
         while iteration_limit <= 0 or iteration < iteration_limit:
             if program is not None:
                 program.ensure_current()
             if prepare_step is not None:
                 for material in await prepare_step():
-                    if material not in messages:
+                    material = dict(material)
+                    identity = material.pop("_ledger_message_id", None)
+                    if identity is not None:
+                        if identity in prepared_ids:
+                            continue
+                        prepared_ids.add(identity)
+                        messages.append(material)
+                    elif material not in messages:
                         messages.append(material)
             tools = ToolMenu(self.tools)
             directories = self.tools.directory_provider

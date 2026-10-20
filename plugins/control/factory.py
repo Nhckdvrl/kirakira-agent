@@ -140,6 +140,8 @@ def build_control_plane(
     workspace: Path,
     pipeline: Any,
     sessions: Any,
+    messages: Any = None,
+    turn_projection: Any = None,
     workspace_services: Any = None,
     endpoint: str | Path | None = None,
     workspace_token: str | None = None,
@@ -177,6 +179,9 @@ def build_control_plane(
         restart_coordinator=restart_coordinator,
         workspace_services=workspace_services,
         programs=getattr(pipeline, "programs", None),
+        conversation=pipeline if hasattr(pipeline, "stage") else None,
+        messages=messages,
+        turn_projection=turn_projection,
     )
     resolved = endpoint or (Path(workspace) / ".kirakira" / "control.sock")
     server = SocketAppServer(resolved, service)

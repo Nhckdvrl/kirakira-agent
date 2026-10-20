@@ -72,6 +72,8 @@ include = [
 "eval.longmemeval" = ["LICENSE"]
 "plugins.akasha2" = ["LICENSE", "UPSTREAM.json"]
 "agent.plugin_composition" = ["LICENSE", "UPSTREAM.json"]
+"plugins.ledger" = ["LICENSE", "UPSTREAM.json"]
+"plugins.turn_projection" = ["LICENSE"]
 "migrations" = ["yoyo/*.py"]
 "plugin_packages.curated_feeds" = [
     "README.md",

@@ -1,12 +1,15 @@
-"""Immutable accepted inputs in the same ledger transaction as owner state."""
+"""Accepted requests are Input messages, never a second owner-record payload."""
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from uuid import uuid4
 
+from core.common.frozen_json import json_value
+
+from .message import ContentPart, Input
 from .owner_store import OwnerStore
 
-OWNER = "ledger_inputs"
+OWNER = "ledger_inputs"  # Read only during the one-time legacy migration.
 
 
 @dataclass(frozen=True)
@@ -21,40 +24,70 @@ class InputMessage:
 class InputLedger:
     def __init__(self, sessions):
         self.store = OwnerStore(sessions)
-        sessions.register_initializer(
-            "ledger_inputs", lambda session, tx: None, on_delete=self.delete_session
-        )
+        self.messages = sessions.message_log
 
-    @staticmethod
-    def append(session_key, source, request, tx):
-        identity = "input_" + uuid4().hex
-        tx.save(
-            OWNER,
-            identity,
-            {
-                "session_key": session_key,
-                "source": source,
-                "request": request,
-                "accepted_at": datetime.now(UTC).isoformat(),
-            },
-            expected_version=None,
+    def append(
+        self, session_key, source, request, tx, *, identity=None, recorded_at=None
+    ):
+        origin = {
+            key: value
+            for key, value in request.items()
+            if key not in {"content", "media"}
+        }
+        message = self.messages.append(
+            session_key,
+            source,
+            str(request.get("sender") or "user"),
+            Input(
+                (
+                    ContentPart("origin", origin),
+                    ContentPart("text", request["content"]),
+                    ContentPart("media", request.get("media", [])),
+                )
+            ),
+            message_id=identity or "input_" + uuid4().hex,
+            transaction=tx,
+            recorded_at=recorded_at,
         )
-        return identity
+        return message.message_id
 
     def read(self, identity, *, session_key=None, transaction=None):
-        row = (
-            transaction.read(OWNER, identity)
-            if transaction is not None
-            else self.store.read(OWNER, identity)
+        message = self.messages.get(
+            identity, session_id=session_key, transaction=transaction
         )
-        if row is None or (
-            session_key is not None and row.value["session_key"] != session_key
-        ):
+        if message is None:
+            if transaction is None:
+                with self.store.transaction() as tx:
+                    return self.read(identity, session_key=session_key, transaction=tx)
+            row = transaction.read(OWNER, identity)
+            if row is not None:
+                value = row.value
+                if session_key is not None and value["session_key"] != session_key:
+                    raise ValueError("input does not belong to this Session")
+                self.append(
+                    value["session_key"],
+                    value["source"],
+                    value["request"],
+                    transaction,
+                    identity=identity,
+                    recorded_at=datetime.fromisoformat(value["accepted_at"]),
+                )
+                transaction.delete(OWNER, identity, expected_version=row.version)
+                message = self.messages.get(
+                    identity, session_id=session_key, transaction=transaction
+                )
+        if message is None or not isinstance(message.body, Input):
             raise ValueError("input does not belong to this Session")
-        return InputMessage(identity, **row.value)
-
-    @staticmethod
-    def delete_session(session_key, tx):
-        for key, row in tx.scan(OWNER):
-            if row.value["session_key"] == session_key:
-                tx.delete(OWNER, key, expected_version=row.version)
+        parts = {part.kind: json_value(part.value) for part in message.body.parts}
+        request = {
+            **parts["origin"],
+            "content": parts["text"],
+            "media": parts.get("media", []),
+        }
+        return InputMessage(
+            identity,
+            message.session_id,
+            message.source,
+            request,
+            message.recorded_at.isoformat(),
+        )

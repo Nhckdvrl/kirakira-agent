@@ -188,6 +188,11 @@ class ConnectionRouter:
         return await self._call_method(method, values)
 
     async def _call_method(self, method: str, values: dict[str, Any]) -> object:
+        if method in {"turn/steer", "turn/withdraw", "message/list", "turn/project"}:
+            try:
+                return await self._service.workspace_request(method, values)
+            except (ValueError, OSError) as exc:
+                raise JsonRpcError(INVALID_PARAMS, str(exc)) from exc
         if method.startswith("program/"):
             try:
                 if method == "program/resume":

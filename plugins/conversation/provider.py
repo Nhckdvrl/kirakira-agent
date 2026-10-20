@@ -20,6 +20,7 @@ async def apply(ctx):
         program=program, admission=admission, programs=state, jobs=ctx.get(JOBS)
     )
     execute = conversation.run
+    conversation.spawn = lambda operation: ctx.spawn(operation, name="conversation-steer")
 
     async def run_owned(*args, **kwargs):
         task = await ctx.spawn(execute(*args, **kwargs), name="conversation")

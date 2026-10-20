@@ -9,11 +9,21 @@ from plugins.control.factory import build_control_plane
 from plugins.conversation.contract import CONVERSATION
 from plugins.default_memory.contract import MEMORY_SERVICES
 from plugins.extensions.contract import EXTENSIONS
-from plugins.ledger.contract import SESSIONS
+from plugins.ledger.contract import MESSAGES, SESSIONS
+from plugins.turn_projection.contract import TURN_PROJECTION
 from plugins.projects.contract import WORKSPACE
 from plugins.runtime_restart.contract import RESTART
 
-inject = (CONVERSATION, SESSIONS, WORKSPACE, MEMORY_SERVICES, EXTENSIONS, RESTART)
+inject = (
+    CONVERSATION,
+    SESSIONS,
+    WORKSPACE,
+    MEMORY_SERVICES,
+    EXTENSIONS,
+    RESTART,
+    MESSAGES,
+    TURN_PROJECTION,
+)
 provides = (CONTROL,)
 
 
@@ -55,6 +65,8 @@ async def apply(ctx):
             workspace=workdir,
             pipeline=pipeline,
             sessions=session_manager,
+            messages=ctx.get(MESSAGES),
+            turn_projection=ctx.get(TURN_PROJECTION),
             workspace_services=workspace_services,
             endpoint=os.getenv("KIRAKIRA_CONTROL_ENDPOINT", "").strip() or None,
             workspace_token=os.getenv("KIRAKIRA_CONTROL_TOKEN", "").strip() or None,

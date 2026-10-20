@@ -71,6 +71,7 @@ class ProgramBinding:
         self.session_key, self.lease = value["session_key"], value["lease"]
         self.task, self.phase = asyncio.current_task(), "preparing"
         self.batch = None
+        self.prepare_inputs = lambda: []
 
     def ensure_current(self):
         if not self.owner.store.is_current(self.identity):
@@ -201,16 +202,17 @@ class ProgramBinding:
 
 
 class ReplyPrograms:
-    def __init__(self, sessions, sources=None, inputs=None):
+    def __init__(self, sessions, sources=None, inputs=None, messages=None):
         self.sessions = sessions
         self.sources = sources or SourceSessions(sessions)
-        self.store = ProgramStore(sessions, self.sources, inputs)
+        self.store = ProgramStore(sessions, self.sources, inputs, messages)
         self.recovery_requests = []
         self.suspending = False
         sessions.register_initializer(
             "reply_programs",
             lambda session, tx: None,
             on_delete=self.store.delete_session,
+            on_redact=self.store.redact,
         )
 
     def accept_channel(self, msg):

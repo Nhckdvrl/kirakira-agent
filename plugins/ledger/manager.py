@@ -372,6 +372,7 @@ class SessionManager:
         self._cache: Dict[str, Session] = {}
         self._initializers = {}
         self._owner_deleters = {}
+        self._owner_redactors = {}
         self._delete_callbacks: List[Callable[[str], None]] = []
         self._index_lock = threading.Lock()
         # SQLite 是会话与消息的唯一权威状态。sessions/*.json 只作为旧版一次性
@@ -384,6 +385,10 @@ class SessionManager:
         self._closed = False
         self._migrate_legacy_json_once()
         self._drop_legacy_index()
+        from .log import MessageLog
+
+        self.message_log = MessageLog(self)
+        self.message_log.import_compat_history()
 
     def _drop_legacy_index(self) -> None:
         """删掉换路径前的旧索引库(sessions/message_index.sqlite3)。
@@ -407,7 +412,7 @@ class SessionManager:
             ).fetchone()
         return (int(row[0]), str(row[1])) if row else None
 
-    def register_initializer(self, name, callback, *, on_delete=None):
+    def register_initializer(self, name, callback, *, on_delete=None, on_redact=None):
         """Register transactional owner hooks and return their activation's disposer."""
         with self._index_lock:
             if name in self._initializers:
@@ -415,6 +420,8 @@ class SessionManager:
             self._initializers[name] = callback
             if on_delete is not None:
                 self._owner_deleters[name] = on_delete
+            if on_redact is not None:
+                self._owner_redactors[name] = on_redact
 
         def unregister():
             with self._index_lock:
@@ -422,6 +429,8 @@ class SessionManager:
                     del self._initializers[name]
                     if self._owner_deleters.get(name) is on_delete:
                         self._owner_deleters.pop(name, None)
+                    if self._owner_redactors.get(name) is on_redact:
+                        self._owner_redactors.pop(name, None)
 
         return unregister
 
@@ -828,6 +837,7 @@ class SessionManager:
                 self._index.execute(
                     "DELETE FROM messages WHERE session_key = ?", (key,)
                 )
+                self._index.execute("DELETE FROM ledger_messages WHERE session_id = ?", (key,))
                 self._index.execute(
                     "DELETE FROM session_compactions WHERE session_key = ?", (key,)
                 )
@@ -878,6 +888,16 @@ class SessionManager:
             }
             self._index.execute("BEGIN IMMEDIATE")
             try:
+                from plugins.ledger.owner_store import OwnerTransaction
+
+                transaction = OwnerTransaction(self._index)
+                for redact in self._owner_redactors.values():
+                    redact(ids, transaction)
+                for identity in ids:
+                    self._index.execute(
+                        "DELETE FROM ledger_messages WHERE message_id=? OR instr(message_id,?)=1",
+                        (identity, identity + ":"),
+                    )
                 cursor = self._index.execute(
                     f"DELETE FROM messages WHERE id IN ({placeholders})", ids
                 )
@@ -908,6 +928,7 @@ class SessionManager:
         return self.session_dir / ("%s.json" % _legacy_safe_key(key))
 
     def _initialize_index(self) -> bool:
+        from plugins.ledger.log import ensure_message_log
         from plugins.ledger.owner_store import ensure_owner_records
         from plugins.ledger.publications import ensure_publications
 
@@ -916,6 +937,7 @@ class SessionManager:
             self._index.execute("PRAGMA synchronous=FULL")
             self._index.execute("PRAGMA foreign_keys=ON")
             ensure_owner_records(self._index)
+            ensure_message_log(self._index)
             self._index.execute(
                 "CREATE TABLE IF NOT EXISTS sessions ("
                 "key TEXT PRIMARY KEY, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, "
@@ -1202,10 +1224,14 @@ class SessionManager:
                         for message in session.messages[len(existing) :]
                     ],
                 )
-                if transaction_hook is not None:
-                    from plugins.ledger.owner_store import OwnerTransaction
+                from plugins.ledger.owner_store import OwnerTransaction
 
-                    transaction_hook(OwnerTransaction(self._index))
+                transaction = OwnerTransaction(self._index)
+                for message in session.messages[len(existing):]:
+                    self.message_log.import_compat_row(self._message_row(session.key, message), transaction)
+                if transaction_hook is not None:
+
+                    transaction_hook(transaction)
                 self._index.commit()
             except BaseException:
                 self._index.rollback()

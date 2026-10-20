@@ -3,14 +3,20 @@
 import asyncio
 from contextlib import AsyncExitStack, nullcontext
 from dataclasses import asdict
+import logging
 
 from bus.events import InboundMessage, OutboundMessage
+from .steer import Steers
+
+logger = logging.getLogger(__name__)
 
 
 class ConversationService:
     def __init__(self, *, program, admission, programs=None, jobs=None):
         self.program, self.admission, self.programs = program, admission, programs
         self.jobs = jobs
+        self.steers = Steers(programs) if programs is not None else None
+        self.spawn = None
         self._closing, self._callers = False, set()
         self.bus, self.event_bus = program.bus, program.event_bus
 
@@ -33,6 +39,29 @@ class ConversationService:
             return await self._run(*args, **kwargs)
         finally:
             self._callers.discard(task)
+            key = args[1] if len(args) > 1 else kwargs.get("key")
+            if self.steers is not None and key is not None and key not in self.steers.bound:
+                for message in self.steers.take_pending(key):
+                    if not self._closing and self.spawn is not None:
+                        await self.spawn(self._follow_up(message, key))
+
+    async def _follow_up(self, message, key):
+        try:
+            fallback = message.metadata.get("_steer_fallback")
+            if fallback is not None:
+                await fallback(message)
+            else:
+                await self.run(message, key)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("steer follow-up failed session=%s", key)
+
+    def stage(self, message, key):
+        return self.steers.stage(key, message) if self.steers is not None else None
+
+    def withdraw(self, key, identity):
+        return self.steers.withdraw(key, identity) if self.steers is not None else False
 
     async def _run(
         self,
@@ -81,6 +110,8 @@ class ConversationService:
                 else nullcontext(None)
             )
             binding = resources.enter_context(scope)
+            if binding is not None and self.steers is not None:
+                resources.enter_context(self.steers.bind(binding))
             try:
                 self.program._active_sessions.add(key)
                 if admitted is not None:

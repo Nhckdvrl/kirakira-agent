@@ -50,6 +50,11 @@ class DeliveryService:
         state.extra_metadata.update(provenance)
         committed_user = None
         binding = current_program(state.session_key)
+        if binding is not None and binding.value.get("steer_ids"):
+            # Memory's pair consumer cannot yet represent multiple human inputs
+            # in one Turn. Preserve the raw facts without learning a false pair.
+            state.extra_metadata["skip_post_memory"] = True
+            state.extra_metadata["input_ids"] = [binding.value["input_id"], *binding.value["steer_ids"]]
         program_metadata = (
             {"program_id": binding.identity, "input_id": binding.value["input_id"]}
             if binding is not None
@@ -69,6 +74,8 @@ class DeliveryService:
                     else {}
                 ),
             )
+        if binding is not None:
+            self.programs.store.project_steers(session, binding)
         committed_assistant = session.add_message(
             "assistant",
             result.outbound.content,

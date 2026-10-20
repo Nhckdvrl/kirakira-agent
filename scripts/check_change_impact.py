@@ -14,6 +14,7 @@ IMPACT_RULES: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
         (
             "plugins/jobs/",
             "plugins/conversation/",
+            "plugins/turn_projection/",
             "plugins/reply/",
             "plugins/reply_program/",
             "plugins/delivery/",

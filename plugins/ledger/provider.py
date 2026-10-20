@@ -3,12 +3,12 @@ from agent.composition.lifecycle import on_close
 """Declare this owner's dependencies, capabilities and resource lifetime."""
 
 
-from plugins.ledger.contract import INPUTS, SESSIONS
+from plugins.ledger.contract import INPUTS, MESSAGES, SESSIONS
 from plugins.ledger.inputs import InputLedger
 from plugins.ledger.manager import SessionManager
 
 inject = ()
-provides = (SESSIONS, INPUTS)
+provides = (SESSIONS, INPUTS, MESSAGES)
 
 
 async def apply(ctx):
@@ -18,4 +18,5 @@ async def apply(ctx):
     session_manager.recover_admissions()
 
     await ctx.provide(SESSIONS, session_manager)
+    await ctx.provide(MESSAGES, session_manager.message_log)
     await ctx.provide(INPUTS, InputLedger(session_manager))
