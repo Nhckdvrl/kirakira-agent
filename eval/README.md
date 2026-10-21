@@ -170,6 +170,18 @@ python -m eval.memory_report \
 
 合并器拒绝不完整主实验、重复题目、不同数据/预算/模型条件；输出逐题结果、分项、配对胜负和调用账本。探索实验与主实验分开，不混合不同 reader 格式。
 
+### 已发布记忆报告重算
+
+公开报告不依赖私有模型工作区即可重算；以下命令只读取 JSON，不调用模型，也不修改原始记录：
+
+```sh
+python -m eval.memory_report \
+  --from-report docs/operations/evaluations/artifacts/2026-10-21-memory-runtime/memory-quality.json \
+  --output /local-disk/eval/memory-findings.json
+```
+
+输出重新核对主实验的完整性、分区、预算和已发布汇总，区分可回答题与无法回答题、带引用回答与空引用，并列出补全通道标签消息在各方案中是否实际呈现。`completion_only_gold_messages` 是补全通道归属，不能据字段名称推断完整向量方案一定找不到。探索记录不进入主实验分母；来源报告和重算代码均保存摘要。
+
 ## 状态一致性和确定性链路
 
 ```sh

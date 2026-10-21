@@ -126,4 +126,4 @@ source = await client.memory_source(MemorySourceQuery(
 - 质量验证：冻结公开历史，保留所有干扰会话，分别测关键消息覆盖、回答、引用和无答案处理。
 - 对照验证：同一编码器、同一 reader、同一候选与字符上限，对比无记忆、近期历史、向量、混合检索及图式召回。
 
-运行方法和实测结果见[验证入口](../operations/verification.md)。来源与许可证集中在仓库根目录的 [THIRD_PARTY.md](../../THIRD_PARTY.md)。
+量化指标与实际亮点见[记忆实测](../operations/evaluations/2026-10-21-memory-runtime.md)；运行方法及其他链路见[验证入口](../operations/verification.md)。来源与许可证集中在仓库根目录的 [THIRD_PARTY.md](../../THIRD_PARTY.md)。

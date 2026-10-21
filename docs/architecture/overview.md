@@ -4,6 +4,9 @@ Kirakira 以统一的任务生命周期组织对话、工具、记忆和主动�
 原始消息保存在 Ledger，派生状态由各自的插件管理；来源与许可证集中记录在
 [第三方声明](../../THIRD_PARTY.md)。
 
+宿主、插件更新、任务接纳、消息权限和恢复采用同一套版本化实现。
+发行入口、模型驱动、历史导入与评测保留各自边界；退出主链的旧实现不再保留第二个任务 owner 或权限体系。
+
 ```mermaid
 flowchart TD
     CLI[CLI / Supervisor] --> Manager[PluginManager]
@@ -85,10 +88,10 @@ EventMail 分别接纳 Content、Alert、Context；Wake 按兴趣池与规则决
 Alert 使用真实 Delivery 回执完成结算；Content 不足以触发时记录可观察的 content_insufficient。
 event-ingress 只把已认证 Gateway RPC 转到绑定来源，不另建事件队列或任务调度器。
 Drift 保存提案状态并提供 Wake/Delivery 窄合同；可选的空闲思考生产端读取选定对话和同范围的记忆，使用 Models 生成带出处的候选。OwnerState 只保留规划次数、原始来源引用与交接凭据。任务领取、程序执行、工具与投递仍由既有 Drift/Wake、Sources、Task、ReplyProgram 和 Delivery 管理，没有第二套执行队列。研究继承提案的参考对话范围，收件位置独立。
-不能将其源码存在表述为完整的第二主动生成流程已上线。
+空闲链路已有[跨会话学习场景实测](../operations/evaluations/2026-10-21-idle-reflection.md)；当前每次新讨论只进行一次有界规划，多日自主探索与长期交流时机仍需验证。
 
 运行诊断和插件安装也是插件。新工作区默认选中；既有工作区使用显式 upgrade 命令，
-保留其余插件选择并备份原选择。各功能启用与验证状态见[差距文档](../status/roadmap.md)。
+保留其余插件选择并备份原选择。各功能启用与验证状态见[当前状态](../status/current.md)和[后续路线](../status/roadmap.md)。
 
 发行构建另有 `patches/stage-web-assets.patch`：npm build 最后把 dashboard/chat 产物移入所属插件制品目录，
 避免源码已更新、运行时却读取旧构建。补丁、来源摘要与本地摘要均登记在 UPSTREAM.json。
