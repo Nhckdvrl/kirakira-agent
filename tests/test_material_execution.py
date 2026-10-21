@@ -1,15 +1,54 @@
 """O: independent material owners prepare together and merge in stable order."""
 import asyncio
+import fcntl
+import os
 
 import pytest
 
 from agent.plugin_composition import CompositionRoot, PluginRuntime
-from plugins.context.materials import ContextMaterials
-from plugins.context.api import decode_material
-from plugins.models.settings import UpdateConnection
 from agent.plugin_composition import tasks as task_runtime
 from agent.plugin_composition.tasks import Tasks
+from plugins.context.api import decode_material
+from plugins.context.materials import ContextMaterials
+from plugins.models.settings import UpdateConnection
 from tests.support.material_models import material_models
+
+
+@pytest.mark.asyncio
+async def test_existing_profile_lock_supports_nfs_and_cancelled_waiters(tmp_path, monkeypatch):
+    from plugins.markdown_memory.plugin import profile_lock
+
+    path = tmp_path / "markdown-profile.lock"
+    path.write_bytes(b"existing lock metadata\n")
+    flock = fcntl.flock
+    waiting = asyncio.Event()
+
+    def strict_flock(descriptor, operation):
+        if operation & fcntl.LOCK_EX:
+            # NFS rejects exclusive locks on descriptors opened read-only.
+            assert fcntl.fcntl(descriptor, fcntl.F_GETFL) & os.O_ACCMODE != os.O_RDONLY
+        try:
+            flock(descriptor, operation)
+        except BlockingIOError:
+            waiting.set()
+            raise
+
+    monkeypatch.setattr(fcntl, "flock", strict_flock)
+
+    async def contender():
+        async with profile_lock(path, create=False):
+            raise AssertionError("contender acquired a held profile lock")
+
+    async with profile_lock(path, create=False):
+        job = asyncio.create_task(contender())
+        try:
+            await asyncio.wait_for(waiting.wait(), 2)
+        finally:
+            job.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await job
+    async with profile_lock(path, create=False):
+        assert path.read_bytes() == b"existing lock metadata\n"
 
 
 @pytest.mark.asyncio

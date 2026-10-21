@@ -277,6 +277,50 @@ async def test_default_reply_loads_one_complete_granted_plugin_group(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_current_model_facts_follow_the_bound_selection_after_switching(tmp_path):
+    from agent.plugin_composition import ServiceKey
+
+    def selectable_provider(sources):
+        path = sources / "test_provider/plugin.py"
+        code = path.read_text().replace("calls = []", "calls = []\n    selected = ['first-backend']")
+        code = code.replace("from functools import partial", "from functools import partial\nfrom dataclasses import replace")
+        code = code.replace('yield SimpleNamespace(chat=lambda role: model)',
+            'chosen = _BoundChat(replace(descriptor, model=selected[0], model_id="friendly-alias"), Driver(), store)\n'
+            '                yield SimpleNamespace(chat=lambda role: chosen)')
+        code = code.replace('await ctx.provide(ServiceKey("fixture.calls"), calls)',
+            'await ctx.provide(ServiceKey("fixture.calls"), calls)\n'
+            '    await ctx.provide(ServiceKey("fixture.selected"), selected)')
+        path.write_text(code)
+
+    async with application(tmp_path, replying=True, extra_sources=selectable_provider) as (log, host):
+        root = host.live_root
+        selected = root.context.require(ServiceKey("fixture.selected"))
+        calls = root.context.require(ServiceKey("fixture.calls"))
+        for index, name in enumerate(("first-backend", "different-vendor-model")):
+            selected[0] = name
+            before = len(calls)
+            accepted = await root.context.require(CHANNEL_INPUT)(
+                "test:identity", f"identity-{index}", ChannelInboundMessage(
+                    "test", "user", "identity", "当前用什么模型？", datetime.now(UTC), {}))
+
+            async def completed():
+                async for _ in log.catalog().follow():
+                    if any(row.seq > accepted.seq and isinstance(row.body, Output)
+                           and row.body.finish == "complete"
+                           for row in log.reader("test:identity").snapshot()):
+                        return
+
+            await asyncio.wait_for(completed(), 5)
+            for call in calls[before:]:
+                content = str(call.messages)
+                assert f'"model": "{name}"' in content
+                assert '"model_id": "friendly-alias"' in content
+                assert "不授予额外工具权限" in content
+                if index == 0:
+                    assert "different-vendor-model" not in content
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("vision", [False, True])
 @pytest.mark.parametrize("attach_image", [False, True])
 async def test_reply_projects_images_by_model_capability(tmp_path, vision, attach_image):

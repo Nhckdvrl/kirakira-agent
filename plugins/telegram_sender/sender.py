@@ -1,17 +1,24 @@
 """每个 Telegram 请求只发送一次；不确定效果交还 Delivery。"""
 import asyncio
+import hashlib
 import json
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Literal, cast
 
 import aiohttp
 from telegramify_markdown.converter import convert_with_segments
 from telegramify_markdown.entity import MessageEntity, split_entities
-from plugins.ledger.contract import ArtifactRead
-from plugins.channels.contract import AttachmentKind, AttachmentRef
-from plugins.ledger.contract import MessageCatalog
-from plugins.ledger.contract import ContentPart, Control, Message
 
+from core.common.diagnostic_log import log_timing
+from plugins.channels.contract import AttachmentKind, AttachmentRef
+from plugins.ledger.contract import (
+    ArtifactRead,
+    ContentPart,
+    Control,
+    Message,
+    MessageCatalog,
+)
 
 Status = Literal["delivered", "rejected", "failed"]
 
@@ -110,16 +117,39 @@ class TelegramSender:
     idempotent = False
 
     def __init__(self, client: aiohttp.ClientSession, api_base: str, token: str,
-                 catalog: MessageCatalog, artifacts: ArtifactRead):
+                 catalog: MessageCatalog, artifacts: ArtifactRead, *, draft_delivery=None):
         self._client = client
         self._url = api_base.rstrip("/") + "/bot" + token
         self._catalog = catalog
         self._artifacts = artifacts
+        self._draft_identity = hashlib.sha256(token.encode()).hexdigest()
+        self._draft_delivery = draft_delivery
 
     async def query(self, key: str, address: str) -> SendResult | None:
         return None
 
     async def send(self, key: str, address: str, message: Message) -> SendResult:
+        log_timing("telegram.delivery.begin", session_id=message.session_id, request_id=key)
+        try:
+            async with self._draft_guard(address, message.message_id):
+                return await self._send(key, address, message)
+        finally:
+            log_timing("telegram.delivery.end", session_id=message.session_id, request_id=key)
+
+    @asynccontextmanager
+    async def _draft_guard(self, address, message_id):
+        try:
+            chat_id = int(address)
+        except ValueError:
+            yield
+            return
+        if self._draft_delivery is None:
+            yield
+        else:
+            async with self._draft_delivery(self._draft_identity, chat_id, message_id):
+                yield
+
+    async def _send(self, key: str, address: str, message: Message) -> SendResult:
         """先准备所有正文与附件，再逐项记录明确的 provider 回执。"""
         # 1. 地址和本地材料错误发生在第一个发送请求之前。
         try:

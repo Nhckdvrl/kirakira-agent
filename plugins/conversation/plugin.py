@@ -126,6 +126,7 @@ async def apply(ctx: Context) -> None:
 
         attributes = SessionAttributes.scoped(dimensions) if dimensions else await run_file_io(initial_attributes)
         _ = await ctx.require(SESSION_ADMISSION).ensure_async(ctx, session_id, attributes)
+        log_timing("input.attributes.end", session_id=session_id, request_id=message_id)
         # 2. 来源只核验已发布附件，不接管传输 lease 或派生另一份元数据。
         if message.attachments:
             artifacts = ctx.require(ARTIFACT_READ)
@@ -150,6 +151,7 @@ async def apply(ctx: Context) -> None:
                 check = scopes.enter_context(ctx.borrow(input_part_key(kind)))
                 extra[kind] = partial(reject_input_part, kind) if check is None else partial(check, reader=reader)
                 parts += (ContentPart(kind, value),)
+            log_timing("input.content.end", session_id=session_id, request_id=message_id)
             accepted = await open(session_id, extra).accept(message_id, Input(parts))
         log_timing("input.committed", session_id=session_id, request_id=message_id, counts={"seq": accepted.seq})
         return accepted

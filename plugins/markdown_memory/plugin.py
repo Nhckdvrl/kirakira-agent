@@ -498,7 +498,9 @@ async def profile_lock(path: Path, *, create: bool = True) -> AsyncGenerator[Non
     """按文件名提供跨 Session 和 generation 的排他锁；取消等待不会遗留持锁线程。"""
     if create:
         path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a+b" if create else "rb") as handle:
+    # NFS requires a writable descriptor for an exclusive flock, even when
+    # reading an existing profile. Opening r+b preserves the lock file bytes.
+    with path.open("a+b" if create else "r+b") as handle:
         while True:
             try:
                 fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)

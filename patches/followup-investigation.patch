@@ -302,24 +302,6 @@
  desc = "一次回复的资源与执行组合；不拥有来源策略或后台监听"
  inject = (CHAT_MODELS, CONTENT, CONTEXT, MATERIALS_V4, MODEL_CALLS, MODEL_CHECKS,
            MODEL_CONTENT, MODEL_PROJECTION, MODEL_SELECTION, REACT_ORDERED_V2, TOOL_CLEANUP,
---- a/plugins/reply_program/program.py
-+++ b/plugins/reply_program/program.py
-@@ -62,6 +62,7 @@
-     preview: Callable[[str], AbstractContextManager[StreamCallback]] | None = None,
-     reminders: Sequence[Mapping[str, object]] = (),
-     terminal_tools: frozenset[str] = frozenset(),
-+    tool_choice: str | Mapping[str, object] | None = None,
-     presentation: ToolPresentation | None = None,
-     history: Literal["session", "own"] = "session",
-     before_step: Callable[[], Awaitable[None]] | None = None,
-@@ -209,6 +210,7 @@
-                 materials=build_materials, content=view, tools=menu,
-                 max_output_tokens=max_output_tokens, max_steps=max_steps,
-                 reduce=None if history == "own" else reduce, preview=preview, terminal_tools=terminal_tools,
-+                **({"tool_choice": tool_choice} if tool_choice is not None else {}),
-                 max_parallel_calls=max_parallel_calls,
-                 state=owner_state.open_scoped(ctx, "generation"),
-                 check_start=check,
 --- a/plugins/wake/api.py
 +++ b/plugins/wake/api.py
 @@ -30,7 +30,7 @@

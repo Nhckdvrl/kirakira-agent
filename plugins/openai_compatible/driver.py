@@ -1134,16 +1134,22 @@ def _merge_tool_deltas(calls: dict[int, dict[str, str]], raw_calls: list[Any]) -
             raise TransportError("stream tool call index must be non-negative").exception()
         slot = calls.setdefault(index, {"id": "", "name": "", "arguments": ""})
         raw_id = raw.get("id")
-        if isinstance(raw_id, str):
-            slot["id"] += raw_id
-            advanced = advanced or bool(raw_id)
+        if isinstance(raw_id, str) and raw_id:
+            if slot["id"] and slot["id"] != raw_id:
+                raise TransportError("stream tool call id changed within one index").exception()
+            if not slot["id"]:
+                slot["id"] = raw_id
+                advanced = True
         function = raw.get("function")
         if isinstance(function, Mapping):
             name = function.get("name")
             arguments = function.get("arguments")
-            if isinstance(name, str):
-                slot["name"] += name
-                advanced = advanced or bool(name)
+            if isinstance(name, str) and name:
+                if slot["name"] and slot["name"] != name:
+                    raise TransportError("stream tool call name changed within one index").exception()
+                if not slot["name"]:
+                    slot["name"] = name
+                    advanced = True
             if isinstance(arguments, str):
                 slot["arguments"] += arguments
                 advanced = advanced or bool(arguments)

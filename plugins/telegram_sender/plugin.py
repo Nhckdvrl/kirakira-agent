@@ -13,6 +13,7 @@ from agent.plugin_composition import (
 )
 from plugins.ledger.contract import ARTIFACT_READ
 from plugins.ledger.contract import MESSAGE_CATALOG
+from plugins.telegram_channel.contract import DRAFT_DELIVERY
 from plugins.delivery.contract import (
     DELIVERY_SENDERS as DELIVERY_SENDERS,
 )
@@ -59,12 +60,26 @@ async def run(ctx: Context) -> None:
 
     from .sender import TelegramSender
 
+    # One lazy pool per actual plugin generation. Credentials and send receipts
+    # remain per invocation; ordinary replies can reuse DNS/TCP/TLS connections.
+    client: aiohttp.ClientSession | None = None
+
+    async def close_http():
+        if client is not None:
+            await client.close()
+
+    await ctx.effect(lambda: close_http, label="telegram-http")
+
     @asynccontextmanager
     async def open_sender() -> AsyncGenerator[TelegramSender]:
-        async with ctx.require(CREDENTIALS).open(ctx, {"token": token_ref}) as credentials:
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=config.timeout_seconds), trust_env=True) as client:
+        nonlocal client
+        with ctx.borrow(DRAFT_DELIVERY) as drafts:
+            async with ctx.require(CREDENTIALS).open(ctx, {"token": token_ref}) as credentials:
+                if client is None:
+                    client = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=config.timeout_seconds), trust_env=True)
                 yield TelegramSender(client, config.api_base, credentials.credential(token_ref),
-                                     ctx.require(MESSAGE_CATALOG), ctx.require(ARTIFACT_READ))
+                                     ctx.require(MESSAGE_CATALOG), ctx.require(ARTIFACT_READ),
+                                     draft_delivery=None if drafts is None else drafts.delivering)
 
     _ = await ctx.require(DELIVERY_SENDERS).register(ctx, name=config.channel, idempotent=False, open=open_sender)
 

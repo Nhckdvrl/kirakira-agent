@@ -8,11 +8,14 @@ from plugins.channels.contract import CHANNELS, ChannelCapability, ChannelDefini
 from plugins.channels.contract import CHANNEL_INPUT_V2 as CHANNEL_INPUT, RawInbound
 from agent.plugin_composition.credentials import CREDENTIALS
 from plugins.ledger.contract import MESSAGE_CATALOG
+from plugins.reply.contract import REPLY_STATUS
 from plugins.sources.contract import (
     SOURCE_INTERRUPT_V2 as SOURCE_INTERRUPT,
 )
 
 from .config import TelegramChannelConfig
+from .contract import DRAFT_DELIVERY
+from .drafts import DraftDeliveries
 
 if TYPE_CHECKING:
     from .channel import TelegramChannelAdapter, build_telegram_channel
@@ -22,7 +25,7 @@ name = "telegram_channel"
 version = "3.0.0"
 desc = "Telegram inbound and outbound v3 channel adapter"
 author = "Kirakira"
-function_inject = (CHANNELS, CHANNEL_INPUT, CREDENTIALS, MESSAGE_CATALOG, SOURCE_INTERRUPT)
+function_inject = (CHANNELS, CHANNEL_INPUT, CREDENTIALS, MESSAGE_CATALOG, SOURCE_INTERRUPT, DRAFT_DELIVERY)
 Config = TelegramChannelConfig
 
 
@@ -34,6 +37,15 @@ async def run(ctx: Context) -> None:
         return
     # python-telegram-bot 只在启用后加载；停用时不进入插件启动成本。
     from .channel import build_telegram_channel
+
+    async def start_previews(drafts):
+        # Optional feature, explicit lifetime dependency: when Reply unloads,
+        # cancel its readers before Reply waits for borrowed scopes to drain.
+        async def follow(child):
+            drafts.resume()
+            await child.spawn(drafts.run(), name="telegram-reply-previews")
+
+        await ctx.inject((REPLY_STATUS,), follow, name="reply-previews")
 
     async def interrupt(raw: RawInbound) -> bool:
         """先通过来源提交 pause 并等待旧工作，再由原 binding 发送 ack。"""
@@ -48,8 +60,11 @@ async def run(ctx: Context) -> None:
             capabilities=frozenset(
                 {ChannelCapability.INBOUND, ChannelCapability.OUTBOUND, ChannelCapability.CONTROL}
             ),
-            factory=partial(build_telegram_channel, create_client=partial(ctx.require(CREDENTIALS).create, ctx)),
+            factory=partial(build_telegram_channel, create_client=partial(ctx.require(CREDENTIALS).create, ctx),
+                            draft_deliveries=ctx.require(DRAFT_DELIVERY),
+                            start_previews=start_previews),
             config=ctx.config,
+            optional_services=frozenset({REPLY_STATUS}),
             interrupt=interrupt,
             inbound_identity=InboundIdentity.PROVIDER_MESSAGE_ID,
         ),
@@ -89,5 +104,7 @@ inject = (PLUGIN_CONFIG, RUNTIME_CATALOG, CREDENTIALS)
 async def apply(ctx: Context) -> None:
     """设置入口常驻，业务依赖只影响功能分支。"""
     from .settings import mount
+    drafts = DraftDeliveries()
+    await ctx.provide(DRAFT_DELIVERY, drafts)
     function = await ctx.inject(function_inject, run, name="function")
     await mount(ctx, Config, function)

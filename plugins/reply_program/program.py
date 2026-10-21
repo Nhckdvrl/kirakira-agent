@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import Any, Literal, cast
+import json
 from contextlib import AbstractAsyncContextManager, AbstractContextManager
 
 from core.common.diagnostic_log import log_timing
@@ -124,6 +125,15 @@ async def run_reply(
         materials as material_view,
     ):
         model = execution.chat("agent")
+        runtime_model = {"name": "runtime_model", "priority": 90, "text": (
+            "本次请求已绑定的对话模型：" + json.dumps({
+                "model": model.descriptor.model, "model_id": model.descriptor.model_id,
+                "driver": model.descriptor.driver_id,
+            }, ensure_ascii=False)
+            + "。这是 Runtime 本次实际选择的事实；配置标识不是模型名称。"
+            "询问当前底座时可直接依据此记录，不必读取配置或调用 Shell；"
+            "它不说明未公开的训练细节，也不授予额外工具权限。"
+        )}
         # 推理与正文共用输出额度；在冻结请求前确定预算，Context 同样预留它。
         if max_output_tokens is None:
             max_output_tokens = model.descriptor.capabilities.max_output_tokens or 32768
@@ -161,7 +171,7 @@ async def run_reply(
             if history == "own":
                 messages = own_messages(messages, source)
             result = await material_view.prepare(
-                messages, source, caller=ctx, reminders=tuple(reminders),
+                messages, source, caller=ctx, reminders=(*reminders, runtime_model),
             )
             if history == "own":
                 result = {key: value for key, value in result.items() if key != "summary"}

@@ -22,6 +22,8 @@ from telegram.ext import (
 from telegramify_markdown.converter import convert_with_segments
 from telegramify_markdown.entity import split_entities
 
+from core.common.diagnostic_log import log_timing
+
 from plugins.channels.contract import AttachmentKind, AttachmentRef, ChannelAdapter, ChannelCleanupFailure, ChannelFactoryContext, ChannelInboundMessage, ChannelReady, DeliveryStatus, InboundIdentity, ProviderDeliveryReceipt, ProviderDeliveryRequest, RawInbound, StopReceipt
 from agent.plugin_composition.credentials import CredentialRef, ProviderClient
 from plugins.channels.contract import (
@@ -32,6 +34,7 @@ from plugins.channels.contract import (
 
 from .reply_context import build_reply_inbound_text
 from .telegram_utils import TelegramOutboundLimiter, strip_chunk
+from .drafts import ReplyDrafts
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +66,8 @@ class _MessageDeduper:
 def build_telegram_channel(
     context: ChannelFactoryContext, *,
     create_client: Callable[[Mapping[str, CredentialRef]], Awaitable[ProviderClient]],
+    draft_deliveries=None,
+    start_previews=None,
 ) -> ChannelAdapter:
     """Build a side-effect-free Telegram adapter for the exact Core binding."""
 
@@ -74,7 +79,8 @@ def build_telegram_channel(
         raise RuntimeError("Telegram channel 需要 Core identity")
     if context.attachment_import is None:
         raise RuntimeError("Telegram channel 需要 Core attachment import")
-    return TelegramChannelAdapter(context, create_client=create_client)
+    return TelegramChannelAdapter(context, create_client=create_client, draft_deliveries=draft_deliveries,
+                                  start_previews=start_previews)
 
 
 class TelegramChannelAdapter:
@@ -86,6 +92,8 @@ class TelegramChannelAdapter:
     def __init__(
         self, context: ChannelFactoryContext, *,
         create_client: Callable[[Mapping[str, CredentialRef]], Awaitable[ProviderClient]],
+        draft_deliveries=None,
+        start_previews=None,
     ) -> None:
         self._context = context
         self._binding_token = context.binding_token
@@ -111,6 +119,10 @@ class TelegramChannelAdapter:
         self._known_chats: dict[str, str] = {}
         self._deduper = _MessageDeduper(_SEEN_LIMIT)
         self._limiter = TelegramOutboundLimiter()
+        self._drafts = ReplyDrafts(context, lambda: self._app.bot, supervised=start_previews is not None)
+        self._start_previews = start_previews
+        self._draft_deliveries = draft_deliveries
+        self._unregister_drafts = None
         self._admission_open = False
         self._started = False
         self._stopping = False
@@ -140,11 +152,13 @@ class TelegramChannelAdapter:
         if self._stopping or self._runtime is None:
             raise RuntimeError("Telegram channel 尚未准备好 admission")
         self._admission_open = True
+        self._drafts.resume()
 
     def close_admission(self) -> None:
         """Reject new callbacks before Core drains this binding."""
 
         self._admission_open = False
+        self._drafts.pause()
 
     async def start(self) -> ChannelReady:
         """Resolve the formal credential and start polling with admission closed."""
@@ -189,6 +203,11 @@ class TelegramChannelAdapter:
             await self._app.bot.set_my_commands(
                 [BotCommand("stop", "中断当前回复")]
             )
+            if self._draft_deliveries is not None:
+                identity = hashlib.sha256(token.encode()).hexdigest()
+                self._unregister_drafts = self._draft_deliveries.register(identity, self._drafts)
+            if self._start_previews is not None:
+                await self._start_previews(self._drafts)
             self._started = True
             return ChannelReady(
                 binding_token=self._binding_token,
@@ -202,6 +221,19 @@ class TelegramChannelAdapter:
             raise
 
     async def deliver(self, request: ProviderDeliveryRequest) -> ProviderDeliveryReceipt:
+        try:
+            chat_id = int(self._resolve_recipient(request.recipient))
+        except (TypeError, ValueError):
+            return await self._deliver(request)
+        session = "telegram:" + str(chat_id)
+        log_timing("telegram.delivery.begin", session_id=session, request_id=request.delivery_id)
+        try:
+            async with self._drafts.delivering(chat_id, request.session_message_id):
+                return await self._deliver(request)
+        finally:
+            log_timing("telegram.delivery.end", session_id=session, request_id=request.delivery_id)
+
+    async def _deliver(self, request: ProviderDeliveryRequest) -> ProviderDeliveryReceipt:
         """Verify Core attachments, then send ordered Telegram messages."""
 
         if request.binding_token != self._binding_token:
@@ -281,6 +313,10 @@ class TelegramChannelAdapter:
         self._stopping = True
         self._admission_open = False
         failures: list[ChannelCleanupFailure] = []
+        await self._drafts.close()
+        if self._unregister_drafts is not None:
+            self._unregister_drafts()
+            self._unregister_drafts = None
         tasks = tuple(self._inbound_tasks)
         if tasks:
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -366,6 +402,8 @@ class TelegramChannelAdapter:
         message_id = str(getattr(message, "message_id", "") or "").strip()
         if not message_id or self._deduper.seen(f"{chat.id}:{message_id}"):
             return
+        log_timing("telegram.update.received", session_id="telegram:" + str(chat.id), request_id=message_id)
+        self._drafts.watch(int(chat.id))
         content = str(getattr(message, "text", None) or getattr(message, "caption", None) or "")
         attachments: list[AttachmentRef] = []
         if message.photo:

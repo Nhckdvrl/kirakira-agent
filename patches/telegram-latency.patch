@@ -1,0 +1,449 @@
+--- a/plugins/context/materials.py
++++ b/plugins/context/materials.py
+@@ -6,6 +6,8 @@
+ from contextlib import AsyncExitStack, asynccontextmanager
+ from dataclasses import dataclass
+ from typing import TypedDict
++
++from core.common.diagnostic_log import log_timing
+ 
+ from agent.plugin_composition import Context, Effect
+ from agent.plugin_composition.model import FiberState
+@@ -79,19 +81,24 @@
+             collect(caller.runtime.plugin_id, decode_material({"reminders": reminders}).reminders)
+         summary: Summary | None = None
+         references: dict[str, Mapping[str, object]] = {}
+-        async def prepare_owner(owner: _Source) -> Materials | Exception:
++        async def prepare_owner(name: str, owner: _Source) -> Materials | Exception:
+             """Keep each independent contribution inside its actual owner scope."""
++            fields = {"session_id": snapshot[-1].session_id if snapshot else "",
++                      "source": source, "operation_id": name}
++            log_timing("materials.owner.begin", **fields)
+             try:
+                 async with owner.context.runtime_scope():
+                     return decode_material(await owner.prepare(snapshot, source))
+             except Exception as error:
+                 # Drain every started owner, then report errors in frozen order.
+                 return error
++            finally:
++                log_timing("materials.owner.end", **fields)
+ 
+         # Preparation may overlap; merging still follows the frozen source order.
+         async with asyncio.TaskGroup() as group:
+-            tasks = [group.create_task(prepare_owner(owner), context=child_task_context())
+-                     for _, owner in self._sources]
++            tasks = [group.create_task(prepare_owner(name, owner), context=child_task_context())
++                     for name, owner in self._sources]
+         for (name, owner), task in zip(self._sources, tasks, strict=True):
+             material = task.result()
+             if isinstance(material, Exception):
+--- a/plugins/conversation/plugin.py
++++ b/plugins/conversation/plugin.py
+@@ -126,6 +126,7 @@
+ 
+         attributes = SessionAttributes.scoped(dimensions) if dimensions else await run_file_io(initial_attributes)
+         _ = await ctx.require(SESSION_ADMISSION).ensure_async(ctx, session_id, attributes)
++        log_timing("input.attributes.end", session_id=session_id, request_id=message_id)
+         # 2. 来源只核验已发布附件，不接管传输 lease 或派生另一份元数据。
+         if message.attachments:
+             artifacts = ctx.require(ARTIFACT_READ)
+@@ -150,6 +151,7 @@
+                 check = scopes.enter_context(ctx.borrow(input_part_key(kind)))
+                 extra[kind] = partial(reject_input_part, kind) if check is None else partial(check, reader=reader)
+                 parts += (ContentPart(kind, value),)
++            log_timing("input.content.end", session_id=session_id, request_id=message_id)
+             accepted = await open(session_id, extra).accept(message_id, Input(parts))
+         log_timing("input.committed", session_id=session_id, request_id=message_id, counts={"seq": accepted.seq})
+         return accepted
+--- a/plugins/markdown_memory/plugin.py
++++ b/plugins/markdown_memory/plugin.py
+@@ -431,7 +431,7 @@
+ 
+ def _consolidation_prompt(workspace: Workspace, docs: tuple[str, ...]) -> str:
+     files = "\n\n".join(f"### {doc}\n{workspace.texts[doc].strip()}" for doc in docs)
+-    return f"""你在整理 Akashic 的长期 Markdown 记忆。只合并已有条目，不新增事实。
++    return f"""你在整理 Kirakira 的长期 Markdown 记忆。只合并已有条目，不新增事实。
+ 
+ 只返回 JSON：{{"ops":[{{"op":"merge","doc":"文件","olds":["- 旧条目原文","- 另一条旧条目原文"],"line":"- 合并后的一条"}}]}}；没有需要整理的内容时返回 {{"ops":[]}}。
+ - 合并同一文件中重复或可以合成一句的条目。
+@@ -465,7 +465,7 @@
+ 
+ def _profile_prompt(workspace: Workspace, source: str) -> str:
+     files = "\n\n".join(f"### {doc}\n{text.strip() or '（空）'}" for doc, text in workspace.texts.items())
+-    return f"""你维护 Akashic 的长期 Markdown 记忆。根据本次已提交的精确对话，只返回需要的文件操作。
++    return f"""你维护 Kirakira 的长期 Markdown 记忆。根据本次已提交的精确对话，只返回需要的文件操作。
+ 
+ 只返回 JSON：{{"ops":[...]}}；没有值得长期保存的内容时返回 {{"ops":[]}}。可用操作：
+ - {{"op":"add","doc":"MEMORY.md","section":"## 用户偏好","line":"- 条目","message_ids":["完整 message_id"]}}：MEMORY.md 与 SELF.md 必须给出所在二级标题；主题文件不写 section
+@@ -476,7 +476,7 @@
+ 
+ 写到哪里：
+ - MEMORY.md：跨对话稳定的用户事实、偏好、明确要求记住的内容。标题只有 {"、".join(MEMORY_HEADINGS[1:])}。总量有配额，满了就 supersede 合并，或写进 topics/。
+-- SELF.md：Akashic 的人格与形象、对用户的理解、关系定义。大多数事实不应改变它。
++- SELF.md：Kirakira 的人格与形象、对用户的理解、关系定义。大多数事实不应改变它。
+ - topics/<名>.md：全局参考信息与经验，按主题归并，优先写进已有主题而不是新建。
+ - topics/<文件夹>/<名>.md：只属于当前 scope 的约定、决策、环境与经验。{_scope_line(workspace)}
+ 
+@@ -498,7 +498,9 @@
+     """按文件名提供跨 Session 和 generation 的排他锁；取消等待不会遗留持锁线程。"""
+     if create:
+         path.parent.mkdir(parents=True, exist_ok=True)
+-    with path.open("a+b" if create else "rb") as handle:
++    # NFS requires a writable descriptor for an exclusive flock, even when
++    # reading an existing profile. Opening r+b preserves the lock file bytes.
++    with path.open("a+b" if create else "r+b") as handle:
+         while True:
+             try:
+                 fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+--- a/plugins/reply_program/program.py
++++ b/plugins/reply_program/program.py
+@@ -2,6 +2,7 @@
+ 
+ from collections.abc import Awaitable, Callable, Mapping, Sequence
+ from typing import Any, Literal, cast
++import json
+ from contextlib import AbstractAsyncContextManager, AbstractContextManager
+ 
+ from core.common.diagnostic_log import log_timing
+@@ -62,6 +63,7 @@
+     preview: Callable[[str], AbstractContextManager[StreamCallback]] | None = None,
+     reminders: Sequence[Mapping[str, object]] = (),
+     terminal_tools: frozenset[str] = frozenset(),
++    tool_choice: str | Mapping[str, object] | None = None,
+     presentation: ToolPresentation | None = None,
+     history: Literal["session", "own"] = "session",
+     before_step: Callable[[], Awaitable[None]] | None = None,
+@@ -123,6 +125,15 @@
+         materials as material_view,
+     ):
+         model = execution.chat("agent")
++        runtime_model = {"name": "runtime_model", "priority": 90, "text": (
++            "本次请求已绑定的对话模型：" + json.dumps({
++                "model": model.descriptor.model, "model_id": model.descriptor.model_id,
++                "driver": model.descriptor.driver_id,
++            }, ensure_ascii=False)
++            + "。这是 Runtime 本次实际选择的事实；配置标识不是模型名称。"
++            "询问当前底座时可直接依据此记录，不必读取配置或调用 Shell；"
++            "它不说明未公开的训练细节，也不授予额外工具权限。"
++        )}
+         # 推理与正文共用输出额度；在冻结请求前确定预算，Context 同样预留它。
+         if max_output_tokens is None:
+             max_output_tokens = model.descriptor.capabilities.max_output_tokens or 32768
+@@ -160,7 +171,7 @@
+             if history == "own":
+                 messages = own_messages(messages, source)
+             result = await material_view.prepare(
+-                messages, source, caller=ctx, reminders=tuple(reminders),
++                messages, source, caller=ctx, reminders=(*reminders, runtime_model),
+             )
+             if history == "own":
+                 result = {key: value for key, value in result.items() if key != "summary"}
+@@ -209,6 +220,7 @@
+                 materials=build_materials, content=view, tools=menu,
+                 max_output_tokens=max_output_tokens, max_steps=max_steps,
+                 reduce=None if history == "own" else reduce, preview=preview, terminal_tools=terminal_tools,
++                **({"tool_choice": tool_choice} if tool_choice is not None else {}),
+                 max_parallel_calls=max_parallel_calls,
+                 state=owner_state.open_scoped(ctx, "generation"),
+                 check_start=check,
+--- a/plugins/telegram_channel/channel.py
++++ b/plugins/telegram_channel/channel.py
+@@ -22,6 +22,8 @@
+ from telegramify_markdown.converter import convert_with_segments
+ from telegramify_markdown.entity import split_entities
+ 
++from core.common.diagnostic_log import log_timing
++
+ from plugins.channels.contract import AttachmentKind, AttachmentRef, ChannelAdapter, ChannelCleanupFailure, ChannelFactoryContext, ChannelInboundMessage, ChannelReady, DeliveryStatus, InboundIdentity, ProviderDeliveryReceipt, ProviderDeliveryRequest, RawInbound, StopReceipt
+ from agent.plugin_composition.credentials import CredentialRef, ProviderClient
+ from plugins.channels.contract import (
+@@ -32,6 +34,7 @@
+ 
+ from .reply_context import build_reply_inbound_text
+ from .telegram_utils import TelegramOutboundLimiter, strip_chunk
++from .drafts import ReplyDrafts
+ 
+ logger = logging.getLogger(__name__)
+ 
+@@ -63,6 +66,8 @@
+ def build_telegram_channel(
+     context: ChannelFactoryContext, *,
+     create_client: Callable[[Mapping[str, CredentialRef]], Awaitable[ProviderClient]],
++    draft_deliveries=None,
++    start_previews=None,
+ ) -> ChannelAdapter:
+     """Build a side-effect-free Telegram adapter for the exact Core binding."""
+ 
+@@ -74,7 +79,8 @@
+         raise RuntimeError("Telegram channel 需要 Core identity")
+     if context.attachment_import is None:
+         raise RuntimeError("Telegram channel 需要 Core attachment import")
+-    return TelegramChannelAdapter(context, create_client=create_client)
++    return TelegramChannelAdapter(context, create_client=create_client, draft_deliveries=draft_deliveries,
++                                  start_previews=start_previews)
+ 
+ 
+ class TelegramChannelAdapter:
+@@ -86,6 +92,8 @@
+     def __init__(
+         self, context: ChannelFactoryContext, *,
+         create_client: Callable[[Mapping[str, CredentialRef]], Awaitable[ProviderClient]],
++        draft_deliveries=None,
++        start_previews=None,
+     ) -> None:
+         self._context = context
+         self._binding_token = context.binding_token
+@@ -111,6 +119,10 @@
+         self._known_chats: dict[str, str] = {}
+         self._deduper = _MessageDeduper(_SEEN_LIMIT)
+         self._limiter = TelegramOutboundLimiter()
++        self._drafts = ReplyDrafts(context, lambda: self._app.bot, supervised=start_previews is not None)
++        self._start_previews = start_previews
++        self._draft_deliveries = draft_deliveries
++        self._unregister_drafts = None
+         self._admission_open = False
+         self._started = False
+         self._stopping = False
+@@ -140,11 +152,13 @@
+         if self._stopping or self._runtime is None:
+             raise RuntimeError("Telegram channel 尚未准备好 admission")
+         self._admission_open = True
++        self._drafts.resume()
+ 
+     def close_admission(self) -> None:
+         """Reject new callbacks before Core drains this binding."""
+ 
+         self._admission_open = False
++        self._drafts.pause()
+ 
+     async def start(self) -> ChannelReady:
+         """Resolve the formal credential and start polling with admission closed."""
+@@ -189,6 +203,11 @@
+             await self._app.bot.set_my_commands(
+                 [BotCommand("stop", "中断当前回复")]
+             )
++            if self._draft_deliveries is not None:
++                identity = hashlib.sha256(token.encode()).hexdigest()
++                self._unregister_drafts = self._draft_deliveries.register(identity, self._drafts)
++            if self._start_previews is not None:
++                await self._start_previews(self._drafts)
+             self._started = True
+             return ChannelReady(
+                 binding_token=self._binding_token,
+@@ -202,6 +221,19 @@
+             raise
+ 
+     async def deliver(self, request: ProviderDeliveryRequest) -> ProviderDeliveryReceipt:
++        try:
++            chat_id = int(self._resolve_recipient(request.recipient))
++        except (TypeError, ValueError):
++            return await self._deliver(request)
++        session = "telegram:" + str(chat_id)
++        log_timing("telegram.delivery.begin", session_id=session, request_id=request.delivery_id)
++        try:
++            async with self._drafts.delivering(chat_id, request.session_message_id):
++                return await self._deliver(request)
++        finally:
++            log_timing("telegram.delivery.end", session_id=session, request_id=request.delivery_id)
++
++    async def _deliver(self, request: ProviderDeliveryRequest) -> ProviderDeliveryReceipt:
+         """Verify Core attachments, then send ordered Telegram messages."""
+ 
+         if request.binding_token != self._binding_token:
+@@ -281,6 +313,10 @@
+         self._stopping = True
+         self._admission_open = False
+         failures: list[ChannelCleanupFailure] = []
++        await self._drafts.close()
++        if self._unregister_drafts is not None:
++            self._unregister_drafts()
++            self._unregister_drafts = None
+         tasks = tuple(self._inbound_tasks)
+         if tasks:
+             results = await asyncio.gather(*tasks, return_exceptions=True)
+@@ -366,6 +402,8 @@
+         message_id = str(getattr(message, "message_id", "") or "").strip()
+         if not message_id or self._deduper.seen(f"{chat.id}:{message_id}"):
+             return
++        log_timing("telegram.update.received", session_id="telegram:" + str(chat.id), request_id=message_id)
++        self._drafts.watch(int(chat.id))
+         content = str(getattr(message, "text", None) or getattr(message, "caption", None) or "")
+         attachments: list[AttachmentRef] = []
+         if message.photo:
+--- a/plugins/telegram_channel/plugin.py
++++ b/plugins/telegram_channel/plugin.py
+@@ -8,11 +8,14 @@
+ from plugins.channels.contract import CHANNEL_INPUT_V2 as CHANNEL_INPUT, RawInbound
+ from agent.plugin_composition.credentials import CREDENTIALS
+ from plugins.ledger.contract import MESSAGE_CATALOG
++from plugins.reply.contract import REPLY_STATUS
+ from plugins.sources.contract import (
+     SOURCE_INTERRUPT_V2 as SOURCE_INTERRUPT,
+ )
+ 
+ from .config import TelegramChannelConfig
++from .contract import DRAFT_DELIVERY
++from .drafts import DraftDeliveries
+ 
+ if TYPE_CHECKING:
+     from .channel import TelegramChannelAdapter, build_telegram_channel
+@@ -21,8 +24,8 @@
+ name = "telegram_channel"
+ version = "3.0.0"
+ desc = "Telegram inbound and outbound v3 channel adapter"
+-author = "Akashic"
+-function_inject = (CHANNELS, CHANNEL_INPUT, CREDENTIALS, MESSAGE_CATALOG, SOURCE_INTERRUPT)
++author = "Kirakira"
++function_inject = (CHANNELS, CHANNEL_INPUT, CREDENTIALS, MESSAGE_CATALOG, SOURCE_INTERRUPT, DRAFT_DELIVERY)
+ Config = TelegramChannelConfig
+ 
+ 
+@@ -34,6 +37,15 @@
+         return
+     # python-telegram-bot 只在启用后加载；停用时不进入插件启动成本。
+     from .channel import build_telegram_channel
++
++    async def start_previews(drafts):
++        # Optional feature, explicit lifetime dependency: when Reply unloads,
++        # cancel its readers before Reply waits for borrowed scopes to drain.
++        async def follow(child):
++            drafts.resume()
++            await child.spawn(drafts.run(), name="telegram-reply-previews")
++
++        await ctx.inject((REPLY_STATUS,), follow, name="reply-previews")
+ 
+     async def interrupt(raw: RawInbound) -> bool:
+         """先通过来源提交 pause 并等待旧工作，再由原 binding 发送 ack。"""
+@@ -48,8 +60,11 @@
+             capabilities=frozenset(
+                 {ChannelCapability.INBOUND, ChannelCapability.OUTBOUND, ChannelCapability.CONTROL}
+             ),
+-            factory=partial(build_telegram_channel, create_client=partial(ctx.require(CREDENTIALS).create, ctx)),
++            factory=partial(build_telegram_channel, create_client=partial(ctx.require(CREDENTIALS).create, ctx),
++                            draft_deliveries=ctx.require(DRAFT_DELIVERY),
++                            start_previews=start_previews),
+             config=ctx.config,
++            optional_services=frozenset({REPLY_STATUS}),
+             interrupt=interrupt,
+             inbound_identity=InboundIdentity.PROVIDER_MESSAGE_ID,
+         ),
+@@ -89,5 +104,7 @@
+ async def apply(ctx: Context) -> None:
+     """设置入口常驻，业务依赖只影响功能分支。"""
+     from .settings import mount
++    drafts = DraftDeliveries()
++    await ctx.provide(DRAFT_DELIVERY, drafts)
+     function = await ctx.inject(function_inject, run, name="function")
+     await mount(ctx, Config, function)
+--- a/plugins/telegram_sender/plugin.py
++++ b/plugins/telegram_sender/plugin.py
+@@ -13,6 +13,7 @@
+ )
+ from plugins.ledger.contract import ARTIFACT_READ
+ from plugins.ledger.contract import MESSAGE_CATALOG
++from plugins.telegram_channel.contract import DRAFT_DELIVERY
+ from plugins.delivery.contract import (
+     DELIVERY_SENDERS as DELIVERY_SENDERS,
+ )
+@@ -59,12 +60,26 @@
+ 
+     from .sender import TelegramSender
+ 
++    # One lazy pool per actual plugin generation. Credentials and send receipts
++    # remain per invocation; ordinary replies can reuse DNS/TCP/TLS connections.
++    client: aiohttp.ClientSession | None = None
++
++    async def close_http():
++        if client is not None:
++            await client.close()
++
++    await ctx.effect(lambda: close_http, label="telegram-http")
++
+     @asynccontextmanager
+     async def open_sender() -> AsyncGenerator[TelegramSender]:
+-        async with ctx.require(CREDENTIALS).open(ctx, {"token": token_ref}) as credentials:
+-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=config.timeout_seconds), trust_env=True) as client:
++        nonlocal client
++        with ctx.borrow(DRAFT_DELIVERY) as drafts:
++            async with ctx.require(CREDENTIALS).open(ctx, {"token": token_ref}) as credentials:
++                if client is None:
++                    client = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=config.timeout_seconds), trust_env=True)
+                 yield TelegramSender(client, config.api_base, credentials.credential(token_ref),
+-                                     ctx.require(MESSAGE_CATALOG), ctx.require(ARTIFACT_READ))
++                                     ctx.require(MESSAGE_CATALOG), ctx.require(ARTIFACT_READ),
++                                     draft_delivery=None if drafts is None else drafts.delivering)
+ 
+     _ = await ctx.require(DELIVERY_SENDERS).register(ctx, name=config.channel, idempotent=False, open=open_sender)
+ 
+--- a/plugins/telegram_sender/sender.py
++++ b/plugins/telegram_sender/sender.py
+@@ -1,17 +1,24 @@
+ """每个 Telegram 请求只发送一次；不确定效果交还 Delivery。"""
+ import asyncio
++import hashlib
+ import json
++from contextlib import asynccontextmanager
+ from dataclasses import dataclass
+ from typing import Literal, cast
+ 
+ import aiohttp
+ from telegramify_markdown.converter import convert_with_segments
+ from telegramify_markdown.entity import MessageEntity, split_entities
+-from plugins.ledger.contract import ArtifactRead
++
++from core.common.diagnostic_log import log_timing
+ from plugins.channels.contract import AttachmentKind, AttachmentRef
+-from plugins.ledger.contract import MessageCatalog
+-from plugins.ledger.contract import ContentPart, Control, Message
+-
++from plugins.ledger.contract import (
++    ArtifactRead,
++    ContentPart,
++    Control,
++    Message,
++    MessageCatalog,
++)
+ 
+ Status = Literal["delivered", "rejected", "failed"]
+ 
+@@ -110,16 +117,39 @@
+     idempotent = False
+ 
+     def __init__(self, client: aiohttp.ClientSession, api_base: str, token: str,
+-                 catalog: MessageCatalog, artifacts: ArtifactRead):
++                 catalog: MessageCatalog, artifacts: ArtifactRead, *, draft_delivery=None):
+         self._client = client
+         self._url = api_base.rstrip("/") + "/bot" + token
+         self._catalog = catalog
+         self._artifacts = artifacts
++        self._draft_identity = hashlib.sha256(token.encode()).hexdigest()
++        self._draft_delivery = draft_delivery
+ 
+     async def query(self, key: str, address: str) -> SendResult | None:
+         return None
+ 
+     async def send(self, key: str, address: str, message: Message) -> SendResult:
++        log_timing("telegram.delivery.begin", session_id=message.session_id, request_id=key)
++        try:
++            async with self._draft_guard(address, message.message_id):
++                return await self._send(key, address, message)
++        finally:
++            log_timing("telegram.delivery.end", session_id=message.session_id, request_id=key)
++
++    @asynccontextmanager
++    async def _draft_guard(self, address, message_id):
++        try:
++            chat_id = int(address)
++        except ValueError:
++            yield
++            return
++        if self._draft_delivery is None:
++            yield
++        else:
++            async with self._draft_delivery(self._draft_identity, chat_id, message_id):
++                yield
++
++    async def _send(self, key: str, address: str, message: Message) -> SendResult:
+         """先准备所有正文与附件，再逐项记录明确的 provider 回执。"""
+         # 1. 地址和本地材料错误发生在第一个发送请求之前。
+         try:

@@ -1,5 +1,11 @@
 """Model request views and usage projections preserve their source semantics."""
 
+import json
+from contextlib import aclosing
+
+import httpx
+import pytest
+
 from plugins.ledger.contract import ContentReferences
 from plugins.models.contract import (
     BoundModelDescriptor,
@@ -7,6 +13,38 @@ from plugins.models.contract import (
     ModelRequest,
 )
 from plugins.models.projection import MessageProjection
+
+
+@pytest.mark.asyncio
+async def test_streamed_tool_identity_is_stable_while_arguments_accumulate():
+    from plugins.openai_compatible.driver import _consume_stream, _merge_tool_deltas
+
+    def call(index, identity, name, args):
+        return {"index": index, "id": identity, "function": {"name": name, "arguments": args}}
+
+    chunks = [
+        [call(0, "call-1", "read_memory_source", '{"message_id":')],
+        [call(0, "call-1", "read_memory_source", '"source",'), call(1, "call-2", "other_tool", '{"value":')],
+        [call(1, "call-2", "other_tool", '2}'), call(0, "call-1", "read_memory_source", '"offset":0}')],
+    ]
+
+    class Stream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            for chunk in chunks:
+                yield ("data: " + json.dumps({"choices": [{"delta": {"tool_calls": chunk}}]}) + "\n\n").encode()
+            yield b'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}\n\ndata: [DONE]\n\n'
+
+    async with aclosing(httpx.Response(200, stream=Stream())) as response:
+        result = await _consume_stream(response, None)
+    assert [(c.id, c.name, dict(c.arguments)) for c in result.tool_calls] == [
+        ("call-1", "read_memory_source", {"message_id": "source", "offset": 0}),
+        ("call-2", "other_tool", {"value": 2}),
+    ]
+    saved = {}
+    assert _merge_tool_deltas(saved, [call(0, "call-1", "read_memory_source", "")])
+    assert not _merge_tool_deltas(saved, [call(0, "call-1", "read_memory_source", "")])
+    with pytest.raises(RuntimeError, match="id changed"):
+        _merge_tool_deltas(saved, [call(0, "another-call", "read_memory_source", "")])
 
 
 class _CountingModel:

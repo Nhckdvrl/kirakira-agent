@@ -7,6 +7,8 @@ from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
 from typing import TypedDict
 
+from core.common.diagnostic_log import log_timing
+
 from agent.plugin_composition import Context, Effect
 from agent.plugin_composition.model import FiberState
 from plugins.models.contract import ContextModel, ModelRequest
@@ -79,19 +81,24 @@ class MaterialView:
             collect(caller.runtime.plugin_id, decode_material({"reminders": reminders}).reminders)
         summary: Summary | None = None
         references: dict[str, Mapping[str, object]] = {}
-        async def prepare_owner(owner: _Source) -> Materials | Exception:
+        async def prepare_owner(name: str, owner: _Source) -> Materials | Exception:
             """Keep each independent contribution inside its actual owner scope."""
+            fields = {"session_id": snapshot[-1].session_id if snapshot else "",
+                      "source": source, "operation_id": name}
+            log_timing("materials.owner.begin", **fields)
             try:
                 async with owner.context.runtime_scope():
                     return decode_material(await owner.prepare(snapshot, source))
             except Exception as error:
                 # Drain every started owner, then report errors in frozen order.
                 return error
+            finally:
+                log_timing("materials.owner.end", **fields)
 
         # Preparation may overlap; merging still follows the frozen source order.
         async with asyncio.TaskGroup() as group:
-            tasks = [group.create_task(prepare_owner(owner), context=child_task_context())
-                     for _, owner in self._sources]
+            tasks = [group.create_task(prepare_owner(name, owner), context=child_task_context())
+                     for name, owner in self._sources]
         for (name, owner), task in zip(self._sources, tasks, strict=True):
             material = task.result()
             if isinstance(material, Exception):
