@@ -128,6 +128,50 @@ python -m eval.mail_followups \
 
 记忆向量资产先通过 `configure-memory --download` 显式准备，参见[配置指南](../docs/handbook/memory-proactive.md)。生产运行不临时下载。中文功能场景与英文公开基准使用各自固定的向量空间，不混库。
 
+## Telegram 链路延迟
+
+纯 Runtime 测量不发送 Telegram 消息；使用与实际运行相同的文件系统，保留冷启动与后续请求的差异：
+
+```sh
+python -m eval.telegram_latency \
+  --model-config /private/path/model.json --key-file /private/path/model.key \
+  --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json \
+  --workspace /same-filesystem/eval/latency-new --output /private/path/latency.json
+```
+
+测试实际适配器与 Telegram 发送时，额外指定 `--telegram-token-file /private/path/bot.key --telegram-chat-file /private/path/chat.key --expected-bot your_bot`。两个文件只保存 token、已确认的私聊数字 ID。该模式会向这个私聊发送四条受控回复；隔离工作区关闭轮询，在线实例继续收信。它验证实际 Core 接纳、流式草稿和投递回执，不冒充手机到手机测试。需要新的工作区及独立插件 home，不能连接生产工作区运行夹具。
+
+报告分开记录原始 SSE 正文、公开正文回调、草稿 API 确认、最终回执和各材料阶段；推理字段不算正文。每次结束后顺序重放相同原生请求字节，只存摘要和大小，不保存正文或密钥。先后次序可能预热供应商缓存，因此不能据此计算产品 A/B 加速比。默认头部跟踪支持通用兼容驱动及既有订阅驱动，不依赖具体模型名。
+
+结果、慢样本与开发失败见 [Telegram 实测](../docs/operations/evaluations/2026-10-22-telegram-latency.md)。
+
+## 记忆取证深度
+
+这个受控组件实验测量片段外的原始事实是否恢复，使用固定合成历史、正式记忆组件与真实 Models reader；不是公开 benchmark。向量和图方案都有相同的原文读取机会。原文预算包含序列化说明；累计重发输入、调用数和用量另外报告。
+
+```sh
+python -m eval.memory_depth \
+  --model-config /private/path/model.json --key-file /private/path/model.key \
+  --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json \
+  --workspace /local-disk/eval/depth-new --output /private/path/depth.json \
+  --per-family 4 --candidates 4 --max-chars 6000 --initial-chars 2400 --parallel 3
+```
+
+首轮 80 个组合保留格式错误、读取失败和错误回答，不替换已完成结果。末页来源提供正常的目录线索，不向 reader 提供参考编号或正确读取偏移。原文只允许从当前父回执已经入选的消息读取。
+
+保存首轮报告与其 `frozen-corpus/sessions.db` 后，可在另一个新工作区重新核对全部材料摘要、原文范围，并对已冻结回答作一次独立同模型语义复核：
+
+```sh
+python -m eval.memory_depth \
+  --model-config /private/path/model.json --key-file /private/path/model.key \
+  --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json \
+  --workspace /local-disk/eval/depth-grade-new --output /private/path/depth-grade.json \
+  --analyze-existing /private/path/depth.json \
+  --corpus-db /local-disk/eval/depth-new/frozen-corpus/sessions.db --parallel 2
+```
+
+复核不重跑 reader、不追加原文、不改原报告；先复制一致的 SQLite 快照，judge 看不到方案名称。原机械规则、无效 judge 与新复核分别保存，不能挑高分替换首轮。确定性原文覆盖与有误差的答案评分分开解释。结果见[取证深度实测](../docs/operations/evaluations/2026-10-22-memory-depth.md)。运行实际渠道、工具与完整重启继续使用 `eval.memory_runtime`。
+
 ## 工具读取与执行
 
 只测组件时不需要模型凭据；`--baseline-ref` 需要包含该提交的源码 checkout，省略它则只验证当前实现：
