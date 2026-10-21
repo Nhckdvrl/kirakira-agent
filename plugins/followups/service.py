@@ -21,7 +21,7 @@ from plugins.ledger.contract import (
 from plugins.tools.contract import TOOLS
 
 from . import webpages
-from .contract import Feedback, Revise, SetEnabled, WatchSpec
+from .contract import Feedback, Recheck, Revise, SetEnabled, WatchSpec
 from .feeds import MAX_BYTES, Entry, decode, feed_url, fingerprint
 from .mailbox import MailboxError
 
@@ -324,6 +324,85 @@ class Service:
             await self._save("cursor:" + watch_id, value)
         self.changed.set()
         return {"status": "baseline_requested", "accepted_events_preserved": True}
+
+    async def recheck(self, request: Recheck):
+        async with self.locks.setdefault(request.watch_id, asyncio.Lock()):
+            source = await self._source(request.watch_id)
+            await self._recover(request.watch_id, source)
+            watch = await run_file_io(lambda: self._watch(request.watch_id))
+            spec = WatchSpec.model_validate(watch["spec"])
+            self._session(spec.session_id)
+            current_policy = await run_file_io(lambda: self._policy(watch))
+            selected = await source.inspect_revision(request.item_id, request.revision)
+            if selected is None:
+                raise ValueError("跟进条目不存在")
+            root = (
+                selected["payload"]
+                .get("owner_recheck", {})
+                .get("original_revision", request.revision)
+            )
+            prefix = "recent:" + request.watch_id + ":"
+            recent = await run_file_io(
+                lambda: [
+                    dict(json_value(row.value))
+                    for _, row in self.store.scan(
+                        start=prefix, stop=prefix + "\uffff", limit=100
+                    )
+                ]
+            )
+            latest = next(
+                (row for row in recent if row["item_id"] == request.item_id), None
+            )
+            if latest is None:
+                raise ValueError("该条目已不在当前时间线，请选择最近的版本")
+            latest_value = await source.inspect_revision(
+                request.item_id, latest["revision"]
+            )
+            latest_root = (
+                latest_value["payload"]
+                .get("owner_recheck", {})
+                .get("original_revision", latest["revision"])
+            )
+            if root != latest_root:
+                raise ValueError("来源已有较新版本，请复查最新信息，不能重放过期内容")
+            original = await source.inspect_revision(request.item_id, root)
+            if current_policy["revision"] <= original["payload"]["follow_up"].get(
+                "policy_revision", 0
+            ):
+                raise ValueError("请先修改关注规则，再按新规则复查")
+            revision = fingerprint(
+                [
+                    "owner-rule-recheck",
+                    request.watch_id,
+                    request.item_id,
+                    root,
+                    current_policy["revision"],
+                ]
+            )
+            refs = [{"item_id": request.item_id, "revision": revision}]
+            if await source.inspect_revision(request.item_id, revision) is not None:
+                return {"status": "reused", "submitted": 0, "refs": refs}
+            cursor = await run_file_io(
+                lambda: self.store.read("cursor:" + request.watch_id)
+            )
+            payload = {
+                **json_value(original["payload"]),
+                "review_policy": REQUESTED_REVIEW,
+                "owner_recheck": {
+                    "original_revision": root,
+                    "policy_revision": current_policy["revision"],
+                    "policy_message_id": current_policy["message_id"],
+                },
+            }
+            # A derived review version, not a fabricated new mail or changed original.
+            return await self._accept(
+                watch,
+                spec,
+                source,
+                [Entry(request.item_id, revision, payload)],
+                dict(json_value(cursor.value)) if cursor else {},
+                datetime.now(UTC),
+            )
 
     async def _accept(self, watch, spec, source, fresh, checkpoint, now):
         anchors = await run_file_io(lambda: self._anchors(spec))

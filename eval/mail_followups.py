@@ -17,7 +17,11 @@ from eval.fixtures.mailbox import MailboxServer
 from eval.models import EvaluationModel, provider_slot, source_identity
 from eval.native_alignment import metrics, until
 from kirakira_agent.runtime import initialize_workspace, rpc, runtime, submit
-from kirakira_agent.setup import configure_embedding, configure_proactive
+from kirakira_agent.setup import (
+    configure_embedding,
+    configure_proactive,
+    upgrade_workspace,
+)
 from plugins.akasha.infrastructure.consumption import load_message_nodes
 from plugins.ledger.contract import MESSAGE_CATALOG
 from plugins.ui.contract import PLUGIN_UI
@@ -523,6 +527,112 @@ async def evaluate(args):
     return all(row["passed"] for row in report["cases"])
 
 
+async def recheck_existing(args):
+    """Keep the first-pass error, clarify the owner's rule, review the same fact."""
+    previous = json.loads(args.first_pass.read_text())
+    original = next(
+        row
+        for row in previous["observations"]
+        if row["family"] == "region"
+        and row["history"] == "present"
+        and row["variant"] == 1
+    )
+    assert original["decision"] == "skip_content", (
+        "this intervention requires the recorded first-pass error"
+    )
+    upgrade_workspace(args.workspace)
+    report = {
+        "implementation": source_identity(),
+        "first_pass_source_commit": "5c80353",
+        "first_pass_error_retained": original,
+        "model_config": EvaluationModel.read(args.model_config).description(),
+    }
+    try:
+        async with runtime(args.workspace) as core:
+            identity = original["watch"]["watch_id"]
+            reference = {key: original["event"][key] for key in ("item_id", "revision")}
+            before = await rpc(core, "followups/timeline", {"watch_id": identity})
+            original_value = next(
+                row
+                for row in before["events"]
+                if row["revision"] == reference["revision"]
+            )
+            request = {
+                "watch_id": identity,
+                "request_id": "clarify-region-subject",
+                "expected_revision": 0,
+                "purpose": "我对数据存放在哪个国家没有限制，美国区域的方案也符合我的要求；这样的新候选需要提醒我。这里不要求服务商同时提供所有国家的机房。",
+            }
+            receipt = await rpc(core, "followups/revise", request)
+            result = await rpc(
+                core, "followups/recheck", {"watch_id": identity, **reference}
+            )
+            report.update(
+                policy_request=request, policy_receipt=receipt, review_submission=result
+            )
+            target = result["refs"][0]
+            async with asyncio.timeout(240):
+                while True:
+                    current = await rpc(
+                        core, "followups/timeline", {"watch_id": identity}
+                    )
+                    review = next(
+                        row
+                        for row in current["events"]
+                        if row["revision"] == target["revision"]
+                    )
+                    terminal = [
+                        row
+                        for row in review["decisions"]
+                        if row["tool"] in {"share_content", "skip_content"}
+                    ]
+                    if terminal and (
+                        terminal[-1]["tool"] == "skip_content" or review["deliveries"]
+                    ):
+                        break
+                    await asyncio.sleep(0.2)
+            report["review"] = review
+            assert terminal[-1]["tool"] == "share_content", terminal
+            assert len(review["deliveries"]) == 1
+            old = next(
+                row
+                for row in current["events"]
+                if row["revision"] == reference["revision"]
+            )
+            assert (
+                old["payload"] == original_value["payload"]
+                and old["decisions"] == original_value["decisions"]
+            )
+            assert review["payload"]["mail"] == old["payload"]["mail"]
+            assert (
+                review["payload"]["owner_recheck"]["original_revision"]
+                == reference["revision"]
+            )
+            model = EvaluationModel.read(args.model_config)
+            calls = metrics(args.workspace, model)["remote_chat_calls"]
+            duplicate = await rpc(
+                core, "followups/recheck", {"watch_id": identity, **reference}
+            )
+            assert duplicate["status"] == "reused" and duplicate["submitted"] == 0
+            assert metrics(args.workspace, model)["remote_chat_calls"] == calls
+            assert not current["watch"]["enabled"]
+            report.update(
+                passed=True,
+                same_original_mail=True,
+                original_error_and_payload_unchanged=True,
+                repeated_review_reuses_receipt=True,
+                paused_collection_remains_paused=True,
+                metrics=metrics(args.workspace, model),
+            )
+    except Exception as error:  # noqa: BLE001 - preserve the actual failed intervention
+        report.update(
+            passed=False, error=type(error).__name__ + ": " + str(error)[:1500]
+        )
+    args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+    print(json.dumps({"owner_clarification_and_recheck": report["passed"]}), flush=True)
+    return report["passed"]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("workspace", "key-file", "embedding-manifest", "output"):
@@ -530,6 +640,8 @@ def main():
     parser.add_argument("--model-config", type=Path)
     parser.add_argument("--functional-only", action="store_true")
     parser.add_argument("--with-functional", action="store_true")
+    parser.add_argument("--recheck-existing", action="store_true")
+    parser.add_argument("--first-pass", type=Path)
     parser.add_argument("--family-start", type=int, default=0)
     parser.add_argument("--family-end", type=int, default=len(FAMILIES))
     args = parser.parse_args()
@@ -541,6 +653,10 @@ def main():
         async with provider_slot(
             EvaluationModel.read(args.model_config), args.key_file
         ):
+            if args.recheck_existing:
+                if args.first_pass is None:
+                    raise ValueError("--recheck-existing requires --first-pass")
+                return await recheck_existing(args)
             return await evaluate(args)
 
     raise SystemExit(0 if asyncio.run(run()) else 1)

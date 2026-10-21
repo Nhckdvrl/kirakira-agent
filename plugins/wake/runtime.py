@@ -221,7 +221,8 @@ class Runtime:
             model_id=model.model_id, reasoning_effort=model.reasoning_effort,
             rules=read_archived_rules(ctx.data_root) or "",
             history=recent_context(ctx.require(MESSAGE_CATALOG), ctx.require(DELIVERY_READ),
-                                   target=context_session, now=now),
+                                   target=context_session, now=now,
+                                   items=captured_items if owner == "content" else ()),
             events=tuple(dict(item) for item in (await ctx.require(EVENTMAIL_WAKE).active_context(now))))
 
     async def follow(self) -> None:

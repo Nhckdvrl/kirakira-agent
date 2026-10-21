@@ -10,7 +10,7 @@ interface Mailbox { account_id: string; label: string }
 interface Decision { tool: string; arguments: { reason?: string; message?: string } }
 interface Event {
   item_id: string; revision: string; status: string;
-  payload: { title: string; content: string; url: string | null; mail?: { messages_in_update: number } }; decisions: Decision[];
+  payload: { title: string; content: string; url: string | null; content_truncated?: boolean; mail?: { messages_in_update: number }; follow_up: { purpose: string; policy_revision?: number }; owner_recheck?: { original_revision: string } }; decisions: Decision[];
   evidence: { kind: string; text?: string; recorded_at?: string; start?: number; end?: number; truncated?: boolean }[];
   deliveries: { text: string; confirmed_at: string }[]; feedback: { value: string } | null;
 }
@@ -195,15 +195,16 @@ class FollowupTab {
           void this.request("/reset-mailbox", { watch_id: selected }).then(() => this.refreshTimeline()).catch(error => this.error(error));
       }));
       if (!value.events.length) pane.append(el("p", "等待新变化。建立基线时的信息不会触发历史通知。"));
-      for (const event of value.events) pane.append(this.event(event, selected));
+      for (const event of value.events) pane.append(this.event(event, selected, value.watch.policy.revision));
       this.root.append(pane);
       this.timer = window.setTimeout(() => { void this.refreshTimeline(); }, 8000);
     } catch (error) { this.error(error); }
   }
-  private event(event: Event, watch: string): HTMLElement {
+  private event(event: Event, watch: string, currentRule: number): HTMLElement {
     const card = el("article"); const link = event.payload.url ? el("a", event.payload.title || "信息源更新") : el("strong", event.payload.title || "邮件更新");
     if (link instanceof HTMLAnchorElement && event.payload.url) { link.href = event.payload.url; link.target = "_blank"; link.rel = "noopener noreferrer"; } card.append(link);
     if (event.payload.mail) card.append(el("p", `同一邮件线程 · 本次合并 ${event.payload.mail.messages_in_update} 封`, "followups-note"));
+    if (event.payload.owner_recheck) card.append(el("p", "按修改后的关注规则复查；原始内容与旧判断保留。", "followups-note"));
     const decision = [...event.decisions].reverse().find(value => value.tool === "skip_content" || value.tool === "share_content");
     const ready = event.status === "ready_for_delivery";
     const status = event.deliveries.length ? "已送达" : decision?.tool === "skip_content" ? "本轮已跳过"
@@ -211,6 +212,8 @@ class FollowupTab {
     card.append(el("p", status, "followups-status"));
     if (decision) card.append(el("p", "本轮调查：" + (decision.arguments.reason || decision.arguments.message || "")));
     const detail = el("details"); detail.append(el("summary", "查看新信息与调查依据"), el("p", event.payload.content));
+    detail.append(el("blockquote", "本次采用的关注规则：\n" + event.payload.follow_up.purpose));
+    if (event.payload.content_truncated) detail.append(el("p", "内容已节选，结论可能需要继续核对原始来源。", "followups-note"));
     for (const evidence of event.evidence) {
       const range = evidence.kind === "source_read" ? `原始消息第 ${evidence.start}—${evidence.end} 字符\n` : "";
       detail.append(el("blockquote", range + (evidence.recorded_at ? date(evidence.recorded_at) + "\n" : "")
@@ -219,6 +222,10 @@ class FollowupTab {
     }
     if (!event.evidence.length) detail.append(el("p", "当前尚无记忆工具的成功读取记录。"));
     card.append(detail);
+    if (currentRule > (event.payload.follow_up.policy_revision || 0)) card.append(button("按当前规则复查", () => {
+      void this.request("/recheck", { watch_id: watch, item_id: event.item_id, revision: event.revision })
+        .then(() => this.refreshTimeline()).catch(error => this.error(error));
+    }));
     for (const delivered of event.deliveries) card.append(el("p", "确认送达：" + date(delivered.confirmed_at), "followups-note"));
     if (event.deliveries.length) {
       for (const [value, label] of [["useful", "有用"], ["irrelevant", "与我无关"]]) {

@@ -53,6 +53,12 @@ python -m eval.followups \
   --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json \
   --workspace /local-disk/eval/followups-new --output /local-disk/eval/followups.json \
   --isolated --long-source
+
+python -m eval.mail_followups \
+  --model-config /private/path/model.json --key-file /private/path/model.key \
+  --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json \
+  --workspace /local-disk/eval/mail-new --output /local-disk/eval/mail.json \
+  --with-functional
 ```
 
 | 入口 | 验证范围 |
@@ -62,10 +68,26 @@ python -m eval.followups \
 | `memory_runtime` | 真实渠道学习到查询、RPC、Agent 工具、原文展开、项目提醒、显式反馈和重启 |
 | `native_web` | 认证后的工作台/聊天 HTTP、import map、项目作用域与实际文件工具 |
 | `followups` | 原始对话创建跟进、真实 HTTP 订阅/网页差异、调查分享/跳过、精确投递、反馈、暂停与恢复；可选隔离项目和长原文读取 |
+| `mail_followups` | 本地 TLS IMAP 的真实采集、跨会话历史条件与分享/跳过、线程更正、规则修改、外部指令、UID 重建与重启 |
 
 `eval/fixtures/native_extension` 提供真实托管 HTTP 进程和 stdio MCP 服务；事件投递目标为隔离的本地会话。它们是受控集成验收，不是外部账号、所有设备或所有可选提供方的部署认证。
 
 `followups` 的本机订阅源提供变化事实，不携带参考答案或人工兴趣分。明确订阅通过独立的调查请求接纳；语义兴趣仍如实记录。`--isolated` 验证调查范围与通知位置分离，`--long-source` 明确要求摘录后展开原文，检查工具可用性；它不是自主选择检索策略的质量基准。加 `--webpage` 将前两条变化切换为真实 HTTP 网页的前后版本，仍经过相同调查、记忆、投递与恢复链路。端到端用例不计作公开通知有效率。
+
+邮件实验用六个固定场景，每个场景的邮件相同，在另一个历史对话中分别放置应分享或应跳过的用户条件。每个条件另有移除该历史的观察组，共 24 次调查；通知收件位置独立于项目隔离。`--family-start` / `--family-end` 可拆分场景，`--functional-only` 只跑功能验收。无历史组本来就缺少个人条件，不能把它当作公平的其他记忆系统基线或现实通知准确率。首轮错误保留，功能断言与行动符合率分别报告。
+
+已有首轮出现地域条件误解时，可以在其原工作区执行一次独立干预；需要保留原报告与工作区。此操作会写入用户澄清规则并对原内容提交复查，不重算首轮分数：
+
+```sh
+python -m eval.mail_followups \
+  --model-config /private/path/model.json --key-file /private/path/model.key \
+  --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json \
+  --workspace /local-disk/eval/mail-original \
+  --first-pass /local-disk/eval/mail-original.json --recheck-existing \
+  --output /local-disk/eval/mail-owner-clarification.json
+```
+
+这个干预只适用于已经保留该首轮错误的场景，不能通过反复调用筛选出成功结果。相同规则下的重复复查仅复用回执；通用 API 见[使用指南](../docs/handbook/followups.md)。TLS 测试夹具生成临时证书并保留协议命令，不接触真实私人邮箱。
 
 记忆向量资产先通过 `configure-memory --download` 显式准备，参见[配置指南](../docs/handbook/memory-proactive.md)。生产运行不临时下载。中文功能场景与英文公开基准使用各自固定的向量空间，不混库。
 

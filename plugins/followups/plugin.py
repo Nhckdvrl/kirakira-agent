@@ -26,6 +26,7 @@ from .contract import (
     FOLLOWUPS,
     Config,
     Feedback,
+    Recheck,
     Revise,
     SetEnabled,
     WatchId,
@@ -96,6 +97,7 @@ async def apply(ctx):
                 "feedback",
                 "revise",
                 "reset_mailbox",
+                "recheck",
             )
         }
     )
@@ -108,6 +110,7 @@ async def apply(ctx):
         ("set-enabled", SetEnabled, api.set_enabled),
         ("feedback", Feedback, api.feedback),
         ("revise", Revise, api.revise),
+        ("recheck", Recheck, api.recheck),
         ("reset-mailbox", WatchId, lambda request: api.reset_mailbox(request.watch_id)),
     ):
 

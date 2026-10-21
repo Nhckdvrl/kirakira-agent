@@ -1,10 +1,20 @@
 """Authenticated, generation-bound HTTP facade for the conversation tab."""
 
 from fastapi import FastAPI, HTTPException, Path, Query
+from starlette.responses import JSONResponse
 
+from agent.plugin_composition.model import CompositionError
 from plugins.ui.contract import UI
 
-from .contract import FOLLOWUPS, Feedback, Revise, SetEnabled, WatchId, WatchSpec
+from .contract import (
+    FOLLOWUPS,
+    Feedback,
+    Recheck,
+    Revise,
+    SetEnabled,
+    WatchId,
+    WatchSpec,
+)
 from .mail_settings import MAIL_SETTINGS
 
 inject = (FOLLOWUPS, MAIL_SETTINGS, UI)
@@ -18,6 +28,15 @@ async def checked(action):
 
 
 def register(app: FastAPI, context):
+    async def changing_owner(_request, error):
+        if error.code not in {"OWNER_UNAVAILABLE", "STALE_ACTIVATION"}:
+            raise error
+        return JSONResponse(
+            {"code": "stale_owner", "detail": "配置正在切换，请刷新后查询原操作回执"},
+            status_code=409,
+        )
+
+    app.add_exception_handler(CompositionError, changing_owner)
     context.require(UI).register_configuration(
         app, context, MAIL_SETTINGS, "/api/dashboard/followups/config"
     )
@@ -54,3 +73,7 @@ def register(app: FastAPI, context):
     @app.post("/api/dashboard/followups/reset-mailbox")
     async def reset(request: WatchId):
         return await checked(context.require(FOLLOWUPS).reset_mailbox(request.watch_id))
+
+    @app.post("/api/dashboard/followups/recheck")
+    async def recheck(request: Recheck):
+        return await checked(context.require(FOLLOWUPS).recheck(request))

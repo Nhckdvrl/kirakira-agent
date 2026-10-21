@@ -184,7 +184,9 @@ def _fetch(config, secret, spec, cursor, connection):
     deadline = time.monotonic() + 40
     client = None
     try:
-        context = ssl.create_default_context(cafile=config.tls_ca_file)
+        context = ssl.create_default_context()
+        if config.tls_ca_file:
+            context.load_verify_locations(cafile=config.tls_ca_file)
         client = _ReadOnlyIMAP(
             config.host, config.port, ssl_context=context, timeout=10
         )
@@ -220,6 +222,8 @@ def _fetch(config, secret, spec, cursor, connection):
             return int(data[0])
 
         epoch, upper = number("UIDVALIDITY"), number("UIDNEXT") - 1
+        if epoch <= 0 or upper < 0:
+            raise MailboxError("protocol_error", "邮箱 UID 身份或水位无效")
         if not cursor.get("initialized"):
             return Batch((), {"uidvalidity": epoch, "last_uid": upper}, 0, 0, 0)
         previous = cursor.get("mailbox", {})

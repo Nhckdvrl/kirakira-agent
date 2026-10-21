@@ -131,6 +131,11 @@ class Revise(WatchId):
         return value.strip()
 
 
+class Recheck(WatchId):
+    item_id: str = Field(min_length=1, max_length=256)
+    revision: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 class Followups(Protocol):
     async def overview(self, session_id: str) -> dict: ...
     async def create(self, spec: WatchSpec) -> dict: ...
@@ -140,6 +145,7 @@ class Followups(Protocol):
     async def feedback(self, request: Feedback) -> dict: ...
     async def revise(self, request: Revise) -> dict: ...
     async def reset_mailbox(self, watch_id: str) -> dict: ...
+    async def recheck(self, request: Recheck) -> dict: ...
 
 
 FOLLOWUPS = ServiceKey[Followups]("followups.v1")

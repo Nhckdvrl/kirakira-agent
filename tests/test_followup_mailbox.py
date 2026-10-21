@@ -1,8 +1,11 @@
 """Real TLS, UID backlog, cancellation and atomic owner-rule updates."""
 
 import asyncio
+import json
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
+import httpx
 import pytest
 
 from agent.plugin_composition import CompositionRoot, CredentialRef
@@ -12,6 +15,7 @@ from plugins.eventmail.plugin import _SourceServices, _StoreIO
 from plugins.eventmail.store import EventMailStore
 from plugins.followups.contract import (
     MailboxConfig,
+    Recheck,
     Revise,
     WatchSpec,
     check_policy_record,
@@ -156,6 +160,20 @@ async def test_rule_fact_and_policy_commit_atomically_retry_and_conflict(tmp_pat
     mail.initialize()
     sources = _SourceServices(mail, _StoreIO(), lambda: None)
     root, services = CompositionRoot("policy-test"), []
+    feed = {"content": None, "requests": 0}
+
+    def handle(_request):
+        feed["requests"] += 1
+        item = (
+            ""
+            if feed["content"] is None
+            else "<item><guid>stable</guid><title>项目更新</title><description>"
+            + feed["content"]
+            + "</description></item>"
+        )
+        return httpx.Response(
+            200, content=("<rss><channel>" + item + "</channel></rss>").encode()
+        )
 
     async def mount(ctx):
         service = Service(
@@ -168,6 +186,8 @@ async def test_rule_fact_and_policy_commit_atomically_retry_and_conflict(tmp_pat
             lambda: None,
             writers=lambda _: writer("followups"),
         )
+        await service.http.aclose()
+        service.http = httpx.AsyncClient(transport=httpx.MockTransport(handle))
         await ctx.effect(lambda: service.http.aclose)
         services.append(service)
 
@@ -184,6 +204,10 @@ async def test_rule_fact_and_policy_commit_atomically_retry_and_conflict(tmp_pat
             anchors=("original",),
         )
         await service.create(spec)
+        assert (await service.poll(spec.watch_id))["status"] == "baseline"
+        feed["content"] = "第一版来源内容"
+        original_event = await service.poll(spec.watch_id)
+        ref = original_event["refs"][0]
         request = Revise(
             watch_id=spec.watch_id,
             request_id="once",
@@ -219,6 +243,51 @@ async def test_rule_fact_and_policy_commit_atomically_retry_and_conflict(tmp_pat
         assert timeline["watch"]["policy"]["purpose"] == request.purpose
         assert len(timeline["policy_history"]) == 1
         assert log.reader("owner").get("original").body.parts[0].value == "跟进项目动态"
+        previous_cursor = service.store.read("cursor:" + spec.watch_id).value
+        previous_requests = feed["requests"]
+        review = await service.recheck(Recheck(watch_id=spec.watch_id, **ref))
+        assert review["submitted"] == 1 and feed["requests"] == previous_requests
+        assert service.store.read("cursor:" + spec.watch_id).value == previous_cursor
+        assert (await service.recheck(Recheck(watch_id=spec.watch_id, **ref)))[
+            "status"
+        ] == "reused"
+        timeline = await service.timeline(spec.watch_id)
+        assert len(timeline["events"]) == 2
+        by_revision = {row["revision"]: row["payload"] for row in timeline["events"]}
+        assert by_revision[ref["revision"]]["follow_up"]["purpose"] == "原规则"
+        newer = by_revision[review["refs"][0]["revision"]]
+        assert (
+            newer["content"] == "第一版来源内容"
+            and newer["follow_up"]["purpose"] == request.purpose
+        )
+        from plugins.wake.messages import recent_context
+
+        def captured_policy(payload=newer, source="followups:" + spec.watch_id):
+            return recent_context(
+                log.catalog(),
+                SimpleNamespace(recent=lambda **_: ()),
+                target="owner",
+                now=datetime.now(UTC),
+                items=({"ref": {"source_id": source}, "payload": payload},),
+            )
+
+        raw_rules = json.loads(captured_policy())["followup_rule_changes"]
+        assert len(raw_rules) == 1 and raw_rules[0]["text"] == request.purpose
+        assert raw_rules[0]["message_id"] == receipt["message_id"]
+        assert not json.loads(captured_policy(source="external-mail"))[
+            "followup_rule_changes"
+        ]
+        with pytest.raises(ValueError, match="来源、版本"):
+            captured_policy(source="followups:w_" + "c" * 32)
+        with pytest.raises(ValueError, match="用户文字"):
+            captured_policy(
+                {**newer, "follow_up": {**newer["follow_up"], "purpose": "forged"}}
+            )
+        assert newer["owner_recheck"]["original_revision"] == ref["revision"]
+        feed["content"] = "第二版来源内容"
+        await service.poll(spec.watch_id)
+        with pytest.raises(ValueError, match="较新版本"):
+            await service.recheck(Recheck(watch_id=spec.watch_id, **ref))
     finally:
         await root.dispose()
         log.close()

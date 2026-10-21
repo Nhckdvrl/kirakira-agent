@@ -1267,19 +1267,19 @@
     "plugins/delivery/contract.py": {
       "sha256": "d4ba89941a1cca0745c57f0b57106ab370c8cbee47011f60944bb97a1a93329b",
       "patch": "patches/followup-investigation.patch",
-      "patch_sha256": "a2b5fa908077c2d4d21a93209f647a26d12af065511c925774238eb286c6076e",
+      "patch_sha256": "3523964850347151ce584e7dde4a2a0ac7f53c823ec712bbf45a34afc41f689a",
       "reason": "Owner-requested review, bounded inherited scope, phase-bound history checks, required decision tools, live inspection and exact delivery confirmations."
     },
     "plugins/delivery/history.py": {
       "sha256": "bb80111d250c6d59cc6d8838861935eb15b8420e5494a16fbbf9c5ce256d44c3",
       "patch": "patches/followup-investigation.patch",
-      "patch_sha256": "a2b5fa908077c2d4d21a93209f647a26d12af065511c925774238eb286c6076e",
+      "patch_sha256": "3523964850347151ce584e7dde4a2a0ac7f53c823ec712bbf45a34afc41f689a",
       "reason": "Owner-requested review, bounded inherited scope, phase-bound history checks, required decision tools, live inspection and exact delivery confirmations."
     },
     "plugins/delivery/plugin.py": {
       "sha256": "e9d1f4b35bf8299e137e45ed5ecdb7a6c1894e88b4d54e58472365378db34529",
       "patch": "patches/followup-investigation.patch",
-      "patch_sha256": "a2b5fa908077c2d4d21a93209f647a26d12af065511c925774238eb286c6076e",
+      "patch_sha256": "3523964850347151ce584e7dde4a2a0ac7f53c823ec712bbf45a34afc41f689a",
       "reason": "Owner-requested review, bounded inherited scope, phase-bound history checks, required decision tools, live inspection and exact delivery confirmations."
     },
     "plugins/drift/plugin.py": {
@@ -1291,19 +1291,19 @@
     "plugins/eventmail/contract.py": {
       "sha256": "d18638aa73eb34b20f4c76b8c546babb161cffc9001a623916eb8ec546b7b16b",
       "patch": "patches/followup-investigation.patch",
-      "patch_sha256": "a2b5fa908077c2d4d21a93209f647a26d12af065511c925774238eb286c6076e",
+      "patch_sha256": "3523964850347151ce584e7dde4a2a0ac7f53c823ec712bbf45a34afc41f689a",
       "reason": "Owner-requested review, bounded inherited scope, phase-bound history checks, required decision tools, live inspection and exact delivery confirmations."
     },
     "plugins/eventmail/plugin.py": {
       "sha256": "1f70e490f650e7df7ac39d0cbdb2527d45af3612281eff750193f4d6b7fb2663",
       "patch": "patches/followup-investigation.patch",
-      "patch_sha256": "a2b5fa908077c2d4d21a93209f647a26d12af065511c925774238eb286c6076e",
+      "patch_sha256": "3523964850347151ce584e7dde4a2a0ac7f53c823ec712bbf45a34afc41f689a",
       "reason": "Owner-requested review, bounded inherited scope, phase-bound history checks, required decision tools, live inspection and exact delivery confirmations."
     },
     "plugins/eventmail/store.py": {
       "sha256": "654f6b4c3984e625d7aab3f2b30ed4c9c7f588ce85f0502f9f6e73b0e1c2764f",
       "patch": "patches/followup-investigation.patch",
-      "patch_sha256": "a2b5fa908077c2d4d21a93209f647a26d12af065511c925774238eb286c6076e",
+      "patch_sha256": "3523964850347151ce584e7dde4a2a0ac7f53c823ec712bbf45a34afc41f689a",
       "reason": "Owner-requested review, bounded inherited scope, phase-bound history checks, required decision tools, live inspection and exact delivery confirmations."
     },
     "plugins/gateway/service.py": {
@@ -1417,31 +1417,31 @@
     "plugins/react/contract.py": {
       "sha256": "bf12a58853772098551482ea31be8a1d1fc8a40b68e716722a4a1b7b903b52ea",
       "patch": "patches/followup-investigation.patch",
-      "patch_sha256": "a2b5fa908077c2d4d21a93209f647a26d12af065511c925774238eb286c6076e",
+      "patch_sha256": "3523964850347151ce584e7dde4a2a0ac7f53c823ec712bbf45a34afc41f689a",
       "reason": "Owner-requested review, bounded inherited scope, phase-bound history checks, required decision tools, live inspection and exact delivery confirmations."
     },
     "plugins/react/plugin.py": {
       "sha256": "ed18e2457d5452ca57834c2390f697ab6ad87ddace975c895cee6647e5802431",
       "patch": "patches/followup-investigation.patch",
-      "patch_sha256": "a2b5fa908077c2d4d21a93209f647a26d12af065511c925774238eb286c6076e",
+      "patch_sha256": "3523964850347151ce584e7dde4a2a0ac7f53c823ec712bbf45a34afc41f689a",
       "reason": "Owner-requested review, bounded inherited scope, phase-bound history checks, required decision tools, live inspection and exact delivery confirmations."
     },
     "plugins/reply_program/contract.py": {
       "sha256": "cc6e56b9d9e967d2cc02b0c8a33a1778ecae840ac28f07411741a0d2102f5552",
       "patch": "patches/followup-investigation.patch",
-      "patch_sha256": "a2b5fa908077c2d4d21a93209f647a26d12af065511c925774238eb286c6076e",
+      "patch_sha256": "3523964850347151ce584e7dde4a2a0ac7f53c823ec712bbf45a34afc41f689a",
       "reason": "Owner-requested review, bounded inherited scope, phase-bound history checks, required decision tools, live inspection and exact delivery confirmations."
     },
     "plugins/reply_program/plugin.py": {
       "sha256": "f53c0be9da4caf736c399b1fc9c3541a023dcc27f086efd8928e992c18d6b748",
       "patch": "patches/followup-investigation.patch",
-      "patch_sha256": "a2b5fa908077c2d4d21a93209f647a26d12af065511c925774238eb286c6076e",
+      "patch_sha256": "3523964850347151ce584e7dde4a2a0ac7f53c823ec712bbf45a34afc41f689a",
       "reason": "Owner-requested review, bounded inherited scope, phase-bound history checks, required decision tools, live inspection and exact delivery confirmations."
     },
     "plugins/reply_program/program.py": {
       "sha256": "a16f71aa5b0ac0b20d30eb795b7576ad290a9edf40e4943586d112cda3abf683",
       "patch": "patches/followup-investigation.patch",
-      "patch_sha256": "a2b5fa908077c2d4d21a93209f647a26d12af065511c925774238eb286c6076e",
+      "patch_sha256": "3523964850347151ce584e7dde4a2a0ac7f53c823ec712bbf45a34afc41f689a",
       "reason": "Owner-requested review, bounded inherited scope, phase-bound history checks, required decision tools, live inspection and exact delivery confirmations."
     },
     "plugins/runtime_diagnostics/README.md": {
@@ -1483,55 +1483,55 @@
     "plugins/wake/api.py": {
       "sha256": "80e7481870ca7df217e2f6390b9b7ac936a39baa114b248b1b943291b65e76c1",
       "patch": "patches/followup-investigation.patch",
-      "patch_sha256": "a2b5fa908077c2d4d21a93209f647a26d12af065511c925774238eb286c6076e",
+      "patch_sha256": "3523964850347151ce584e7dde4a2a0ac7f53c823ec712bbf45a34afc41f689a",
       "reason": "Owner-requested review, bounded inherited scope, phase-bound history checks, required decision tools, live inspection and exact delivery confirmations."
     },
     "plugins/wake/content.py": {
       "sha256": "777a506266eb96b39a0c17d2dc897711fbedd0a3aa6ba9bb916d468b1ea23988",
       "patch": "patches/followup-investigation.patch",
-      "patch_sha256": "a2b5fa908077c2d4d21a93209f647a26d12af065511c925774238eb286c6076e",
+      "patch_sha256": "3523964850347151ce584e7dde4a2a0ac7f53c823ec712bbf45a34afc41f689a",
       "reason": "Owner-requested review, bounded inherited scope, phase-bound history checks, required decision tools, live inspection and exact delivery confirmations."
     },
     "plugins/wake/messages.py": {
-      "sha256": "6406fe84d43c8ef5884952097ec43cf232f513cecda6ed4846f0349b11264afb",
+      "sha256": "fe69e2dfc0c6a2bab39455fe048d7045f8ca285698fe3306225851a8bb07ca12",
       "patch": "patches/followup-investigation.patch",
-      "patch_sha256": "a2b5fa908077c2d4d21a93209f647a26d12af065511c925774238eb286c6076e",
+      "patch_sha256": "3523964850347151ce584e7dde4a2a0ac7f53c823ec712bbf45a34afc41f689a",
       "reason": "Owner-requested review, bounded inherited scope, phase-bound history checks, required decision tools, live inspection and exact delivery confirmations."
     },
     "plugins/wake/plugin.py": {
       "sha256": "517312674060ab135008b0d09cca5e6127a2a98b0f81a48f44a26d6f0d9c3128",
       "patch": "patches/followup-investigation.patch",
-      "patch_sha256": "a2b5fa908077c2d4d21a93209f647a26d12af065511c925774238eb286c6076e",
+      "patch_sha256": "3523964850347151ce584e7dde4a2a0ac7f53c823ec712bbf45a34afc41f689a",
       "reason": "Owner-requested review, bounded inherited scope, phase-bound history checks, required decision tools, live inspection and exact delivery confirmations."
     },
     "plugins/wake/pool.py": {
       "sha256": "f58319b8749c5a688e51e651f772772301b40bf8f922487da1bd8cfdcef57d65",
       "patch": "patches/followup-investigation.patch",
-      "patch_sha256": "a2b5fa908077c2d4d21a93209f647a26d12af065511c925774238eb286c6076e",
+      "patch_sha256": "3523964850347151ce584e7dde4a2a0ac7f53c823ec712bbf45a34afc41f689a",
       "reason": "Owner-requested review, bounded inherited scope, phase-bound history checks, required decision tools, live inspection and exact delivery confirmations."
     },
     "plugins/wake/program.py": {
-      "sha256": "8bda4238ff7a771676cfa4ceccc3fac1437baad94d38977c6f4e5bd80d5a408e",
+      "sha256": "684fed045f41a010f43cee73fac9d84dfc2e6b79ced8ec8b73c21296f96638e3",
       "patch": "patches/followup-investigation.patch",
-      "patch_sha256": "a2b5fa908077c2d4d21a93209f647a26d12af065511c925774238eb286c6076e",
+      "patch_sha256": "3523964850347151ce584e7dde4a2a0ac7f53c823ec712bbf45a34afc41f689a",
       "reason": "Owner-requested review, bounded inherited scope, phase-bound history checks, required decision tools, live inspection and exact delivery confirmations."
     },
     "plugins/wake/request.py": {
       "sha256": "2c652dfa49a8ab7c6c7b851b8e40f5db6b590a3d6daf313b300bbf08692cdc9c",
       "patch": "patches/followup-investigation.patch",
-      "patch_sha256": "a2b5fa908077c2d4d21a93209f647a26d12af065511c925774238eb286c6076e",
+      "patch_sha256": "3523964850347151ce584e7dde4a2a0ac7f53c823ec712bbf45a34afc41f689a",
       "reason": "Owner-requested review, bounded inherited scope, phase-bound history checks, required decision tools, live inspection and exact delivery confirmations."
     },
     "plugins/wake/runtime.py": {
-      "sha256": "d149f4f69a0269bc30e97da3e2f4b1640105c234a45ac8546f279ec3156f948e",
+      "sha256": "11e09b7e7ec77925830ee3263f8423efa1c44598391e4715127e5900e4491930",
       "patch": "patches/followup-investigation.patch",
-      "patch_sha256": "a2b5fa908077c2d4d21a93209f647a26d12af065511c925774238eb286c6076e",
+      "patch_sha256": "3523964850347151ce584e7dde4a2a0ac7f53c823ec712bbf45a34afc41f689a",
       "reason": "Owner-requested review, bounded inherited scope, phase-bound history checks, required decision tools, live inspection and exact delivery confirmations."
     },
     "plugins/wake/selection.py": {
       "sha256": "3c9576b0e1207ccdd6d980cc800ad36aa9d3c1bd778c06643a9ce6bdcbf31996",
       "patch": "patches/followup-investigation.patch",
-      "patch_sha256": "a2b5fa908077c2d4d21a93209f647a26d12af065511c925774238eb286c6076e",
+      "patch_sha256": "3523964850347151ce584e7dde4a2a0ac7f53c823ec712bbf45a34afc41f689a",
       "reason": "Owner-requested review, bounded inherited scope, phase-bound history checks, required decision tools, live inspection and exact delivery confirmations."
     },
     "plugins/wake/settings.py": {
@@ -1543,19 +1543,19 @@
     "plugins/wake/source.py": {
       "sha256": "d0bf3b29aa8faae6b5b1369ee1b3a97c84b3240063a6684800a7a76344acc637",
       "patch": "patches/followup-investigation.patch",
-      "patch_sha256": "a2b5fa908077c2d4d21a93209f647a26d12af065511c925774238eb286c6076e",
+      "patch_sha256": "3523964850347151ce584e7dde4a2a0ac7f53c823ec712bbf45a34afc41f689a",
       "reason": "Owner-requested review, bounded inherited scope, phase-bound history checks, required decision tools, live inspection and exact delivery confirmations."
     },
     "plugins/wake/state.py": {
       "sha256": "5e25e8b8b562cbf93742715f5e15fc1c27de545c005076b058d25a809453bf25",
       "patch": "patches/followup-investigation.patch",
-      "patch_sha256": "a2b5fa908077c2d4d21a93209f647a26d12af065511c925774238eb286c6076e",
+      "patch_sha256": "3523964850347151ce584e7dde4a2a0ac7f53c823ec712bbf45a34afc41f689a",
       "reason": "Owner-requested review, bounded inherited scope, phase-bound history checks, required decision tools, live inspection and exact delivery confirmations."
     },
     "plugins/wake/tools.py": {
       "sha256": "b601092d8af59aaa6b5891bab7a9a9a4f1f6ac7ece96cab4f5f09feeca16391c",
       "patch": "patches/followup-investigation.patch",
-      "patch_sha256": "a2b5fa908077c2d4d21a93209f647a26d12af065511c925774238eb286c6076e",
+      "patch_sha256": "3523964850347151ce584e7dde4a2a0ac7f53c823ec712bbf45a34afc41f689a",
       "reason": "Owner-requested review, bounded inherited scope, phase-bound history checks, required decision tools, live inspection and exact delivery confirmations."
     },
     "plugins/web_auth/app.py": {
