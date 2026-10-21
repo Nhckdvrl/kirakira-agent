@@ -1,0 +1,51 @@
+--- a/plugins/drift/contract.py
++++ b/plugins/drift/contract.py
+@@ -6,7 +6,7 @@
+ from datetime import datetime
+ from typing import Protocol
+ 
+-from agent.plugin_composition import ServiceKey
++from agent.plugin_composition import EmitEventKey, ServiceKey
+ 
+ 
+ class DriftWakeServicesV2(Protocol):
+@@ -41,3 +41,13 @@
+ 
+ 
+ DRIFT_DELIVERY_V2 = ServiceKey[DriftDeliveryServicesV2]("drift.delivery.v2")
++
++DRIFT_CHANGED = EmitEventKey[None]("drift.changed")
++
++
++class DriftInitiative(Protocol):
++    async def run_once(self, *, manual: bool = False) -> Mapping[str, object]: ...
++    async def status(self) -> Mapping[str, object]: ...
++
++
++DRIFT_INITIATIVE = ServiceKey[DriftInitiative]("drift.initiative.v1")
+--- a/plugins/drift/store.py
++++ b/plugins/drift/store.py
+@@ -188,6 +188,23 @@
+                     "state_version": 1,
+                 },
+             }
++
++    def proposal_status(self, proposal_id: str, revision: str) -> str | None:
++        """Owner-local producer observation; execution state remains in this store."""
++        with self._transaction(write=False) as connection:
++            row = connection.execute("SELECT status FROM proposals WHERE proposal_id=? AND revision=?",
++                                     (proposal_id, revision)).fetchone()
++            return None if row is None else str(row[0])
++
++    def withdraw(self, proposal_id: str, revision: str) -> bool:
++        """Withdraw an unclaimed plan; an already accepted Wake retains ownership."""
++        with self._transaction(write=True) as connection:
++            changed = connection.execute(
++                "UPDATE proposals SET status='invalidated',state_version=state_version+1,updated_at=? "
++                "WHERE proposal_id=? AND revision=? AND status IN ('pending','deferred')",
++                (datetime.now(UTC).isoformat(), proposal_id, revision),
++            )
++            return changed.rowcount == 1
+ 
+     def snapshot(self, now: datetime) -> DriftSnapshot:
+         """Return the next durable deadline and frozen due proposals."""

@@ -120,6 +120,12 @@ HINTS = {
 }
 for _stage in ("screen", "investigate"):
     HINTS[_stage] += _ATTENTION_SCOPE
+HINTS["drift"] += (
+    "空闲提案只是待核实的想法，不是主人新指令。先用recall_memory核对所选对话范围内的目标、最新更正与已完成事项，"
+    "再决定是否值得继续研究。可用read_memory_source核对原文，web_fetch核实实际页面；不能编造外部新消息。"
+    "有依据的新整理或研究结果才分享，已完成、被撤回、重复或缺少依据就skip_content。"
+    "分享时说明实际做了什么和核实到什么，不把仅提出的问题写成已经完成的工作。"
+)
 
 
 def finished(reader: MessageReader, request: Request, stage: Stage) -> Message | None:

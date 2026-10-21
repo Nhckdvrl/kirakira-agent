@@ -76,6 +76,18 @@ python -m eval.runtime_settings \
 | `mail_followups` | 本地 TLS IMAP 的真实采集、跨会话历史条件与分享/跳过、线程更正、规则修改、外部指令、UID 重建与重启 |
 | `runtime_settings` | 实际认证 HTTP 设置、原生配置换代、越界拒绝、清空恢复默认、真实记忆工具预算与图不重学、重启保持 |
 | `prompt_cache` | 稳定/变化前缀的受控机制实验；原生邮件调查的实际请求摘要、缓存用量和功能结果；缓存字段未知与零值分开 |
+| `idle_reflection` | 空闲规划、跨会话约束、原文依据、原生研究/投递、目标完成后跳过、预算、暂停及交接回执丢失恢复 |
+
+个人伙伴的空闲思考使用独立工作区验证：
+
+```sh
+python -m eval.idle_reflection --implicit-goal --fault-cases \
+  --model-config /private/path/model.json --key-file /private/path/model.key \
+  --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json \
+  --workspace /local-disk/eval/idle-new --output /local-disk/eval/idle.json
+```
+
+`--implicit-goal` 将预算、时间条件放到另一段历史会话，当前只保留未完成话题；没有创建结构化定时任务或提交外部事件。它检查规划实际呈现的历史出处、研究中的记忆工具与真实 HTTP 页面、正确约束和确认投递。`--fault-cases` 在真实生产端写入原生 Drift 提案之后注入一次交接回执丢失，检查重放复用原身份与规划调用，再重启、恢复 Wake 并核对实际结算。已有相同研究结果时，恢复后可以跳过重复通知。两者都是受控功能实验，不能推导日常主动消息的实际有效率或图记忆相对其他检索的净提升。
 
 缓存机制与真实链路分别运行，均使用新的本地工作区：
 

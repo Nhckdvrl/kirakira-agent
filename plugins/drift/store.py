@@ -189,6 +189,23 @@ class DriftStore:
                 },
             }
 
+    def proposal_status(self, proposal_id: str, revision: str) -> str | None:
+        """Owner-local producer observation; execution state remains in this store."""
+        with self._transaction(write=False) as connection:
+            row = connection.execute("SELECT status FROM proposals WHERE proposal_id=? AND revision=?",
+                                     (proposal_id, revision)).fetchone()
+            return None if row is None else str(row[0])
+
+    def withdraw(self, proposal_id: str, revision: str) -> bool:
+        """Withdraw an unclaimed plan; an already accepted Wake retains ownership."""
+        with self._transaction(write=True) as connection:
+            changed = connection.execute(
+                "UPDATE proposals SET status='invalidated',state_version=state_version+1,updated_at=? "
+                "WHERE proposal_id=? AND revision=? AND status IN ('pending','deferred')",
+                (datetime.now(UTC).isoformat(), proposal_id, revision),
+            )
+            return changed.rowcount == 1
+
     def snapshot(self, now: datetime) -> DriftSnapshot:
         """Return the next durable deadline and frozen due proposals."""
 

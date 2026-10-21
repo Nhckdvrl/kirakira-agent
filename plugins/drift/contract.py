@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Protocol
 
-from agent.plugin_composition import ServiceKey
+from agent.plugin_composition import EmitEventKey, ServiceKey
 
 
 class DriftWakeServicesV2(Protocol):
@@ -41,3 +41,13 @@ DRIFT_WAKE_V2 = ServiceKey[DriftWakeServicesV2]("drift.wake.v2")
 
 
 DRIFT_DELIVERY_V2 = ServiceKey[DriftDeliveryServicesV2]("drift.delivery.v2")
+
+DRIFT_CHANGED = EmitEventKey[None]("drift.changed")
+
+
+class DriftInitiative(Protocol):
+    async def run_once(self, *, manual: bool = False) -> Mapping[str, object]: ...
+    async def status(self) -> Mapping[str, object]: ...
+
+
+DRIFT_INITIATIVE = ServiceKey[DriftInitiative]("drift.initiative.v1")

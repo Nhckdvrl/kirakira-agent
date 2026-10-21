@@ -40,7 +40,7 @@ from .legacy_rules import read_archived_rules
 from .messages import recent_context
 from .request import TOOLS as WAKE_TOOLS, WAKE_PROGRAM, Request
 from .source import Pointer, Source
-from .selection import propose_content
+from .selection import propose_content, propose_drift
 from .state import WakeState, WakeStateReader
 
 
@@ -190,10 +190,18 @@ class Runtime:
                 history_check_required = True
             if proposal is not None and (context is not None or proposal.payload.get("review_policy") == "owner-requested"):
                 captured_items = proposal.candidates
+        elif owner == "drift":
+            proposal = propose_drift(admission.proposals)
+            context = proposal.payload.get("context_session_id") if proposal else None
+            if context is not None:
+                if not isinstance(context, str) or not messages.exists(context) or messages.attributes(context).visibility != "listed":
+                    raise ValueError("空闲提案的上下文必须引用已接纳的可见对话")
+                context_session = context
+                history_check_required = True
         metadata = messages.reader(context_session or target.session_id).metadata()
         model = ctx.require(MODEL_SELECTION).read_saved(metadata if metadata is not None else {})
         catalog = ctx.require(TOOLS)
-        allowed = set(self.config.investigation_tools) if owner == "content" else set()
+        allowed = set(self.config.investigation_tools) if owner in {"content", "drift"} else set()
         view: ToolView = catalog.view(
             *ctx.require(WAKE_TOOLS_VIEW).refs,
             *(ref for ref in ctx.require(ALL_TOOLS)().refs if ref.name in allowed),

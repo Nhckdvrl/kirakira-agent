@@ -84,7 +84,7 @@ local-embedding 是普通 Models driver，使用本地 ONNX 权重和固定资�
 EventMail 分别接纳 Content、Alert、Context；Wake 按兴趣池与规则决定是否执行、调查和分享。
 Alert 使用真实 Delivery 回执完成结算；Content 不足以触发时记录可观察的 content_insufficient。
 event-ingress 只把已认证 Gateway RPC 转到绑定来源，不另建事件队列或任务调度器。
-Drift 的公开插件保存提案状态并提供 Wake/Delivery 窄合同；当前组合没有空闲提案生成提供方。
+Drift 保存提案状态并提供 Wake/Delivery 窄合同；可选的空闲思考生产端读取选定对话和同范围的记忆，使用 Models 生成带出处的候选。OwnerState 只保留规划次数、原始来源引用与交接凭据。任务领取、程序执行、工具与投递仍由既有 Drift/Wake、Sources、Task、ReplyProgram 和 Delivery 管理，没有第二套执行队列。研究继承提案的参考对话范围，收件位置独立。
 不能将其源码存在表述为完整的第二主动生成流程已上线。
 
 运行诊断和插件安装也是插件。新工作区默认选中；既有工作区使用显式 upgrade 命令，

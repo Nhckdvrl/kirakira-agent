@@ -66,7 +66,7 @@ class Request(BaseModel):
     @model_validator(mode="after")
     def check_choices(self) -> Self:
         if (not set(TOOLS[self.owner]) <= set(self.tools)
-                or (self.owner != "content" and set(self.tools) != set(TOOLS[self.owner]))
+                or (self.owner == "alert" and set(self.tools) != set(TOOLS[self.owner]))
                 or any(not name or not value for name, value in self.tools.items())):
             raise ValueError("Wake 原工具集合与职责不一致")
         if (

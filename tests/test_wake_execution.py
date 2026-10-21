@@ -8,9 +8,9 @@ import pytest
 from agent.plugin_composition import CompositionRoot
 from plugins.eventmail.plugin import _StoreIO, _WakeServices
 from plugins.eventmail.store import EventMailStore
+from plugins.wake._boundary import SemanticInterest
 from plugins.wake.admission import Duties
 from plugins.wake.api import DriftWakeServices
-from plugins.wake._boundary import SemanticInterest
 from plugins.wake.state import WakeState
 
 
@@ -56,3 +56,73 @@ async def test_due_alert_bypasses_running_content_score(tmp_path):
         release.set()
         await job
         await root.dispose()
+
+
+def test_idle_withdrawal_invalidates_pending_but_preserves_an_accepted_wake(tmp_path):
+    from plugins.drift.store import DriftStore
+
+    store = DriftStore(tmp_path / "drift.sqlite3")
+    store.initialize()
+    now = datetime.now(UTC)
+    receipt = store.propose("idle:pending", "r1", {"question": "grounded research"}, now)
+    assert store.withdraw("idle:pending", "r1")
+    assert store.proposal_status("idle:pending", "r1") == "invalidated"
+    assert not store.select(receipt["ref"], {"session_id": "wake:a", "turn_id": "input:a"}, now)["selected"]
+    assert not store.withdraw("idle:pending", "r1")
+    receipt = store.propose("idle:accepted", "r1", {"question": "accepted research"}, now)
+    assert store.select(receipt["ref"], {"session_id": "wake:b", "turn_id": "input:b"}, now)["selected"]
+    assert not store.withdraw("idle:accepted", "r1")
+    assert store.proposal_status("idle:accepted", "r1") == "selected"
+
+
+def test_idle_evidence_separates_presented_history_from_user_goal_authority():
+    from plugins.drift.producer import Plan, check_evidence
+
+    def plan(decision, refs):
+        return Plan(decision=decision, subject="research", question="check original material",
+                    reason="traceable context", evidence_message_ids=refs)
+
+    check_evidence(plan("propose", ("user-goal", "assistant-reply")),
+                   {"user-goal", "assistant-reply"}, {"user-goal"})
+    check_evidence(plan("skip", ("assistant-reply",)), {"assistant-reply"}, set())
+    with pytest.raises(ValueError, match="用户历史"):
+        check_evidence(plan("propose", ("assistant-reply",)), {"assistant-reply"}, set())
+    with pytest.raises(ValueError, match="未呈现"):
+        check_evidence(plan("skip", ("forged-source",)), {"user-goal"}, {"user-goal"})
+
+
+@pytest.mark.asyncio
+async def test_pause_after_lost_handoff_ack_withdraws_only_unclaimed_proposals(tmp_path):
+    from types import SimpleNamespace
+
+    from plugins.drift.producer import Config, Producer, digest
+    from plugins.drift.store import DriftStore
+    from plugins.ledger.contract import OWNER_STATE
+    from plugins.ledger.log import MessageLog
+
+    log = MessageLog(tmp_path / "ledger.db")
+    domain = DriftStore(tmp_path / "drift.db")
+    domain.initialize()
+    now = datetime.now(UTC)
+    try:
+        for claimed in (False, True):
+            identity = "claimed" if claimed else "pending"
+            owner = log.owner("drift_" + identity)
+            ctx = SimpleNamespace(require=lambda key, owner=owner: SimpleNamespace(open=lambda _: owner)
+                                  if key == OWNER_STATE else log.catalog())
+            producer = Producer(ctx, domain, Config(context_session_id="owner"))
+            receipt = domain.propose(identity, "r1", {"question": "already committed"}, now)
+            if claimed:
+                assert domain.select(receipt["ref"], {"session_id": "wake:a", "turn_id": "input:a"}, now)["selected"]
+            value = {"run_id": identity, "status": "planned", "automatic": True,
+                     "config": digest(Config(auto_enabled=True, context_session_id="owner").model_dump()),
+                     "model_call_id": "original-call", "proposal": {"proposal_id": identity, "revision": "r1"}}
+            owner.transact(lambda tx, value=value: (tx.save("run", value, expected_version=None),
+                                      tx.save("initiative:active", {"key": "run"}, expected_version=None)))
+            assert await producer.recover() is claimed
+            saved = owner.read("run").value
+            assert saved["model_call_id"] == "original-call"
+            assert saved["status"] == ("offered" if claimed else "cancelled")
+            assert domain.proposal_status(identity, "r1") == ("selected" if claimed else "invalidated")
+    finally:
+        log.close()

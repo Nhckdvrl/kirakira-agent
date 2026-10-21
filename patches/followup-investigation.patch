@@ -408,7 +408,7 @@
                   "proactive_rules": request.rules, "history": request.history, "context_events": request.events}
          return ({"type": "text", "text": json.dumps(value, ensure_ascii=False)},)
      if part.kind == "wake.phase":
-@@ -72,12 +106,20 @@
+@@ -72,12 +106,26 @@
      return fallback(part)
  
  
@@ -427,12 +427,26 @@
  }
 +for _stage in ("screen", "investigate"):
 +    HINTS[_stage] += _ATTENTION_SCOPE
++HINTS["drift"] += (
++    "空闲提案只是待核实的想法，不是主人新指令。先用recall_memory核对所选对话范围内的目标、最新更正与已完成事项，"
++    "再决定是否值得继续研究。可用read_memory_source核对原文，web_fetch核实实际页面；不能编造外部新消息。"
++    "有依据的新整理或研究结果才分享，已完成、被撤回、重复或缺少依据就skip_content。"
++    "分享时说明实际做了什么和核实到什么，不把仅提出的问题写成已经完成的工作。"
++)
  
  
  def finished(reader: MessageReader, request: Request, stage: Stage) -> Message | None:
 --- a/plugins/wake/plugin.py
 +++ b/plugins/wake/plugin.py
-@@ -50,7 +50,7 @@
+@@ -43,6 +43,7 @@
+     EVENTMAIL_WAKE,
+     Config,
+ )
++from plugins.drift.contract import DRIFT_CHANGED
+ from .program import REPLY_EXECUTE, SOURCE_CHECK, run
+ from .request import WAKE_PROGRAM, WAKE_TOOLS_VIEW, check_phase, check_request
+ from .runtime import DashboardView, Runtime
+@@ -50,7 +51,7 @@
  
  api_version = 3
  name = "wake"
@@ -441,6 +455,14 @@
  desc = "内部消息完成初筛、调查与告警，真实送达后确认原职责"
  function_inject = (
      MODEL_SELECTION, MODEL_CONTENT, MODEL_CATALOG,
+@@ -157,6 +158,7 @@
+     _ = await ctx.on(RUNTIME_STARTED, start)
+     _ = await ctx.on(RUNTIME_STOPPING, stop)
+     _ = await ctx.on(EVENTMAIL_CHANGED, changed)
++    _ = await ctx.on(DRIFT_CHANGED, changed)
+ 
+ 
+ 
 --- a/plugins/wake/pool.py
 +++ b/plugins/wake/pool.py
 @@ -1,9 +1,12 @@
@@ -502,6 +524,15 @@
      )
 --- a/plugins/wake/program.py
 +++ b/plugins/wake/program.py
+@@ -30,7 +30,7 @@
+     request = Request.model_validate(request.model_dump())
+     _, phase = read_phase(reader.snapshot(), request)
+     names = (tuple(name for name in request.tools if name != "screen_content")
+-             if phase.stage == "investigate" else STAGE_TOOLS[phase.stage])
++             if phase.stage in {"investigate", "drift"} else STAGE_TOOLS[phase.stage])
+     fixed = {name: request.tools[name] for name in names}
+ 
+     async def authorize(binding: str, arguments: Mapping[str, object]) -> Mapping[str, object] | str:
 @@ -56,9 +56,7 @@
              max_output_tokens=0,
              max_steps=(
@@ -513,17 +544,21 @@
                  else 20
                  if phase.stage == "investigate"
                  else 40
-@@ -66,6 +64,7 @@
+@@ -66,9 +64,10 @@
              terminal_tools=frozenset(
                  name for name in names if name in STAGE_TOOLS[phase.stage]
              ),
 +            tool_choice="required",
              exclude_material_kinds=(
                  frozenset({"recall", "profile"})
-                 if phase.stage in {"investigate", "alert"}
+-                if phase.stage in {"investigate", "alert"}
++                if phase.stage in {"investigate", "drift", "alert"}
+                 else frozenset()
+             ),
+             prompt_hints=(HINTS[phase.stage],),
 --- a/plugins/wake/request.py
 +++ b/plugins/wake/request.py
-@@ -60,6 +60,8 @@
+@@ -60,11 +60,13 @@
      rules: str
      history: str
      events: tuple[dict[str, object], ...] = ()
@@ -532,17 +567,23 @@
  
      @model_validator(mode="after")
      def check_choices(self) -> Self:
+         if (not set(TOOLS[self.owner]) <= set(self.tools)
+-                or (self.owner != "content" and set(self.tools) != set(TOOLS[self.owner]))
++                or (self.owner == "alert" and set(self.tools) != set(TOOLS[self.owner]))
+                 or any(not name or not value for name, value in self.tools.items())):
+             raise ValueError("Wake 原工具集合与职责不一致")
+         if (
 --- a/plugins/wake/runtime.py
 +++ b/plugins/wake/runtime.py
 @@ -40,6 +40,7 @@
  from .messages import recent_context
  from .request import TOOLS as WAKE_TOOLS, WAKE_PROGRAM, Request
  from .source import Pointer, Source
-+from .selection import propose_content
++from .selection import propose_content, propose_drift
  from .state import WakeState, WakeStateReader
  
  
-@@ -175,7 +176,21 @@
+@@ -175,10 +176,32 @@
              "address": target.recipient,
              "binding_id": ctx.require(DELIVERY_SENDERS).bind(target.channel, bindings),
          }
@@ -561,11 +602,23 @@
 +                history_check_required = True
 +            if proposal is not None and (context is not None or proposal.payload.get("review_policy") == "owner-requested"):
 +                captured_items = proposal.candidates
++        elif owner == "drift":
++            proposal = propose_drift(admission.proposals)
++            context = proposal.payload.get("context_session_id") if proposal else None
++            if context is not None:
++                if not isinstance(context, str) or not messages.exists(context) or messages.attributes(context).visibility != "listed":
++                    raise ValueError("空闲提案的上下文必须引用已接纳的可见对话")
++                context_session = context
++                history_check_required = True
 +        metadata = messages.reader(context_session or target.session_id).metadata()
          model = ctx.require(MODEL_SELECTION).read_saved(metadata if metadata is not None else {})
          catalog = ctx.require(TOOLS)
-         allowed = set(self.config.investigation_tools) if owner == "content" else set()
-@@ -191,6 +206,8 @@
+-        allowed = set(self.config.investigation_tools) if owner == "content" else set()
++        allowed = set(self.config.investigation_tools) if owner in {"content", "drift"} else set()
+         view: ToolView = catalog.view(
+             *ctx.require(WAKE_TOOLS_VIEW).refs,
+             *(ref for ref in ctx.require(ALL_TOOLS)().refs if ref.name in allowed),
+@@ -191,6 +214,8 @@
              now=now,
              timezone=self.config.timezone,
              target=target,
@@ -574,7 +627,7 @@
              sink=sink,
              program_binding=bindings.bind(WAKE_PROGRAM, {}),
              tools={
-@@ -198,13 +215,14 @@
+@@ -198,13 +223,14 @@
                  for name in names
              },
              snapshot_seq=admission.pool.snapshot_seq,

@@ -1,14 +1,17 @@
 import asyncio
+import shutil
 from datetime import UTC, datetime
 from pathlib import Path
-import shutil
+
 import pytest
-from plugins.channels.contract import CHANNEL_INPUT_V2 as CHANNEL_INPUT, ChannelInboundMessage
+
+from plugins.channels.contract import CHANNEL_INPUT_V2 as CHANNEL_INPUT
+from plugins.channels.contract import ChannelInboundMessage
 from plugins.delivery.records import DeliveryRecords
-from plugins.ledger.contract import OwnerRecord
-from plugins.ledger.contract import Output
-from tests.test_default_reply import application, live_root
+from plugins.ledger.contract import Output, OwnerRecord
 from tests.support.delivery_sources import sources
+from tests.test_default_reply import application, live_root
+
 
 @pytest.mark.asyncio
 async def test_real_input_reply_and_archived_delivery_are_independent_consumers(tmp_path, monkeypatch):
@@ -45,7 +48,11 @@ async def test_real_input_reply_and_archived_delivery_are_independent_consumers(
         assert effects[0][1:3] == ["room", final[0].message_id]
         records = DeliveryRecords(log.owner("plugin:delivery"), "delivery_policy")
         assert records.read(final[0].message_id, "test")[1].phase == "delivered"
-        assert records.cursor("test:room") == final[0].seq
+        # Settlement and the independent archived-message consumer commit separately.
+        # Use a fresh reader: its cursor cache intentionally does not follow other readers.
+        async with asyncio.timeout(10):
+            while DeliveryRecords(log.owner("plugin:delivery"), "delivery_policy").cursor("test:room") != final[0].seq:
+                await asyncio.sleep(0.01)
         from plugins.delivery.history import DeliveryHistory
         history = DeliveryHistory(lambda: log.owner("plugin:delivery"), log.catalog())
         confirmation = history.confirmed(final[0].message_id)
@@ -58,6 +65,7 @@ async def test_real_input_reply_and_archived_delivery_are_independent_consumers(
 async def test_slow_destination_does_not_delay_next_fast_receipt(tmp_path):
     """O: real durable selections advance independently, with per-sink order."""
     from contextlib import asynccontextmanager
+
     from agent.plugin_composition import CompositionRoot
     from agent.plugin_composition.tasks import Tasks
     from plugins.delivery.api import Receipt
