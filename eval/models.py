@@ -26,6 +26,8 @@ def source_identity():
              "eval/models.py", "plugins/akasha/contract.py", "plugins/akasha/plugin.py",
              "plugins/akasha/query.py", "plugins/akasha/recalls.py", "plugins/akasha/recall_tool.py",
              "plugins/akasha/runtime.py", "plugins/akasha/excerpts.py", "plugins/akasha/source_tool.py"]
+    names.extend(str(path.relative_to(ROOT)) for path in sorted((ROOT / "plugins/followups").glob("*.py")))
+    names.extend(["plugins/eventmail/store.py", "plugins/wake/api.py", "plugins/wake/messages.py", "eval/followups.py"])
     if (ROOT / "UPSTREAM.json").is_file():
         names.append("UPSTREAM.json")
     names.extend(str(path.relative_to(ROOT)) for path in sorted((ROOT / "patches").glob("*.patch")))

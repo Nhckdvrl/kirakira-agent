@@ -81,6 +81,23 @@ class DeliveryHistory:
             "receipt": None if delivery.receipt is None else delivery.receipt.model_dump(mode="json"),
         }
 
+    def confirmed(self, message_id: str) -> DeliveredMessage | None:
+        if not message_id:
+            raise ValueError("送达查询需要消息身份")
+        state = self._state()
+        def read():
+            row = state.read("confirmed-message:" + message_id)
+            if row is None:
+                return None
+            fact = Confirmation.model_validate_json(json.dumps(json_value(row.value)))
+            if row.version != 0 or fact.message_id != message_id:
+                raise ValueError("送达确认身份损坏")
+            message = self._catalog.reader(fact.session_id).get(message_id)
+            if message is None:
+                raise ValueError("送达确认的原消息缺失")
+            return DeliveredMessage(message, fact.confirmed_at)
+        return state.snapshot(read)
+
     def _recent(self, state: OwnerStore, start: str, stop: str, limit: int,
                 excluded_sources: frozenset[str],
                 visibility: Literal["listed", "internal"] | None) -> tuple[DeliveredMessage, ...]:

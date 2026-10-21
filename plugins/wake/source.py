@@ -34,6 +34,7 @@ from plugins.models.contract import (
 )
 
 from ._boundary import CONTENT, DELIVERY
+from .pool import requests_review
 from plugins.delivery.contract import (
     StartGuard,
 )
@@ -98,8 +99,10 @@ class Source:
     async def accept(self, request: Request) -> None:
         """原选择与恢复指针同事务提交，先于任何 EventMail/Drift 领取。"""
         ctx = self.ctx
+        context = request.context_session_id
+        scope = ctx.require(MESSAGE_CATALOG).attributes(context).scope if context is not None else ()
         _ = await ctx.require(SESSION_ADMISSION).ensure_async(ctx, request.session_id,
-            SessionAttributes(visibility="internal", learning="excluded"))
+            SessionAttributes(visibility="internal", learning="excluded", scope=scope))
         writer = ctx.require(MESSAGE_WRITERS).bind(ctx, author="wake", source="wake", body_types=(Input,),
             content={"wake.request": check_request})(request.session_id)
         pointer = Pointer(session_id=request.session_id, input_id=request.input_id)
@@ -261,7 +264,12 @@ class Source:
             selected = await domain.selection(request.accepted)
             if selected is None:
                 raise ValueError("Content 领取成功却缺少领域回执")
-        await run_file_io(lambda: self.state.commit_content_admission(request.items))
+        selected_keys = {(_mapping(ref, "Content ref")["source_id"], ref["item_id"], ref["revision"]) for ref in refs}
+        reviewed = tuple(item for item in request.items
+                         if (not requests_review(_mapping(item.get("payload"), "Content payload"))
+                             and item["payload"].get("context_session_id") is None)
+                         or (item["ref"]["source_id"], item["ref"]["item_id"], item["ref"]["revision"]) in selected_keys)
+        await run_file_io(lambda: self.state.commit_content_admission(reviewed))
         token = _string(selected.get("selection_token"), "Content selection_token")
         status = _string(selected.get("status"), "Content status")
         if status == "selected":

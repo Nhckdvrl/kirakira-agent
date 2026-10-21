@@ -587,17 +587,6 @@
  inject = ()
  workspace_roots = ()
  workspace_files = ()
---- a/plugins/eventmail/plugin.py
-+++ b/plugins/eventmail/plugin.py
-@@ -20,7 +20,7 @@
- name = "eventmail"
- version = "4.1.0"
- desc = "Immutable Content, Alert, and Context mailbox"
--author = "Akashic Core"
-+author = "Kirakira Core"
- inject = ()
- workspace_roots = ()
- workspace_files = ()
 --- a/plugins/gateway/service.py
 +++ b/plugins/gateway/service.py
 @@ -111,11 +111,11 @@

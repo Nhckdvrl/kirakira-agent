@@ -5,7 +5,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, cast
 
-from .pool import rank_events
+from plugins.eventmail.contract import REQUESTED_REVIEW
+from .pool import rank_events, requests_review
 
 SelectionDecision = Literal["select", "decline"]
 
@@ -25,7 +26,11 @@ def propose_content(
 ) -> DutyProposal | None:
     """Choose the highest-ranked due Content revision from one snapshot."""
 
-    due = [item for item in items if item.get("due") is True]
+    due = [item for item in items if item.get("due") is True
+           and not (isinstance(item.get("payload"), Mapping)
+                    and (item["payload"].get("review_policy") == REQUESTED_REVIEW
+                         or item["payload"].get("context_session_id") is not None)
+                    and item["payload"].get("_wake_review_consumed") is True)]
     if not due:
         return None
     ranked = rank_events(
@@ -33,6 +38,10 @@ def propose_content(
         now=now,
     )
     page = tuple(event["_wake_item"] for event in ranked[:100])
+    # Owner-requested reviews are processed one at a time, with bounded model
+    # context. The remaining requests stay unseen until their own selection.
+    if requests_review(ranked[0]) or page[0]["payload"].get("context_session_id") is not None:
+        page = page[:1]
     if any(not isinstance(item, Mapping) for item in page):
         raise TypeError("Wake ranked Content page 必须是 Mapping sequence")
     selected = page[0]

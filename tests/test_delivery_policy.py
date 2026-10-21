@@ -46,6 +46,12 @@ async def test_real_input_reply_and_archived_delivery_are_independent_consumers(
         records = DeliveryRecords(log.owner("plugin:delivery"), "delivery_policy")
         assert records.read(final[0].message_id, "test")[1].phase == "delivered"
         assert records.cursor("test:room") == final[0].seq
+        from plugins.delivery.history import DeliveryHistory
+        history = DeliveryHistory(lambda: log.owner("plugin:delivery"), log.catalog())
+        confirmation = history.confirmed(final[0].message_id)
+        assert confirmation is not None and confirmation.message == final[0]
+        assert history.confirmed("not-delivered") is None
+        assert history.recent(since=accepted.recorded_at, until=datetime.now(UTC), limit=10)[0] == confirmation
 
 
 @pytest.mark.asyncio

@@ -18,7 +18,7 @@ from .store import EventMailStore
 
 api_version = 3
 name = "eventmail"
-version = "4.1.0"
+version = "4.2.0"
 desc = "Immutable Content, Alert, and Context mailbox"
 author = "Kirakira Core"
 inject = ()
@@ -103,6 +103,14 @@ class _BoundSource(_SourceBinding):
     async def read_revision(self, item_id: str, revision: str) -> Mapping[str, object] | None:
         self._check_open()
         return await run_file_io(lambda: self._store.read_revision(self._source_id, item_id, revision))
+
+    async def inspect_submission(self, batch_id: str) -> Mapping[str, object] | None:
+        self._check_open()
+        return await run_file_io(lambda: self._store.read_submission(self._source_id, batch_id, live=True))
+
+    async def inspect_revision(self, item_id: str, revision: str) -> Mapping[str, object] | None:
+        self._check_open()
+        return await run_file_io(lambda: self._store.read_revision(self._source_id, item_id, revision, live=True))
 
     async def unsettled(self, limit: int = 100) -> tuple[Mapping[str, object], ...]:
         self._check_open()

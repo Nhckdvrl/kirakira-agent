@@ -119,6 +119,10 @@ class DeliveredMessage(Protocol):
 
 
 class DeliveryHistory(Protocol):
+    def confirmed(self, message_id: str) -> DeliveredMessage | None:
+        """Read the durable confirmation for one exact message, without sending."""
+        ...
+
     def recent(
         self,
         *,

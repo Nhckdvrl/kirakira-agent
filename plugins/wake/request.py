@@ -60,6 +60,8 @@ class Request(BaseModel):
     rules: str
     history: str
     events: tuple[dict[str, object], ...] = ()
+    context_session_id: str | None = Field(default=None, min_length=1)
+    history_check_required: bool = False
 
     @model_validator(mode="after")
     def check_choices(self) -> Self:

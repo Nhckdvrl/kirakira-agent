@@ -101,6 +101,7 @@ def _pool_detail(
         f"{pool}, new={new_count}, new_mass={result.new_mass:.6f}, "
         f"pool_mass={result.pool_mass:.6f}, threshold={result.threshold:.6f}, "
         f"below_floor={result.below_floor}, "
+        f"requested_reviews={result.requested_reviews}, "
         f"driver={result.driver_item_id or '-'}"
     )
 

@@ -554,13 +554,13 @@ class EventMailStore:
             return receipt
 
     def read_submission(
-        self, source_id: str, batch_id: str
+        self, source_id: str, batch_id: str, *, live: bool = False
     ) -> dict[str, object] | None:
         """Read one exact durable submit receipt without changing Content state."""
 
         source = _identity("source_id", source_id)
         batch = _identity("batch_id", batch_id)
-        with self._verification_transaction() as connection:
+        with (self._transaction(write=False) if live else self._verification_transaction()) as connection:
             row = connection.execute(
                 "SELECT receipt_json FROM submissions WHERE source_id=? AND batch_id=?",
                 (source, batch),
@@ -573,14 +573,14 @@ class EventMailStore:
         return cast(dict[str, object], value)
 
     def read_revision(
-        self, source_id: str, item_id: str, revision: str
+        self, source_id: str, item_id: str, revision: str, *, live: bool = False
     ) -> dict[str, object] | None:
         """Read one exact source-owned revision without advancing its lifecycle."""
 
         source = _identity("source_id", source_id)
         item = _identity("item_id", item_id)
         item_revision = _identity("revision", revision)
-        with self._verification_transaction() as connection:
+        with (self._transaction(write=False) if live else self._verification_transaction()) as connection:
             row = connection.execute(
                 """
                 SELECT payload_json, status, not_before, requires_ack, snapshot_seq
@@ -588,6 +588,19 @@ class EventMailStore:
                 """,
                 (source, item, item_revision),
             ).fetchone()
+            history = connection.execute(
+                "SELECT action, detail_json, created_at FROM mail_transitions "
+                "WHERE mail_id=? ORDER BY seq DESC LIMIT 100",
+                (_mail_id("content", source, item, item_revision),),
+            ).fetchall() if row is not None else ()
+            settlements = connection.execute(
+                "SELECT s.settlement_ref, s.accepted_session_id, s.accepted_turn_id "
+                "FROM content_selection_members m JOIN content_selections s "
+                "ON s.selection_token=m.selection_token "
+                "WHERE m.source_id=? AND m.item_id=? AND m.revision=? "
+                "AND m.selected_for_delivery=1 AND s.settlement_ref IS NOT NULL",
+                (source, item, item_revision),
+            ).fetchall() if row is not None else ()
         if row is None:
             return None
         payload = json.loads(str(row["payload_json"]))
@@ -600,6 +613,14 @@ class EventMailStore:
             "not_before": str(row["not_before"]),
             "requires_ack": bool(row["requires_ack"]),
             "snapshot_seq": int(row["snapshot_seq"]),
+            "settlements": [{"settlement_ref": str(settlement["settlement_ref"]),
+                             "accepted_turn": {"session_id": str(settlement["accepted_session_id"]),
+                                               "turn_id": str(settlement["accepted_turn_id"])}}
+                            for settlement in settlements],
+            "history": [{"action": str(change["action"]),
+                         "detail": json.loads(str(change["detail_json"])),
+                         "created_at": str(change["created_at"])}
+                        for change in reversed(history)],
         }
 
     @staticmethod

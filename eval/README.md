@@ -47,6 +47,12 @@ python -m eval.memory_runtime \
 python -m eval.native_web \
   --model-config /private/path/model.json --key-file /private/path/model.key \
   --workspace /local-disk/eval/web-new --output /local-disk/eval/web.json
+
+python -m eval.followups \
+  --model-config /private/path/model.json --key-file /private/path/model.key \
+  --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json \
+  --workspace /local-disk/eval/followups-new --output /local-disk/eval/followups.json \
+  --isolated --long-source
 ```
 
 | 入口 | 验证范围 |
@@ -55,8 +61,11 @@ python -m eval.native_web \
 | `native_alignment` | 在线记忆学习、诊断、事件跳过/投递/去重、实际插件安装、压缩与重启 |
 | `memory_runtime` | 真实渠道学习到查询、RPC、Agent 工具、原文展开、项目提醒、显式反馈和重启 |
 | `native_web` | 认证后的工作台/聊天 HTTP、import map、项目作用域与实际文件工具 |
+| `followups` | 原始对话创建跟进、真实 HTTP 订阅/网页差异、调查分享/跳过、精确投递、反馈、暂停与恢复；可选隔离项目和长原文读取 |
 
 `eval/fixtures/native_extension` 提供真实托管 HTTP 进程和 stdio MCP 服务；事件投递目标为隔离的本地会话。它们是受控集成验收，不是外部账号、所有设备或所有可选提供方的部署认证。
+
+`followups` 的本机订阅源提供变化事实，不携带参考答案或人工兴趣分。明确订阅通过独立的调查请求接纳；语义兴趣仍如实记录。`--isolated` 验证调查范围与通知位置分离，`--long-source` 明确要求摘录后展开原文，检查工具可用性；它不是自主选择检索策略的质量基准。加 `--webpage` 将前两条变化切换为真实 HTTP 网页的前后版本，仍经过相同调查、记忆、投递与恢复链路。端到端用例不计作公开通知有效率。
 
 记忆向量资产先通过 `configure-memory --download` 显式准备，参见[配置指南](../docs/handbook/memory-proactive.md)。生产运行不临时下载。中文功能场景与英文公开基准使用各自固定的向量空间，不混库。
 

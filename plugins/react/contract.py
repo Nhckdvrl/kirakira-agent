@@ -38,6 +38,7 @@ class OrderedReact(Protocol):
         reduce: SummaryReducer | None = None,
         preview: Preview | None = None,
         terminal_tools: frozenset[str] = frozenset(),
+        tool_choice: str | Mapping[str, object] | None = None,
         capture_scope: Callable[[], RuntimeScope] | None = None,
         state: OwnerStore,
         check_start: StartCheck,

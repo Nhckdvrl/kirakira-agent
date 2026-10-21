@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
+
+from plugins.eventmail.contract import REQUESTED_REVIEW
 
 WAKE_ADMISSION_FLOOR = 0.02
 WAKE_POOL_THRESHOLD = 1.5
@@ -21,6 +24,7 @@ class PoolResult:
     threshold: float
     below_floor: int
     driver_item_id: str
+    requested_reviews: int = 0
 
 
 def measure_pool(
@@ -48,13 +52,16 @@ def measure_pool(
         value for _, identity, value in contributions if identity in new_identities
     )
     driver = max(contributions, key=lambda item: item[2])[0] if contributions else ""
+    requested = [event for event in ranked if requests_review(event)
+                 and str(event.get("_wake_admission_identity") or event.get("id") or "") in new_identities]
     return PoolResult(
-        should_wake=bool(new_identities) and pool_mass > WAKE_POOL_THRESHOLD,
+        should_wake=bool(requested) or (bool(new_identities) and pool_mass > WAKE_POOL_THRESHOLD),
         new_mass=new_mass,
         pool_mass=pool_mass,
         threshold=WAKE_POOL_THRESHOLD,
         below_floor=below_floor,
-        driver_item_id=driver,
+        driver_item_id=str(requested[0].get("id", "")) if requested else driver,
+        requested_reviews=len(requested),
     )
 
 
@@ -125,8 +132,15 @@ def build_initial_score(
     return -math.log1p(-probability) * confidence
 
 
-def _rank_key(event: dict[str, Any]) -> tuple[float, str]:
+def requests_review(event: Mapping[str, Any]) -> bool:
+    return (event.get("review_policy") == REQUESTED_REVIEW
+            and event.get("wake_eligible") is not False
+            and event.get("_wake_review_consumed") is not True)
+
+
+def _rank_key(event: dict[str, Any]) -> tuple[bool, float, str]:
     return (
+        requests_review(event),
         float(event["_wake_rank_score"]),
         str(event.get("published_at") or event.get("first_seen_at") or ""),
     )

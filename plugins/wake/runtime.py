@@ -40,6 +40,7 @@ from .legacy_rules import read_archived_rules
 from .messages import recent_context
 from .request import TOOLS as WAKE_TOOLS, WAKE_PROGRAM, Request
 from .source import Pointer, Source
+from .selection import propose_content
 from .state import WakeState, WakeStateReader
 
 
@@ -175,7 +176,21 @@ class Runtime:
             "address": target.recipient,
             "binding_id": ctx.require(DELIVERY_SENDERS).bind(target.channel, bindings),
         }
-        metadata = ctx.require(MESSAGE_CATALOG).reader(target.session_id).metadata()
+        messages = ctx.require(MESSAGE_CATALOG)
+        context_session = target.session_id if messages.exists(target.session_id) else None
+        history_check_required = False
+        captured_items = admission.pool.items
+        if owner == "content":
+            proposal = propose_content(admission.pool.items, now=now)
+            context = proposal.payload.get("context_session_id") if proposal else None
+            if context is not None:
+                if not isinstance(context, str) or not messages.exists(context) or messages.attributes(context).visibility != "listed":
+                    raise ValueError("Content 的调查上下文必须引用已接纳的可见对话")
+                context_session = context
+                history_check_required = True
+            if proposal is not None and (context is not None or proposal.payload.get("review_policy") == "owner-requested"):
+                captured_items = proposal.candidates
+        metadata = messages.reader(context_session or target.session_id).metadata()
         model = ctx.require(MODEL_SELECTION).read_saved(metadata if metadata is not None else {})
         catalog = ctx.require(TOOLS)
         allowed = set(self.config.investigation_tools) if owner == "content" else set()
@@ -191,6 +206,8 @@ class Runtime:
             now=now,
             timezone=self.config.timezone,
             target=target,
+            context_session_id=context_session,
+            history_check_required=history_check_required,
             sink=sink,
             program_binding=bindings.bind(WAKE_PROGRAM, {}),
             tools={
@@ -198,13 +215,13 @@ class Runtime:
                 for name in names
             },
             snapshot_seq=admission.pool.snapshot_seq,
-            items=tuple(dict(item) for item in admission.pool.items),
+            items=tuple(dict(item) for item in captured_items),
             proposals=tuple(dict(item) for item in admission.proposals),
             alert_ref=None if alert is None else cast(dict[str, str], dict(alert)),
             model_id=model.model_id, reasoning_effort=model.reasoning_effort,
             rules=read_archived_rules(ctx.data_root) or "",
             history=recent_context(ctx.require(MESSAGE_CATALOG), ctx.require(DELIVERY_READ),
-                                   target=target.session_id, now=now),
+                                   target=context_session, now=now),
             events=tuple(dict(item) for item in (await ctx.require(EVENTMAIL_WAKE).active_context(now))))
 
     async def follow(self) -> None:

@@ -49,6 +49,7 @@ class ReplyExecuteV4(Protocol):
         preview: Callable[[str], AbstractContextManager[StreamCallback]] | None = None,
         reminders: Sequence[Mapping[str, object]] = (),
         terminal_tools: frozenset[str] = frozenset(),
+        tool_choice: str | Mapping[str, object] | None = None,
         presentation: ToolPresentation | None = None,
         history: Literal["session", "own"] = "session",
         # 每一步模型请求之前调用；对话来源用它写入用户的插话。

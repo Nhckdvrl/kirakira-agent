@@ -16,7 +16,7 @@ from .senders import DELIVERY_SENDERS, Senders, open_sender
 
 api_version = 3
 name = "delivery"
-version = "1.0.0"
+version = "1.1.0"
 desc = "独立发送已保存消息，固定原目的地与出站绑定并恢复真实效果"
 inject = (BINDINGS, MESSAGE_CATALOG, OWNER_STATE, TASKS)
 

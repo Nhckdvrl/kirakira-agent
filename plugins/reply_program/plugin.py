@@ -31,7 +31,7 @@ from .program import run_reply
 
 api_version = 3
 name = "reply_program"
-version = "1.0.0"
+version = "1.1.0"
 desc = "一次回复的资源与执行组合；不拥有来源策略或后台监听"
 inject = (CHAT_MODELS, CONTENT, CONTEXT, MATERIALS_V4, MODEL_CALLS, MODEL_CHECKS,
           MODEL_CONTENT, MODEL_PROJECTION, MODEL_SELECTION, REACT_ORDERED_V2, TOOL_CLEANUP,

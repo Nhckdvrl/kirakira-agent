@@ -50,7 +50,7 @@ from .tools import SCHEMAS, DecisionTool
 
 api_version = 3
 name = "wake"
-version = "4.0.0"
+version = "4.1.0"
 desc = "内部消息完成初筛、调查与告警，真实送达后确认原职责"
 function_inject = (
     MODEL_SELECTION, MODEL_CONTENT, MODEL_CATALOG,

@@ -24,6 +24,7 @@
 | event-ingress | 发行扩展 | 是 |
 | eventmail | 运行组件 | 是 |
 | files | 运行组件 | 是 |
+| followups | 发行扩展 | 是 |
 | gateway | 运行组件 | 是 |
 | gemini | 运行组件 | 可选 |
 | host_execution | 运行组件 | 是 |

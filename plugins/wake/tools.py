@@ -5,7 +5,7 @@ from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from plugins.ledger.contract import ContentPart, Output, ToolCall
+from plugins.ledger.contract import ContentPart, Output, ToolCall, ToolResult
 from plugins.ledger.contract import json_value
 
 from ._boundary import CallSource, ToolResultValue
@@ -72,7 +72,7 @@ class DecisionTool:
             raise PermissionError('Wake 决策只能由内部消息程序调用')
         try:
             request = read_request(source.messages)
-            _, phase = read_phase(source.messages, request)
+            phase_message, phase = read_phase(source.messages, request)
         except ValueError as error:
             raise PermissionError('Wake 决策缺少真实内部请求') from error
         message = next(message for message in source.messages if message.message_id == source.call_ref.message_id)
@@ -85,6 +85,28 @@ class DecisionTool:
             result = SCHEMAS[self.name].model_validate(json_value(arguments))
         except ValidationError as error:
             return str(error)
+        if isinstance(result, (Share, Skip)) and request.history_check_required:
+            by_id = {item.message_id: item for item in source.messages}
+            checked, unavailable = False, request.tools.get("recall_memory") is None
+            for item in source.messages:
+                read = item.body
+                if (item.seq <= phase_message.seq or item.seq >= message.seq or item.source != "wake"
+                        or not isinstance(read, ToolResult)):
+                    continue
+                parent = by_id.get(read.call_ref.message_id)
+                if parent is None or parent.seq <= phase_message.seq or not isinstance(parent.body, Output):
+                    continue
+                memory_call = parent.body.parts[read.call_ref.part_index]
+                if isinstance(memory_call, ToolCall) and memory_call.binding_id == request.tools.get("recall_memory"):
+                    unavailable |= read.outcome != "success"
+                    if read.outcome == "success" and any(part.kind == "akasha.recall" for part in read.parts):
+                        checked = True
+                        break
+            if not checked and not (isinstance(result, Skip) and unavailable):
+                return ("该跟进绑定了原始对话，作出分享或跳过决定前必须在本次调查中成功调用 recall_memory，"
+                        "检查该事项的最新安排、更正和约束。最初关注依据不是当前安排。"
+                        "原文较长时可使用 presentation='excerpts' 并以 read_memory_source 核对。"
+                        "没有记忆读取能力或无法核实时，请用 skip_content 说明缺少的依据。")
         if isinstance(result, Screen):
             # 候选身份在模型输入边界核对，错误反馈给本轮模型纠正。
             proposal = propose_content(request.items, now=request.now)

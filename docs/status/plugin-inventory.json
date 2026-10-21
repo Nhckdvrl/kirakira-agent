@@ -164,6 +164,14 @@
       "pinned_files": 5
     },
     {
+      "id": "followups",
+      "directory": "plugins/followups",
+      "api_version": 3,
+      "upstream": false,
+      "headless_selected": true,
+      "pinned_files": 0
+    },
+    {
       "id": "gateway",
       "directory": "plugins/gateway",
       "api_version": 3,

@@ -172,6 +172,7 @@ def upgrade_workspace(workspace):
         "plugin_update",
         "local-embedding",
         "event-ingress",
+        "followups",
     }
     lock = WorkspaceInstanceLock(workspace)
     lock.acquire()
@@ -222,6 +223,13 @@ def upgrade_workspace(workspace):
         current = selection.commit(
             tuple(existing[name] for name in sorted(existing)), expected_ref=previous
         )
+        from agent.plugin_composition.config_input import load_config, save_config
+        wake_directory = workspace / "plugin-data/wake-builtin"
+        wake_values, _ = load_config(wake_directory)
+        old_default = tuple(wake_values.get("investigation_tools", ())) == ("recall_memory", "web_fetch")
+        if old_default:
+            save_config(wake_directory, {**wake_values, "investigation_tools":
+                ["recall_memory", "read_memory_source", "web_fetch"]})
         (backup / "upgrade.json").write_text(
             json.dumps(
                 {
@@ -229,6 +237,7 @@ def upgrade_workspace(workspace):
                     "current_root": current,
                     "refreshed_builtins": refreshed,
                     "enabled_additions": sorted(additions),
+                    "upgraded_default_memory_source_tool": old_default,
                 },
                 indent=2,
             )

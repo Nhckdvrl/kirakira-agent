@@ -118,6 +118,13 @@ EVENTMAIL_WAKE_V2 = ServiceKey[ContentWakeServicesV2]("eventmail.wake.v2")
 
 EVENTMAIL_DELIVERY_V2 = ServiceKey[EventMailDeliveryServicesV2]("eventmail.delivery.v2")
 
+# A source may request review of an owner's subscription independently of
+# learned interest. This admits investigation, never notification or tool rights.
+# The source owns authorization; external feed text cannot set this routing field.
+# A context_session_id may name the owner's conversation whose fixed scope and
+# recall policy the investigation should inherit. It does not change delivery.
+REQUESTED_REVIEW = "owner-requested"
+
 # Fleet 的 Calendar/Feed/Fitbit/Steam 从这些来源端口提交；不是零消费者能力。
 class BoundContentSource(Protocol):
     def close(self) -> None: ...
@@ -131,7 +138,15 @@ class BoundContentSource(Protocol):
         ...
 
     async def read_revision(self, item_id: str, revision: str) -> Mapping[str, object] | None:
-        """Read a checkpointed revision during offline handoff verification."""
+        """Read the revision, settlements and last 100 lifecycle transitions."""
+        ...
+
+    async def inspect_submission(self, batch_id: str) -> Mapping[str, object] | None:
+        """Read a live WAL-aware receipt; do not advance source or delivery state."""
+        ...
+
+    async def inspect_revision(self, item_id: str, revision: str) -> Mapping[str, object] | None:
+        """Read live payload, lifecycle and settlements in one read-only snapshot."""
         ...
 
     async def unsettled(self, limit: int = 100) -> tuple[Mapping[str, object], ...]: ...

@@ -23,13 +23,13 @@ from plugins.tools.execution import ToolExecution, MessageReply, Result
 from plugins.tools.abandon import follow_abandon, reject_start
 from plugins.tools.menu import NativePresentation, ToolMenu, ToolCallDecode
 from plugins.ledger.log import MessageLog
-from plugins.ledger.contract import OwnerTransaction
+from plugins.ledger.contract import ContentReferences, OwnerTransaction
 from plugins.ledger.contract import CallRef, Control, Input, Output, ToolCall, ToolResult
 
 @asynccontextmanager
 async def runtime(tmp_path, complete, invoke, *, max_steps=4, authorize_hook=None,
                   reducer=None, material_source=None, estimate=None, preview_state=None, terminal_tools=frozenset(),
-                  state_owner=None, model_max_attempts=1, parallel_ids=frozenset(), max_parallel_calls=1, tool_schemas=None):
+                  state_owner=None, model_max_attempts=1, parallel_ids=frozenset(), max_parallel_calls=1, tool_schemas=None, tool_choice=None):
     log = MessageLog(tmp_path / "sessions.db")
     store = ModelsStore(tmp_path / "models.db", tmp_path / "backups")
     store.initialize()
@@ -54,7 +54,8 @@ async def runtime(tmp_path, complete, invoke, *, max_steps=4, authorize_hook=Non
     def writer(body, call_ref=None):
         return log.writer(
             "s", author="test", source="conversation", body_types=(body,),
-            content={"text": check_text, "model.facts": check_facts, "model.tool_rejection": check_tool_rejection, "context.summary": check_summary} if body is Output else {"text": check_text},
+            content={"text": check_text, "model.facts": check_facts, "model.tool_rejection": check_tool_rejection, "context.summary": check_summary,
+                     "context.notice": lambda _: ContentReferences()} if body is Output else {"text": check_text},
             call_ref=call_ref, check_call=lambda call: None,
         )
     class Target:
@@ -165,6 +166,7 @@ async def runtime(tmp_path, complete, invoke, *, max_steps=4, authorize_hook=Non
             return await react(reader, output, model=model, context=ContextBuilder(),
                                projection=projection, materials=materials, content=Content(), tools=menu,
                                max_output_tokens=100, max_steps=max_steps, reduce=reducer, preview=preview, terminal_tools=terminal_tools,
+                               tool_choice=tool_choice,
                                state=None if state_owner is None else log.owner(state_owner),
                                max_parallel_calls=max_parallel_calls, check_start=menu.check_start)
     conversation = Conversation(reader=log.reader("s"), inputs=writer(Input), controls=writer(Control),

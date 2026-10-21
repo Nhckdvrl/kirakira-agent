@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import cast
 
-from .pool import WAKE_ADMISSION_FLOOR, PoolResult, measure_pool, rank_events
+from .pool import WAKE_ADMISSION_FLOOR, PoolResult, measure_pool, rank_events, requests_review
 
 _SCHEMA_VERSION = 9
 _ADMISSION_TABLE_SQL = """
@@ -244,6 +244,7 @@ class WakeState:
             and item.get("due") is True
         }
         scores = self._scores(due_identities)
+        seen, watermark = self._seen(), self._read()
         result: list[Mapping[str, object]] = []
         for item in items:
             if not (
@@ -261,6 +262,7 @@ class WakeState:
             enriched = dict(cast(Mapping[str, object], payload))
             enriched["_wake_initial_score"] = score.initial_score
             enriched["_wake_semantic_interest"] = score.semantic_interest
+            enriched["_wake_review_consumed"] = _is_seen(item, high_watermark=watermark, seen=seen)
             result.append({**dict(item), "payload": enriched})
         return tuple(result)
 
@@ -309,6 +311,8 @@ class WakeState:
         )[:limit]
         expired: list[Mapping[str, object]] = []
         for item in eligible:
+            if requests_review(_event(item)):
+                continue
             ranked = rank_events([_event(item)], now=instant)
             features = ranked[0]["_wake_rank_features"]
             if float(features["admission_mass"]) < WAKE_ADMISSION_FLOOR:

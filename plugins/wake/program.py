@@ -66,6 +66,7 @@ async def run(ctx: Context, task: Task, reader: MessageReader, request: Request)
             terminal_tools=frozenset(
                 name for name in names if name in STAGE_TOOLS[phase.stage]
             ),
+            tool_choice="required",
             exclude_material_kinds=(
                 frozenset({"recall", "profile"})
                 if phase.stage in {"investigate", "alert"}

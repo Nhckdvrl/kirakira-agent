@@ -24,7 +24,7 @@ HEADLESS = frozenset({
     "managed_processes", "mcp", "commands", "projects", "models", "content",
     "context", "turn_projection", "sources", "tools", "tool_search", "assets",
     "working_directory", "vision", "skills", "shell", "files", "runtime_inspection",
-    "runtime_diagnostics", "plugin_update", "local-embedding", "event-ingress",
+    "runtime_diagnostics", "plugin_update", "local-embedding", "event-ingress", "followups",
     "prompt", "compaction", "markdown_memory", "react", "conversation",
     "reply_program", "reply", "jobs", "eventmail", "delivery", "delivery_policy",
     "message_push", "programmatic", "akashic_sender", "scheduler", "subagent", "drift", "wake",

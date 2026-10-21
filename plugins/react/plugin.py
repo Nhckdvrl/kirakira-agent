@@ -66,12 +66,14 @@ Materials = Mapping[str, object]
 
 api_version = 3
 name = "react"
-version = "1.0.0"
+version = "1.1.0"
 desc = "组合上下文、模型、内容与工具，不拥有会话或外部效果状态"
 inject = ()
 
 
 Preview = Callable[[str], AbstractContextManager[StreamCallback]]
+
+_REQUIRED_DECISION_NOTICE = "本流程要求通过获授工具提交决定；普通文字没有完成本次任务。"
 
 
 @dataclass(frozen=True, slots=True)
@@ -386,6 +388,7 @@ async def _complete(
     preview: Preview | None,
     reminder_input_id: str | None,
     operation_id: str = "",
+    tool_choice: str | Mapping[str, object] | None = None,
 ) -> AsyncGenerator[tuple[LLMResponse, Materials, str, ModelRequest]]:
     """缩减只更新已取得材料中的摘要；provider 容量拒绝最多重试一次。"""
     mark = partial(log_timing, session_id=snapshot[-1].session_id if snapshot else "",
@@ -397,7 +400,8 @@ async def _complete(
                                      tools=tools.schemas, max_output_tokens=max_output_tokens,
                                      current_reminder_input_id=reminder_input_id)
         mark("context.build.end")
-        return result
+        request, rejection = result
+        return (replace(request, tool_choice=tool_choice) if tool_choice is not None else request), rejection
 
     async def reduce_request(mats: Materials, request: ModelRequest, *, force: bool) -> tuple[Materials, Mapping[str, object] | None]:
         """压缩预览只显示状态；可见诊断随冻结材料进入最终 Output。"""
@@ -489,6 +493,7 @@ async def react(
     reduce: SummaryReducer | None = None,
     preview: Preview | None = None,
     terminal_tools: frozenset[str] = frozenset(),
+    tool_choice: str | Mapping[str, object] | None = None,
     capture_scope: Callable[[], RuntimeScope] | None = None,
     state: OwnerStore | None = None,
     max_parallel_calls: int = 1,
@@ -588,12 +593,22 @@ async def react(
         # 2. 重启和显式重试都用当前材料发新请求，不恢复旧请求身份。
         mark("preparation.begin")
         prepared = await materials(tuple(snapshot))
+        if tool_choice == "required" and terminal_tools:
+            last_output = next((item for item in reversed(snapshot)
+                                if item.source == writer.source and isinstance(item.body, Output)), None)
+            if last_output is not None and any(isinstance(part, ContentPart)
+                    and part.kind == "context.notice" and part.value == _REQUIRED_DECISION_NOTICE
+                    for part in last_output.body.parts):
+                prepared = {**prepared, "system_prompt": str(prepared.get("system_prompt", ""))
+                            + "\n\n" + _REQUIRED_DECISION_NOTICE + "请调用当前目录中的工具；终止工具："
+                            + ", ".join(sorted(terminal_tools)) + "。不得把普通回答当作工具调用。"}
         mark("preparation.end")
         async with _complete(
             snapshot, prepared, source=writer.source, context=context, model=model,
             projection=projection, tools=tools, max_output_tokens=max_output_tokens, reduce=reduce, preview=preview,
             reminder_input_id=reminder_input_id,
             operation_id=operation_id,
+            tool_choice=tool_choice,
         ) as (response, prepared, message_id, request):
             # 先检查完整性：即使截断参数恰好是合法 JSON，也不能执行该批工具。
             if response.finish_reason == "length":
@@ -642,18 +657,21 @@ async def react(
                 parts.append(ContentPart("context.summary", {"reference": summary["reference"]}))
             parts.extend(ContentPart("context.notice", notice)
                          for notice in cast(Sequence[str], prepared.get("notices", ())))
+            missing_decision = tool_choice == "required" and bool(terminal_tools) and not indices
+            if missing_decision:
+                parts.append(ContentPart("context.notice", _REQUIRED_DECISION_NOTICE))
             mark("output.decoded", counts={"tool_calls": len(indices)})
             # 4. 内容完成后在窄事务内核对前提并提交；失败的草稿绝不触发工具。
             try:
                 message = await commit(
                     message_id,
-                    Output(tuple(parts), "continue" if indices else "complete"),
+                    Output(tuple(parts), "continue" if indices or missing_decision else "complete"),
                     metadata,
                 )
             except _Superseded:
                 raise asyncio.CancelledError from None
             mark("output.committed", request_id=response.call_record_id or "", parent_operation_id=message.message_id, counts={"seq": message.seq, "tool_calls": len(indices)})
-            if not indices:
+            if not indices and not missing_decision:
                 return message
         # Loop 保留当前历史，直到下轮真实快照替换它；弱解码缓存才能复用旧消息。
         # 不再使用的准备材料与提交闭包立即释放，结束或取消时释放整个 Loop。

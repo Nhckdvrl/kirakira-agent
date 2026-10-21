@@ -7,6 +7,7 @@
 - [Runtime 架构](architecture/overview.md)：所有权、生命周期和主要链路。
 - [启动和迁移](handbook/start.md)：唯一 Python 环境、配置与既有数据。
 - [记忆与主动交互](handbook/memory-proactive.md)：本地 embedding、Wake、事件入口和升级。
+- [持续跟进](handbook/followups.md)：从原始对话接入信息源、调查、核对投递与反馈。
 - [ADR0016](decisions/0016-native-runtime.md)：统一 Runtime 的架构决策。
 - [工程工作流](engineering/development-workflow.md)：实现、验证与交付。
 - [验证入口](operations/verification.md)：当前结果及可复现命令。
