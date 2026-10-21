@@ -4,7 +4,10 @@ const ICON = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" vie
 const NUMBER = new Intl.NumberFormat("zh-CN");
 const TIME = new Intl.DateTimeFormat("zh-CN", {month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false});
 const number = (value) => NUMBER.format(Number(value || 0));
-const rateOf = (totals) => Number(totals?.prompt_tokens) > 0 ? Number(totals.hit_tokens) / Number(totals.prompt_tokens) : null;
+const rateOf = (totals) => {
+  const prompt = totals?.cache_observed_prompt_tokens ?? totals?.prompt_tokens;
+  return totals?.hit_tokens != null && Number(prompt) > 0 ? Number(totals.hit_tokens) / Number(prompt) : null;
+};
 const percent = (value) => typeof value === "number" ? `${(value * 100).toFixed(1)}%` : "—";
 
 function shortTime(value) {
@@ -16,8 +19,9 @@ function shortTime(value) {
 function metric(element, totals, title) {
   const turns = Number(totals?.turns || 0);
   element.classList.toggle("empty", turns === 0);
-  element.querySelector("strong").textContent = turns === 0 ? "暂无记录" : percent(rateOf(totals));
-  element.querySelector("span").textContent = turns === 0 ? title : `${title} · ${number(turns)} 轮`;
+  const observed = Number(totals?.cache_observed_turns || 0);
+  element.querySelector("strong").textContent = turns === 0 ? "暂无记录" : observed === 0 ? "未提供" : percent(rateOf(totals));
+  element.querySelector("span").textContent = turns === 0 ? title : `${title} · 已知 ${number(observed)} / ${number(turns)} 轮`;
 }
 
 // 每轮一行；展开后显示会话与 Prompt / Hit / Miss 原始数。
@@ -34,11 +38,12 @@ function turnRow(turn) {
   meta.textContent = `${turn.proactive ? "主动" : "被动"} · ${shortTime(turn.recorded_at)}`;
   value.textContent = percent(rate);
   value.classList.toggle("low", typeof rate === "number" && rate < 0.5);
-  tokens.textContent = `${number(turn.hit_tokens)} / ${number(turn.prompt_tokens)}`;
+  const hit = turn.hit_tokens == null ? "未提供" : number(turn.hit_tokens);
+  tokens.textContent = `${hit} / ${number(turn.prompt_tokens)}`;
   const detail = item.querySelector("dl");
-  const miss = Math.max(0, Number(turn.prompt_tokens) - Number(turn.hit_tokens));
+  const miss = turn.hit_tokens == null ? "未提供" : number(Math.max(0, Number(turn.prompt_tokens) - Number(turn.hit_tokens)));
   for (const [label, text] of [["Session", turn.session_id], ["Prompt", number(turn.prompt_tokens)],
-    ["Hit", number(turn.hit_tokens)], ["Miss", number(miss)], ["时间", shortTime(turn.recorded_at)]]) {
+    ["Hit", hit], ["Miss", miss], ["时间", shortTime(turn.recorded_at)]]) {
     const term = document.createElement("dt");
     const description = document.createElement("dd");
     term.textContent = label;
@@ -58,6 +63,7 @@ function render(page, usage) {
   const ring = page.querySelector(".models-cache-ring");
   ring.style.setProperty("--models-cache-rate", `${Math.max(0, Math.min(1, recent || 0)) * 100}%`);
   ring.querySelector("strong").textContent = percent(recent);
+  page.querySelector("[data-coverage]").textContent = `已知 ${number(usage.recent_passive?.cache_observed_turns)} / ${number(usage.recent_passive?.turns)} 轮`;
   metric(page.querySelector("[data-passive]"), usage.passive, "被动总览");
   metric(page.querySelector("[data-proactive]"), usage.proactive, "主动链路");
   page.querySelector("[data-total]").textContent = `${number(usage.total)} 轮`;
@@ -95,11 +101,11 @@ export function cacheUsageSection({resource, progress}) {
       const page = document.createElement("main");
       page.className = "settings-page models-cache";
       page.innerHTML = `<div class="settings-shell">
-        <header class="settings-header"><div><h1>缓存效率</h1><p>按 Turn 汇总模型调用的 KV Cache 命中，数据来自模型调用记录。</p></div></header>
+        <header class="settings-header"><div><h1>缓存效率</h1><p>按 Turn 汇总供应商报告的输入缓存命中。比率只包含缓存字段完整的轮次，未提供不算零命中。</p></div></header>
         <p class="models-cache-status" role="status"></p>
         <div data-content hidden>
           <section class="models-cache-overview" aria-label="KV Cache 概览">
-            <div class="models-cache-current"><div class="models-cache-ring"><strong>—</strong></div><span>近期被动复用</span></div>
+            <div class="models-cache-current"><div class="models-cache-ring"><strong>—</strong></div><span>近期被动复用</span><small data-coverage></small></div>
             <div class="models-cache-sources"><div data-passive><strong>—</strong><span>被动总览</span></div><div data-proactive><strong>—</strong><span>主动链路</span></div></div>
           </section>
           <section class="settings-section"><header><h2>最近 Turn</h2><span data-total></span></header><div data-turns></div></section>

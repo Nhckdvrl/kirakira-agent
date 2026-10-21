@@ -75,6 +75,22 @@ python -m eval.runtime_settings \
 | `followups` | 原始对话创建跟进、真实 HTTP 订阅/网页差异、调查分享/跳过、精确投递、反馈、暂停与恢复；可选隔离项目和长原文读取 |
 | `mail_followups` | 本地 TLS IMAP 的真实采集、跨会话历史条件与分享/跳过、线程更正、规则修改、外部指令、UID 重建与重启 |
 | `runtime_settings` | 实际认证 HTTP 设置、原生配置换代、越界拒绝、清空恢复默认、真实记忆工具预算与图不重学、重启保持 |
+| `prompt_cache` | 稳定/变化前缀的受控机制实验；原生邮件调查的实际请求摘要、缓存用量和功能结果；缓存字段未知与零值分开 |
+
+缓存机制与真实链路分别运行，均使用新的本地工作区：
+
+```sh
+python -m eval.prompt_cache --mode probe --rounds 8 \
+  --model-config /private/path/model.json --key-file /private/path/model.key \
+  --workspace /local-disk/eval/cache-probe-new --output /local-disk/eval/cache-probe.json
+
+python -m eval.prompt_cache --mode mail --attention-cases \
+  --model-config /private/path/model.json --key-file /private/path/model.key \
+  --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json \
+  --workspace /local-disk/eval/cache-mail-new --output /local-disk/eval/cache-mail.json
+```
+
+请求跟踪目前支持 `openai-compatible` 和 `step-plan` 驱动；它观察实际插件代中的传输，不修改生产 Prompt、工具目录、请求路由或流式选择。报告只存请求摘要和大小，不存请求正文或凭据。`mail` 另存 `.functional.json`，保留原有功能验收结果；`--attention-cases` 在原有 8 项之外增加 4 项一般知识、话题、补材料和限时确认的内容判断，分别核对跳过与实际投递。字符前缀只是本地诊断，不是供应商的实际 token 前缀。机制实验可以说明缓存复用条件，不能替代产品优化前后的效果和费用对照。
 
 `eval/fixtures/native_extension` 提供真实托管 HTTP 进程和 stdio MCP 服务；事件投递目标为隔离的本地会话。它们是受控集成验收，不是外部账号、所有设备或所有可选提供方的部署认证。
 

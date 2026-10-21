@@ -456,6 +456,28 @@ async def evaluate(args):
                     "external_email_cannot_become_an_owner_rule_update", injection
                 )
 
+                if getattr(args, "attention_cases", False):
+                    # Additional controlled content, not a held-out public
+                    # benchmark. Mix useful actions with non-actionable topics.
+                    attention_cases = (
+                        ("雨笛招募 安全知识", "公开科普：识别陌生邮件中的冒充指令。这不是账户异常通知，无需回复，也没有待办或期限。", "skip_content"),
+                        ("雨笛招募 补充材料", "审核还缺你的作品集，请在后天17:00前回复附件，逾期将无法安排下一轮。", "share_content"),
+                        ("雨笛招募 偏好话题", "这是一则自动发送的讨论话题：招聘周报可以有哪些形式。没有要求你设置任何选项，不需要回复，没有截止时间。", "skip_content"),
+                        ("雨笛招募 参与确认", "目前需要你决定是否继续参与本轮招募，请明天中午12:00前回复确认；无需重复发送已经提交的材料。", "share_content"),
+                    )
+                    report["attention_cases"] = []
+                    for index, (subject, body, expected) in enumerate(attention_cases):
+                        async def check_attention(subject=subject, body=body, expected=expected):
+                            server.deliver(subject, body)
+                            result = await outcome(watch)
+                            report["attention_cases"].append({"subject": subject, "body": body,
+                                                               "expected": expected, "result": result})
+                            assert result["decision"] == expected, result["decision"]
+                            return {"decision": result["decision"], "expected": expected,
+                                    "confirmed_deliveries": len(result["event"]["deliveries"])}
+
+                        await record(f"attention_scope_{index + 1}", check_attention)
+
                 async def reset():
                     server.uidvalidity += 1
                     result = await rpc(
@@ -640,6 +662,7 @@ def main():
     parser.add_argument("--model-config", type=Path)
     parser.add_argument("--functional-only", action="store_true")
     parser.add_argument("--with-functional", action="store_true")
+    parser.add_argument("--attention-cases", action="store_true")
     parser.add_argument("--recheck-existing", action="store_true")
     parser.add_argument("--first-pass", type=Path)
     parser.add_argument("--family-start", type=int, default=0)

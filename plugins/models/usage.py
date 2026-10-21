@@ -27,7 +27,7 @@ _RECENT_PASSIVE_TURNS = 10
 _PREVIEW_CHARS = 90
 _SCAN_SECONDS = 2.0
 # 检查点里存的是按当前计数规则算好的结果：改了计数规则（什么算计入、主动来源集合、预览）必须加一，旧结果随之丢弃重算。
-_CHECKPOINT_SCHEMA = 1
+_CHECKPOINT_SCHEMA = 2
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ class TurnUsage:
     recorded_at: str
     preview: str
     prompt_tokens: int
-    hit_tokens: int
+    hit_tokens: int | None
 
 
 @dataclass(slots=True)
@@ -57,14 +57,19 @@ class _Totals:
     turns: int = 0
     prompt_tokens: int = 0
     hit_tokens: int = 0
+    cache_observed_turns: int = 0
+    cache_observed_prompt_tokens: int = 0
 
     def add(self, turn: TurnUsage) -> None:
         self.turns += 1
         self.prompt_tokens += turn.prompt_tokens
-        self.hit_tokens += turn.hit_tokens
+        if turn.hit_tokens is not None:
+            self.hit_tokens += turn.hit_tokens
+            self.cache_observed_turns += 1
+            self.cache_observed_prompt_tokens += turn.prompt_tokens
 
     def body(self) -> dict[str, object]:
-        return {"turns": self.turns, "prompt_tokens": self.prompt_tokens, "hit_tokens": self.hit_tokens}
+        return asdict(self)
 
 
 @dataclass(slots=True)
@@ -97,10 +102,11 @@ class _Checkpoint:
                     raise sqlite3.DatabaseError(f"checkpoint schema {version}")
                 heads = dict(connection.execute("SELECT session_id, head FROM heads"))
                 sources: dict[tuple[str, str], _SourceState] = {}
-                for session_id, source, after, turns, prompt, hit, recent in connection.execute(
-                        "SELECT session_id, source, after_seq, turns, prompt_tokens, hit_tokens, recent FROM sources"):
+                for session_id, source, after, turns, prompt, hit, observed, observed_prompt, recent in connection.execute(
+                        "SELECT session_id, source, after_seq, turns, prompt_tokens, hit_tokens, "
+                        "cache_observed_turns, cache_observed_prompt_tokens, recent FROM sources"):
                     sources[(session_id, source)] = _SourceState(
-                        after, _Totals(turns, prompt, hit),
+                        after, _Totals(turns, prompt, hit, observed, observed_prompt),
                         deque((TurnUsage(**item) for item in json.loads(recent)), maxlen=_RECENT_TURNS))
                 for session_id, source, message_id, tokens in connection.execute(
                         "SELECT session_id, source, message_id, tokens FROM outputs"):
@@ -123,6 +129,7 @@ class _Checkpoint:
                 CREATE TABLE IF NOT EXISTS heads (session_id TEXT PRIMARY KEY, head INTEGER NOT NULL);
                 CREATE TABLE IF NOT EXISTS sources (session_id TEXT, source TEXT, after_seq INTEGER NOT NULL,
                     turns INTEGER NOT NULL, prompt_tokens INTEGER NOT NULL, hit_tokens INTEGER NOT NULL,
+                    cache_observed_turns INTEGER NOT NULL, cache_observed_prompt_tokens INTEGER NOT NULL,
                     recent TEXT NOT NULL, PRIMARY KEY (session_id, source));
                 CREATE TABLE IF NOT EXISTS outputs (session_id TEXT, source TEXT, message_id TEXT,
                     tokens INTEGER NOT NULL, PRIMARY KEY (session_id, message_id));
@@ -134,9 +141,11 @@ class _Checkpoint:
             for (session_id, source), state in sources.items():
                 if state.reset:
                     _ = connection.execute("DELETE FROM outputs WHERE session_id = ? AND source = ?", (session_id, source))
-                _ = connection.execute("INSERT OR REPLACE INTO sources VALUES (?, ?, ?, ?, ?, ?, ?)", (
+                _ = connection.execute("INSERT OR REPLACE INTO sources VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (
                     session_id, source, state.after_seq, state.totals.turns, state.totals.prompt_tokens,
-                    state.totals.hit_tokens, json.dumps([asdict(turn) for turn in state.recent], ensure_ascii=False)))
+                    state.totals.hit_tokens, state.totals.cache_observed_turns,
+                    state.totals.cache_observed_prompt_tokens,
+                    json.dumps([asdict(turn) for turn in state.recent], ensure_ascii=False)))
                 _ = connection.executemany("INSERT OR REPLACE INTO outputs VALUES (?, ?, ?, ?)",
                                        ((session_id, source, message_id, tokens)
                                         for message_id, tokens in state.unsaved.items()))
@@ -199,6 +208,8 @@ class CacheUsage:
                 target.turns += state.totals.turns
                 target.prompt_tokens += state.totals.prompt_tokens
                 target.hit_tokens += state.totals.hit_tokens
+                target.cache_observed_turns += state.totals.cache_observed_turns
+                target.cache_observed_prompt_tokens += state.totals.cache_observed_prompt_tokens
             recent = _latest((state.recent for _, state in states), _RECENT_TURNS)
             recent_passive = _Totals()
             for turn in _latest((state.recent for is_proactive, state in states if not is_proactive),
@@ -336,7 +347,11 @@ def _record(
     final = outputs[-1][1] if outputs else members[-1][1]
     text = "\n".join(fact.text for _, fact in members if fact.text).replace("\n", " ").strip()
     preview = text if len(text) <= _PREVIEW_CHARS else text[:_PREVIEW_CHARS].rstrip() + "..."
-    usage = TurnUsage(session_id, source in _PROACTIVE_SOURCES, final.recorded_at, preview, prompt, hit or 0)
+    # Input/output coverage does not imply cache coverage. Missing or invalid
+    # cache counts stay unknown; a real reported zero remains a measured miss.
+    if hit is not None and not 0 <= hit <= prompt:
+        hit = None
+    usage = TurnUsage(session_id, source in _PROACTIVE_SOURCES, final.recorded_at, preview, prompt, hit)
     state.totals.add(usage)
     state.recent.append(usage)
 
