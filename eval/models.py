@@ -29,7 +29,7 @@ def source_identity():
     names.extend(str(path.relative_to(ROOT)) for path in sorted((ROOT / "plugins/followups").glob("*.py")))
     names.extend(["plugins/eventmail/store.py", "plugins/wake/api.py", "plugins/wake/messages.py",
                   "plugins/wake/runtime.py", "plugins/wake/program.py", "eval/followups.py"])
-    names.extend(name for name in ("eval/mail_followups.py", "eval/fixtures/mailbox.py") if (ROOT / name).is_file())
+    names.extend(name for name in ("eval/mail_followups.py", "eval/fixtures/mailbox.py", "eval/runtime_settings.py") if (ROOT / name).is_file())
     if (ROOT / "UPSTREAM.json").is_file():
         names.append("UPSTREAM.json")
     names.extend(str(path.relative_to(ROOT)) for path in sorted((ROOT / "patches").glob("*.patch")))

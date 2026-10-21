@@ -9,6 +9,7 @@ import type {
 } from "@akashic/web-ui-v1";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
+import { WebDataRegistry } from "./webData";
 
 type Disposer = WebUiDisposer;
 type MountCardinality = WebMountCardinality;
@@ -81,6 +82,7 @@ class BrowserCatalogSession implements WebHostSession {
   private closed = false;
   private staleCatalog = false;
   private staleNotice: HTMLElement | null = null;
+  private readonly data = new WebDataRegistry();
 
   constructor(readonly bootstrap: WebUiBootstrap) {
     this.mounts.set("web.root.v1", {
@@ -151,6 +153,7 @@ class BrowserCatalogSession implements WebHostSession {
     this.rejectUnresolvedInjections();
     this.verifyContractUse();
     this.admissionOpen = false;
+    this.data.warmWhenIdle();
   }
 
   renderRoot(host: HTMLElement): Disposer {
@@ -238,7 +241,18 @@ class BrowserCatalogSession implements WebHostSession {
   }
 
   private contextFor(owner: ModuleActivation): WebHostContextV1 {
+    const keys = new Set<string>();
     return {
+      data: {
+        resource: (key, load, options) => {
+          if (owner.disposed) throw new Error("web module is disposed");
+          if (keys.has(key)) throw new Error(`duplicate resource ${key}`);
+          keys.add(key);
+          const created = this.data.create(key, load, options);
+          owner.effects.push(once(created.dispose));
+          return created.resource;
+        },
+      },
       http: {
         request: (path, init) => this.request(owner, path, init),
         webSocketUrl: (path) => this.webSocketUrl(owner, path),
@@ -865,12 +879,32 @@ function importModule(
   return importModuleFromBytes(module);
 }
 
+// 不同模块常携带字节相同的样式表（共享底包分别打包）：按样式哈希引用计数共享同一个
+// <style>，最后一个使用者释放才移除。@scope 锚点是内容哈希，宿主元素本就各自带同一哈希。
+const installedStyles = new Map<string, { element: HTMLStyleElement; users: number }>();
+
 function installStyle(module: WebModulePayload): Disposer {
+  const scope = styleScopeId(module);
+  const existing = installedStyles.get(scope);
+  if (existing && existing.element.isConnected) {
+    existing.users += 1;
+    return once(() => releaseStyle(scope));
+  }
   const style = document.createElement("style");
   style.dataset.akashicModuleStyle = module.pluginId;
-  style.textContent = `@scope ([data-akashic-style="${styleScopeId(module)}"]) {\n${module.stylesheet}\n}`;
+  style.textContent = `@scope ([data-akashic-style="${scope}"]) {\n${module.stylesheet}\n}`;
   document.head.appendChild(style);
-  return once(() => style.remove());
+  installedStyles.set(scope, { element: style, users: 1 });
+  return once(() => releaseStyle(scope));
+}
+
+function releaseStyle(scope: string): void {
+  const installed = installedStyles.get(scope);
+  if (!installed) return;
+  installed.users -= 1;
+  if (installed.users > 0) return;
+  installedStyles.delete(scope);
+  installed.element.remove();
 }
 
 function styleScopeId(module: WebModulePayload): string {

@@ -80,7 +80,7 @@
            groups={navigationGroups ? {
 --- a/frontend/chat/src/desktop-chat-view.tsx
 +++ b/frontend/chat/src/desktop-chat-view.tsx
-@@ -384,7 +384,7 @@
+@@ -393,7 +393,7 @@
      wasGenerating.current = generating;
      const apply = () => {
        if (!document.hidden) unseen.current = false;
@@ -89,7 +89,7 @@
      };
      apply();
      document.addEventListener("visibilitychange", apply);
-@@ -412,7 +412,7 @@
+@@ -421,7 +421,7 @@
        <p>服务可能正在启动、已停用或启动失败。连接恢复后，这个页面会自动更新。</p>
        <a href="/">查看管理面板</a>
      </div> : shellStatus === "starting" ? <div className="model-connection-state">
@@ -100,7 +100,7 @@
      </div> : shellStatus === null ? (
 --- a/frontend/chat/src/desktop-sidebar.tsx
 +++ b/frontend/chat/src/desktop-sidebar.tsx
-@@ -527,7 +527,7 @@
+@@ -591,7 +591,7 @@
          <div className="chat-sidebar__brand-row">
            <span className="chat-sidebar__brand">
              <span className="chat-sidebar__mark" style={brandMask} aria-hidden="true" />
@@ -175,7 +175,7 @@
  
 @@ -85,7 +85,7 @@
  
- 消息操作等次要操作默认 `opacity: 0`，父消息容器 `:hover` / `:focus-within` 时在 `--ak-sys-duration-short` 内显现。时间戳与操作同属一条元信息行：有悬停的宽屏只有最新一条消息常驻，更早的消息整行随悬停/聚焦显现；该行固定 28px，40px 操作热区上下透明溢出，显隐只改透明度、不推动正文。窄屏（≤36rem）同理只留最新一条，点按消息显示该条。触控断点（≤820px 或 `hover: none`）hover 不存在，次要操作常驻可见。透明状态不得把按钮移出 Tab 序（禁用 `visibility: hidden` / `display: none`），键盘 Tab 到达时经 `focus-within` 必然可见。键盘焦点统一是 2px `--ak-rule-focus` 墨线、外偏 2px：`styles.css` 开头有一条 `:where()` 零特异性兜底，没写焦点样式的控件也不会落回浏览器默认的 1px 蓝环；组件需要别的焦点形态时自己写 `:focus-visible` 覆盖。
+ 消息操作等次要操作默认 `opacity: 0`，父消息容器 `:hover` / `:focus-within` 时在 `--ak-sys-duration-short` 内显现。时间戳与操作同属一条元信息行：有悬停的宽屏只有最新一条消息常驻，更早的消息整行随悬停/聚焦显现；该行固定 28px，40px 操作热区上下透明溢出，显隐只改透明度、不推动正文。窄屏（≤36rem）同理只留最新一条，点按消息显示该条。触控断点（≤820px 或 `hover: none`）hover 不存在，次要操作常驻可见。透明状态不得把按钮移出 Tab 序（禁用 `visibility: hidden` / `display: none`），键盘 Tab 到达时必然可见：消息操作经父容器 `:focus-within`，侧栏行菜单经行主按钮 `:focus-visible`（不再用根级键盘模态类——它一进一出会让整棵样式树重算）。键盘焦点统一是 2px `--ak-rule-focus` 墨线、外偏 2px：`styles.css` 开头有一条 `:where()` 零特异性兜底，没写焦点样式的控件也不会落回浏览器默认的 1px 蓝环；组件需要别的焦点形态时自己写 `:focus-visible` 覆盖。
  
 -用户自己的提问额外有"放回输入框编辑"（排在引用、复制之前）：原文接在已有草稿之后（空行分隔），不覆盖正在写的内容；聚焦到末尾并按溢出展开输入卡。它不改写历史、不分叉会话，只是"改一改再问"的快捷方式；回复与工具结果不提供。键盘等价物：输入框为空（且无附件）时按 ↑ 取回当前会话最后一条提问，光标置于末尾；有内容时 ↑ 仍是移动光标。选了"引用此消息"后焦点直接进输入框（触屏弹出键盘），引用条显示"回复 Akashic / 回复 你"，内部角色名不外露；引用目标与草稿一样按会话保留（切走再切回仍在，发出或取消后清除，不跟到别的会话）；针对一句追问：鼠标在同一条消息里选中文字后，选区上方浮出墨色反白的"引用"小药丸，点击把选中内容转成 Markdown 引用块（`> `）接到草稿后面并聚焦输入框；跨消息、在可编辑区域里选中不出现，滚动、Esc、选区清空即隐藏；高亮代码在 shadow DOM 里，选区经 `getComposedRanges` 取回真实端点（兼容旧的剩余参数签名）、越过 shadow 边界找所属消息；代码块连着后面正文的跨树选区按树切段（shadow 内剩余部分、宿主之间的文档、另一 shadow 的开头）分别量行，两端都滚出视口的长选区也能定位；按钮落在选区可见部分——标题条之下、输入卡之上（按两者实际几何扣除），优先首个可见行上方，放不下就到末个可见行下方，再压回可见区；触屏有系统选择菜单，不叠加。所有 `:hover` 样式（底色、颜色、显隐）都写在 `@media (hover: hover)` 里：触屏的 hover 会粘在最后点过的元素上；按下反馈用 `:active`，与 `:focus-visible` 一起留在媒体块外；靠悬停才显出的控件（附件移除钮等）在 `(hover: none)` 下常显。生成中焦点在输入框时按 Esc 停止本轮（与停止按钮同一入口，排队内容随之退回）；输入法组合中的 Esc 属于输入法；停止按钮的提示与 `aria-keyshortcuts` 标明该快捷键。
 +用户自己的提问额外有"放回输入框编辑"（排在引用、复制之前）：原文接在已有草稿之后（空行分隔），不覆盖正在写的内容；聚焦到末尾并按溢出展开输入卡。它不改写历史、不分叉会话，只是"改一改再问"的快捷方式；回复与工具结果不提供。键盘等价物：输入框为空（且无附件）时按 ↑ 取回当前会话最后一条提问，光标置于末尾；有内容时 ↑ 仍是移动光标。选了"引用此消息"后焦点直接进输入框（触屏弹出键盘），引用条显示"回复 Kirakira / 回复 你"，内部角色名不外露；引用目标与草稿一样按会话保留（切走再切回仍在，发出或取消后清除，不跟到别的会话）；针对一句追问：鼠标在同一条消息里选中文字后，选区上方浮出墨色反白的"引用"小药丸，点击把选中内容转成 Markdown 引用块（`> `）接到草稿后面并聚焦输入框；跨消息、在可编辑区域里选中不出现，滚动、Esc、选区清空即隐藏；高亮代码在 shadow DOM 里，选区经 `getComposedRanges` 取回真实端点（兼容旧的剩余参数签名）、越过 shadow 边界找所属消息；代码块连着后面正文的跨树选区按树切段（shadow 内剩余部分、宿主之间的文档、另一 shadow 的开头）分别量行，两端都滚出视口的长选区也能定位；按钮落在选区可见部分——标题条之下、输入卡之上（按两者实际几何扣除），优先首个可见行上方，放不下就到末个可见行下方，再压回可见区；触屏有系统选择菜单，不叠加。所有 `:hover` 样式（底色、颜色、显隐）都写在 `@media (hover: hover)` 里：触屏的 hover 会粘在最后点过的元素上；按下反馈用 `:active`，与 `:focus-visible` 一起留在媒体块外；靠悬停才显出的控件（附件移除钮等）在 `(hover: none)` 下常显。生成中焦点在输入框时按 Esc 停止本轮（与停止按钮同一入口，排队内容随之退回）；输入法组合中的 Esc 属于输入法；停止按钮的提示与 `aria-keyshortcuts` 标明该快捷键。
@@ -294,13 +294,15 @@
        <span><input value={path} disabled={busy} onChange={(event) => { request.current += 1; setPath(event.target.value); setPage(null); onPage(null); setLoading(false); }}
 --- a/frontend/plugins/shell_ui/src/brand.ts
 +++ b/frontend/plugins/shell_ui/src/brand.ts
-@@ -1,2 +1,2 @@
+@@ -1,4 +1,4 @@
 -/** Akashic Dashboard 使用的透明品牌图形。 */
 +/** Kirakira Dashboard 使用的透明品牌图形。 */
  export const akashicBrandIcon = "data:image/png;base64,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";
+ 
+ // React 按对象身份比较 dangerouslySetInnerHTML；同一段图标复用同一个对象，重渲染时不再重新解析 SVG。
 --- a/frontend/plugins/shell_ui/src/index.tsx
 +++ b/frontend/plugins/shell_ui/src/index.tsx
-@@ -446,10 +446,10 @@
+@@ -453,10 +453,10 @@
    const showBand = bandEntries.length > 1;
    return <div className={`unified-shell${showBand ? " has-band" : ""}`}>
      {withdrawn && <p role="status" className="config-hint">所选页面暂不可用，已自动切换至默认页面。可在功能设置中查看已安装功能。</p>}
@@ -334,6 +336,17 @@
    /* 英文使用 Source Serif 4，中文由 Noto Serif SC 承接。 */
    --md-ref-typeface-brand: "Source Serif 4", "Noto Serif SC", "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", Georgia, serif;
    --md-ref-typeface-plain: "Source Serif 4", "Noto Serif SC", "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", Georgia, serif;
+--- a/kirakira_agent/_upstream_main.py
++++ b/kirakira_agent/_upstream_main.py
+@@ -24,7 +24,7 @@
+ 
+ _DISTRIBUTION_COMMANDS = frozenset({"dashboard", "workload-controller"})
+ _MANAGEMENT_COMMANDS = frozenset({"plugin-install", "plugin-status", "plugin-uninstall"})
+-_DEFAULT_WORKSPACE = "~/.akashic/workspace"
++_DEFAULT_WORKSPACE = "~/.kirakira/workspace"
+ _PLUGIN_ROLLOUT_OWNER_TURN_ENV = "AKASHIC_PLUGIN_ROLLOUT_OWNER_TURN"
+ _AGENT_INTERNAL_PLUGIN_COMMANDS = frozenset(
+     {
 --- a/plugins/akashic_clients/attachments.py
 +++ b/plugins/akashic_clients/attachments.py
 @@ -1,4 +1,4 @@
@@ -709,7 +722,7 @@
      if folder is not None:
 --- a/plugins/markdown_memory/plugin.py
 +++ b/plugins/markdown_memory/plugin.py
-@@ -422,7 +422,7 @@
+@@ -431,7 +431,7 @@
  
  def _consolidation_prompt(workspace: Workspace, docs: tuple[str, ...]) -> str:
      files = "\n\n".join(f"### {doc}\n{workspace.texts[doc].strip()}" for doc in docs)
@@ -718,7 +731,7 @@
  
  只返回 JSON：{{"ops":[{{"op":"merge","doc":"文件","olds":["- 旧条目原文","- 另一条旧条目原文"],"line":"- 合并后的一条"}}]}}；没有需要整理的内容时返回 {{"ops":[]}}。
  - 合并同一文件中重复或可以合成一句的条目。
-@@ -456,7 +456,7 @@
+@@ -465,7 +465,7 @@
  
  def _profile_prompt(workspace: Workspace, source: str) -> str:
      files = "\n\n".join(f"### {doc}\n{text.strip() or '（空）'}" for doc, text in workspace.texts.items())
@@ -727,7 +740,7 @@
  
  只返回 JSON：{{"ops":[...]}}；没有值得长期保存的内容时返回 {{"ops":[]}}。可用操作：
  - {{"op":"add","doc":"MEMORY.md","section":"## 用户偏好","line":"- 条目","message_ids":["完整 message_id"]}}：MEMORY.md 与 SELF.md 必须给出所在二级标题；主题文件不写 section
-@@ -467,7 +467,7 @@
+@@ -476,7 +476,7 @@
  
  写到哪里：
  - MEMORY.md：跨对话稳定的用户事实、偏好、明确要求记住的内容。标题只有 {"、".join(MEMORY_HEADINGS[1:])}。总量有配额，满了就 supersede 合并，或写进 topics/。
@@ -863,6 +876,32 @@
  inject = (UI,)
  
  
+--- a/plugins/skills/skills/deploy-kirakira/SKILL.md
++++ b/plugins/skills/skills/deploy-kirakira/SKILL.md
+@@ -1,9 +1,9 @@
+ ---
+-name: deploy-akashic
+-description: 用户明确授权 Akashic 合并 PR 并更新当前 Docker 实例时，通过 Shell 提交宿主部署任务，正常回复后结束回合。
++name: deploy-kirakira
++description: 用户明确授权 Kirakira 合并 PR 并更新当前 Docker 实例时，通过 Shell 提交宿主部署任务，正常回复后结束回合。
+ ---
+ 
+-# 部署当前 Akashic
++# 部署当前 Kirakira
+ 
+ 本回合负责检查、合并和提交。宿主负责等待回复送达、停止、迁移与启动。
+ 成功接单不等于更新成功；提交之后不再操作，让本回合正常结束。
+--- a/plugins/step_plan/transport.py
++++ b/plugins/step_plan/transport.py
+@@ -402,7 +402,7 @@
+         async with asyncio.timeout(30):
+             payload = await _request_limited_json(
+                 connection, credential, "POST", "/embeddings",
+-                body={"model": model, "input": ["Akashic embedding setup check", "Akashic embedding order check"]},
++                body={"model": model, "input": ["Kirakira embedding setup check", "Kirakira embedding order check"]},
+                 max_bytes=4 * 1024 * 1024,
+             )
+     except TimeoutError as error:
 --- a/plugins/telegram_channel/plugin.py
 +++ b/plugins/telegram_channel/plugin.py
 @@ -21,7 +21,7 @@
@@ -1033,6 +1072,17 @@
  
      # 设置主人自己的密码：初始密码文件删除，除 keep 这个会话之外全部退出。
      def set_password(self, password: str, *, keep: str | None) -> None:
+--- a/plugins/web_fetch_http/fetch.py
++++ b/plugins/web_fetch_http/fetch.py
+@@ -27,7 +27,7 @@
+     max_response_mb: float = Field(default=5, gt=0, le=100, allow_inf_nan=False)
+     # 返回给模型的文本字符上限；默认约 12K tokens。
+     max_text_chars: int = Field(default=50_000, ge=1_000, le=1_000_000)
+-    user_agent: str = Field(default="akashic/1.0", min_length=1, max_length=300)
++    user_agent: str = Field(default="kirakira/1.0", min_length=1, max_length=300)
+     accept_language: str = Field(default="zh-CN,zh;q=0.9,en;q=0.8", min_length=1, max_length=200)
+     proxy: AnyUrl | None = None
+ 
 --- a/plugins/workspace_changes/plugin.py
 +++ b/plugins/workspace_changes/plugin.py
 @@ -16,7 +16,7 @@
@@ -1084,40 +1134,3 @@
  ```
  
  SDK 不启动 workspace owner。父进程托管可运行 `python main.py app-server --stdio` 并使用 JSON-RPC NDJSON；当前 Python 客户端使用 Unix socket 或 loopback TCP。服务端只接受 v2，旧 Thread/Turn 方法没有兼容入口。请求参数见 [协议 schema](../../schema/app-server-v2.json)。
---- a/kirakira_agent/_upstream_main.py
-+++ b/kirakira_agent/_upstream_main.py
-@@ -24,7 +24,7 @@
- 
- _DISTRIBUTION_COMMANDS = frozenset({"dashboard", "workload-controller"})
- _MANAGEMENT_COMMANDS = frozenset({"plugin-install", "plugin-status", "plugin-uninstall"})
--_DEFAULT_WORKSPACE = "~/.akashic/workspace"
-+_DEFAULT_WORKSPACE = "~/.kirakira/workspace"
- _PLUGIN_ROLLOUT_OWNER_TURN_ENV = "AKASHIC_PLUGIN_ROLLOUT_OWNER_TURN"
- _AGENT_INTERNAL_PLUGIN_COMMANDS = frozenset(
-     {
---- a/plugins/step_plan/transport.py
-+++ b/plugins/step_plan/transport.py
-@@ -402,7 +402,7 @@
-         async with asyncio.timeout(30):
-             payload = await _request_limited_json(
-                 connection, credential, "POST", "/embeddings",
--                body={"model": model, "input": ["Akashic embedding setup check", "Akashic embedding order check"]},
-+                body={"model": model, "input": ["Kirakira embedding setup check", "Kirakira embedding order check"]},
-                 max_bytes=4 * 1024 * 1024,
-             )
-     except TimeoutError as error:
---- a/plugins/skills/skills/deploy-kirakira/SKILL.md
-+++ b/plugins/skills/skills/deploy-kirakira/SKILL.md
-@@ -1,9 +1,9 @@
- ---
--name: deploy-akashic
--description: 用户明确授权 Akashic 合并 PR 并更新当前 Docker 实例时，通过 Shell 提交宿主部署任务，正常回复后结束回合。
-+name: deploy-kirakira
-+description: 用户明确授权 Kirakira 合并 PR 并更新当前 Docker 实例时，通过 Shell 提交宿主部署任务，正常回复后结束回合。
- ---
- 
--# 部署当前 Akashic
-+# 部署当前 Kirakira
- 
- 本回合负责检查、合并和提交。宿主负责等待回复送达、停止、迁移与启动。
- 成功接单不等于更新成功；提交之后不再操作，让本回合正常结束。

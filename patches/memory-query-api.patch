@@ -572,7 +572,7 @@
      return material
 --- a/plugins/akasha/settings.py
 +++ b/plugins/akasha/settings.py
-@@ -71,7 +71,7 @@
+@@ -90,7 +90,7 @@
              pitch="记住你们聊过的事",
              benefit="对话会沉淀成情景记忆，之后聊到相关的事时它会自己想起来。需要一个向量模型。",
              preview=(PreviewLine("你", "上次说的那家拉面店叫什么来着？"),

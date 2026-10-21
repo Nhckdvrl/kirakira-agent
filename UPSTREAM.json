@@ -1,6 +1,6 @@
 {
   "repository": "https://github.com/kachofugetsu09/akashic-agent",
-  "commit": "94027a5cce9fc494f20bb7931fddf26f1e15e8df",
+  "commit": "e4ba3e29ee5a259cac7eb306db91cb632ba98a13",
   "license": "UPSTREAM-LICENSE",
   "files": {
     "agent/background/__init__.py": "e148993b0fb0ece03bd59cc367538b7e60d2def9e54fdcebcd996238849c7ff0",
@@ -93,7 +93,7 @@
     "frontend/chat/src/attachment-card.tsx": "a75720d0f9b39e89888d0443119fb29f1fa254722291c6d3d7f35bff159fbdf5",
     "frontend/chat/src/browser-uuid.ts": "4e1b9a5647b2850c95773de2473f9028979f532af78972e140286c890fecf4a0",
     "frontend/chat/src/chat-host.ts": "8ca11f2b00dec962f989c04e9434779f7ab7610234eca1d8b10b7ed6241bde09",
-    "frontend/chat/src/chat-layout.ts": "99b600e93ac77b4c85253fc71c13b594fee2cb1af1d6f8b840a68a6e50efca07",
+    "frontend/chat/src/chat-layout.ts": "ecd4f6135d0b252e7a85c161cd37aa044dc655af137f2039c835b7a66bd6acdf",
     "frontend/chat/src/chat-message.ts": "e54c029b3392d5f254af809ea60e61c606cd2657860aa7cbee919611d2cce7ff",
     "frontend/chat/src/chat-ui-runtime.tsx": "deb8e69a132b3476935531513e0a8a11d69e525ed110be7a7808bca996f999fc",
     "frontend/chat/src/compact-navigation.tsx": "fdc52428b2f45fb9a1d9f12ec378af1591d9d0fadb0fd6616b32016c8a91f56f",
@@ -118,30 +118,30 @@
     "frontend/chat/src/composer-stats-line.tsx": "ba52c3385b9f8b8c64a9c48b102ea64f675734bf8fe8483e22f4004f8fe038a0",
     "frontend/chat/src/composer-suggest.tsx": "4f5d3bff264a23074360e940070e8eb9c3d926a5bb058529147add3b678f92cf",
     "frontend/chat/src/conversation-navigation.css": "29bf7bc291b4acbb98204a11d0b0cd60819948062576750cf7c043a773d32bb5",
-    "frontend/chat/src/conversation-navigation.tsx": "39c4794556d2812d0ea2095cf422c42a1be832dea5922ad249f3d34541b806c8",
+    "frontend/chat/src/conversation-navigation.tsx": "36a268462733c46142716f3af2b7a5dd0ac3a1fe0c82cf550fb91db92688ed55",
     "frontend/chat/src/copy-last-code.tsx": "34514a6f1ed89162f795b972ef95503de5277e81cfacbacd4822600c990ff391",
     "frontend/chat/src/copy-text.ts": "98d083dd01dea12c72eec15ccf953cb4c1857c83fb1cb5b6ab470a5ce5825c73",
     "frontend/chat/src/desktop-auto-scroll.tsx": "f1312a1fdf31e5bdb864313c65676ac62d04f8c09beb0907152c2c7d73d272e9",
     "frontend/chat/src/desktop-chat-app.tsx": "60d04437c0d8c1ea0a00af0d0f563dee2081766efb4291ca002d51605b5057fa",
-    "frontend/chat/src/desktop-chat-view.tsx": "b6cd4d1b4e063c0357057f4648ddbf8d71d50f0b8ec3e963f7afe21aca2de1a5",
+    "frontend/chat/src/desktop-chat-view.tsx": "64ec301d2035c01fc7010678b26622365a3702589b09dd19d88b0de40599c479",
     "frontend/chat/src/desktop-composer.tsx": "3db8746b5850186a0d95f7c3aa862f115ced946d96fa45f64577c15e4dcddbec",
     "frontend/chat/src/desktop-conversation.tsx": "3d77d9f74e8a33959a6cd4f5e2404c53820e064cec78a47388074819d2b8fff8",
-    "frontend/chat/src/desktop-sidebar.tsx": "3d957a95b03db6e89ba351c7524e74a7e2cb9ab087155e3987b28f1ce0225813",
+    "frontend/chat/src/desktop-sidebar.tsx": "5c7a86d8865f1e780cc00722c26273f64fb1ef01d49f152eedb0a09196a9dcb4",
     "frontend/chat/src/icon-swap.tsx": "2490e926d7e13939a60d77347ec18f4a15a671f3ca94022750e8ce66784f2f87",
     "frontend/chat/src/kaomoji-markdown.ts": "ca614d51a6549fa2da090f9391445726f3dd45a73b8b0c14cd076db6c0eac2db",
     "frontend/chat/src/lib/utils.ts": "53f3d3d070f0a9082934da25b875f9499855c2b0693868dd28be8c23d8730f68",
-    "frontend/chat/src/markdown-reading-nodes.tsx": "b63cc2245c1e47b030a2100976535ccd447311b71915028a8d4c315f10702047",
-    "frontend/chat/src/markdown-reading.ts": "b4edddac2f126ee217edba1c8a358768c52804d0c46bce7c5b19c78e917fe577",
-    "frontend/chat/src/marquee-text.tsx": "8d1875f8a85642913af574fb7f3223c4a3e5786415e89a647b68ebc1e724b297",
+    "frontend/chat/src/markdown-reading-nodes.tsx": "1e90fc3886fc8a674581724203dc601ba173a2eaa5afae61339f74b58c77e99c",
+    "frontend/chat/src/markdown-reading.ts": "fc24b3a510fd039be044cf035f959cbc1abeb4b01534ba2bd4b6fb50184096dd",
+    "frontend/chat/src/marquee-text.tsx": "914a5b71220d4229cdcd7917736766d9ff9f33ed5aafc81759dd8a6671fa2bb4",
     "frontend/chat/src/mermaid-stub.ts": "ceeacfd5af2cf22e9440a52bddcf2e3089257de7f5803d854a34cfe60e72e4e2",
     "frontend/chat/src/message-actions.tsx": "898c74c22dd8bb8d62992518faffcce416accca35236983fee97c9ead36698b9",
     "frontend/chat/src/message-rendering-policy.ts": "6b3927a86fd1731e9c14bbf3bdcb08b618734167b6ff9f0c49e0cdfeb1338bfe",
     "frontend/chat/src/message-timeline.ts": "9f493c71b0e8ef5d200acd8185e7d7325c9856352fb8e4d8843bec8087de2ce7",
-    "frontend/chat/src/message-view.css": "f66c57445f1e9b4eb5e5060817b7787a8b2a6a56d5cc5e171129beb0cf2e08d3",
-    "frontend/chat/src/message-view.tsx": "3a4fa7f2a296109229d899dd0df1e9cffa41666e01cc6a99fa8ee2fa94e44e87",
-    "frontend/chat/src/mount.tsx": "16ddceae7750763b564b5910a28e99dc846598ebb3347d2353660aa44023041a",
-    "frontend/chat/src/navigation-groups.tsx": "e177765ca89dd71e8d37626af2a9358b221ab498cb4ea61e1200f4c5f2861e4a",
-    "frontend/chat/src/navigation-row-menu.tsx": "7ab0c3eccb7101e3f6f3a6915ec888ce986f921e23d6d35a7c36b8441d9ae1c6",
+    "frontend/chat/src/message-view.css": "27354bf5253111caebb5ebd6b333bc1eb8faa7183da621fe44239b77d0d03e7d",
+    "frontend/chat/src/message-view.tsx": "8747f237c4afe5792149f09b271855d109bfcd7c741fb495298a45fa64b45e68",
+    "frontend/chat/src/mount.tsx": "5534884e73d954ac7bc7ed7848e1b4b3475b5f0c37dc034729bfc014dda66c5c",
+    "frontend/chat/src/navigation-groups.tsx": "43f654c951014e4f557b7ffde506f803722c7e8b0bc9c25dfa17a76abea13baa",
+    "frontend/chat/src/navigation-row-menu.tsx": "c34ca3e42d27e59634b939cb1cfb720a7228c5466825a4d94ae7a6b82f8db7f9",
     "frontend/chat/src/new-chat-scope.tsx": "577d6a9ddba9c02d8eaf4e0a07a6c6be83b56d49e83bf7dec6264adb77c609c7",
     "frontend/chat/src/paper-tooltip.tsx": "3ee6a8e3b3f706020ace2b8527b9118195ed8b4efe02c7d9f6b14a159b15259d",
     "frontend/chat/src/plugin-ui-query-queue.ts": "48acc0657f30e48e09bbe45c39f07584c41deac16133c9ff916e10e6467754d4",
@@ -160,27 +160,27 @@
     "frontend/chat/src/steer-cards.tsx": "deeb7e16cea38e668bb9643b18e973109f5c62f305f67af5b21e48c345436daa",
     "frontend/chat/src/stream-pace.ts": "83709f47073b7e6aefd5d18340e651213745246b620463453d6b0d7d4de8422b",
     "frontend/chat/src/stream-projection.ts": "9adbc49afe85467b8d4afdf8df527aa7fc8016fe353b8221dfb1caa34ac1edee",
-    "frontend/chat/src/styles.css": "c223e3741c3ccbd1b6215cc2617e0f79afea36107a5a965726a97d6a54e0e65a",
+    "frontend/chat/src/styles.css": "82cfea3edafcc7add85651a19377e571573f158d76a71151f9de27aa36efc349",
     "frontend/chat/src/swap-text.tsx": "eb2cf7bb62a690af9f49deb2e9db086fd3b036459e3b5f48224c4ee65da004c2",
     "frontend/chat/src/theme.css": "9b47dd15f36854cab4efe7a6bd6246de19d843bbfd230a1b5c8008aebb8c05bb",
     "frontend/chat/src/thinking-placeholder.tsx": "64f0ecb830cf99de29b088c0d8e25cd1c202ae6119fcd066f726e1584f0722d4",
     "frontend/chat/src/tool-result-view.tsx": "b392f5fc67de3ac9a0225c9ee757b2d83dfb7f880a1d44af256c3a2cb00bfa5a",
-    "frontend/chat/src/use-desktop-chat-controller.ts": "2c567253e1de06aebf8b3867e7f301bed3eb29de28232124ca2a623fc3e62b4d",
+    "frontend/chat/src/use-desktop-chat-controller.ts": "c0798cf9c404cdd6db2a3692a95e8a9774816e9d7feaf343ff6c292d182479e7",
     "frontend/chat/src/use-navigation-pins.ts": "34e7f77a94c58eec6740cbef2ad02dcd276b6ba89ffaf6bea7c3406c208e3fdd",
     "frontend/chat/src/use-session-activity.ts": "92412026527cc4675b85f1dad25ac720b3d2aedfa1488393b28e94685a3d8a61",
-    "frontend/chat/src/use-sidebar-rail.ts": "68a3fd6736b4258806f3efb2a11ed1e12ea614ff5294f16461592618a876ff18",
+    "frontend/chat/src/use-sidebar-rail.ts": "ac0a53184b649e1f6264c58e75f19ddfce3ac31b75b17643ac14ed17d6d7a41e",
     "frontend/chat/src/use-steers.ts": "39ad66a15c80abddff6dc28b6bba8530298fb291be6de9849cc1f004911798c4",
     "frontend/chat/src/verify-composer-flow.mjs": "4c3e4cc6d92f7bad5d787b46c40b5e710407f80afe443a212ba4f02380bd4436",
     "frontend/chat/src/verify-composer-tps.mjs": "f7666a6bbd24f0a5cd33661e03af8d272f5a7f539d7d60e934305b4cbad27e19",
     "frontend/chat/src/verify-reconnect.mjs": "50d0fdf51cbe90235dafb1fea4e5392cf6e7d9fb446b7b0723bb33c85b239f33",
     "frontend/chat/src/verify-reply-waiting.mjs": "e642b85cefc4882a74b538d4d5268bcd715fc7b0efe40d23f17694f36ddaf18a",
-    "frontend/chat/src/verify-sidebar-search.mjs": "872db0e315e9527cbe4505480362f17d0d96d8ffb6d68a3444116f2416c5f518",
+    "frontend/chat/src/verify-sidebar-search.mjs": "9e8478ee0a9d93ba46e622fe0e7cde4360cb8c867335add94189b3864120b81a",
     "frontend/chat/src/verify-startup-performance.mjs": "a4d7324eab75a18144e6acda556dd46f9b41ec061bccde497280448b66062374",
     "frontend/chat/src/verify-timeline-performance.mjs": "eec2f2441c318ef3b9ecb2a68d16511dd4a4f0019e043643796a30f99447e206",
     "frontend/chat/src/web-chat-data.ts": "01a66e3e4ff4663cb86852f4c75e28e485f3338832bba2220ef1389e005b1c2c",
     "frontend/chat/src/web-chat-message-data.ts": "26d1587e94b0b0dbe3f6a22e20854b47d7b16e259f84568c6ff2a743260b9b08",
     "frontend/chat/src/web-chat-status.ts": "c3515e49e3945437383a3e12b62e633e3d8b57398f3b5f8bafd173c704a75505",
-    "frontend/chat/src/web-chat-transport.ts": "6b0ec66e493e4e36af3b58c663b43a4a168136e488b86052e86e4c64ada2c127",
+    "frontend/chat/src/web-chat-transport.ts": "e9ee4add6c8b4c4c93bf0928fc50d61c3d3fcef351b9c7994fff3cc972badd62",
     "frontend/chat/src/web-stream-projection.ts": "b86c3a272b8bed298fed0f4cb40e365690fce28f919cc1d907170f93fe7dc706",
     "frontend/chat/src/web-turn-trace.ts": "4b76af54c49bdcea2c2c5423c1ab76f2c44e4f47a99a8b3147ba96dda9af6aa8",
     "frontend/chat/src/webui-error-boundary.tsx": "e781a0817aad2b042ae222d24690c0d4983f55e4f5bab7c19b35c74fabe35ce8",
@@ -198,12 +198,12 @@
     "frontend/dashboard/src/design/runtime.ts": "b343faa7ce8c2f14015a4d6edecd699bc0315c4d1879d808970bb34313b3b746",
     "frontend/dashboard/src/fonts/JetBrainsMono-latin.woff2": "83c005d49d8a6a50474c73a5a36ac0468076e9c4a29da7bdb14995d80560a5be",
     "frontend/dashboard/src/main.tsx": "fe05b2294732681df224adfe222c9dab28f8165b246decdccfe52a9043f6ae88",
-    "frontend/dashboard/src/styles.css": "a35182270654f71b8d0f84532803af96e2877b08222fd4f385891955aae757c6",
-    "frontend/dashboard/src/webHost.ts": "4ee356eb32d736eb6d9ceeec6a903e6a0ce7a5fa3b69486d545eec3766c6df3f",
+    "frontend/dashboard/src/styles.css": "d58c79cd5c2354466c07cd39a96eb791aaf70cc50493bf799f5a792ad3387ea1",
+    "frontend/dashboard/src/webHost.ts": "63aadbafd53bf336af8f22a27e3bb64b6574d41f799a1922ae7b383befcfb616",
     "frontend/dashboard/tailwind.config.ts": "64f77ae3c6c9a83880ad5a7ebb26af99de119d8e2f931eec6db73888d92d6982",
     "frontend/dashboard/vite.config.ts": "a51e4e70f83ce1b0c7186bcde91a567f17da5e4c33b9510d108c530fca48f48d",
-    "frontend/design.md": "7996a5c27b5280caeefe212585bc6080359271f960a45f5d00eee7035ba2c3df",
-    "frontend/plugins/akasha/src/index.tsx": "3894295b1dbc772c079c37047879c6269cc11f10e92f39626bb57f44b8e0fa81",
+    "frontend/design.md": "50e3ea32a6381163370d2be1f4e3e079118a2103ca3f88797a191048d18cbb31",
+    "frontend/plugins/akasha/src/index.tsx": "6c3c23e75a3009fa29a84283f7915e5bfa01543c5629919c915ad207827b3189",
     "frontend/plugins/akasha/src/plugin-ui.css": "69cbcf264f74660e5e44a7dcbab6e96fc5e036eba75e44d8b54e042692784a9a",
     "frontend/plugins/akasha/src/plugin-ui.js": "4e3a399a73905a2315841924da1106b6316718585b7e93351bf84a2cc68a4a2b",
     "frontend/plugins/akasha/src/scope-ui.tsx": "23d34e065d8252c133f51d3b1a09cdb6257cd44efe827475cd73fabeab29ea2e",
@@ -217,7 +217,7 @@
     "frontend/plugins/host_execution/src/plugin-ui.tsx": "88e2595201c7098d1ba2357071f91ea7a6d6a1089906036dcb88ea2be5dd8310",
     "frontend/plugins/jobs/src/plugin-ui.css": "964473401e29676f683076ef6c30a14f46c6c76c0f17f5abf39d77d6ee62e06d",
     "frontend/plugins/jobs/src/plugin-ui.tsx": "546baa2c6dbefa3e5773e361865c589c47d94ed7419bcd82c87cc9f3a5f6fdcf",
-    "frontend/plugins/models/src/cache-usage.js": "c234d58d615625a7d66f18bd4463c6533c484eb09a7ddead8c97394d4b86b888",
+    "frontend/plugins/models/src/cache-usage.js": "d788c4f482c6467974e716c682e58175355b2e61f5af25ac999f99dc6428b0ed",
     "frontend/plugins/models/src/call-stats.ts": "ea155bee079f7132cc447ff525845663ffda7ff32f7c411507a33fc93d84938e",
     "frontend/plugins/models/src/capsule-data.ts": "bfbda6a5f0544751287697243c3f8a5f6a03b917d1c657d399ba9380bbad220b",
     "frontend/plugins/models/src/capsule-picker.tsx": "21d4f4ca26e105903d54027754d95109f4ca8dc49f353db83d786be6c9d688f0",
@@ -225,7 +225,7 @@
     "frontend/plugins/models/src/index.tsx": "ba6fa05da6e2bed6ce25b12bd73915a0e0380065af4c5fc221f21e837273acaa",
     "frontend/plugins/models/src/message-ui.css": "4783b9f2e92e39875a682845c9850d49fa6507cfbee7541b34aef0fdf6fcbfd7",
     "frontend/plugins/models/src/module.d.ts": "8035ea27839ddf570f8715542a499f581d99f0992867d518c6a3575a39e106c0",
-    "frontend/plugins/models/src/module.js": "64cd018d353138205c9d6b63ac6fa4b5280053f758bf83a152e32117f54c1a1d",
+    "frontend/plugins/models/src/module.js": "30db3bf01028cfe96f984c3b97a0f4b596af1ef9c077b17390a7e789f17852eb",
     "frontend/plugins/models/src/plugin-ui.tsx": "6094941ab7d5053c15983d898034c0685a4327e81840d75440593e5efe977465",
     "frontend/plugins/models/src/style.css": "e5df06195c35fa5ecd9d4f2d4fe39ef3e64e87fe587c545c4bd6521b364d5450",
     "frontend/plugins/onboarding/src/index.tsx": "2bc95d8084df0e7ad9278a2e895a91046d4df7c9855e0621a3e5a02fba98a95b",
@@ -239,12 +239,12 @@
     "frontend/plugins/projects/src/plugin-ui.css": "86c4f72e6762af1d5714ac6bdda93807c30c919364db24f271d35d21a0fb84e3",
     "frontend/plugins/projects/src/plugin-ui.tsx": "9f7a7f8975a43f4e33dbd955ad685042c976719a59d31a2f7da4b970f3f992fa",
     "frontend/plugins/shared/src/configuration.css": "f35da2a0323bb34247ae83511357daa19ada29ce3ba10118a1eea274a2f9f334",
-    "frontend/plugins/shared/src/configuration.tsx": "8c1f839e0d07e42faab4044808cfeb24cc5f90821b32c720c03070ffdfbbdaa2",
+    "frontend/plugins/shared/src/configuration.tsx": "5f6df79a78ce6238c9218218775f1b51e42505fa2d0739ebddb40da7d2979c32",
     "frontend/plugins/shell/src/plugin-ui.css": "eb8d7d31527587200ace52565595113695259f215da6552a006b0ff8692530d3",
     "frontend/plugins/shell/src/plugin-ui.tsx": "46c03dd29dfc434efbbda92f7c0e61db45b4155925ff0488e8ffbc0039ee7834",
-    "frontend/plugins/shell_ui/src/brand.ts": "e322283ef28ff2fe8146259364bd5a7bdd9351e8021f2648658a2412ec6b96b3",
-    "frontend/plugins/shell_ui/src/index.tsx": "574104db699ca83c6a06481a3a2fcdf607da5bb3b8b71f913afd084d8833b835",
-    "frontend/plugins/shell_ui/src/plugin-inventory.tsx": "75ac942068f05de4a380beb535d36594c869f3080b6c05c2b61e000d7f3eb5ae",
+    "frontend/plugins/shell_ui/src/brand.ts": "b8e19f2cb2d10092828d5022bb7e3aee867a661648b2b1429f94455f6f69dcac",
+    "frontend/plugins/shell_ui/src/index.tsx": "babe12baf93cd7f6362e613803c4731dfe7b4319dcc4f686d6e3b3917a5dd139",
+    "frontend/plugins/shell_ui/src/plugin-inventory.tsx": "c6c26f1c2c1443ad6963d372f367e971a889fc5e8eb49e843e5ce3582ec0e5eb",
     "frontend/plugins/shell_ui/src/style.css": "7958868dce63a03e544291aa374104a9d5ba506524cd084be882b866e9f4d9b8",
     "frontend/plugins/sites/src/message-ui.css": "c5332d960362663b437c3b55754e213b7d94e79a01503695a2bff7a2fa885881",
     "frontend/plugins/sites/src/message-ui.ts": "46e46c13f76b329428148a8107934559b4813541abd466d8100cb22202147408",
@@ -258,10 +258,10 @@
     "frontend/plugins/terminal/src/style.css": "552094c4a968314d1209e8346b75ee555959ce2d5e890feada3e49fa42004756",
     "frontend/plugins/visuals/src/bootstrap.html": "aab069048868df7165cbffae206fe661b7eba9ab1ac94bec658a87d79d7b5f22",
     "frontend/plugins/visuals/src/charts.ts": "64e2ecead83c84ab62abd625595ad58b435d4a944200fda1206f6e24c99823c9",
-    "frontend/plugins/visuals/src/frame.html": "8a38890ec42591478614d3d1d1a295982390b881c6b50373ef17ffeebfd445b1",
+    "frontend/plugins/visuals/src/frame.html": "0ad81d08a05ea1cda7765a5f52d09795122f5e7ff8453ff69a723c84acaa8752",
     "frontend/plugins/visuals/src/plugin-ui.ts": "432304a3e9361efda1d56c04fab4779feca181e4275e1c205bfc42e9fdfd5d48",
     "frontend/plugins/wake/src/index.tsx": "fe0dcd7541f262f232281664dddf4251b05d80093cb760430da867f8a13754e5",
-    "frontend/plugins/web_search_exa/src/index.tsx": "fffa62774001c1f04acc702fdc2c5b8fa2ab31132917afa9c617fd9e4b1d237a",
+    "frontend/plugins/web_search_exa/src/index.tsx": "73a74e466e177ac9d703092b4eef5d822980e046a6a506c6291c603b11e3f91d",
     "frontend/plugins/working_directory/src/plugin-ui.tsx": "19a83d4e1e81ae66321a5bc06645bbdaf89585eb338b520920faa9f7beefd5be",
     "frontend/plugins/workspace_changes/src/index.tsx": "c1de554bb2b7db698e29834d9171dab1608c083a7fb0c3673d9bce4bca17c979",
     "frontend/plugins/workspace_changes/src/message-ui.css": "2a4abb8e7e53941a99f6d0e3b3228210c6f7077f355ca85ee440f446089d4f88",
@@ -322,7 +322,7 @@
     "frontend/theme/src/fonts/source-serif.woff2": "b9b2f0cc590faed024c52fb01eddaa6b4781db61d32623e3b5dfb8dcfdf378cc",
     "frontend/theme/src/fonts/sourceserif4-OFL.txt": "0fd8b796c1c6220a559a5682cfd00d1c8488b428369f7cb70deb671888cef85f",
     "frontend/theme/src/material-components.ts": "ec6130a7666c0aecbd1c0682a2680d7f78a7f9a693eb90979090db08e67a2882",
-    "frontend/theme/src/material-react.tsx": "8a03c204a0b1db89e3501624b97fac8166f5c2a616919dd2da26733adb196d47",
+    "frontend/theme/src/material-react.tsx": "2e36665b12d0d402c77fd4b9c117372ad1efee042c2385cb681b93063712d5ee",
     "frontend/theme/src/material-tokens.css": "81ad583189c0df8c7fc9397afdc8ff04cc7e330edaa0ef898ddc056b0ea6fe62",
     "frontend/theme/src/paper-surface.css": "4eb5a5e69044caf3988fa26f46afcfc2c1f616149be4636793ea84bd21235471",
     "frontend/theme/src/product-band.css": "1140ff0547bf2f44b9deff4e9cabe1c94c3e6e1d30b91ffefc0691c5674a27ed",
@@ -360,7 +360,7 @@
     "packages/akashic-shell-ui-v1/package.json": "0ab310d1b2eacb17dc00d155ba6c47204dcecce66ecbf25d7d431ef160f830a3",
     "packages/akashic-shell-ui-v1/settings-plugins.contract.json": "1823b19c778297893495ca9193d688e24c99d079effbaf5ecf0d1148ae0a1aa2",
     "packages/akashic-shell-ui-v1/settings.contract.json": "1f4dd2eaee9118c799590a36745975150c46979a3f62b431f73aa29e949ce189",
-    "packages/akashic-web-ui-v1/index.d.ts": "8ff8aebf741966b4ecf18aa0957264f48a12f614691b55e053567547f93d2971",
+    "packages/akashic-web-ui-v1/index.d.ts": "e357447ba4ba7f20d9e0057c75fc9c7b55fe244f5558ca9918bc2b924dd9838b",
     "packages/akashic-web-ui-v1/package.json": "db784be6611a60b2aea8d1313e11961bdedb80d7b603b4fe1fde2d40f0c84b3a",
     "packages/akashic-web-ui-v1/tailwind-preset.d.mts": "3dc0c5d75eff739e1550917b8832d29529353b35e74c1251b9ae8281bd627d8e",
     "packages/akashic-web-ui-v1/tailwind-preset.mjs": "198bc2fd948f95c0c88866485c1d98133d336791e136199f77fb213c603df143",
@@ -405,10 +405,10 @@
     "plugins/akasha/recalls.py": "c47ddc22f635a1dc99236e01c985d396d7cb0d1158861540e2000db525e78b90",
     "plugins/akasha/runtime.py": "1dab45613392f073764ac44a63630e14b4becf155c76738bad2dc13f108e402d",
     "plugins/akasha/scopes.py": "069abaf78c7a2fc813238f22a39af912fbf9f33e4e2a36b9766e2794bd0b85ea",
-    "plugins/akasha/settings.py": "a2f58b3b920df6eba048430d2fc32fecc1676370830b2f5cd0772ea6eff4ba0a",
+    "plugins/akasha/settings.py": "7ed4cfe22b8f2ecbc11642606879ef226b41de712142879ba4aa7f79b73276be",
     "plugins/akasha/tools.py": "d7b5aaca2193ea4651a2a7be2659f2e3f41e3be71cfd4c823654ffd12504c8be",
     "plugins/akasha/web_module.css": "203990074b89d27235fd85b124e8d22b9956b9dd4c2685403ae7fa2fbab37994",
-    "plugins/akasha/web_module.js": "7388c48554065d8a2e1c7a6360f52449659a97f22634274c1b4bc90bd2a69ba5",
+    "plugins/akasha/web_module.js": "6323c24d78856416090067cc3a36d9f66605c7536ae4e95ee071b12e326f1136",
     "plugins/akashic_clients/attachments.py": "164c74e5362476ccf6f7ca26961cb41da74c6ffee605f4f6553acc3f282433b2",
     "plugins/akashic_clients/capabilities.py": "b275dac622f9857bf401a69b16dfd1cfa6858f25366b1adeff36a4436a460b28",
     "plugins/akashic_clients/channel.py": "7fe0a02725b5b3958f5c1ceb60105bf4aad807cf82dcada246e9bdbbf0b83b1e",
@@ -452,7 +452,7 @@
     "plugins/commands/registry.py": "a27eff0c7e94043e2453a661c4cd91d649e6a95d6a769c3e100640647631c096",
     "plugins/compaction/contract.py": "a800b0cb3c5d489f75d680274e4c7b2fe4233f7d61e56a2533a627b6df9e76ee",
     "plugins/compaction/message_summary.py": "d9b13210874c2e7f4816953a794de2e442c5c6d0e2e17bca6365986fd31693d9",
-    "plugins/compaction/plugin.py": "d1de0bfb84f2e3aac61bc61b2f2a7a3edbb801b3f2a684cefe33f9b10d2cf05a",
+    "plugins/compaction/plugin.py": "e31c6e5b26dfc92699ba66a1938699d749ec4115ec24f926cbc744ae90f0c679",
     "plugins/compaction/records.py": "ea086131b04a0163806457817742020bd5fb1563bf949ef396239b905c7f66cc",
     "plugins/computer/bench/README.md": "ff5e63fdca1fe53c3b72559576aa6dca6cd7214f5aa809a3f065a7fc472af23c",
     "plugins/computer/bench/browser.py": "e2539fa5e1f42660b9e5659e6dba57f166dfc1126c56adb9d2b707c3c668b4ab",
@@ -586,7 +586,7 @@
     "plugins/jobs/__init__.py": "dd9a6dae36dd4b0b91b2e2e182e81bdbc4876873fbbc2bcee6d794938bcd4e72",
     "plugins/jobs/board.py": "fbe4b2014e725bfd5afc1f577f7f794ae9e617d6ae3242fd5937aca0f5b13250",
     "plugins/jobs/contract.py": "091b22d53d1070ede7ec5d9cad45cb9e6bbdf7b5ec7c6aa90eb3c85d7cdad24a",
-    "plugins/jobs/plugin.py": "5ae79b5261687c6aa9edaf6d1f03f5fe743f10c9740117864978557c0199289b",
+    "plugins/jobs/plugin.py": "edfece64354f9c90a73cd5903ce1d160217725a221e5e4052a66474657ee73ed",
     "plugins/jobs/plugin_ui.css": "773cfcd85b04369b443a224432664efa879f894df660dd68751b62447abc649a",
     "plugins/jobs/plugin_ui.js": "dbd0cb82e560a90adbc08f36d5df595b92ab2ac6bd2b88beb6bd9097e4e7c4e5",
     "plugins/ledger/__init__.py": "e4bdbdd3f5aa4464ec6039cff69ea84dfcc241ea1747bbd4bf9a9abd9c47e13e",
@@ -631,7 +631,7 @@
     "plugins/markdown_memory/__init__.py": "49771ed9f260d2023eaefa2701e2f6a0303dcb1303ce477c024de034a3d00f15",
     "plugins/markdown_memory/documents.py": "98cea1de659493e9a65c693b6c5666250e2023f7059457fff6487515baf6874d",
     "plugins/markdown_memory/llm_json.py": "7ae8cc183209cdb0cbe6a3d2ce864e0e35e6b69437495c5177173a48919d4197",
-    "plugins/markdown_memory/plugin.py": "a5c44cced3706c89a013db4535ef6c0d00086cdceb7409fea97b69a0b1a90d37",
+    "plugins/markdown_memory/plugin.py": "bf6bd33d67a073a7f239d1fdeccf5f1b8180f93fec9bceaef25e352aa91b4321",
     "plugins/markdown_memory/store.py": "cba06865df0c8353ec64ec1a6021d620d31686acec1a904bb5a9ec4297ded6e9",
     "plugins/mcp/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "plugins/mcp/client.py": "9f2bc5fc4e8e878d68f0e02e426cddbf459350b91dd5e9d5c541fbea777415b6",
@@ -652,7 +652,7 @@
     "plugins/models/litellm_capabilities.py": "629325cb71347f2a85415c5aff71f5f7002b563a3b288c8d0839fc24c88332e7",
     "plugins/models/litellm_catalog.py": "172075b5946b7fd84255899b51d26b508c30b91a407cb1413f47edd90f03abdc",
     "plugins/models/model_settings_http.py": "cd37b1af0693aca40918803a41f81c369858f47fe8e87ef9b55db3ac9dc7d22f",
-    "plugins/models/plugin.py": "99b000af9e984e887bc8b6913d2ee0812f43305773147e0ff7cdf7354bcf02fb",
+    "plugins/models/plugin.py": "f748b960a584c0b866fe04486a57892d3af5c83f1c2bbca79656111dc01f42df",
     "plugins/models/plugin_ui.css": "0c88ebe9e29e06a5dffe4ddc50ec5e5f413d2f1e2f478407da9b50d12ded6801",
     "plugins/models/plugin_ui.js": "8eb309a9c9030f2674166107d1b95a2c9396f6521478f8b1bfdaabc2a452f37c",
     "plugins/models/projection.py": "3540e5d5a923f08a215006e73337b5a20632efeaaf3d85665414bbf39882dd3a",
@@ -660,10 +660,10 @@
     "plugins/models/settings.py": "8bfb72a3ff73752be9be14ca82f7e194dc213adb70d71b76fac074b47fbf5acc",
     "plugins/models/state.py": "41126d7c5d3ea9fdb8a3f00cec7abac41fb1ac2b6e84d881a0a026b7c89bb704",
     "plugins/models/store.py": "3337cb939cd347eac3ba9495d6e4012ac0d52c5b878d364e0b5d7742ad68bf27",
-    "plugins/models/usage.py": "9a11e947c5edde269854635940438a9d0d507d81ec1ea3fbabbc177d4cd417be",
+    "plugins/models/usage.py": "dbc6e378cedf84d1600d2ea1dea518c4e5f57ebfa5d60d7b411c70ebf9780c97",
     "plugins/models/views.py": "33fe70745caf116bd822526531f0b2e948e4dba05f6278cd0d999b5166592558",
     "plugins/models/web_module.css": "720d6a66c657dd05d389d2a36f1df84f1e70ebc043dc74866b75547d0d3f2575",
-    "plugins/models/web_module.js": "4dff65b63e769495b74d7148ba1eb434d6318e25f4ac48113d07098ca7cb309f",
+    "plugins/models/web_module.js": "d4ffacc73762bcf3ca175a7bbb1ff878b2f294e368c81804504bb680e28c6c91",
     "plugins/onboarding/contract.py": "cd1efa7f5adb9a5f15a4ae7b68176761f377356e3259dd12c6ec8ae962485d06",
     "plugins/onboarding/dashboard.py": "13ba3f8df491063e762d5f334f80abc98e6b6bf937487a2890203e36252e4e79",
     "plugins/onboarding/plugin.py": "619e6834ef1df93b1a8cf246cb20e1c63fe03347b6cf0fb9e7f7b6449f83defc",
@@ -708,7 +708,7 @@
     "plugins/reply/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "plugins/reply/contract.py": "f99f4e08d1ad4151136dbf2810d327d8bc9af0053514bea2f07c8d518c22cc34",
     "plugins/reply/follow.py": "5fb80c96ac48313d67fb076033aa58cd7d934b8695303f6c9948eae8b1e10e80",
-    "plugins/reply/plugin.py": "c88a010954d1f5fab1e5fac10c987e836b070aa9ca8f084d6977c32a381406c8",
+    "plugins/reply/plugin.py": "0eb528437e5063e97e568b15281561fe91ed53fcde3ed8d24c965c3e65cc6a47",
     "plugins/reply/status.py": "735f566140ab35dfd7939c4b7cae8ed5991a66138e85dafa65a1b6aa9202acc0",
     "plugins/reply_program/contract.py": "bfed464f0e54869b52a46d3756bb3e47e774e7c5d92d0d0581726cdbab0b52b1",
     "plugins/reply_program/plugin.py": "472bafe967be521b2ddf4498882d0f19364dd028aa57a75c6af2c77f1161c66e",
@@ -732,27 +732,27 @@
     "plugins/scheduler/inputs.py": "2e801de255cf77a4a94aeeaeadecece1e580365e1688fccf4e1c5113976ee53e",
     "plugins/scheduler/inspection.py": "3563f05291c9e62154a2d91f0cebd57b11a48a1077ec0475050a1dc6b221d70d",
     "plugins/scheduler/migration.catalog.toml": "6eff09d07b79241369353c2f52f853993a608978bcf34d5707b157c586f916f8",
-    "plugins/scheduler/plugin.py": "1b1d85105d1fa2496339871d51efeb57f87742552a8d4d27149fd85342cb463a",
+    "plugins/scheduler/plugin.py": "0f744a816743b56dbbec1034e721397a52a70399d9a166421e8b44dacfcf9990",
     "plugins/scheduler/runtime.py": "5add0ddd16bde948e187cc9b73cc3d7497fdc3ff9359b2271861ce4df0569481",
     "plugins/scheduler/schedule.py": "017e883ac0eb01d69fd83906244d6669170496bf17ab912cc6fe432f7c30d5a4",
     "plugins/scheduler/scheduler_migrations/20261018_01_schedules_v3.py": "6855d4866d37b7622d8e46009238796197128d8a55365b350a7f6c2f0e53d282",
     "plugins/scheduler/scheduler_migrations/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "plugins/scheduler/store.py": "2f28a0aec42bb8562833c014dd5b0022739fed58c797f298ab13d11c48a676c1",
+    "plugins/scheduler/store.py": "3b7c7263548b4abf94b1a0c4c6066859d8c8789ab5c3689e989a073cbd0cf3e5",
     "plugins/scheduler/tools.py": "1727b3f6e3c6f431942cf2dc0c5469e9558071c5f0f6cb8cc8c603d6449e6a21",
     "plugins/session_title/__init__.py": "8d9d9bd2d8bc7d1b17ce6f6798a2ede85679a062f701f40dd984b902b98dc56a",
-    "plugins/session_title/plugin.py": "02dd1ece67a4ca1fea617cea190be7b044a15bbde0339eba326d34a24542a76e",
+    "plugins/session_title/plugin.py": "7998dce8aa55f509e4ae9064135d6135e35add069353da803ff21e7590aada66",
     "plugins/shell/__init__.py": "00cbe03e7aaad721510f137358f08766b022aa0bff9afc1b499fcab0503bbd07",
     "plugins/shell/_tool_boundary.py": "878b0279a906f78eaf2c4a10cb7793fc105c75ce28291944911503587625ab9c",
-    "plugins/shell/plugin.py": "1697d0f37da4557ae513b7f067d10f66f6463939c40ece26370676a59b392b27",
+    "plugins/shell/plugin.py": "a9bf95a626edb3a31eedc22acffc7cc7e5424ece7a77efedfe245a8eba6e0e31",
     "plugins/shell/plugin_ui.css": "53a6fc3a8b8ae050f6f5523aed1b03992cf46d8c16de743806f3587cd2d37058",
     "plugins/shell/plugin_ui.js": "a03d817b16a24cfd48732b5f7ea30060832f07eca35670c8ab23488f3921aabd",
-    "plugins/shell/shell.py": "491ef6bf1ceae7b596f0388a2696902ce92cb569ad08760b244b87f52e1bb96d",
+    "plugins/shell/shell.py": "0ff8d578553e3342a5e0ec8a3e7dc2b1bc60c7bf947a1a1c25687024ec3a269a",
     "plugins/shell/shell_backend.py": "88b2dad87a7893fa730cd5fe2c0871d5574b40984b4f63e5fffb88465612374d",
     "plugins/shell/shell_security.py": "b12dacf30df0e2a9a07ff20e59d1eda73060f7a3da1efd46e0b08caff8c96550",
     "plugins/shell_ui/inventory.py": "40c1a2894fca4bd32121dfb7c49ab7f20739ad1028d385aafcc66a09bcf97b8c",
     "plugins/shell_ui/plugin.py": "e959f7d90053f6677dc47b0a7dfe681ca6362f07746290327e3ab682c3fd7153",
     "plugins/shell_ui/web_module.css": "0dd3d9069d412ff71fe4149c3c4141babfc0c3bd5425078dd7feca322c4ec122",
-    "plugins/shell_ui/web_module.js": "94d7117cfd1f29be49319bfc527913ddb4508f0496b363b13ec43b0402e71ec5",
+    "plugins/shell_ui/web_module.js": "b5b1fb010abbbba81b6d7d7d40574c0cdc416a709852a23805994fe0db5052d0",
     "plugins/sites/README.md": "1a248a231e20ea013ab4f0031000f72cf329e33acb23738caf62a8a3baba3534",
     "plugins/sites/dashboard.py": "1c6e24e8efaafb08eeeb7160bade1301ce3edb26cc418da6d84f93f8f3daa588",
     "plugins/sites/frame.html": "89f00150fd41913704f10b083436df6abe7c71305558ded902b03f6314c297dc",
@@ -778,15 +778,15 @@
     "plugins/stable_view/plugin.py": "8658c6393e2f4f33f3ac50cf9f4af76101f1ffdb248673ac593d8d43702972ea",
     "plugins/standard_web/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "plugins/standard_web/_tool_boundary.py": "5b01ccca99c3ec354df20a557f7d933ac67ee872872b31167476e3e35d573185",
-    "plugins/standard_web/contract.py": "6fc5418bff1aed93e1abf89b6b86bf38571d7562824b02ca4e7f7dcc5ffb47eb",
-    "plugins/standard_web/plugin.py": "a753660f73cf0711d1c1ec399a31b6232e17be4d809d6dae9af4a611ca7faef5",
-    "plugins/standard_web/web.py": "fe8d85c00317b7d5666b25070cf2ada926e00e6a4f8fbfd18b07746c76682a3a",
+    "plugins/standard_web/contract.py": "b2572dcf00ad8ac15471e4b22c404b8b66bbc0d9d316a40d6d2a5892f9840535",
+    "plugins/standard_web/plugin.py": "355ecd1f977b04cef6f0601ae8db7ea51f9ed54b169bed1b345457ed540b5c48",
+    "plugins/standard_web/web.py": "983903662519cd42aaf6a29ddcebfe92f36434b761debfb4db9130fd828291e6",
     "plugins/subagent/inputs.py": "976bf18baf3f3b5ccf835ce0bf720ce8a14c84decfef2c2a9a2dc869b2ae64dd",
-    "plugins/subagent/plugin.py": "dd57ccb97c17d2a7bb0adda3311ba3ddfd507c58000cc93d4738d242adf29c08",
+    "plugins/subagent/plugin.py": "c5ec67a40b4484803767add5d26e6267b21b85dae2d4ab4c2dd3dd2d95bb54f9",
     "plugins/subagent/prompts.py": "e0fb89638f9fbd3508478a74715dccdcde1e671a4c9d97c2a96dc581ecff421f",
     "plugins/subagent/request.py": "0d1faab009820d3c97188cf52b5d56362aa616b49be0365268fb7c1991b8d454",
-    "plugins/subagent/runtime.py": "1b90016287ae98b44c472b1b4428617eaafd0ade02bf9cff83bb70c757698bbe",
-    "plugins/subagent/tools.py": "bfb37dc3706a2268d2f39537ee66ada1e64af85dddec659f28c30374e5ca5390",
+    "plugins/subagent/runtime.py": "9faa4eddf5bc1acf61f87feab3c9e6e48bff454db66a44148fd907f306b145d3",
+    "plugins/subagent/tools.py": "94b766722574ae6dedc5771f2d0cc1e86373f9deb27dab1140c85631bf558ea2",
     "plugins/telegram_channel/channel.py": "d34078bf41789a7f153417e13c99165c41db911530ab57a0ced2cf243bd021b1",
     "plugins/telegram_channel/config.py": "c93ffa774305dbbc66f88b517922273e708f335f1593dc6111f33036ad0fe0d4",
     "plugins/telegram_channel/dashboard.py": "0699a08a949e8d875a83d9a4d98d89da94d3553787438e6d2e10c9a8cefc1604",
@@ -798,7 +798,7 @@
     "plugins/telegram_channel/telegram_utils.py": "1750e033f3caa7a85b0720e4ee14df979cd836a62597da988e91bf0e83545c4d",
     "plugins/telegram_channel/upgrade_config.py": "ef4acac6652cff55de9bac24cb7d7220def9362df3ae4587dfadc125697fc64b",
     "plugins/telegram_channel/web_module.css": "203990074b89d27235fd85b124e8d22b9956b9dd4c2685403ae7fa2fbab37994",
-    "plugins/telegram_channel/web_module.js": "64460b0180f784711a3d98641de155c218fbfe972fd4a3439b1423986438fe3e",
+    "plugins/telegram_channel/web_module.js": "3d115cfa7db4bd26225f3d650452f514449c8d221a7f424a162b4461171fadb4",
     "plugins/telegram_sender/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "plugins/telegram_sender/dashboard.py": "453caf82f9326029a941e154fdd6249df0ae95f748bd509f0c7028ddf0687485",
     "plugins/telegram_sender/initial_config.json": "70c20bdae6d5296d36572a9ea14b50e91a434fa46e88bb34198922b836c360e5",
@@ -808,7 +808,7 @@
     "plugins/telegram_sender/settings.py": "4892f2f093a9fcbc87c69b3b9cf913ba94a8546284ef27ea9c3adaf723323e25",
     "plugins/telegram_sender/upgrade_config.py": "ef4acac6652cff55de9bac24cb7d7220def9362df3ae4587dfadc125697fc64b",
     "plugins/telegram_sender/web_module.css": "203990074b89d27235fd85b124e8d22b9956b9dd4c2685403ae7fa2fbab37994",
-    "plugins/telegram_sender/web_module.js": "b583723aa09cdb2926c8b94aa53ac10a77c1b7e22eaf5fc467220f3ad8d992b8",
+    "plugins/telegram_sender/web_module.js": "048bb84692170bae996ec12072ce4ec31ff4118ae250ffbd2805b361856844b9",
     "plugins/terminal/dashboard.py": "5bc0f578bd1dc6fa30cf082def712d306a27bace5dab1eff3fb594e838f49eb8",
     "plugins/terminal/plugin.py": "46d2b9db252adc478b933768277fe0b8cfe801ee0e05a6ccd623d27eadcf5a12",
     "plugins/terminal/sessions.py": "e3b1788b3a06fdb36b3c19ce8b086ef984784df35230d542521838142d7ef6fd",
@@ -831,7 +831,7 @@
     "plugins/turn_projection/contract.py": "a6a63bc1599b1260baded180a570b8a756f51cea278f4ead8a9553a7043a661d",
     "plugins/turn_projection/plugin.py": "b3c7811bba7322568670c663650730bd173bbca3020a6829fb2753bfcf0f49f0",
     "plugins/ui/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "plugins/ui/contract.py": "ff7bac991183690f613bd279fa3339f042da868626d3523e4ed31c595a5871c6",
+    "plugins/ui/contract.py": "9c15fc6507617ffd55a17d9a59ee2a557a968169da1e670b55ba4f81e700b880",
     "plugins/ui/dashboard.py": "ba3c0f19a415092f9d94c82ba2e192f82d552462189e02c904b4b3db588e1b3c",
     "plugins/ui/dashboard_app.py": "808dd575bf3ecdd7377c13a5f76de70bd4c65428c0ba2909245d1f08b10d7594",
     "plugins/ui/dashboard_host.py": "2bb3f5b13beec036d22bf05b2696478105ac11ddb2d7c7e39c8a5472b5f7145d",
@@ -845,14 +845,14 @@
     "plugins/vision/_tool_boundary.py": "59c2316aeb39a986b467a33b6ebf5093541a2dff3aa88eb3feef7eaafb0c0615",
     "plugins/vision/plugin.py": "cde745c4ef96ecf71b890106d148d6728ae5be38f96a7314d83d2f0c976416fe",
     "plugins/vision/vision.py": "06e636406db00e062467bc7d7a8f8ef349cdc1121024e14aaccfc71439f2d044",
-    "plugins/visuals/README.md": "e263f71e050564b9f179829597895bff40d473c79048b26cf40c9ba495b52c69",
+    "plugins/visuals/README.md": "e946ee423700e57547dcd8e5f87465d701602b1bbc9571b19e3e3eea621c1644",
     "plugins/visuals/bootstrap.html": "aab069048868df7165cbffae206fe661b7eba9ab1ac94bec658a87d79d7b5f22",
-    "plugins/visuals/dashboard.py": "362c86ce4ab00ba00b0e14e0a7a9c50cec4e285687eed3dacf3e2018e3826323",
-    "plugins/visuals/frame.html": "b20d4fc5132e1bedba876f718d33e8be98e01d13fc56f7d117ba3be03ac01050",
-    "plugins/visuals/message_ui.js": "c36697879f5059e5912342da42abb0c894e705d246d88f1b52dd3f3e0d1d0315",
-    "plugins/visuals/plugin.py": "ba1e35c8ec958f116291d1bcd05de803527ffbdf755d67ac6acacdb47d55159a",
+    "plugins/visuals/dashboard.py": "b3997ac255f2ae806b5c7f4eac15f99dd1f3682840315f7e5fcfb2f0cb793b0c",
+    "plugins/visuals/frame.html": "345e35d9f756aed506de9d85238b27148ae412b46f6dc14106e76ac3e47e3b4b",
+    "plugins/visuals/message_ui.js": "dd5d50fb889fef17402ee8e16bf4a402b1853ecdbd4e431eb3285164d8ab1c17",
+    "plugins/visuals/plugin.py": "5b79a4e16b48aa22f02eedfceb9b618a69457c6a9c664c7b5ada02ac641976e5",
     "plugins/visuals/preview-theme.css": "16141942dc69904e62055d5113af629852c26a3d69a2984b85a097f570d682d3",
-    "plugins/visuals/preview.py": "66785190400b8c37407504df0b6ff9ac181406278e7ff65a16d20e4e8ccc4109",
+    "plugins/visuals/preview.py": "54234f437c8a123c69a52d5156addc7748e56b79a44e3d9e41ded45ff3b87c2e",
     "plugins/wake/__init__.py": "bf495758f0e11126a3c03819c4f4936295171b7619d8afd49b30973569dee09b",
     "plugins/wake/_boundary.py": "27dfcf198d35c77b88ae872b619228e448453dfc71fa40e48b5db73aaf587613",
     "plugins/wake/admission.py": "720f00c4939467d9f9628a117eee8c30b013a13f23905892840c4b2c7b73a954",
@@ -873,22 +873,22 @@
     "plugins/wake/state.py": "de0fa308bb2695113be320b8e5faa225fbf7169c654e8accfb9a2dc2bac06fb4",
     "plugins/wake/tools.py": "8dd328cc4529d62c216f2d8e82e9895cf6c3713d0c3149e59371e40a3a90005f",
     "plugins/wake/web_module.css": "203990074b89d27235fd85b124e8d22b9956b9dd4c2685403ae7fa2fbab37994",
-    "plugins/wake/web_module.js": "d56cccb418661337a0b3a6f1b16de750c376d7779b84e0132df33eb2b3b7911d",
+    "plugins/wake/web_module.js": "2590ea4d519cdd8f85eb92d0cedf40d559d5828bd886cf8e16b3c738abc2aecd",
     "plugins/web_auth/app.py": "9dc12a8ba3fc12f3f6383d2520886d3600fd65627807fdf98dbfb675d6cf27c2",
     "plugins/web_auth/cli.py": "bd2a1a44ab596efcb497ebc2fb1e60d70bb8b3615a5d85275328e8cea817e00c",
     "plugins/web_auth/login.html": "09304afa653ba6712fd5544f0257ee5250cc41a1a87d2ad3aad774ded0d56d2f",
     "plugins/web_auth/plugin.py": "8e775651d3ea9d84b091a5aa4d47e5b70897bc87f6acd9cd8b2edae41c785513",
     "plugins/web_auth/state.py": "86bd078b59a0ea05bbae3c0280fb8cc18b6cda950fcd500de8e0d9963359c701",
     "plugins/web_fetch_http/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "plugins/web_fetch_http/fetch.py": "5a898d51abe7c4a72ba6a6c77002edba631d3d0c55edef2fea3f321ae04b6ed7",
-    "plugins/web_fetch_http/plugin.py": "1133eba4fe1730c6caf369ba02a55ed36f069f1a6e4ea41586163e3552e3af39",
+    "plugins/web_fetch_http/fetch.py": "d8e456aafa62b76dbc1dd21674999d06605446db72bb2fa83b360a37660f8cd5",
+    "plugins/web_fetch_http/plugin.py": "30d83e14e3484ecb63fef6c7eb28374a15fe30c3589518a33e61739a1a268a6e",
     "plugins/web_search_exa/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "plugins/web_search_exa/dashboard.py": "b8e04c63cfbb9617d333332212b2ee79c9079448d0b43dd6a8366cf844b3985b",
-    "plugins/web_search_exa/plugin.py": "fe82b4a2146d093698bfbe3ba651d13cfc19d7c55410754b987f1b20a5af7822",
+    "plugins/web_search_exa/plugin.py": "9b1a84f04faf3cb7bec0deddb34f4b3d9253f6a8775a63f541ff5855c05f3dc3",
     "plugins/web_search_exa/search.py": "ace57d3fde91e874f6b6c7fe7a17168f15a7a4deecb16515fb1b7df00f7a63fc",
-    "plugins/web_search_exa/settings.py": "c820b3fa98f6ba5be29ea7abf8a5bf2cd1749bd90d7bcfd24f9bc972318cc40d",
+    "plugins/web_search_exa/settings.py": "d77d2f3ce3df72a7c8165dc915213f21a3539dd637e000ff715a19b99fb6117b",
     "plugins/web_search_exa/web_module.css": "203990074b89d27235fd85b124e8d22b9956b9dd4c2685403ae7fa2fbab37994",
-    "plugins/web_search_exa/web_module.js": "121f32edb506fe7e597b5c112e2d6715d33eb44606dadcd58887a3f1570a5470",
+    "plugins/web_search_exa/web_module.js": "99e122afab8b4820c96daee454483a497327ca11eab11bbe13205df095856608",
     "plugins/working_directory/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "plugins/working_directory/_tool_boundary.py": "eb8ca7a22e71ee1497495690b9d409512ef060670eefb2df6e69f6881a83ee89",
     "plugins/working_directory/agents.py": "ba51e79f88f45fc5ee2331676fea3498b3e1bc2134783bc0bd5335fee7ca6ff1",
@@ -926,160 +926,208 @@
     "types/assets.d.ts": "291129d4b1ba05ff79fb7ecf70fc3e49f5998bf163aaac4e5af4b5632c8df30b",
     "plugins/step_plan/transport.py": "9f7a713f8cea6d3797a35b90eafa4b0eea71206a03913d0a83829a7fba2694b2",
     "frontend/dashboard/vite-splash-plugin.ts": "6534cb5ded7761eda6e1c1565ca1eb34d7ffd37948ea01f9c9248c562fe1de34",
-    "package.json": "4b6af7e5634e70ed81d5c7a36335213d36766173387c39b0c19a0f4143921a97",
-    "package-lock.json": "27d6c456bebb18903eb2101b834871cb7ac851aa7446d1f488b2a59b346fec39",
+    "package.json": "358bf3a48e16cc0a72aa5f58588602ace0663f40a4bb73e99ea6e12ea2bd884b",
+    "package-lock.json": "25363d3712a200e480c1cd806ee5b31624eb9fea6d8919848350f5655a70cc96",
     "components.json": "e2113eacfd8ec132c2318025cca96ddd8022ea2f0de19d8793471b78a07894af",
     "tsconfig.json": "2c40ada127bdc7aa75629684ae3347ba70929fe2668e001bf3b7596bfd2cbbb5",
     "eslint.config.js": "4d214d2c2465f5d1684017b23a1b19e1b80d7832f8bf6b7ad757cf6d05145cc7",
-    "plugins/skills/skills/deploy-kirakira/SKILL.md": "6a1c28bc802a67d05c5683a48e70e95df85f37c6618cad121aa8958a8cef99b0"
+    "plugins/skills/skills/deploy-kirakira/SKILL.md": "6a1c28bc802a67d05c5683a48e70e95df85f37c6618cad121aa8958a8cef99b0",
+    "frontend/dashboard/src/webData.ts": "f35ea3067de6529b7d4183f03b866933c93631ae8a47e0201381d1a687f926f6",
+    "frontend/plugins/compaction/src/index.tsx": "e4b4b9d2697e1c6234a5ffff8578fbf36f58e5e38af4257db2214c719f881fff",
+    "frontend/plugins/jobs/src/index.tsx": "503d9cf293585ef4e90eb554193c7e257b8795d165a4379d3b79e449278743d5",
+    "frontend/plugins/markdown_memory/src/index.tsx": "542af0e21aa6fb60361d55a77e8447d752fba6fdeba7822542adc9605690e991",
+    "frontend/plugins/reply/src/index.tsx": "f2a2cbe1255ba617c5673e4c8a59b79a0d16e0e9f16c22b71aa4474b3874fcc3",
+    "frontend/plugins/scheduler/src/index.tsx": "a633c6bc2a11a21920c283cdc3711a6ee53095d937703288aecbbd523f70b61b",
+    "frontend/plugins/session_title/src/index.tsx": "c19f30005e3fa7ca2959ca6c54bb40aa1eaebf6dfe5e882b6da0a198fe04c0b7",
+    "frontend/plugins/shell/src/index.tsx": "966353ce64759f6852901e8e3f070305eff69e24ef6eae44f3c6b9fa1416c865",
+    "frontend/plugins/standard_web/src/index.tsx": "4614e563ab5b5367012873a44eb2335a5538afb06be2e6030660f143b47e75a0",
+    "frontend/plugins/subagent/src/index.tsx": "fd966c21835ffbc776f49fd8e90d9ff96ad90c75acab87ec6a128f79dc3b48c8",
+    "frontend/plugins/visuals/src/index.tsx": "70209a0d03bfa53808a4d12e584843a1ddf6790ee0915b9c7fa871636800f1ca",
+    "frontend/plugins/web_fetch_http/src/index.tsx": "922d68e63eee8a3bf2ffa8dcb6c4705065daa69157038ea2f25f3973944850f7",
+    "plugins/compaction/dashboard.py": "10a8a6481a165c0c7d2a982afb50d313adebc8d73492e62998f422409ed52500",
+    "plugins/compaction/web_module.css": "203990074b89d27235fd85b124e8d22b9956b9dd4c2685403ae7fa2fbab37994",
+    "plugins/compaction/web_module.js": "da95aba1655e50b1172b51164b53f8640781d6b3d8ce23241f09e87fece4e66d",
+    "plugins/jobs/settings_ui.py": "a6e9dae90d517ef3c8e778d2476c2052261c3e4591aef6ff30c25e6ba49cf4a8",
+    "plugins/jobs/web_module.css": "203990074b89d27235fd85b124e8d22b9956b9dd4c2685403ae7fa2fbab37994",
+    "plugins/jobs/web_module.js": "249bada30b59f67f4f581c5d5ccdbd375d07a3b0a4eb3d37f5c320ba239bfa51",
+    "plugins/markdown_memory/dashboard.py": "8667fe2aab62fbf371ae5ba3df6b88bcd1dc9ffb0906a482e53bc564331bb4fe",
+    "plugins/markdown_memory/web_module.css": "203990074b89d27235fd85b124e8d22b9956b9dd4c2685403ae7fa2fbab37994",
+    "plugins/markdown_memory/web_module.js": "ba4f338e5aebf4e9042579104be40df501d172f5309663e2c853d09494b4995a",
+    "plugins/reply/dashboard.py": "c9f18eb3f35df653b5bacc03921c85f996e9e4381bdbbb9f10fb7052df2fd7d8",
+    "plugins/reply/web_module.css": "203990074b89d27235fd85b124e8d22b9956b9dd4c2685403ae7fa2fbab37994",
+    "plugins/reply/web_module.js": "3c86a0df01f66c317358cb77af6a7191056e644a462cb58ba2c953ec9cbffd76",
+    "plugins/scheduler/settings_ui.py": "15e9e6695b63781f39e396770ba598ad1922ecc235499c64fe87136ecd22491d",
+    "plugins/scheduler/web_module.css": "203990074b89d27235fd85b124e8d22b9956b9dd4c2685403ae7fa2fbab37994",
+    "plugins/scheduler/web_module.js": "cd0c1ba9ce9c678a0a24e8123e7f5941f3bad530c567e203c58bd9263f0a8cd6",
+    "plugins/session_title/dashboard.py": "840711ca28b55d657e18af06d839bf1b2a3128ce5d777bc014c1231e9b39ec7c",
+    "plugins/session_title/web_module.css": "203990074b89d27235fd85b124e8d22b9956b9dd4c2685403ae7fa2fbab37994",
+    "plugins/session_title/web_module.js": "446657fe49dd10c860905a00dd4a2a64263cbb4ba461fbe547b8e319ee3eccf0",
+    "plugins/shell/dashboard.py": "9210a682df73acd2ba74a52643c56810bf07df0da86f1e8736be4ad151a9b982",
+    "plugins/shell/web_module.css": "203990074b89d27235fd85b124e8d22b9956b9dd4c2685403ae7fa2fbab37994",
+    "plugins/shell/web_module.js": "a923ecc3188a46cd6d381c35be4636f9176a088867c326b848b89914b1c72039",
+    "plugins/standard_web/dashboard.py": "a1f92124985b537e7a389d78219f7849ddc09da77a3bd89df7bd9255e9ccbccd",
+    "plugins/standard_web/web_module.css": "203990074b89d27235fd85b124e8d22b9956b9dd4c2685403ae7fa2fbab37994",
+    "plugins/standard_web/web_module.js": "735070fdc3a70a5e81e937d008fb717ba955f7420c89b31a624ce232f1c7d864",
+    "plugins/subagent/dashboard.py": "d53118a880661cb1f38e83a7b6136ea0a3945b0dc90b031afe7d81188a48879d",
+    "plugins/subagent/web_module.css": "203990074b89d27235fd85b124e8d22b9956b9dd4c2685403ae7fa2fbab37994",
+    "plugins/subagent/web_module.js": "2d6e417923837b11c827977aad3c96fbece41a9564c3a83c654d66b4678d464b",
+    "plugins/visuals/skills/visualize/SKILL.md": "87955d054f0816dcaa0f616ef4773826cb315eb35832367cb67236ce35669f49",
+    "plugins/visuals/skills/visualize/charts.md": "179a77433b3429f1c2934cf8a939c0a1883703c381f26a6fe60ef1ada84448cf",
+    "plugins/visuals/skills/visualize/diagrams.md": "b8733bf09cf35c4bc35fa76f52cad0530a3cbdbbfc6209137ea576cb28d44f57",
+    "plugins/visuals/skills/visualize/interactive.md": "e9ef5a53067f148931137f8147a68ea63318fcd62470228a8b82f207854c9cd6",
+    "plugins/visuals/web_module.css": "203990074b89d27235fd85b124e8d22b9956b9dd4c2685403ae7fa2fbab37994",
+    "plugins/visuals/web_module.js": "284e8c2873a28a0005014d57704588d25eb4783080d76a4c6a4392a37cba75ea",
+    "plugins/web_fetch_http/dashboard.py": "3444f49b45662f6fb535e1a93f2002c243f6c63107aa7839618f84f3ba5c8c52",
+    "plugins/web_fetch_http/web_module.css": "203990074b89d27235fd85b124e8d22b9956b9dd4c2685403ae7fa2fbab37994",
+    "plugins/web_fetch_http/web_module.js": "e5b3da2f1a8b3acab5acbc5d445477a36731a5a3028db9ade1d9a155a548e782"
   },
   "patches": {
     "agent/migrations/context.py": {
       "sha256": "94972c3844877eb4b0f0642d1bfbc5757336d7e811dbbb8c17c64ae639433aeb",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "agent/plugins/__init__.py": {
       "sha256": "d6510cbac83783f4395cae28cd6ad135229e6df70ce627a4cbcb29b0f2251748",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "agent/runtime_identity.py": {
       "sha256": "30ac109c9de39bde539e89892baf3403a909fe11c999ae1b041f17ce8ca1131a",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "bootstrap/web_shell.py": {
       "sha256": "4dfd11b3366cb2ac72404f58ea4706bb8bcd5b831e3956ccb4c74a8b47702e9b",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "core/common/diagnostic_log.py": {
       "sha256": "ed28b0c6c20016fd7ed5b804db19283b57e06181eaf72b7396bf7b90f4410594",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "frontend/chat/harness/index.html": {
       "sha256": "972f35940d06a27d321bb86e0cedd11c760be2cfd372120823d8366c975dc032",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "frontend/chat/src/browser-uuid.ts": {
       "sha256": "15fa30340c06db5315cbae32ec5926483ce37261a9e36a24f367bd7c505bbd07",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "frontend/chat/src/compact-navigation.tsx": {
       "sha256": "1ee16d73eeada6660ed4f572a1945c038d7d96d1a1ee1c3bb8219c3106f6de01",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "frontend/chat/src/desktop-chat-view.tsx": {
-      "sha256": "a3787b6ce4007ae6a0df634fcd8b87e3687eb4ca1bc2a6a76c865f60ca50083a",
+      "sha256": "c6438ebda7b453fde8a049e45f03b708a9627eea8ee1c3bdd6d691ea94a92846",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "frontend/chat/src/desktop-sidebar.tsx": {
-      "sha256": "4cc40dd58078e129301ba3c2bcd2d51de30db8a96c0024183a9ad2b80fe343ed",
+      "sha256": "1aad59759f49744d2d9c5352a421690772d59db8cdb264464d374479ba1fed32",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "frontend/chat/src/message-actions.tsx": {
       "sha256": "b60beb65cec4a8e0fb549cbdb28afadf5b0752484a2ae8d1ef29fcd42154b67c",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "frontend/chat/src/verify-composer-flow.mjs": {
       "sha256": "8ef30c2cc027c805a51c65277f3244daa654f42ae90cce7119548d2f19decc70",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "frontend/chat/src/web-chat-data.ts": {
       "sha256": "0602fd26d8ec9f663d8162eec79ddc1fcac2884c3541f270995ce461c33c34ca",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "frontend/dashboard/index.html": {
       "sha256": "90406c5859992d7bb839900fe01a7f21843a7323dd84f37095bf1f116d56752d",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "frontend/design.md": {
-      "sha256": "81256616d0b65b76967a77f5b0772118647fb311caad9cc478fd25696d84b9b4",
+      "sha256": "16665652bc11c31e74eef43f0afffe44affeb83f870c97641ed3224086734ff2",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "frontend/plugins/akasha/src/plugin-ui.css": {
       "sha256": "fb49e78b390397a55ce1029b462819d8b4d470bd1805cd188eab4c5e69742996",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "frontend/plugins/akasha/src/plugin-ui.js": {
       "sha256": "6fb0e26ff750482719657ab79a27b3a4375a25a02971c6435c99685d22d9fc6d",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "frontend/plugins/onboarding/src/index.tsx": {
       "sha256": "bb2a35e18c10f0cd7385e1e9e5f253154c503f67094c59e7bc04812d02932d0e",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "frontend/plugins/projects/src/plugin-ui.tsx": {
       "sha256": "a0dd619fce5586e97c82aa4f9c9d595f8eca987ff4f0180ff7fe575bfab70644",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "frontend/plugins/shell_ui/src/brand.ts": {
-      "sha256": "f18dd123b2f1acdc8343dbba192a6e09a1a48beeea37572567f374c658a70de5",
+      "sha256": "ff08bd4e14bb7f9c895dc9b7e9d07f29e9cf6c68ce19b5e2936850b635c08a6e",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "frontend/plugins/shell_ui/src/index.tsx": {
-      "sha256": "a55ea0129174c28687ccf4114273c800e5bc022654c7ac279ab8ee5c09e1d04b",
+      "sha256": "ad018b0738c776c1a44fc1a7368df1f96257ce39a8315f444ffc6d1161aab1e9",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "frontend/theme/src/brand-tokens.css": {
       "sha256": "bc7776547b10ec430d6cb9a59f8cb04d0fb0938c58af2bc9402823a59aca84ab",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "frontend/theme/src/material-tokens.css": {
       "sha256": "73ee4edcb232f704647ede6317d69c221df0b950a73aa49564e6808e8fa9f1d2",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "kirakira_agent/_upstream_main.py": {
       "sha256": "690c9658cd35cbcd9b759ef9f045f1823660a8bd21f877d7ff4fdcd0e4e5630e",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "package.json": {
-      "sha256": "0d326503ea9e83bf810900383745253d84de9b1a9c06b44b6caf291ae163f516",
+      "sha256": "2ccb93776fe1e7d54701a535750e9b666ae22e7ed9bf12387874b7a60b605026",
       "patch": "patches/stage-web-assets.patch",
       "patch_sha256": "29e7550a216fd1aacfd614dde4c32d19f7bb216fa244c5bfdf0c3ff3e3510288",
       "reason": "Distribution build must stage dashboard/chat output inside their owning native plugin artifacts; avoid serving stale assets."
@@ -1087,7 +1135,7 @@
     "plugins/akasha/contract.py": {
       "sha256": "db9dfbf35357832de114fb325f03f588a792acaae61b8e5400e46a0f4db6d94e",
       "patch": "patches/memory-query-api.patch",
-      "patch_sha256": "aa3900c92c855aaa2958cb4f5c1e178fe673bfcf61be08a32dddcc97419f24ea",
+      "patch_sha256": "3538f3860238e516f35a5cdc6c021f0c5185c6a12e5e1a4795e1243b2d26ed60",
       "reason": "Session-scoped evidence queries, dated receipts and bounded presentation."
     },
     "plugins/akasha/infrastructure/persistence.py": {
@@ -1099,169 +1147,169 @@
     "plugins/akasha/inspector.py": {
       "sha256": "12046fce3b9a2382bd0f4d0fab4f9c15f6d9024a4a453a9e72c18b9645631b65",
       "patch": "patches/memory-query-api.patch",
-      "patch_sha256": "aa3900c92c855aaa2958cb4f5c1e178fe673bfcf61be08a32dddcc97419f24ea",
+      "patch_sha256": "3538f3860238e516f35a5cdc6c021f0c5185c6a12e5e1a4795e1243b2d26ed60",
       "reason": "Session-scoped evidence queries, dated receipts and bounded presentation."
     },
     "plugins/akasha/message_ui.css": {
       "sha256": "3367654964949f0d33a6e4dc1785c4cb157e50bfa522a16fc6c6a21e4a120212",
       "patch": "patches/memory-query-api.patch",
-      "patch_sha256": "aa3900c92c855aaa2958cb4f5c1e178fe673bfcf61be08a32dddcc97419f24ea",
+      "patch_sha256": "3538f3860238e516f35a5cdc6c021f0c5185c6a12e5e1a4795e1243b2d26ed60",
       "reason": "Session-scoped evidence queries, dated receipts and bounded presentation."
     },
     "plugins/akasha/plugin.py": {
       "sha256": "e8d31031ef0630fb3116068f7efa5c62c898cfec7ecc54571ace8c09ecfbf762",
       "patch": "patches/memory-query-api.patch",
-      "patch_sha256": "aa3900c92c855aaa2958cb4f5c1e178fe673bfcf61be08a32dddcc97419f24ea",
+      "patch_sha256": "3538f3860238e516f35a5cdc6c021f0c5185c6a12e5e1a4795e1243b2d26ed60",
       "reason": "Session-scoped evidence queries, dated receipts and bounded presentation."
     },
     "plugins/akasha/recall_tool.py": {
       "sha256": "df3ecbdab41d3b0ab6d9d6f16f30712916499ae62a182260217d1a580967769d",
       "patch": "patches/memory-query-api.patch",
-      "patch_sha256": "aa3900c92c855aaa2958cb4f5c1e178fe673bfcf61be08a32dddcc97419f24ea",
+      "patch_sha256": "3538f3860238e516f35a5cdc6c021f0c5185c6a12e5e1a4795e1243b2d26ed60",
       "reason": "Session-scoped evidence queries, dated receipts and bounded presentation."
     },
     "plugins/akasha/recalls.py": {
       "sha256": "9f8a404c33fcfe5a5211109fffaf651b501945aaaf72f44c4e31d2bb890c41ac",
       "patch": "patches/memory-query-api.patch",
-      "patch_sha256": "aa3900c92c855aaa2958cb4f5c1e178fe673bfcf61be08a32dddcc97419f24ea",
+      "patch_sha256": "3538f3860238e516f35a5cdc6c021f0c5185c6a12e5e1a4795e1243b2d26ed60",
       "reason": "Session-scoped evidence queries, dated receipts and bounded presentation."
     },
     "plugins/akasha/runtime.py": {
       "sha256": "09a955b57c3c4ac8f17168e96e7ae71c020d26f7a0eb8ff3a2d108197a4fbf2c",
       "patch": "patches/memory-query-api.patch",
-      "patch_sha256": "aa3900c92c855aaa2958cb4f5c1e178fe673bfcf61be08a32dddcc97419f24ea",
+      "patch_sha256": "3538f3860238e516f35a5cdc6c021f0c5185c6a12e5e1a4795e1243b2d26ed60",
       "reason": "Session-scoped evidence queries, dated receipts and bounded presentation."
     },
     "plugins/akasha/settings.py": {
-      "sha256": "2694b869a35645a12a9e9851e2034bcc166e234483ac5cdb1ed2648b9f35f8de",
+      "sha256": "0f28f278dcef395f03fce52c8fa218582d9eabace922608c28e70c770757dc78",
       "patch": "patches/memory-query-api.patch",
-      "patch_sha256": "aa3900c92c855aaa2958cb4f5c1e178fe673bfcf61be08a32dddcc97419f24ea",
+      "patch_sha256": "3538f3860238e516f35a5cdc6c021f0c5185c6a12e5e1a4795e1243b2d26ed60",
       "reason": "Session-scoped evidence queries, dated receipts and bounded presentation."
     },
     "plugins/akashic_clients/attachments.py": {
       "sha256": "b536d76a60a2f02478c45cd9fd45c5b4758ad849ca18b680cf5f9046f2ff35a3",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/akashic_clients/capabilities.py": {
       "sha256": "6abbbd440286dfd4eba002ddf53347cd8467c203be110fbd40389b767f1eb6f2",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/akashic_clients/chat_api.py": {
       "sha256": "8ec3ec6bbdc81f7ea8ca65cc668d745dd890a46d05616e2c9c0aff908a552b5c",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/akashic_clients/config.py": {
       "sha256": "42156e3e0bb2a01cefdc598a4eedd2faaee23642ff510ab2110182c414c5a352",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/akashic_clients/migrations/akashic_clients_migrations/__init__.py": {
       "sha256": "28239033f560eaa2915b62bb967103089ea958c3ca0a0470b86f7f4d54206942",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/akashic_clients/migrations/akashic_clients_migrations/helpers/__init__.py": {
       "sha256": "ae5dd6ff9b77e587074816b1df141fe15206cacb0ef40e247446a3938866b8ad",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/akashic_clients/migrations/akashic_clients_migrations/helpers/config.py": {
       "sha256": "4f99c78dfd3738007c05d80a84ef1d2e84ea183edcb4074d02376aafeeae1d4b",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/akashic_clients/navigation.py": {
       "sha256": "3657822bd6dc31b2bae6f6f1b4174ad02c49bc7164fa606f8820ac322937be50",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/akashic_clients/notifications.py": {
       "sha256": "ec69625b0a27471adac10bd5d42d7084aa80eb5e540bd7fca00b395bcaba9836",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/akashic_clients/plugin.py": {
       "sha256": "0631d7ea35577485802e5e49880b5a9735fba5e77478341b97dd379541bf9482",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/akashic_clients/services.py": {
       "sha256": "5d0916e3afa7fee9b40906c528656b9983090c73fa6ed47178da345219eac773",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/akashic_sender/plugin.py": {
       "sha256": "e80625e7f802df72a642d6cd5eba07e5820844c4c0376947b25d381977c5bd56",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/channels/plugin.py": {
       "sha256": "20825abbc41bf9f6188f2538820d3e4f5279c265bb7f1e8108fc0e2827a6d5da",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/codex/plugin.py": {
       "sha256": "328f82862faac53d87008760855de582308ec292e50c8272afb8ab8a81ded82b",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/computer/bench/README.md": {
       "sha256": "18791eebd806dc436292a8afb73ee29e0714eadd0d1cfd92e68e4d8307113a99",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/computer/bench/run.py": {
       "sha256": "e0e3db8d48a41f0f224c3433e054acb14efb46a2f83d4bedf9709d77e7485896",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/computer/plugin.py": {
       "sha256": "d8e50534ef02581bb17f227d2c2d52460f19fe8a9a09a7be742741baded8e07b",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/computer/skills/computer/SKILL.md": {
       "sha256": "c3330ecabd9be311f912943717e0d1061db76371c0b54d6de353c82c7ae6598a",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/computer/web/agent-cursor.ts": {
       "sha256": "beec6b8c5f43fc183b2a7318ff3c6d666466c51a14fc8dec683de896df8fb52b",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/computer/web/display.ts": {
       "sha256": "a1c052368acc248ce5f0d0029d4039c9ff27c3c1a2184ef68d9561b5a91051a3",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/computer/web/panel-state.ts": {
       "sha256": "7cc2d4a316192055a6948c20dc2e258b2d2f348803325f9a952ee77d02fe7cbd",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/delivery/contract.py": {
@@ -1285,7 +1333,7 @@
     "plugins/drift/plugin.py": {
       "sha256": "ba91336e3a8f7b71612a4102f623f896e99cffff6820f469f08cccea101ee233",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/eventmail/contract.py": {
@@ -1309,31 +1357,31 @@
     "plugins/gateway/service.py": {
       "sha256": "acbe1277b54f27d9493b22f9a213449ca26844cf7d37fb10e5893329bfd9c43f",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/gemini/plugin.py": {
       "sha256": "30974f0b096aa2999a82430b37ecd00be31164c19bf295c2e4bc5b33684178b8",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/host_execution/bridge/doctor.py": {
       "sha256": "992b95a9b722dc422a6adaaa8d1fedd74296535e84ab68fe56d678b9554e5637",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/host_execution/bridge/server.py": {
       "sha256": "fd48742cc38ffc4c4f09f22e422ed1b661e5c8b1c6ceb3605cb05ce4f67097a1",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/host_execution/controller.py": {
       "sha256": "89f55ec49963ef776d57a6968cc7bd73b7757a39e00025a99c21140f93cc39d0",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/host_execution/shell_runtime.py": {
@@ -1345,73 +1393,73 @@
     "plugins/ledger/contract.py": {
       "sha256": "e0db88e03c4e52aa0a4405d6b97a2358e36e78cd8b33f2ae7e92271902e5ea17",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/ledger/durable_delivery_store.py": {
       "sha256": "94b1a7092ab65b6f6d8173c94d1709be4af3c06e1255d0032c232e3a6d74cd00",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/markdown_memory/documents.py": {
       "sha256": "3bdf064a3f02bdc82b3658884a7cbdc73f02c69e006c8b33544b654de749e4f6",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/markdown_memory/plugin.py": {
-      "sha256": "bad3fd46faab92fc424b4aa8911c60db3360706a739028ebb6fe4a71a54425cc",
+      "sha256": "6a74ffe7f8817b73986becbe956bfb7e1b4b389f667c74d219204e599731d2a9",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/markdown_memory/store.py": {
       "sha256": "e10a6f08dacdefaf9e82f16ba0160cdc38a2915f5fad33b740b4676bcec137d2",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/models/plugin.py": {
-      "sha256": "2b1b26577be67a59da78223b14229392f6d526af73c370de7b42437fe7600639",
+      "sha256": "ead5ff8ecaf301a2746335b471004771b33ef8cab97cbb7023ee38aed401cfd4",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/models/state.py": {
       "sha256": "82f18e7ee2668910e9fc9137c8e8d9b49ede7367c55181fef5336c4c2341601a",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/openai_compatible/driver.py": {
       "sha256": "eaf6bb507d320d8b7bd7802c58e987e45118c4b00eb7775f216e212134da55e6",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/openai_compatible/plugin.py": {
       "sha256": "0125239dceb5ad5b74285be263e3b9a5ca3fb9e75ec0fded41223df328e8e560",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/opencode_go/plugin.py": {
       "sha256": "8aee2e2ddffc309c640a9a8ee0fe076d397cc4a7a172168bdcac5a54be10923b",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/plugin_update/skills/plugin-system/SKILL.md": {
       "sha256": "de07942e2234f6391be7ef0819f408ef270e4ba082eaa710e2ced34011a784e4",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/prompt/VEDA.md": {
       "sha256": "786829afe5a9ee4570ae652b9380bd77b7fd3907431d928c7591364a2dddbebb",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/react/contract.py": {
@@ -1447,37 +1495,37 @@
     "plugins/runtime_diagnostics/README.md": {
       "sha256": "0721d4edab3dc8e78675e737bb0398231c18faae2cb9fd3c8db7b1f288c335b0",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/sites_tab/plugin.py": {
       "sha256": "ba6dab901da91e2f299784fcb406680e30608aa2dd5767d3fd297378ceab81e9",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/skills/skills/deploy-kirakira/SKILL.md": {
       "sha256": "df96ad9bcb00acf1e27327ade4f3c201d423aba5d47a13aaad9a77d0c7a4fbb0",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/step_plan/transport.py": {
       "sha256": "eaf6bb507d320d8b7bd7802c58e987e45118c4b00eb7775f216e212134da55e6",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/telegram_channel/plugin.py": {
       "sha256": "e9b19eabb579526efa74a5e00876d9c44be54d502861c84f1955cfbe815b9401",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/ui/dashboard_app.py": {
       "sha256": "edfc5ac5b17935ad419716b4170fbd8d3e85d8cb742aacebab6659d4d12a9111",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/wake/api.py": {
@@ -1537,7 +1585,7 @@
     "plugins/wake/settings.py": {
       "sha256": "408f29c5ea86b5d85bc935567ddb69a4358ef0545885c18a0b8db385edea8ae0",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/wake/source.py": {
@@ -1561,38 +1609,44 @@
     "plugins/web_auth/app.py": {
       "sha256": "cfe61b6ac4f8ba9a2ca0a3e7c985ac37f6e69e98f2052084f77047ac100fa588",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/web_auth/cli.py": {
       "sha256": "20ba59c64a177e9af8e13b36747cfefb59a26c26bd3d83379f98c8c7dd4213e3",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/web_auth/login.html": {
       "sha256": "b8c4fdabd055f9ee89ec9879535af07cd815fef77f8f15ff9b4c51cc4f51fb51",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/web_auth/state.py": {
       "sha256": "1de7296a672b984dd1b6739dbf0ddeaec9ef6a7714e5e74498eb03102daf7f03",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "plugins/workspace_changes/plugin.py": {
       "sha256": "381ff56f030d472b634d03841f8c7c2c32e08824174aaa6a09be57fdbf68d017",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "sdk/python/README.md": {
       "sha256": "42596bb34dc5269251fa287e416e95ac014ee269fa041f3318f48eb20b3bd209",
       "patch": "patches/distribution-branding.patch",
-      "patch_sha256": "8f1a7835e01041033617b66e9f9652af0f975aaacafd645408ef4b2ee30e0a1c",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/web_fetch_http/fetch.py": {
+      "patch": "patches/distribution-branding.patch",
+      "reason": "Distribution presentation and default account branding; existing identities remain compatible.",
+      "sha256": "7d37fc1787848b395c2ae64ef5ce342f9a91228e2a8accb0e7cba4b88bec1587",
+      "patch_sha256": "135fb6ba86ef23d403de9fa6ace92b50d7d7073ec0461dd3ccae4b93c5ee9b63"
     }
   },
   "source_paths": {
@@ -1603,32 +1657,32 @@
   "generated": {
     "plugins/akasha/message_ui.js": {
       "sha256": "ba4f015c4e10337f13ca0d7b386e8bdbaed73692a02bde3a841298c579309e72",
-      "input": "frontend/plugins/akasha/src/plugin-ui.js",
-      "lock_sha256": "27d6c456bebb18903eb2101b834871cb7ac851aa7446d1f488b2a59b346fec39",
+      "input": "frontend/plugins/akasha/src/index.tsx",
+      "lock_sha256": "25363d3712a200e480c1cd806ee5b31624eb9fea6d8919848350f5655a70cc96",
       "reason": "Built from registered frontend sources and the pinned npm lock."
     },
     "plugins/computer/web_module.js": {
       "sha256": "5da95aca287392112271b6806c8e832b4891997a12d05b5c4c7c807b4a60a6f6",
-      "input": "plugins/computer/web/index.tsx",
-      "lock_sha256": "27d6c456bebb18903eb2101b834871cb7ac851aa7446d1f488b2a59b346fec39",
+      "input": "frontend/plugins/computer/src/index.tsx",
+      "lock_sha256": "25363d3712a200e480c1cd806ee5b31624eb9fea6d8919848350f5655a70cc96",
       "reason": "Built from registered frontend sources and the pinned npm lock."
     },
     "plugins/onboarding/web_module.js": {
       "sha256": "4900fe4605cb081340cf27a9ac1d0257053700e3a10512abda3d14050fca2889",
       "input": "frontend/plugins/onboarding/src/index.tsx",
-      "lock_sha256": "27d6c456bebb18903eb2101b834871cb7ac851aa7446d1f488b2a59b346fec39",
+      "lock_sha256": "25363d3712a200e480c1cd806ee5b31624eb9fea6d8919848350f5655a70cc96",
       "reason": "Built from registered frontend sources and the pinned npm lock."
     },
     "plugins/projects/plugin_ui.js": {
       "sha256": "319297f2ff7d4a5c05d98ac2ec6346281264af4258087e25dfeaa2166115a643",
-      "input": "frontend/plugins/projects/src/plugin-ui.tsx",
-      "lock_sha256": "27d6c456bebb18903eb2101b834871cb7ac851aa7446d1f488b2a59b346fec39",
+      "input": "frontend/plugins/projects/src",
+      "lock_sha256": "25363d3712a200e480c1cd806ee5b31624eb9fea6d8919848350f5655a70cc96",
       "reason": "Built from registered frontend sources and the pinned npm lock."
     },
     "plugins/shell_ui/web_module.js": {
-      "sha256": "19d660a3d9e5470146016cce095d5adbccfeb147336d544fd299f1ffd73ce9d2",
+      "sha256": "8892d0198a71348fc5ad7ded4ecca37116b8f37968ffc984b3bdcfb3a326ba29",
       "input": "frontend/plugins/shell_ui/src/index.tsx",
-      "lock_sha256": "27d6c456bebb18903eb2101b834871cb7ac851aa7446d1f488b2a59b346fec39",
+      "lock_sha256": "25363d3712a200e480c1cd806ee5b31624eb9fea6d8919848350f5655a70cc96",
       "reason": "Built from registered frontend sources and the pinned npm lock."
     }
   },

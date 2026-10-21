@@ -612,14 +612,16 @@ export function TimelineMessageView({ message, lookupMessage, toolResults, onNav
     !("display" in part) && part.kind === "artifact_ref" ? [part.value] : []));
   const origin = attachmentOrigin(message, lookupMessage);
   // 单文件成功结果作为回复插图；原始工具数据仍可从过程行查看。
-  const attachmentResult = body.kind === "tool_result" && body.outcome === "success"
-    && message.attachments.length === 1 && message.attachments[0].kind === "file"
+  // 同一结果里的图片是给模型自检的观察（如渲染截图），已在调用卡片里展示，不再进正文。
+  const deliveredFiles = message.attachments.filter(ref => ref.kind === "file");
+  const attachmentResult = body.kind === "tool_result" && body.outcome === "success" && deliveredFiles.length === 1
     && body.parts.every(part => !("display" in part) && (part.kind === "text" || part.kind === "artifact_ref"));
+  const observation = (ref: TimelineAttachment) => attachmentResult && ref.kind === "image";
   const fallback = attachmentResult ? <div className="attachment-description">{body.parts.map((part, index) =>
     part.kind === "text" && !("display" in part) ? <MessageBody key={index} content={part.value}
       streaming={false} deferRichContent onError={onError} /> : null)}
     {!body.parts.some(part => part.kind === "text" && !("display" in part) && part.value.trim())
-      ? <p>{message.attachments[0].filename ?? "附件"}</p> : null}</div> : null;
+      ? <p>{deliveredFiles[0].filename ?? "附件"}</p> : null}</div> : null;
   // 插件认领的文件附件（例如网页）在任何消息里都作为插图展示，插件缺席时退回普通附件卡片。
   usePluginUiCatalogVersion();
   const figure = (ref: TimelineAttachment) => !renderAttachment && ref.kind === "file"
@@ -627,6 +629,7 @@ export function TimelineMessageView({ message, lookupMessage, toolResults, onNav
   const attachment = (id: string) => {
     const ref = message.attachments.find(item => item.artifact_id === id)!;
     if (renderAttachment) return renderAttachment(ref);
+    if (observation(ref)) return null;
     if (attachmentResult || figure(ref)) return <MessageAttachmentFigure attachment={ref} origin={origin}
       sessionId={message.session_id} messageId={message.id}
       fallback={attachmentResult ? fallback : <SentAttachments items={[timelineAttachmentItem(ref)]} />} />;
@@ -634,7 +637,8 @@ export function TimelineMessageView({ message, lookupMessage, toolResults, onNav
   };
   // 与实时消息同一个容器；用户输入的附件（含正文里的 artifact_ref）全部收进气泡上方的附件条，发出时与刷新后位置一致。
   const input = body.kind === "input";
-  const looseAttachments = input ? message.attachments : message.attachments.filter((ref) => !referencedArtifacts.has(ref.artifact_id));
+  const looseAttachments = input ? message.attachments
+    : message.attachments.filter((ref) => !referencedArtifacts.has(ref.artifact_id) && !observation(ref));
   const figures = attachmentResult ? looseAttachments : looseAttachments.filter(figure);
   const strip = looseAttachments.filter(ref => !figures.includes(ref));
   // 插图沿正文宽度展示，不进附件条。
@@ -714,22 +718,19 @@ function UserTextClamp({ enabled, children }: { enabled: boolean; children: Reac
     // 明显不到 12 行的短输入不读几何、不挂观察器：补载历史时这些消息多在跳过渲染的区域里，逐条读 scrollHeight
     // 会逐条强制布局；历史消息带 content-visibility:auto，逐条观察会让长会话滚动多跑布局。
     if (!mayExceedClamp(element)) return;
-    let frame = 0;
     const measure = () => {
-      frame = 0;
       setOverflowing(element.scrollHeight - element.clientHeight > 1);
     };
-    const schedule = () => { if (!frame) frame = window.requestAnimationFrame(measure); };
-    measure();
+    // 首帧的裁剪由 CSS 无条件保证（.user-text-clamp:not([data-state="open"]) 恒裁 12 行），
+    // 本处只决定“展开全部”按钮与末两行渐隐，所以不在注册时同步测量：ResizeObserver 回调在
+    // 布局之后、绘制之前跑，此时读 scrollHeight 不再强制重排（design.md 3.18），零强制布局且首帧完成。
+    // 曾经同步测量，切入长会话时可见区每条长提问一次，实测占切换 CPU 的 ~19%（measure，CPU×4）。
     // 可能超出的这一小部分观察折叠框与里面不限高的内容层：窗口变宽变窄、字体换用、图片加载、富渲染逐步换出
     // （源码→高亮代码块）都会改内容层高度。只看框不够：恰好 12 行的正文再晚到一张图，框仍是 12 行高，变的只有内容。
-    const observer = new ResizeObserver(schedule);
+    const observer = new ResizeObserver(measure);
     observer.observe(element);
     observer.observe(inner);
-    return () => {
-      observer.disconnect();
-      window.cancelAnimationFrame(frame);
-    };
+    return () => observer.disconnect();
   }, [enabled, expanded]);
   if (!enabled) return <>{children}</>;
   const onToggle = () => {

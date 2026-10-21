@@ -30,7 +30,8 @@ from .request import Request, check_request
 logger = logging.getLogger(__name__)
 # 私有程序 binding：tools.py 固定身份，恢复路径经 Bindings.open 读取，不提供外部 SDK。
 SUBAGENT_PROGRAM = ServiceKey[Callable[[Task, MessageReader, Request], Awaitable[Message]]]("subagent.program.v1")
-_MAX_ACTIVE = 3
+DEFAULT_MAX_ACTIVE = 3
+DEFAULT_RESULT_CHARS = 100_000
 
 
 class SubagentBusy(RuntimeError):
@@ -40,8 +41,11 @@ class SubagentBusy(RuntimeError):
 class Subagents:
     """来源拥有准入和回传；Task、模型、工具与消息分别由既有能力执行。"""
 
-    def __init__(self, ctx: Context):
+    def __init__(self, ctx: Context, *, max_active: int = DEFAULT_MAX_ACTIVE,
+                 result_chars: int = DEFAULT_RESULT_CHARS):
         self.ctx = ctx
+        self.max_active = max_active
+        self.result_chars = result_chars
 
     def read(self, key: str) -> tuple[OwnerRecord, Request, MessageReader] | None:
         record = self.ctx.require(OWNER_STATE).open(self.ctx).read(key)
@@ -64,10 +68,11 @@ class Subagents:
         """同一来源准入锁覆盖容量检查与持久提交，重放不再占额。"""
         ctx = self.ctx
         state = ctx.require(OWNER_STATE).open(ctx)
+        limit = self.max_active
 
         def check_capacity() -> None:
-            if state.read(key) is None and sum(not _pointer(row)[2] for _, row in state.list()) >= _MAX_ACTIVE:
-                raise SubagentBusy("subagent capacity reached: max=3; current spawn rejected")
+            if state.read(key) is None and sum(not _pointer(row)[2] for _, row in state.list()) >= limit:
+                raise SubagentBusy(f"subagent capacity reached: max={limit}; current spawn rejected")
 
         async def admit(_slot: TaskSlot) -> None:
             # 1. 所有实例通过同一 owner 的准入 key；拒绝不会留下空 Session。

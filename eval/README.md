@@ -59,6 +59,11 @@ python -m eval.mail_followups \
   --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json \
   --workspace /local-disk/eval/mail-new --output /local-disk/eval/mail.json \
   --with-functional
+
+python -m eval.runtime_settings \
+  --model-config /private/path/model.json --key-file /private/path/model.key \
+  --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json \
+  --workspace /local-disk/eval/settings-new --output /local-disk/eval/settings.json
 ```
 
 | 入口 | 验证范围 |
@@ -69,6 +74,7 @@ python -m eval.mail_followups \
 | `native_web` | 认证后的工作台/聊天 HTTP、import map、项目作用域与实际文件工具 |
 | `followups` | 原始对话创建跟进、真实 HTTP 订阅/网页差异、调查分享/跳过、精确投递、反馈、暂停与恢复；可选隔离项目和长原文读取 |
 | `mail_followups` | 本地 TLS IMAP 的真实采集、跨会话历史条件与分享/跳过、线程更正、规则修改、外部指令、UID 重建与重启 |
+| `runtime_settings` | 实际认证 HTTP 设置、原生配置换代、越界拒绝、清空恢复默认、真实记忆工具预算与图不重学、重启保持 |
 
 `eval/fixtures/native_extension` 提供真实托管 HTTP 进程和 stdio MCP 服务；事件投递目标为隔离的本地会话。它们是受控集成验收，不是外部账号、所有设备或所有可选提供方的部署认证。
 

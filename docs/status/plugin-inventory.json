@@ -1,6 +1,6 @@
 {
-  "upstream_commit": "94027a5cce9fc494f20bb7931fddf26f1e15e8df",
-  "native_files": 929,
+  "upstream_commit": "e4ba3e29ee5a259cac7eb306db91cb632ba98a13",
+  "native_files": 977,
   "scope": "production implementation and architecture; external integrations need separate configuration and validation",
   "plugins": [
     {
@@ -65,7 +65,7 @@
       "api_version": 3,
       "upstream": true,
       "headless_selected": true,
-      "pinned_files": 4
+      "pinned_files": 7
     },
     {
       "id": "computer",
@@ -201,7 +201,7 @@
       "api_version": 3,
       "upstream": true,
       "headless_selected": true,
-      "pinned_files": 6
+      "pinned_files": 9
     },
     {
       "id": "ledger",
@@ -241,7 +241,7 @@
       "api_version": 3,
       "upstream": true,
       "headless_selected": true,
-      "pinned_files": 5
+      "pinned_files": 8
     },
     {
       "id": "mcp",
@@ -337,7 +337,7 @@
       "api_version": 3,
       "upstream": true,
       "headless_selected": true,
-      "pinned_files": 5
+      "pinned_files": 8
     },
     {
       "id": "reply_program",
@@ -369,7 +369,7 @@
       "api_version": 3,
       "upstream": true,
       "headless_selected": true,
-      "pinned_files": 12
+      "pinned_files": 15
     },
     {
       "id": "session_title",
@@ -377,7 +377,7 @@
       "api_version": 3,
       "upstream": true,
       "headless_selected": false,
-      "pinned_files": 2
+      "pinned_files": 5
     },
     {
       "id": "shell",
@@ -385,7 +385,7 @@
       "api_version": 3,
       "upstream": true,
       "headless_selected": true,
-      "pinned_files": 8
+      "pinned_files": 11
     },
     {
       "id": "shell-ui",
@@ -441,7 +441,7 @@
       "api_version": 3,
       "upstream": true,
       "headless_selected": true,
-      "pinned_files": 5
+      "pinned_files": 8
     },
     {
       "id": "step-plan",
@@ -457,7 +457,7 @@
       "api_version": 3,
       "upstream": true,
       "headless_selected": true,
-      "pinned_files": 6
+      "pinned_files": 9
     },
     {
       "id": "telegram_channel",
@@ -537,7 +537,7 @@
       "api_version": 3,
       "upstream": true,
       "headless_selected": false,
-      "pinned_files": 8
+      "pinned_files": 14
     },
     {
       "id": "wake",
@@ -561,7 +561,7 @@
       "api_version": 3,
       "upstream": true,
       "headless_selected": true,
-      "pinned_files": 3
+      "pinned_files": 6
     },
     {
       "id": "web_search_exa",
