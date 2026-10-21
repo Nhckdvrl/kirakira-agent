@@ -408,7 +408,7 @@
                   "proactive_rules": request.rules, "history": request.history, "context_events": request.events}
          return ({"type": "text", "text": json.dumps(value, ensure_ascii=False)},)
      if part.kind == "wake.phase":
-@@ -72,12 +106,26 @@
+@@ -72,12 +106,31 @@
      return fallback(part)
  
  
@@ -432,6 +432,11 @@
 +    "再决定是否值得继续研究。可用read_memory_source核对原文，web_fetch核实实际页面；不能编造外部新消息。"
 +    "有依据的新整理或研究结果才分享，已完成、被撤回、重复或缺少依据就skip_content。"
 +    "分享时说明实际做了什么和核实到什么，不把仅提出的问题写成已经完成的工作。"
++)
++HINTS["alert"] += (
++    "若提醒需要以前确认的安排，先用可用的recall_memory核对当前对话范围内的历史，必要时再用read_memory_source核对原文。"
++    "优先一次检索解决，不做外部调查；必须在本轮调用share_alert。"
++    "检索失败或没有证据时，仍提醒来源已经提供的告警事实并明确缺少的依据，不能编造历史决定。"
 +)
  
  
@@ -529,7 +534,7 @@
      _, phase = read_phase(reader.snapshot(), request)
      names = (tuple(name for name in request.tools if name != "screen_content")
 -             if phase.stage == "investigate" else STAGE_TOOLS[phase.stage])
-+             if phase.stage in {"investigate", "drift"} else STAGE_TOOLS[phase.stage])
++             if phase.stage in {"investigate", "drift", "alert"} else STAGE_TOOLS[phase.stage])
      fixed = {name: request.tools[name] for name in names}
  
      async def authorize(binding: str, arguments: Mapping[str, object]) -> Mapping[str, object] | str:
@@ -558,7 +563,15 @@
              prompt_hints=(HINTS[phase.stage],),
 --- a/plugins/wake/request.py
 +++ b/plugins/wake/request.py
-@@ -60,11 +60,13 @@
+@@ -37,6 +37,7 @@
+     "drift": ("share_content", "skip_content"),
+     "alert": ("share_alert",),
+ }
++ALERT_MEMORY_TOOLS = frozenset({"recall_memory", "read_memory_source"})
+ 
+ 
+ class Request(BaseModel):
+@@ -60,11 +61,13 @@
      rules: str
      history: str
      events: tuple[dict[str, object], ...] = ()
@@ -569,21 +582,24 @@
      def check_choices(self) -> Self:
          if (not set(TOOLS[self.owner]) <= set(self.tools)
 -                or (self.owner != "content" and set(self.tools) != set(TOOLS[self.owner]))
-+                or (self.owner == "alert" and set(self.tools) != set(TOOLS[self.owner]))
++                or (self.owner == "alert" and set(self.tools) - set(TOOLS[self.owner]) - ALERT_MEMORY_TOOLS)
                  or any(not name or not value for name, value in self.tools.items())):
              raise ValueError("Wake 原工具集合与职责不一致")
          if (
 --- a/plugins/wake/runtime.py
 +++ b/plugins/wake/runtime.py
-@@ -40,6 +40,7 @@
+@@ -38,8 +38,9 @@
+ from .api import DRIFT_WAKE, EVENTMAIL_WAKE, Config, DeliveryTarget
+ from .legacy_rules import read_archived_rules
  from .messages import recent_context
- from .request import TOOLS as WAKE_TOOLS, WAKE_PROGRAM, Request
+-from .request import TOOLS as WAKE_TOOLS, WAKE_PROGRAM, Request
++from .request import ALERT_MEMORY_TOOLS, TOOLS as WAKE_TOOLS, WAKE_PROGRAM, Request
  from .source import Pointer, Source
 +from .selection import propose_content, propose_drift
  from .state import WakeState, WakeStateReader
  
  
-@@ -175,10 +176,32 @@
+@@ -175,10 +176,34 @@
              "address": target.recipient,
              "binding_id": ctx.require(DELIVERY_SENDERS).bind(target.channel, bindings),
          }
@@ -614,11 +630,13 @@
          model = ctx.require(MODEL_SELECTION).read_saved(metadata if metadata is not None else {})
          catalog = ctx.require(TOOLS)
 -        allowed = set(self.config.investigation_tools) if owner == "content" else set()
-+        allowed = set(self.config.investigation_tools) if owner in {"content", "drift"} else set()
++        allowed = set(self.config.investigation_tools)
++        if owner == "alert":
++            allowed.intersection_update(ALERT_MEMORY_TOOLS)
          view: ToolView = catalog.view(
              *ctx.require(WAKE_TOOLS_VIEW).refs,
              *(ref for ref in ctx.require(ALL_TOOLS)().refs if ref.name in allowed),
-@@ -191,6 +214,8 @@
+@@ -191,6 +216,8 @@
              now=now,
              timezone=self.config.timezone,
              target=target,
@@ -627,7 +645,7 @@
              sink=sink,
              program_binding=bindings.bind(WAKE_PROGRAM, {}),
              tools={
-@@ -198,13 +223,14 @@
+@@ -198,13 +225,14 @@
                  for name in names
              },
              snapshot_seq=admission.pool.snapshot_seq,

@@ -77,6 +77,9 @@ python -m eval.runtime_settings \
 | `runtime_settings` | 实际认证 HTTP 设置、原生配置换代、越界拒绝、清空恢复默认、真实记忆工具预算与图不重学、重启保持 |
 | `prompt_cache` | 稳定/变化前缀的受控机制实验；原生邮件调查的实际请求摘要、缓存用量和功能结果；缓存字段未知与零值分开 |
 | `idle_reflection` | 空闲规划、跨会话约束、原文依据、原生研究/投递、目标完成后跳过、预算、暂停及交接回执丢失恢复 |
+| `tool_runtime` | 文件与网页读取边界、同输入组件测量，以及分页、编辑、目录、并行、Web 恢复、PTY 和大输出的真实 Agent 验收 |
+
+`memory_runtime` 的事件提醒验收固定不含参考答案的近期关注条件；历史决定由其他真实渠道会话学习。除了提醒内容，还检查 Alert 归档的原事件身份、参考对话范围和实际成功的记忆读取回执，避免把此前确认回复已经说出的答案误算为本轮检索能力。
 
 个人伙伴的空闲思考使用独立工作区验证：
 
@@ -124,6 +127,21 @@ python -m eval.mail_followups \
 这个干预只适用于已经保留该首轮错误的场景，不能通过反复调用筛选出成功结果。相同规则下的重复复查仅复用回执；通用 API 见[使用指南](../docs/handbook/followups.md)。TLS 测试夹具生成临时证书并保留协议命令，不接触真实私人邮箱。
 
 记忆向量资产先通过 `configure-memory --download` 显式准备，参见[配置指南](../docs/handbook/memory-proactive.md)。生产运行不临时下载。中文功能场景与英文公开基准使用各自固定的向量空间，不混库。
+
+## 工具读取与执行
+
+只测组件时不需要模型凭据；`--baseline-ref` 需要包含该提交的源码 checkout，省略它则只验证当前实现：
+
+```sh
+python -m eval.tool_runtime --component-only --baseline-ref fe1387c --samples 3 \
+  --workspace /local-disk/eval/tools-components-new --output /local-disk/eval/tools-components.json
+
+python -m eval.tool_runtime --baseline-ref fe1387c --samples 3 \
+  --model-config /private/path/model.json --key-file /private/path/model.key \
+  --workspace /local-disk/eval/tools-agent-new --output /local-disk/eval/tools-agent.json
+```
+
+文件测量从 Git 读取已选旧组件，使用相同依赖与输入；报告 Python 分配峰值、带追踪的耗时和逐字节输出对照，不等于整机 RSS 或完整 Harness 性能。HTTP 字节流夹具验证响应头和正文限制；真实模型场景另经正式插件图与本机 HTTP 服务器运行，分别记录模型调用和原生工具阶段。MCP、子任务、调度与恢复继续使用 `eval.native_runtime`，不以这些边界用例替代整个主链。
 
 ## 公开历史中的记忆质量
 

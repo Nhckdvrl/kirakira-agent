@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+import hashlib
 import json
 import os
 import shutil
@@ -10,7 +11,8 @@ import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from eval.models import EvaluationModel
+from eval.models import EvaluationModel, source_identity
+from eval.native_alignment import metrics
 from eval.native_runtime import text
 from kirakira_agent.client import AsyncClient, RemoteError
 from kirakira_agent.runtime import ROOT, initialize_workspace, rpc, runtime, submit
@@ -25,6 +27,7 @@ from plugins.akasha.infrastructure.consumption import load_message_nodes
 from plugins.akasha.infrastructure.persistence import logical_state_sha256
 from plugins.delivery.contract import DELIVERY_READ
 from plugins.ledger.contract import MESSAGE_CATALOG, Output, ToolResult
+from plugins.wake.request import read_request
 
 
 async def evaluate(args):
@@ -33,7 +36,10 @@ async def evaluate(args):
     shutil.copytree(ROOT / "eval/fixtures/alignment", extension / "alignment",
                     ignore=shutil.ignore_patterns("__pycache__"))
     model = EvaluationModel.read(args.model_config)
-    report = {"model_config": model.description(), "cases": []}
+    implementation = source_identity()
+    implementation.update({name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
+                           for name in ("eval/memory_runtime.py", "plugins/wake/request.py", "core/net/http.py")})
+    report = {"model_config": model.description(), "implementation": implementation, "cases": []}
 
     def save():
         args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -177,9 +183,14 @@ async def evaluate(args):
 
         async def event_uses_memory():
             target = "akashic:project-follow-up"
-            await rpc(core, "evaluation/seed", {"session_id": target})
-            await submit(core, target, "follow-up-interest",
-                         "我只关注青禾研究项目的发布安排。之后有发布检查事件时，请结合我以前确认的项目记录提醒我。现在简短确认即可。")
+            # Keep reference decisions out of this target's recent conversation.
+            # A live acknowledgment may itself recall and restate those decisions,
+            # allowing the later Alert to answer without exercising its memory tool.
+            await rpc(core, "evaluation/seed", {"session_id": target, "records": [
+                {"kind": "input", "source": "conversation", "text":
+                 "我只关注青禾研究项目的发布安排。之后有发布检查事件时，请结合我以前确认的项目记录提醒我。"},
+                {"kind": "output", "source": "conversation", "text": "已记下这个关注条件。"},
+            ]})
             await configure_proactive(core, args.workspace, target)
             now = datetime.now(UTC)
             event = {"event_id": "project-release-review", "observed_at": now.isoformat(),
@@ -197,13 +208,29 @@ async def evaluate(args):
                             break
                     await asyncio.sleep(0.05)
             value = text(answer)
+            flows = [catalog.reader(session).snapshot()
+                     for session in catalog.snapshot_heads(prefix="wake:")]
+            matching = [rows for rows in flows
+                        if read_request(rows).notification_id == answer.message_id]
+            assert len(matching) == 1, "delivered alert has no unique archived Wake request"
+            flow = read_request(matching[0])
+            assert flow.alert_ref["mail_id"] == receipt["mail_id"]
+            assert flow.context_session_id == target
+            assert not any(token in flow.history for token in ("周五", "林悦", "匿名")), "reference decisions leaked into recent context"
+            reads = [part.value for message in matching[0]
+                     if isinstance(message.body, ToolResult) and message.body.outcome == "success"
+                     for part in message.body.parts if part.kind == "akasha.recall"]
+            assert reads, "alert did not actually retrieve historical evidence"
             assert "周五" in value and "林悦" in value and "匿名" in value, value
             duplicate = await rpc(core, "event-ingress/alert", event)
             assert duplicate["mail_id"] == receipt["mail_id"] and not duplicate["accepted"]
             assert logical_state_sha256(path) == before
             report["follow_up_message_id"] = answer.message_id
             return {"answer": value, "delivered": True, "duplicate_event_reused": True,
-                    "event_contains_reference_answers": False, "query_and_delivery_sessions_excluded": True}
+                    "event_contains_reference_answers": False, "query_and_delivery_sessions_excluded": True,
+                    "recent_context_contains_reference_answers": False,
+                    "successful_memory_reads": len(reads), "memory_context_session_id": target,
+                    "wake_session_id": flow.session_id, "same_event_identity": True}
         await case("incoming_event_recovers_project_decisions_and_delivers", event_uses_memory)
 
         async def long_source_follow_up():
@@ -276,6 +303,7 @@ async def evaluate(args):
                 assert catalog.reader("akashic:project-follow-up").get(report["follow_up_message_id"])
             return {"same_receipt_and_evidence": True, "same_graph_state": True}
         await case("restart_replays_evidence_without_relearning", restart)
+    report["metrics"] = metrics(args.workspace, model)
     save()
     return all(row["passed"] for row in report["cases"])
 

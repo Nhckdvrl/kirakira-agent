@@ -251,6 +251,7 @@ class HttpRequester:
             remaining = max(0.0, deadline - loop.time())
             if remaining <= 0:
                 raise httpx.TimeoutException("request budget exhausted")
+            yielded = False
             try:
                 async with self.client.stream(
                     method,
@@ -281,10 +282,13 @@ class HttpRequester:
                         redirects += 1
                         continue
                     else:
+                        yielded = True
                         yield response
                         return
             except (httpx.TimeoutException, httpx.TransportError):
-                if attempt >= attempts:
+                # A context manager cannot yield a second response after the
+                # consumer has started reading the first one.
+                if yielded or attempt >= attempts:
                     raise
                 attempt += 1
 

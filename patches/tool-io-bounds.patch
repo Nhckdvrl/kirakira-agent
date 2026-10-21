@@ -1,0 +1,166 @@
+--- a/core/net/http.py
++++ b/core/net/http.py
+@@ -251,6 +251,7 @@
+             remaining = max(0.0, deadline - loop.time())
+             if remaining <= 0:
+                 raise httpx.TimeoutException("request budget exhausted")
++            yielded = False
+             try:
+                 async with self.client.stream(
+                     method,
+@@ -281,10 +282,13 @@
+                         redirects += 1
+                         continue
+                     else:
++                        yielded = True
+                         yield response
+                         return
+             except (httpx.TimeoutException, httpx.TransportError):
+-                if attempt >= attempts:
++                # A context manager cannot yield a second response after the
++                # consumer has started reading the first one.
++                if yielded or attempt >= attempts:
+                     raise
+                 attempt += 1
+ 
+--- a/plugins/files/filesystem.py
++++ b/plugins/files/filesystem.py
+@@ -59,7 +59,7 @@
+                 },
+                 "limit": {
+                     "type": "integer",
+-                    "description": "最多读取行数，默认不限（受 80K 字符上限约束）",
++                    "description": "最多读取行数；返回仍受 400 行和 10KB 双重上限约束",
+                     "minimum": 1,
+                 },
+             },
+--- a/plugins/host_execution/bridge/filesystem.py
++++ b/plugins/host_execution/bridge/filesystem.py
+@@ -186,6 +186,8 @@
+     total_lines = 0
+     total_bytes = 0
+     had_decode_errors = False
++    retained_bytes = 0
++    retained_full = False
+ 
+     with builtins.open(file_path, "rb") as fh:
+         while True:
+@@ -201,7 +203,13 @@
+                 continue
+             if limit is not None and len(sliced_lines) >= limit:
+                 continue
++            if retained_full:
++                continue
+             sliced_lines.append(decoded_line)
++            # Retain one overflowing line so the existing formatter keeps its exact
++            # truncation reason, while totals and decoding checks still scan the file.
++            retained_bytes += len(f"{offset + len(sliced_lines):6}\u2192{decoded_line}".encode("utf-8"))
++            retained_full = len(sliced_lines) > _READ_MAX_LINES or retained_bytes > _READ_MAX_BYTES
+ 
+     return sliced_lines, total_lines, total_bytes, had_decode_errors
+ 
+--- a/plugins/web_fetch_http/fetch.py
++++ b/plugins/web_fetch_http/fetch.py
+@@ -1,5 +1,6 @@
+ """HTTP 抓取提供方：直接请求 URL，按格式转换并截断正文。"""
+ 
++import asyncio
+ from typing import Any
+ 
+ import html2text
+@@ -8,7 +9,6 @@
+ from lxml.etree import ParserError
+ from pydantic import AnyUrl, BaseModel, ConfigDict, Field, field_validator
+ 
+-from plugins.standard_web.contract import FetchRequest
+ from core.net.http import (
+     HttpRequester,
+     RequestBudget,
+@@ -16,7 +16,7 @@
+     http_error_detail,
+     redact_http_urls,
+ )
+-
++from plugins.standard_web.contract import FetchRequest
+ 
+ 
+ class FetchConfig(BaseModel):
+@@ -27,7 +27,7 @@
+     max_response_mb: float = Field(default=5, gt=0, le=100, allow_inf_nan=False)
+     # 返回给模型的文本字符上限；默认约 12K tokens。
+     max_text_chars: int = Field(default=50_000, ge=1_000, le=1_000_000)
+-    user_agent: str = Field(default="akashic/1.0", min_length=1, max_length=300)
++    user_agent: str = Field(default="kirakira/1.0", min_length=1, max_length=300)
+     accept_language: str = Field(default="zh-CN,zh;q=0.9,en;q=0.8", min_length=1, max_length=200)
+     proxy: AnyUrl | None = None
+ 
+@@ -68,37 +68,39 @@
+             return _err(url, "URL 必须以 http:// 或 https:// 开头")
+ 
+         try:
+-            resp = await self._requester.get(
+-                url,
+-                follow_redirects=True,
+-                timeout_s=timeout,
+-                budget=RequestBudget(total_timeout_s=float(timeout)),
+-                headers={
+-                    "User-Agent": self._config.user_agent,
+-                    "Accept": _ACCEPT[fmt],
+-                    "Accept-Language": self._config.accept_language,
+-                },
+-            )
+-        except httpx.RequestError as exc:
++            async with asyncio.timeout(float(timeout)):
++                async with self._requester.stream(
++                    "GET", url,
++                    validate_redirects=True,
++                    max_redirects=self._requester.client.max_redirects,
++                    timeout_s=timeout,
++                    budget=RequestBudget(total_timeout_s=float(timeout)),
++                    headers={
++                        "User-Agent": self._config.user_agent,
++                        "Accept": _ACCEPT[fmt],
++                        "Accept-Language": self._config.accept_language,
++                    },
++                ) as resp:
++                    if resp.status_code != 200:
++                        return _err(url, f"HTTP {resp.status_code}")
++                    content_length = resp.headers.get("content-length")
++                    if content_length is not None:
++                        if not content_length.isascii() or not content_length.isdecimal():
++                            return _err(url, "响应 Content-Length 无效")
++                        if int(content_length) > limit:
++                            return _err(url, too_large)
++                    # Count decoded bytes too: missing/false lengths and compressed
++                    # responses must not bypass the body budget.
++                    collected = bytearray()
++                    async for chunk in resp.aiter_bytes():
++                        if len(collected) + len(chunk) > limit:
++                            return _err(url, too_large)
++                        collected.extend(chunk)
++                    body = bytes(collected)
++                    content_type = resp.headers.get("content-type", "")
++                    encoding = resp.encoding or "utf-8"
++        except (httpx.RequestError, TimeoutError) as exc:
+             return _err(url, f"请求失败：{http_error_detail(exc)}")
+-
+-        if resp.status_code != 200:
+-            return _err(url, f"HTTP {resp.status_code}")
+-
+-        # 大小双重检查：先校验 Content-Length header，再检查实际 body。
+-        content_length = resp.headers.get("content-length")
+-        if content_length is not None:
+-            if not content_length.isascii() or not content_length.isdecimal():
+-                return _err(url, "响应 Content-Length 无效")
+-            if int(content_length) > limit:
+-                return _err(url, too_large)
+-
+-        body = resp.content
+-        if len(body) > limit:
+-            return _err(url, too_large)
+-
+-        content_type = resp.headers.get("content-type", "")
+-        encoding = resp.encoding or "utf-8"
+         is_html = "text/html" in content_type
+         is_binary = any(
+             ct in content_type

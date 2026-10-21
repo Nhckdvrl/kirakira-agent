@@ -1,5 +1,6 @@
 """HTTP 抓取提供方：直接请求 URL，按格式转换并截断正文。"""
 
+import asyncio
 from typing import Any
 
 import html2text
@@ -8,7 +9,6 @@ from lxml import html as lxml_html
 from lxml.etree import ParserError
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field, field_validator
 
-from plugins.standard_web.contract import FetchRequest
 from core.net.http import (
     HttpRequester,
     RequestBudget,
@@ -16,7 +16,7 @@ from core.net.http import (
     http_error_detail,
     redact_http_urls,
 )
-
+from plugins.standard_web.contract import FetchRequest
 
 
 class FetchConfig(BaseModel):
@@ -68,37 +68,39 @@ class HttpFetch:
             return _err(url, "URL 必须以 http:// 或 https:// 开头")
 
         try:
-            resp = await self._requester.get(
-                url,
-                follow_redirects=True,
-                timeout_s=timeout,
-                budget=RequestBudget(total_timeout_s=float(timeout)),
-                headers={
-                    "User-Agent": self._config.user_agent,
-                    "Accept": _ACCEPT[fmt],
-                    "Accept-Language": self._config.accept_language,
-                },
-            )
-        except httpx.RequestError as exc:
+            async with asyncio.timeout(float(timeout)):
+                async with self._requester.stream(
+                    "GET", url,
+                    validate_redirects=True,
+                    max_redirects=self._requester.client.max_redirects,
+                    timeout_s=timeout,
+                    budget=RequestBudget(total_timeout_s=float(timeout)),
+                    headers={
+                        "User-Agent": self._config.user_agent,
+                        "Accept": _ACCEPT[fmt],
+                        "Accept-Language": self._config.accept_language,
+                    },
+                ) as resp:
+                    if resp.status_code != 200:
+                        return _err(url, f"HTTP {resp.status_code}")
+                    content_length = resp.headers.get("content-length")
+                    if content_length is not None:
+                        if not content_length.isascii() or not content_length.isdecimal():
+                            return _err(url, "响应 Content-Length 无效")
+                        if int(content_length) > limit:
+                            return _err(url, too_large)
+                    # Count decoded bytes too: missing/false lengths and compressed
+                    # responses must not bypass the body budget.
+                    collected = bytearray()
+                    async for chunk in resp.aiter_bytes():
+                        if len(collected) + len(chunk) > limit:
+                            return _err(url, too_large)
+                        collected.extend(chunk)
+                    body = bytes(collected)
+                    content_type = resp.headers.get("content-type", "")
+                    encoding = resp.encoding or "utf-8"
+        except (httpx.RequestError, TimeoutError) as exc:
             return _err(url, f"请求失败：{http_error_detail(exc)}")
-
-        if resp.status_code != 200:
-            return _err(url, f"HTTP {resp.status_code}")
-
-        # 大小双重检查：先校验 Content-Length header，再检查实际 body。
-        content_length = resp.headers.get("content-length")
-        if content_length is not None:
-            if not content_length.isascii() or not content_length.isdecimal():
-                return _err(url, "响应 Content-Length 无效")
-            if int(content_length) > limit:
-                return _err(url, too_large)
-
-        body = resp.content
-        if len(body) > limit:
-            return _err(url, too_large)
-
-        content_type = resp.headers.get("content-type", "")
-        encoding = resp.encoding or "utf-8"
         is_html = "text/html" in content_type
         is_binary = any(
             ct in content_type

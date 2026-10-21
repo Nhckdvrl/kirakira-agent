@@ -126,6 +126,11 @@ HINTS["drift"] += (
     "有依据的新整理或研究结果才分享，已完成、被撤回、重复或缺少依据就skip_content。"
     "分享时说明实际做了什么和核实到什么，不把仅提出的问题写成已经完成的工作。"
 )
+HINTS["alert"] += (
+    "若提醒需要以前确认的安排，先用可用的recall_memory核对当前对话范围内的历史，必要时再用read_memory_source核对原文。"
+    "优先一次检索解决，不做外部调查；必须在本轮调用share_alert。"
+    "检索失败或没有证据时，仍提醒来源已经提供的告警事实并明确缺少的依据，不能编造历史决定。"
+)
 
 
 def finished(reader: MessageReader, request: Request, stage: Stage) -> Message | None:

@@ -186,6 +186,8 @@ def _scan_text_file(
     total_lines = 0
     total_bytes = 0
     had_decode_errors = False
+    retained_bytes = 0
+    retained_full = False
 
     with builtins.open(file_path, "rb") as fh:
         while True:
@@ -201,7 +203,13 @@ def _scan_text_file(
                 continue
             if limit is not None and len(sliced_lines) >= limit:
                 continue
+            if retained_full:
+                continue
             sliced_lines.append(decoded_line)
+            # Retain one overflowing line so the existing formatter keeps its exact
+            # truncation reason, while totals and decoding checks still scan the file.
+            retained_bytes += len(f"{offset + len(sliced_lines):6}\u2192{decoded_line}".encode("utf-8"))
+            retained_full = len(sliced_lines) > _READ_MAX_LINES or retained_bytes > _READ_MAX_BYTES
 
     return sliced_lines, total_lines, total_bytes, had_decode_errors
 

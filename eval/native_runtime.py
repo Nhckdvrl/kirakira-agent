@@ -180,7 +180,7 @@ async def evaluate(workspace, key_file, output, *, model_config=None):
             session = "akashic:resume"
             path = workspace / "resume-proof.txt"
             pending = asyncio.create_task(submit(core, session, "resume-input",
-                f"Use write_file to create {path} containing exactly ONCE_{nonce}. After writing, report the content. Do not write the file twice."))
+                f"Use write_file to create {path} containing exactly ONCE_{nonce}, with no trailing newline or other characters. After writing, report the content. Do not write the file twice."))
             try:
                 await wait_fact(session, lambda row: isinstance(row.body, ToolResult) and row.body.outcome == "success")
                 await root.context.require(CHANNEL_INPUT_V2)(session, "resume-stop",
@@ -193,7 +193,7 @@ async def evaluate(workspace, key_file, output, *, model_config=None):
                                       metadata={"retry_of_client_message_id": "latest"})
                 rows = catalog.reader(session).snapshot()
                 assert "ONCE_" + nonce in text(answer)
-                assert path.read_text() == "ONCE_" + nonce
+                assert path.read_text() == "ONCE_" + nonce, "file content differs from the exact requested bytes: " + repr(path.read_text())
                 bindings = catalog.reader(session).read_page(limit=100).bindings
                 writes = [(row.message_id, index) for row in rows if isinstance(row.body, Output)
                           for index, part in enumerate(row.body.parts)

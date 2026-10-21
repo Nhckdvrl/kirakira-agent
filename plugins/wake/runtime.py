@@ -38,7 +38,7 @@ from .admission import Admission, Duties
 from .api import DRIFT_WAKE, EVENTMAIL_WAKE, Config, DeliveryTarget
 from .legacy_rules import read_archived_rules
 from .messages import recent_context
-from .request import TOOLS as WAKE_TOOLS, WAKE_PROGRAM, Request
+from .request import ALERT_MEMORY_TOOLS, TOOLS as WAKE_TOOLS, WAKE_PROGRAM, Request
 from .source import Pointer, Source
 from .selection import propose_content, propose_drift
 from .state import WakeState, WakeStateReader
@@ -201,7 +201,9 @@ class Runtime:
         metadata = messages.reader(context_session or target.session_id).metadata()
         model = ctx.require(MODEL_SELECTION).read_saved(metadata if metadata is not None else {})
         catalog = ctx.require(TOOLS)
-        allowed = set(self.config.investigation_tools) if owner in {"content", "drift"} else set()
+        allowed = set(self.config.investigation_tools)
+        if owner == "alert":
+            allowed.intersection_update(ALERT_MEMORY_TOOLS)
         view: ToolView = catalog.view(
             *ctx.require(WAKE_TOOLS_VIEW).refs,
             *(ref for ref in ctx.require(ALL_TOOLS)().refs if ref.name in allowed),

@@ -14,6 +14,25 @@ from plugins.wake.api import DriftWakeServices
 from plugins.wake.state import WakeState
 
 
+def test_alert_can_retrieve_memory_without_gaining_investigation_or_write_tools():
+    from pydantic import ValidationError
+
+    from plugins.wake.request import Request
+
+    value = {"flow_id": "a" * 32, "owner": "alert", "now": datetime.now(UTC), "timezone": "UTC",
+             "target": {"channel": "local", "recipient": "owner", "session_id": "owner"},
+             "sink": {"name": "local", "address": "owner", "binding_id": "sink"},
+             "program_binding": "program", "tools": {"share_alert": "share"}, "snapshot_seq": 0,
+             "alert_ref": {"source_id": "monitor", "event_id": "review", "mail_id": "mail"},
+             "rules": "", "history": ""}
+    assert Request(**value).tools == {"share_alert": "share"}  # Existing archived requests stay valid.
+    memory = {"recall_memory": "memory", "read_memory_source": "source"}
+    assert Request(**(value | {"tools": value["tools"] | memory})).tools.keys() == {"share_alert", *memory}
+    for extra in ("web_fetch", "shell", "write_file", "forget_memory"):
+        with pytest.raises(ValidationError, match="工具集合与职责"):
+            Request(**(value | {"tools": value["tools"] | memory | {extra: "forbidden"}}))
+
+
 @pytest.mark.asyncio
 async def test_due_alert_bypasses_running_content_score(tmp_path):
     mail = EventMailStore(tmp_path / "mail.db")

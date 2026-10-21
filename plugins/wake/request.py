@@ -37,6 +37,7 @@ STAGE_TOOLS: dict[Stage, tuple[str, ...]] = {
     "drift": ("share_content", "skip_content"),
     "alert": ("share_alert",),
 }
+ALERT_MEMORY_TOOLS = frozenset({"recall_memory", "read_memory_source"})
 
 
 class Request(BaseModel):
@@ -66,7 +67,7 @@ class Request(BaseModel):
     @model_validator(mode="after")
     def check_choices(self) -> Self:
         if (not set(TOOLS[self.owner]) <= set(self.tools)
-                or (self.owner == "alert" and set(self.tools) != set(TOOLS[self.owner]))
+                or (self.owner == "alert" and set(self.tools) - set(TOOLS[self.owner]) - ALERT_MEMORY_TOOLS)
                 or any(not name or not value for name, value in self.tools.items())):
             raise ValueError("Wake 原工具集合与职责不一致")
         if (

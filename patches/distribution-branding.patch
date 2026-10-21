@@ -1177,17 +1177,6 @@
  
      # 设置主人自己的密码：初始密码文件删除，除 keep 这个会话之外全部退出。
      def set_password(self, password: str, *, keep: str | None) -> None:
---- a/plugins/web_fetch_http/fetch.py
-+++ b/plugins/web_fetch_http/fetch.py
-@@ -27,7 +27,7 @@
-     max_response_mb: float = Field(default=5, gt=0, le=100, allow_inf_nan=False)
-     # 返回给模型的文本字符上限；默认约 12K tokens。
-     max_text_chars: int = Field(default=50_000, ge=1_000, le=1_000_000)
--    user_agent: str = Field(default="akashic/1.0", min_length=1, max_length=300)
-+    user_agent: str = Field(default="kirakira/1.0", min_length=1, max_length=300)
-     accept_language: str = Field(default="zh-CN,zh;q=0.9,en;q=0.8", min_length=1, max_length=200)
-     proxy: AnyUrl | None = None
- 
 --- a/plugins/workspace_changes/plugin.py
 +++ b/plugins/workspace_changes/plugin.py
 @@ -16,7 +16,7 @@

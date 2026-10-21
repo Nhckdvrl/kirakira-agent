@@ -59,7 +59,7 @@ class ReadFileTool(_FileTool):
                 },
                 "limit": {
                     "type": "integer",
-                    "description": "最多读取行数，默认不限（受 80K 字符上限约束）",
+                    "description": "最多读取行数；返回仍受 400 行和 10KB 双重上限约束",
                     "minimum": 1,
                 },
             },

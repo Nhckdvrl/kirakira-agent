@@ -30,7 +30,7 @@ async def run(ctx: Context, task: Task, reader: MessageReader, request: Request)
     request = Request.model_validate(request.model_dump())
     _, phase = read_phase(reader.snapshot(), request)
     names = (tuple(name for name in request.tools if name != "screen_content")
-             if phase.stage in {"investigate", "drift"} else STAGE_TOOLS[phase.stage])
+             if phase.stage in {"investigate", "drift", "alert"} else STAGE_TOOLS[phase.stage])
     fixed = {name: request.tools[name] for name in names}
 
     async def authorize(binding: str, arguments: Mapping[str, object]) -> Mapping[str, object] | str:
