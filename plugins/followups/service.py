@@ -21,8 +21,9 @@ from plugins.ledger.contract import (
 from plugins.tools.contract import TOOLS
 
 from . import webpages
-from .contract import Feedback, SetEnabled, WatchSpec
+from .contract import Feedback, Revise, SetEnabled, WatchSpec
 from .feeds import MAX_BYTES, Entry, decode, feed_url, fingerprint
+from .mailbox import MailboxError
 
 MAX_WATCHES = 100
 
@@ -36,7 +37,19 @@ def text(message) -> str:
 
 
 class Service:
-    def __init__(self, ctx, store, catalog, content, delivery, bindings, recalls):
+    def __init__(
+        self,
+        ctx,
+        store,
+        catalog,
+        content,
+        delivery,
+        bindings,
+        recalls,
+        *,
+        mailbox=None,
+        writers=None,
+    ):
         self.ctx, self.store, self.catalog = ctx, store, catalog
         self.content, self.delivery, self.bindings, self.recalls = (
             content,
@@ -51,6 +64,41 @@ class Service:
         self.locks: dict[str, asyncio.Lock] = {}
         self.sources = {}
         self.source_lock = asyncio.Lock()
+        self.mailbox, self.writers = mailbox, writers
+
+    def _policy(self, watch):
+        policy = watch.get("policy")
+        if policy is None:
+            return {
+                "revision": 0,
+                "purpose": watch["spec"]["purpose"],
+                "message_id": None,
+            }
+        message = self.catalog.reader(watch["spec"]["session_id"]).get(
+            policy["message_id"]
+        )
+        if (
+            message is None
+            or message.author != "user"
+            or message.source != "followups"
+            or not isinstance(message.body, Input)
+        ):
+            raise RuntimeError("跟进规则缺少原始用户记录")
+        if not any(
+            part.kind == "followups.policy"
+            and part.value["watch_id"] == watch["spec"]["watch_id"]
+            and part.value["revision"] == policy["revision"]
+            for part in message.body.parts
+        ):
+            raise RuntimeError("关注规则的原始记录与当前版本不一致")
+        return {
+            **policy,
+            "purpose": text(message),
+            "recorded_at": message.recorded_at.isoformat(),
+        }
+
+    def _present(self, watch):
+        return {**watch, "policy": self._policy(watch)}
 
     def _watch(self, identity):
         record = self.store.read("watch:" + identity)
@@ -142,10 +190,11 @@ class Service:
                     for message in reversed(recent)
                 ],
                 "watches": [
-                    watch
+                    self._present(watch)
                     for watch in self._watches()
                     if watch["spec"]["session_id"] == session_id
                 ],
+                "mailboxes": self.mailbox.available() if self.mailbox else [],
             }
 
         return await run_file_io(read)
@@ -155,9 +204,17 @@ class Service:
         spec = spec.model_copy(
             update={
                 "url": feed_url(spec.url, github_releases=spec.source_kind == "feed")
+                if spec.url is not None
+                else None
             }
         )
         await run_file_io(lambda: self._anchors(spec))
+        if spec.source_kind == "mailbox" and (
+            self.mailbox is None
+            or spec.mailbox_id
+            not in {m["account_id"] for m in self.mailbox.available()}
+        ):
+            raise ValueError("请先在邮件账户设置中连接原账号")
         async with self.locks.setdefault(spec.watch_id, asyncio.Lock()):
 
             def commit(tx):
@@ -193,6 +250,182 @@ class Service:
             await self._save("watch:" + request.watch_id, value)
         self.changed.set()
         return value
+
+    async def revise(self, request: Revise):
+        if self.writers is None:
+            raise RuntimeError("跟进规则写入能力未提供")
+        async with self.locks.setdefault(request.watch_id, asyncio.Lock()):
+            watch = await run_file_io(lambda: self._watch(request.watch_id))
+            self._session(watch["spec"]["session_id"])
+            identity = "followup-policy:" + fingerprint(
+                [request.watch_id, request.request_id]
+            )
+            prepared = await self.writers(watch["spec"]["session_id"]).prepare_async(
+                identity,
+                Input(
+                    (
+                        ContentPart("text", request.purpose),
+                        ContentPart(
+                            "followups.policy",
+                            {
+                                "watch_id": request.watch_id,
+                                "revision": request.expected_revision + 1,
+                            },
+                        ),
+                    )
+                ),
+            )
+            receipt_key = "policy-request:" + fingerprint(
+                [request.watch_id, request.request_id]
+            )
+            request_hash = fingerprint(request.model_dump(mode="json"))
+
+            def commit(tx):
+                receipt = tx.read(receipt_key)
+                if receipt is not None:
+                    if receipt.value["request_hash"] != request_hash:
+                        raise ValueError("规则修改请求标识已用于其他内容")
+                    return dict(json_value(receipt.value))
+                current = tx.read("watch:" + request.watch_id)
+                value = dict(json_value(current.value))
+                revision = value.get("policy", {}).get("revision", 0)
+                if revision != request.expected_revision:
+                    raise ValueError("关注规则已被修改，请刷新后再提交")
+                tx.append_prepared(prepared)
+                value["policy"] = {"revision": revision + 1, "message_id": identity}
+                tx.save(
+                    "watch:" + request.watch_id, value, expected_version=current.version
+                )
+                result = {
+                    "revision": revision + 1,
+                    "message_id": identity,
+                    "request_hash": request_hash,
+                }
+                tx.save(receipt_key, result, expected_version=None)
+                return result
+
+            return await self.store.transact_async(commit)
+
+    async def reset_mailbox(self, watch_id):
+        async with self.locks.setdefault(watch_id, asyncio.Lock()):
+            watch = await run_file_io(lambda: self._watch(watch_id))
+            if watch["spec"]["source_kind"] != "mailbox":
+                raise ValueError("仅邮箱身份变化后可重建基线")
+            record = await run_file_io(lambda: self.store.read("cursor:" + watch_id))
+            if not record or record.value.get("last_error") != "uidvalidity_changed":
+                raise ValueError("邮箱当前不需要重建身份基线")
+            value = dict(json_value(record.value))
+            value.update(
+                initialized=False,
+                last_error=None,
+                last_error_message=None,
+                next_check=datetime.now(UTC).isoformat(),
+            )
+            await self._save("cursor:" + watch_id, value)
+        self.changed.set()
+        return {"status": "baseline_requested", "accepted_events_preserved": True}
+
+    async def _accept(self, watch, spec, source, fresh, checkpoint, now):
+        anchors = await run_file_io(lambda: self._anchors(spec))
+        policy = await run_file_io(lambda: self._policy(watch))
+        context = {
+            "name": spec.name,
+            "purpose": policy["purpose"],
+            "policy_revision": policy["revision"],
+            "policy_message_id": policy["message_id"],
+            "policy_recorded_at": policy.get("recorded_at"),
+            "project": watch["project"],
+            "original_messages": [
+                {
+                    key: anchor[key]
+                    for key in ("message_id", "session_id", "recorded_at")
+                }
+                for anchor in anchors
+            ],
+            "created_at": watch["created_at"],
+        }
+        items = [
+            {
+                "item_id": entry.item_id,
+                "revision": entry.revision,
+                "requires_ack": False,
+                "payload": {
+                    **entry.payload,
+                    "source_name": spec.name,
+                    "follow_up": context,
+                    "context_session_id": spec.session_id,
+                    **(
+                        {"review_policy": REQUESTED_REVIEW}
+                        if spec.review_mode == "each_update"
+                        else {}
+                    ),
+                },
+            }
+            for entry in fresh
+        ]
+        intent = {
+            "batch_id": fingerprint(
+                [[item["item_id"], item["revision"]] for item in items]
+            ),
+            "refs": [
+                {"item_id": item["item_id"], "revision": item["revision"]}
+                for item in items
+            ],
+            "cursor": checkpoint,
+            "observed_at": now.isoformat(),
+        }
+        await self._save("intent:" + spec.watch_id, intent)
+        await source.submit(intent["batch_id"], items)
+        await self._finish(spec.watch_id, intent)
+        return {"status": "submitted", "submitted": len(items), "refs": intent["refs"]}
+
+    async def _poll_mailbox(self, watch, spec, source, cursor, now):
+        if self.mailbox is None:
+            raise MailboxError("mailbox_unavailable", "邮箱连接能力不可用")
+        batch = await self.mailbox.read(spec, cursor)
+        known = set(cursor.get("seen", ()))
+        fresh = []
+        for entry in batch.entries:
+            if (
+                entry.item_id + ":" + entry.revision not in known
+                and await source.inspect_revision(entry.item_id, entry.revision) is None
+            ):
+                fresh.append(entry)
+        checkpoint = {
+            "initialized": True,
+            "mailbox": batch.cursor,
+            "seen": list(
+                dict.fromkeys(
+                    [
+                        *cursor.get("seen", []),
+                        *(e.item_id + ":" + e.revision for e in batch.entries),
+                    ]
+                )
+            )[-4096:],
+            "last_checked": now.isoformat(),
+            "last_error": None,
+            "last_error_message": None,
+            "failures": 0,
+            "pending_messages": batch.pending,
+            "next_check": (
+                now + timedelta(seconds=5 if batch.pending else spec.interval_seconds)
+            ).isoformat(),
+        }
+        if not cursor.get("initialized") or not fresh:
+            await self._save("cursor:" + spec.watch_id, checkpoint)
+            result = {
+                "status": "baseline" if not cursor.get("initialized") else "unchanged",
+                "submitted": 0,
+            }
+        else:
+            result = await self._accept(watch, spec, source, fresh, checkpoint, now)
+        return {
+            **result,
+            "scanned": batch.scanned,
+            "matched": batch.matched,
+            "pending": batch.pending,
+            "duplicates": batch.duplicates,
+        }
 
     async def _finish(self, watch_id, intent):
         """A committed source receipt wins even if the feed changed after a crash."""
@@ -246,6 +479,8 @@ class Service:
             )
             now = datetime.now(UTC)
             try:
+                if spec.source_kind == "mailbox":
+                    return await self._poll_mailbox(watch, spec, source, cursor, now)
                 headers = {}
                 if cursor.get("initialized"):
                     headers = {
@@ -353,63 +588,16 @@ class Service:
                 if not fresh:
                     await self._save("cursor:" + watch_id, checkpoint)
                     return {"status": "unchanged", "submitted": 0}
-                anchors = await run_file_io(lambda: self._anchors(spec))
-                context = {
-                    "name": spec.name,
-                    "purpose": spec.purpose,
-                    "project": watch["project"],
-                    "original_messages": [
-                        {
-                            key: anchor[key]
-                            for key in ("message_id", "session_id", "recorded_at")
-                        }
-                        for anchor in anchors
-                    ],
-                    "created_at": watch["created_at"],
-                }
-                items = [
-                    {
-                        "item_id": entry.item_id,
-                        "revision": entry.revision,
-                        "requires_ack": False,
-                        "payload": {
-                            **entry.payload,
-                            "source_name": spec.name,
-                            "follow_up": context,
-                            "context_session_id": spec.session_id,
-                            **(
-                                {"review_policy": REQUESTED_REVIEW}
-                                if spec.review_mode == "each_update"
-                                else {}
-                            ),
-                        },
-                    }
-                    for entry in fresh
-                ]
-                intent = {
-                    "batch_id": fingerprint(
-                        [[item["item_id"], item["revision"]] for item in items]
-                    ),
-                    "refs": [
-                        {"item_id": item["item_id"], "revision": item["revision"]}
-                        for item in items
-                    ],
-                    "cursor": checkpoint,
-                    "observed_at": now.isoformat(),
-                }
-                # Only references are checkpointed here. Accepted payloads live in EventMail.
-                await self._save("intent:" + watch_id, intent)
-                await source.submit(intent["batch_id"], items)
-                await self._finish(watch_id, intent)
-                return {
-                    "status": "submitted",
-                    "submitted": len(items),
-                    "refs": intent["refs"],
-                }
+                return await self._accept(watch, spec, source, fresh, checkpoint, now)
             except (httpx.HTTPError, ValueError, etree.XMLSyntaxError) as error:
                 cursor.update(
                     last_checked=now.isoformat(),
-                    last_error=type(error).__name__,
+                    last_error=error.code
+                    if isinstance(error, MailboxError)
+                    else type(error).__name__,
+                    last_error_message=str(error)
+                    if isinstance(error, MailboxError)
+                    else None,
                     failures=int(cursor.get("failures", 0)) + 1,
                 )
                 delay = min(
@@ -604,7 +792,26 @@ class Service:
                 }
             )
         return {
-            "watch": watch,
+            "watch": await run_file_io(lambda: self._present(watch)),
+            "policy_history": await run_file_io(
+                lambda: [
+                    {
+                        "message_id": row.message_id,
+                        "recorded_at": row.recorded_at.isoformat(),
+                        "purpose": text(row),
+                    }
+                    for row in self.catalog.reader(
+                        watch["spec"]["session_id"]
+                    ).snapshot()
+                    if row.source == "followups"
+                    and isinstance(row.body, Input)
+                    and any(
+                        part.kind == "followups.policy"
+                        and part.value["watch_id"] == watch_id
+                        for part in row.body.parts
+                    )
+                ][-20:]
+            ),
             "anchors": await run_file_io(
                 lambda: self._anchors(WatchSpec.model_validate(watch["spec"]))
             ),

@@ -2,9 +2,12 @@
 
 from fastapi import FastAPI, HTTPException, Path, Query
 
-from .contract import FOLLOWUPS, Feedback, SetEnabled, WatchId, WatchSpec
+from plugins.ui.contract import UI
 
-inject = (FOLLOWUPS,)
+from .contract import FOLLOWUPS, Feedback, Revise, SetEnabled, WatchId, WatchSpec
+from .mail_settings import MAIL_SETTINGS
+
+inject = (FOLLOWUPS, MAIL_SETTINGS, UI)
 
 
 async def checked(action):
@@ -15,6 +18,10 @@ async def checked(action):
 
 
 def register(app: FastAPI, context):
+    context.require(UI).register_configuration(
+        app, context, MAIL_SETTINGS, "/api/dashboard/followups/config"
+    )
+
     @app.get("/api/dashboard/followups")
     async def overview(session_id: str = Query(min_length=1, max_length=512)):
         return await checked(context.require(FOLLOWUPS).overview(session_id))
@@ -39,3 +46,11 @@ def register(app: FastAPI, context):
     @app.post("/api/dashboard/followups/feedback")
     async def feedback(request: Feedback):
         return await checked(context.require(FOLLOWUPS).feedback(request))
+
+    @app.post("/api/dashboard/followups/revise")
+    async def revise(request: Revise):
+        return await checked(context.require(FOLLOWUPS).revise(request))
+
+    @app.post("/api/dashboard/followups/reset-mailbox")
+    async def reset(request: WatchId):
+        return await checked(context.require(FOLLOWUPS).reset_mailbox(request.watch_id))
