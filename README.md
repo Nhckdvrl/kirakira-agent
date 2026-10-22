@@ -121,6 +121,7 @@ its request. The embedding encoder runs locally on CPU after an explicit model d
 | --- | --- | --- |
 | Does following a memory clue back to the source help? | Evidence-supported answers **0/8 → 5/8** on difficult middle/tail questions | Same initial material; source access adds evidence and model calls. [Memory scenarios](docs/operations/evaluations/2026-10-22-memory-scenarios.md) |
 | Can past personal conditions affect a new event decision? | Relevant history presented **12/12**; correct share/skip decision **11/12** | Controlled mailbox scenarios, including the failed decision. [Follow-up experiment](docs/operations/evaluations/2026-10-21-mail-followups.md) |
+| Can I delegate in chat and change my instructions later? | **12/12 functional checks** in each of two everyday scenarios | Corrected history, revised rules, evidence, pause and restart recovery. [Assistant workflow experiment](docs/operations/evaluations/2026-10-23-personal-assistant.md) |
 | Can it pick up everyday conversations and stop? | **32/32 assertions** across four invited topics | Actual idle waits; source, delivery, duplicate and stopping checks. [Companion experiment](docs/operations/evaluations/2026-10-22-companion-personality.md) |
 | Does the execution chain work with a real model? | **13/13 runtime scenarios** | Files, Shell, MCP, child tasks, interruption and recovery. [Verification records](docs/operations/verification.md) |
 

@@ -107,6 +107,7 @@ uv run --frozen --no-sync kirakira-agent gateway --config "$HOME/.kirakira/works
 | --- | --- | --- |
 | 沿记忆线索继续查原文是否有帮助？ | 长原文中部、末页困难题，有依据的正确回答 **0/8 → 5/8** | 初始材料相同，查原文增加材料和模型调用。[记忆场景实验](docs/operations/evaluations/2026-10-22-memory-scenarios.md) |
 | 过去的个人条件能否影响新事件判断？ | 对应历史呈现 **12/12**，分享或跳过判断正确 **11/12** | 受控邮箱场景，保留首轮误判。[历史参与行动](docs/operations/evaluations/2026-10-21-mail-followups.md) |
+| 能否从聊天交办，再按我的新要求调整？ | 两组生活场景各 **12/12 功能检查** | 历史更正、改规则后跳过、依据查询、暂停与重启恢复。[聊天交办实测](docs/operations/evaluations/2026-10-23-personal-assistant.md) |
 | 能否接续日常话题，并在结束后停下？ | 四类受邀话题，**32/32 验收断言** | 实际等待空闲，检查出处、投递、去重和停止。[伙伴体验实测](docs/operations/evaluations/2026-10-22-companion-personality.md) |
 | 真实模型下执行主链是否跑通？ | **13/13 主链场景** | 文件、Shell、MCP、子任务、中断与恢复。[验证记录](docs/operations/verification.md) |
 
