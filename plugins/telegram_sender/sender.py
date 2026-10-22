@@ -12,6 +12,7 @@ from telegramify_markdown.converter import convert_with_segments
 from telegramify_markdown.entity import MessageEntity, split_entities
 
 from core.common.diagnostic_log import log_timing
+from core.common.file_io import run_file_io
 from plugins.channels.contract import AttachmentKind, AttachmentRef
 from plugins.ledger.contract import (
     ArtifactRead,
@@ -100,7 +101,11 @@ async def read_content(message: Message, catalog: MessageCatalog, artifacts: Art
         # Provider error bodies can contain credentials or request fragments.
         # Send an actionable status without forwarding the raw exception.
         return (f"这次没能生成回复：{detail}。请检查模型设置，或稍后重新发送。原始消息和已完成的操作仍保留。",)
-    refs = {ref.artifact_id: ref for ref in catalog.reader(message.session_id).attachments(message.message_id)}
+    refs = {}
+    if any(isinstance(part, ContentPart) and part.kind == "artifact_ref" for part in message.body.parts):
+        reader = catalog.reader(message.session_id)
+        attachments = await run_file_io(lambda: reader.attachments(message.message_id))
+        refs = {ref.artifact_id: ref for ref in attachments}
     parts: list[str | File] = []
     for part in message.body.parts:
         if not isinstance(part, ContentPart):

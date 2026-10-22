@@ -623,7 +623,7 @@
  
 --- a/plugins/telegram_sender/sender.py
 +++ b/plugins/telegram_sender/sender.py
-@@ -1,17 +1,25 @@
+@@ -1,17 +1,26 @@
  """每个 Telegram 请求只发送一次；不确定效果交还 Delivery。"""
  import asyncio
 +import hashlib
@@ -639,6 +639,7 @@
 -from plugins.ledger.contract import ArtifactRead
 +
 +from core.common.diagnostic_log import log_timing
++from core.common.file_io import run_file_io
  from plugins.channels.contract import AttachmentKind, AttachmentRef
 -from plugins.ledger.contract import MessageCatalog
 -from plugins.ledger.contract import ContentPart, Control, Message
@@ -653,11 +654,12 @@
  
  Status = Literal["delivered", "rejected", "failed"]
  
-@@ -75,7 +83,23 @@
+@@ -75,8 +84,28 @@
  async def read_content(message: Message, catalog: MessageCatalog, artifacts: ArtifactRead) -> tuple[str | File, ...]:
      """先读完全部附件，避免发送正文后才发现文件损坏。"""
      if isinstance(message.body, Control):
 -        return ()
+-    refs = {ref.artifact_id: ref for ref in catalog.reader(message.session_id).attachments(message.message_id)}
 +        if message.body.action != "failure":
 +            return ()
 +        reason = message.body.reason or ""
@@ -675,10 +677,15 @@
 +        # Provider error bodies can contain credentials or request fragments.
 +        # Send an actionable status without forwarding the raw exception.
 +        return (f"这次没能生成回复：{detail}。请检查模型设置，或稍后重新发送。原始消息和已完成的操作仍保留。",)
-     refs = {ref.artifact_id: ref for ref in catalog.reader(message.session_id).attachments(message.message_id)}
++    refs = {}
++    if any(isinstance(part, ContentPart) and part.kind == "artifact_ref" for part in message.body.parts):
++        reader = catalog.reader(message.session_id)
++        attachments = await run_file_io(lambda: reader.attachments(message.message_id))
++        refs = {ref.artifact_id: ref for ref in attachments}
      parts: list[str | File] = []
      for part in message.body.parts:
-@@ -110,16 +134,39 @@
+         if not isinstance(part, ContentPart):
+@@ -110,16 +139,39 @@
      idempotent = False
  
      def __init__(self, client: aiohttp.ClientSession, api_base: str, token: str,

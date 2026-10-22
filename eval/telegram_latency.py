@@ -176,12 +176,30 @@ async def evaluate(args):
     os.environ["AKASHIC_TIMING"] = "1"
     os.environ["AKASHIC_PLUGIN_HOME"] = str(args.workspace / "isolated-plugin-home")
     initialize_workspace(args.workspace)
+    profile_source = getattr(args, "memory_documents", None)
+    profile_digests = {}
+    if profile_source is not None:
+        profile_source = profile_source.resolve()
+        if not profile_source.is_dir():
+            raise ValueError("memory documents must be an existing directory")
+        for path in profile_source.rglob("*.md"):
+            if path.is_symlink() or not path.is_file():
+                continue
+            relative = path.relative_to(profile_source)
+            destination = args.workspace / "memory" / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            payload = path.read_bytes()
+            destination.write_bytes(payload)
+            profile_digests[str(relative)] = hashlib.sha256(payload).hexdigest()
     extension = args.workspace / "fixtures"
     shutil.copytree(ROOT / "eval/fixtures/alignment", extension / "alignment",
                     ignore=shutil.ignore_patterns("__pycache__"))
     report = {"implementation": source_identity(), "model_config": model.description(),
               "scope": "Isolated native graph; same configured memory and tools. Exact final native payload replayed directly after its native run; native-first order may warm provider cache. These are observations, not randomized A/B speedups.",
               "telegram": telegram, "cases": []}
+    if profile_source is not None:
+        report["memory_document_sha256"] = profile_digests
+        report["memory_document_scope"] = "Markdown snapshots only; no production graph, credentials, sessions or polling copied."
     for name in ("eval/telegram_latency.py", "plugins/reply_program/program.py", "plugins/telegram_sender/sender.py",
                  "plugins/telegram_channel/drafts.py", "plugins/context/materials.py"):
         report["implementation"][name] = hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
@@ -248,6 +266,10 @@ async def evaluate(args):
                              ("short-warm", "这是速度检查，只回答‘收到’，不要调用工具。"),
                              ("model-identity", "你现在底座啥模型？"),
                              ("long-stream", "直接用约400个汉字解释为什么人们喜欢星空。不要调用工具。")]
+                    selected = getattr(args, "case_names", None)
+                    if selected:
+                        available = dict(cases + [("natural-greeting", "你好")])
+                        cases = [(label, available[label]) for label in dict.fromkeys(selected)]
                     for label, prompt in cases:
                         if not telegram:
                             session = "programmatic:latency-" + uuid4().hex
@@ -295,6 +317,9 @@ async def evaluate(args):
                         if label == "model-identity":
                             row["bound_model_named"] = model.model in text(answer)
                             row["passed"] = row["bound_model_named"] and row["tool_results"] == 0
+                        if label == "natural-greeting":
+                            row["passed"] = bool(text(answer).strip()) and row["tool_results"] == 0
+                            row["prompt_forbids_tools"] = False
                         if telegram:
                             drafts = draft_rows[draft_start:]
                             row.update(drafts=len(drafts), final_delivered=True,
@@ -307,7 +332,7 @@ async def evaluate(args):
                         save()
                         print(json.dumps({k: row[k] for k in ("case", "passed", "native_total_ms", "tool_results")}), flush=True)
         report["shutdown_completed"] = True
-        report["passed"] = len(report["cases"]) == 4 and all(row["passed"] for row in report["cases"])
+        report["passed"] = len(report["cases"]) == len(cases) and all(row["passed"] for row in report["cases"])
     finally:
         logger.removeHandler(timings)
         save()
@@ -321,6 +346,10 @@ def main():
     parser.add_argument("--telegram-token-file", type=Path)
     parser.add_argument("--telegram-chat-file", type=Path)
     parser.add_argument("--expected-bot")
+    parser.add_argument("--case", dest="case_names", action="append", choices=(
+        "natural-greeting", "short-cold", "short-warm", "model-identity", "long-stream"))
+    parser.add_argument("--memory-documents", type=Path,
+                        help="Read-only Markdown snapshots copied into the isolated workspace")
     args = parser.parse_args()
     raise SystemExit(0 if asyncio.run(evaluate(args)) else 1)
 

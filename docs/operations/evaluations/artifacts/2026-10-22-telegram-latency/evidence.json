@@ -9344,5 +9344,193 @@
       "plugins/openai_compatible/driver.py": "003a15fe6f05b5ec851fb9b726cdd273d47afbd2d534f0c9e4a16c59aa750a02",
       "plugins/step_plan/transport.py": "b04713f1ba0c854a5270f9c4d2a4b13ce17d9bbd301eccd98fff04bbb1e567d5"
     }
+  },
+  "natural_conversation_followup_2026_10_23": {
+    "production_observation": {
+      "input_text": "\u4f60\u597d\u554a",
+      "input_utc": "2026-10-22T17:50:58.848857+00:00",
+      "final_output_utc": "2026-10-22T17:52:40.851354+00:00",
+      "confirmed_delivery_utc": "2026-10-22T17:52:43.437664+00:00",
+      "input_to_receipt_s": 104.589,
+      "tool_results": 4,
+      "unrelated_tool_work": [
+        "read personality and memory files",
+        "search memory directory"
+      ],
+      "first_model_call_s_approx": 61,
+      "delivery_status": "delivered"
+    },
+    "separate_event_loop_stall": {
+      "duration_s": 8.9,
+      "frame": "MessageReader.attachments_for",
+      "message_kind": "text-only command acknowledgment",
+      "note": "Separate command delivery; do not add this duration to the greeting observation."
+    },
+    "isolated_replay_before": {
+      "phase": "before",
+      "cases": [
+        {
+          "name": "hello",
+          "passed": true,
+          "duration_s": 3.635,
+          "tool_results": 0,
+          "reply_chars": 52,
+          "reply_sha256": "f62740c2c238239f0d06b7c9adc6bf4f240a190e48d67659c7e36368629a9f65"
+        },
+        {
+          "name": "hello-again",
+          "passed": true,
+          "duration_s": 3.928,
+          "tool_results": 0,
+          "reply_chars": 52,
+          "reply_sha256": "b5ec6b8f18ca5f2da42446b75567965f5675a605117f3c3ce8240411b0292fbd"
+        },
+        {
+          "name": "available",
+          "passed": true,
+          "duration_s": 3.989,
+          "tool_results": 0,
+          "reply_chars": 47,
+          "reply_sha256": "39d36a79a20a5dd28c293895a35cad658c1590adf99866c4a600ed68c26f8149"
+        }
+      ],
+      "scope": "Isolated native conversation, unchanged production Markdown profiles and recorded recall. Frozen recall fixture replaces graph querying; tools remain enabled."
+    },
+    "isolated_replay_after": {
+      "phase": "after",
+      "cases": [
+        {
+          "name": "hello",
+          "passed": true,
+          "duration_s": 3.56,
+          "tool_results": 0,
+          "reply_chars": 49,
+          "reply_sha256": "3a1ea68e6186d58a8aac458ada0cf4aa52f69fbf4e7b54de302ee1cf439d2bc3"
+        },
+        {
+          "name": "hello-again",
+          "passed": true,
+          "duration_s": 4.671,
+          "tool_results": 0,
+          "reply_chars": 67,
+          "reply_sha256": "394f6abd3ec5a4f16cf56de5ee900956a7bdba9bdf9cd9b2e510ba5633cd2579"
+        },
+        {
+          "name": "available",
+          "passed": true,
+          "duration_s": 2.968,
+          "tool_results": 0,
+          "reply_chars": 49,
+          "reply_sha256": "27cd810dd230ce39a4b3e827853cb9984aa0ad91b8de41fd1734d98a1eee85ec"
+        },
+        {
+          "name": "arithmetic",
+          "passed": true,
+          "duration_s": 3.028,
+          "tool_results": 0,
+          "reply_chars": 2,
+          "reply_sha256": "b4944c6ff08dc6f43da2e9c824669b7d927dd1fa976fadc7b456881f51bf5ccc"
+        },
+        {
+          "name": "file",
+          "passed": true,
+          "duration_s": 26.551,
+          "tool_results": 5,
+          "reply_chars": 183,
+          "reply_sha256": "f9d9c8024d68bfab6a18684d1013d2ec63047183eeca0f5ab9813f6198ee7f62"
+        }
+      ],
+      "scope": "Isolated native conversation, unchanged production Markdown profiles and recorded recall. Frozen recall fixture replaces graph querying; tools remain enabled."
+    },
+    "frozen_recall": {
+      "chars": 2731,
+      "sha256": "99089bbe414f3cf522572e4da544aa45fa618dfe5d7b40fd6302cec4e73d249a",
+      "raw_private_context_published": false
+    },
+    "controlled_telegram": {
+      "model_config": {
+        "model": "step-5-preview",
+        "endpoint": "https://api.stepfun.com/step_plan/v1",
+        "driver_id": "openai-compatible",
+        "model_id": "arbitrary-chat-id",
+        "context_window": 32768,
+        "max_output_tokens": 4096,
+        "reasoning_effort": "low"
+      },
+      "scope": "Synthetic Update enters actual adapter/Core ingress. Real bot draft and final send APIs, actual native delivery receipt. No getUpdates, user-device or network-to-poller latency claim. Chat IDs and token URLs excluded.",
+      "case": {
+        "case": "natural-greeting",
+        "passed": true,
+        "native_total_ms": 8260.94718836248,
+        "model_calls": 1,
+        "tool_results": 0,
+        "native_driver_ms": 5373.1899205595255,
+        "native_first_visible_content_ms": 5899.497827515006,
+        "final_delivered": true,
+        "prompt_forbids_tools": false,
+        "request_sha256": "04255364e1e5a3a7aab579fe92fa2a1d6499c8c78fc8ffbcab337dff9436a39b",
+        "request_bytes": 32170
+      },
+      "shutdown_completed": true,
+      "memory_scope": "Markdown snapshots only; no production graph, credentials, sessions or polling copied."
+    },
+    "regression": {
+      "affected_passed": 20,
+      "affected_total": 20,
+      "full_local_passed": 134,
+      "full_local_total": 134
+    },
+    "production_bot_identity": {
+      "channel_and_sender_are_same_bot": true,
+      "requested_username_matches": true
+    },
+    "implementation_sha256": {
+      "plugins/prompt/text.py": "93d2e087d6e9a6524c4464d7f25852bb7b8f88e35ce5f497fc02219a2d27464f",
+      "plugins/markdown_memory/documents.py": "fa3affb48e95b52ced2f28aef6f0d6cbdf1ca9815e87b7fe87d229c1d555c1e6",
+      "plugins/telegram_sender/sender.py": "08da1aa1038f4d5ed4fc8568477c885c37331111e6ded20f1825661552b3ad3d",
+      "eval/telegram_latency.py": "ec11b46576b5e50250ce0ab5cf1dc73267b1898b086b21d602e92986fccc268d"
+    },
+    "limits": [
+      "The three baseline replay greetings also passed; the production tool detour was not reproduced deterministically.",
+      "Replay uses real Markdown snapshots and frozen recall text; it does not replay the production graph or entire request byte for byte.",
+      "The controlled Telegram run uses a new isolated local workspace, not the production filesystem and history; it is not an A/B speedup or phone-to-phone measurement.",
+      "Prompt clarification does not guarantee that all models avoid unrelated tools on every conversation.",
+      "The final production sample still took 18.803 seconds. NFS binding reads, material preparation and provider generation remain observable; no general low-latency guarantee is claimed."
+    ],
+    "production_after_deployment": {
+      "input_text": "\u5728\u5417",
+      "input_utc": "2026-10-22T18:01:30.905278+00:00",
+      "final_output_utc": "2026-10-22T18:01:47.627707+00:00",
+      "confirmed_delivery_utc": "2026-10-22T18:01:49.708156Z",
+      "input_to_receipt_s": 18.803,
+      "tool_results": 0,
+      "business_model_calls": 1,
+      "business_model_duration_ms": 8965.521173,
+      "preparation_ms": 4263.737,
+      "final_send_ms": 1310.439,
+      "delivery_status": "delivered",
+      "remaining_observed_event_loop_stall": {
+        "seconds": 2.3,
+        "frame": "MessageLog.read_binding"
+      },
+      "storage_filesystem": "NFSv4 home directory",
+      "scope": "A real Telegram user message after deployment, using production history and filesystem. User confirmed sending it; API delivery receipt does not measure client screen rendering."
+    },
+    "deployment": {
+      "new_boot": true,
+      "loaded_sources_match": {
+        "prompt": true,
+        "markdown_memory": true,
+        "telegram_sender": true
+      },
+      "health": 200,
+      "gateway_read_only_check": true
+    },
+    "data_preservation": {
+      "profiles_unchanged": true,
+      "configurations_unchanged": true,
+      "proactive_enabled_unchanged": true,
+      "notification_destination_unchanged": true
+    }
   }
 }

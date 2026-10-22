@@ -202,7 +202,9 @@ async def test_durable_telegram_sender_drains_preview_for_same_bot_only():
     drafts = ReplyDrafts(SimpleNamespace(open_scope=status.scope), lambda: bot, interval=0)
     registry = DraftDeliveries()
     remove = registry.register(hashlib.sha256(b"fixture-token").hexdigest(), drafts)
-    catalog = SimpleNamespace(reader=lambda _: SimpleNamespace(attachments=lambda _: ()))
+    def unexpected_reader(_):
+        raise AssertionError("A text-only Telegram reply must not read attachment tables")
+    catalog = SimpleNamespace(reader=unexpected_reader)
     sender = TelegramSender(None, "https://fixture.invalid", "fixture-token", catalog, None,
                             draft_delivery=registry.delivering)
 

@@ -170,6 +170,11 @@ uv run --frozen --no-sync python -m eval.telegram_latency \
 
 测试实际适配器与 Telegram 发送时，额外指定 `--telegram-token-file /private/path/bot.key --telegram-chat-file /private/path/chat.key --expected-bot your_bot`。两个文件只保存 token、已确认的私聊数字 ID。该模式会向这个私聊发送四条受控回复；隔离工作区关闭轮询，在线实例继续收信。它验证实际 Core 接纳、流式草稿和投递回执，不冒充手机到手机测试。需要新的工作区及独立插件 home，不能连接生产工作区运行夹具。
 
+可用 `--case natural-greeting` 单独测试原话“你好”，不在输入中限制工具。它要求正常回应且没有无关工具调用，
+避免只用“不要调用工具”的指令测试闲聊。`--case` 可重复选择场景，省略时仍为原四项。
+`--memory-documents /private/path/memory` 只把 Markdown 快照读入隔离工作区并记录摘要；不会复制生产图、
+会话、凭据或轮询配置。这种测试不代表复现了生产记忆召回；复现历史干扰需另外冻结实际召回材料。
+
 报告分开记录原始 SSE 正文、公开正文回调、草稿 API 确认、最终回执和各材料阶段；推理字段不算正文。每次结束后顺序重放相同原生请求字节，只存摘要和大小，不保存正文或密钥。先后次序可能预热供应商缓存，因此不能据此计算产品 A/B 加速比。默认头部跟踪支持通用兼容驱动及既有订阅驱动，不依赖具体模型名。
 
 结果、慢样本与开发失败见 [Telegram 实测](../docs/operations/evaluations/2026-10-22-telegram-latency.md)。
