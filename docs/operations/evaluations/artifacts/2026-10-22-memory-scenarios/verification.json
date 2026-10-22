@@ -1,0 +1,329 @@
+{
+  "kind": "Offline original-source and exact-answer verification",
+  "parent_sha256": "32ddcdcec7fb1d337fdf82951c85b7e856f79308b5475a4019bc4f695993c17e",
+  "verifier_sha256": "b996411ec77ecaba5fdcd127ede6f963b682f9c6b15b0fd4afa20117bbc38029",
+  "model_calls": 0,
+  "rows": [
+    {
+      "case": "head-control-0",
+      "family": "head-control",
+      "system": "fused-excerpts",
+      "initial_answer_span_present": true,
+      "final_answer_span_present": true,
+      "correct_with_original_support": false,
+      "source_windows_verified": 0,
+      "retained_evidence_chars": 2393
+    },
+    {
+      "case": "head-control-1",
+      "family": "head-control",
+      "system": "fused-excerpts",
+      "initial_answer_span_present": true,
+      "final_answer_span_present": true,
+      "correct_with_original_support": false,
+      "source_windows_verified": 0,
+      "retained_evidence_chars": 2390
+    },
+    {
+      "case": "head-control-0",
+      "family": "head-control",
+      "system": "fused-adaptive",
+      "initial_answer_span_present": true,
+      "final_answer_span_present": true,
+      "correct_with_original_support": false,
+      "source_windows_verified": 0,
+      "retained_evidence_chars": 2393
+    },
+    {
+      "case": "head-control-2",
+      "family": "head-control",
+      "system": "fused-excerpts",
+      "initial_answer_span_present": true,
+      "final_answer_span_present": true,
+      "correct_with_original_support": false,
+      "source_windows_verified": 0,
+      "retained_evidence_chars": 2390
+    },
+    {
+      "case": "head-control-2",
+      "family": "head-control",
+      "system": "fused-adaptive",
+      "initial_answer_span_present": true,
+      "final_answer_span_present": true,
+      "correct_with_original_support": false,
+      "source_windows_verified": 0,
+      "retained_evidence_chars": 2390
+    },
+    {
+      "case": "head-control-3",
+      "family": "head-control",
+      "system": "fused-adaptive",
+      "initial_answer_span_present": true,
+      "final_answer_span_present": true,
+      "correct_with_original_support": false,
+      "source_windows_verified": 0,
+      "retained_evidence_chars": 2390
+    },
+    {
+      "case": "head-control-3",
+      "family": "head-control",
+      "system": "fused-excerpts",
+      "initial_answer_span_present": true,
+      "final_answer_span_present": true,
+      "correct_with_original_support": false,
+      "source_windows_verified": 0,
+      "retained_evidence_chars": 2390
+    },
+    {
+      "case": "long-tail-1",
+      "family": "long-tail",
+      "system": "fused-adaptive",
+      "initial_answer_span_present": false,
+      "final_answer_span_present": false,
+      "correct_with_original_support": false,
+      "source_windows_verified": 0,
+      "retained_evidence_chars": 2390
+    },
+    {
+      "case": "long-tail-2",
+      "family": "long-tail",
+      "system": "fused-excerpts",
+      "initial_answer_span_present": false,
+      "final_answer_span_present": false,
+      "correct_with_original_support": false,
+      "source_windows_verified": 0,
+      "retained_evidence_chars": 2390
+    },
+    {
+      "case": "long-tail-0",
+      "family": "long-tail",
+      "system": "fused-excerpts",
+      "initial_answer_span_present": false,
+      "final_answer_span_present": false,
+      "correct_with_original_support": false,
+      "source_windows_verified": 0,
+      "retained_evidence_chars": 2390
+    },
+    {
+      "case": "long-tail-1",
+      "family": "long-tail",
+      "system": "fused-excerpts",
+      "initial_answer_span_present": false,
+      "final_answer_span_present": false,
+      "correct_with_original_support": false,
+      "source_windows_verified": 0,
+      "retained_evidence_chars": 2390
+    },
+    {
+      "case": "long-tail-3",
+      "family": "long-tail",
+      "system": "fused-excerpts",
+      "initial_answer_span_present": false,
+      "final_answer_span_present": false,
+      "correct_with_original_support": false,
+      "source_windows_verified": 0,
+      "retained_evidence_chars": 2390
+    },
+    {
+      "case": "mid-document-0",
+      "family": "mid-document",
+      "system": "fused-excerpts",
+      "initial_answer_span_present": false,
+      "final_answer_span_present": false,
+      "correct_with_original_support": false,
+      "source_windows_verified": 0,
+      "retained_evidence_chars": 2390
+    },
+    {
+      "case": "mid-document-1",
+      "family": "mid-document",
+      "system": "fused-excerpts",
+      "initial_answer_span_present": false,
+      "final_answer_span_present": false,
+      "correct_with_original_support": false,
+      "source_windows_verified": 0,
+      "retained_evidence_chars": 2390
+    },
+    {
+      "case": "mid-document-2",
+      "family": "mid-document",
+      "system": "fused-excerpts",
+      "initial_answer_span_present": false,
+      "final_answer_span_present": false,
+      "correct_with_original_support": false,
+      "source_windows_verified": 0,
+      "retained_evidence_chars": 2390
+    },
+    {
+      "case": "unknown-control-0",
+      "family": "unknown-control",
+      "system": "fused-excerpts",
+      "initial_answer_span_present": false,
+      "final_answer_span_present": false,
+      "correct_with_original_support": true,
+      "source_windows_verified": 0,
+      "retained_evidence_chars": 2387
+    },
+    {
+      "case": "mid-document-3",
+      "family": "mid-document",
+      "system": "fused-excerpts",
+      "initial_answer_span_present": false,
+      "final_answer_span_present": false,
+      "correct_with_original_support": false,
+      "source_windows_verified": 0,
+      "retained_evidence_chars": 2390
+    },
+    {
+      "case": "unknown-control-0",
+      "family": "unknown-control",
+      "system": "fused-adaptive",
+      "initial_answer_span_present": false,
+      "final_answer_span_present": false,
+      "correct_with_original_support": true,
+      "source_windows_verified": 0,
+      "retained_evidence_chars": 2387
+    },
+    {
+      "case": "mid-document-2",
+      "family": "mid-document",
+      "system": "fused-adaptive",
+      "initial_answer_span_present": false,
+      "final_answer_span_present": false,
+      "correct_with_original_support": false,
+      "source_windows_verified": 0,
+      "retained_evidence_chars": 2390
+    },
+    {
+      "case": "unknown-control-1",
+      "family": "unknown-control",
+      "system": "fused-adaptive",
+      "initial_answer_span_present": false,
+      "final_answer_span_present": false,
+      "correct_with_original_support": true,
+      "source_windows_verified": 0,
+      "retained_evidence_chars": 2387
+    },
+    {
+      "case": "unknown-control-1",
+      "family": "unknown-control",
+      "system": "fused-excerpts",
+      "initial_answer_span_present": false,
+      "final_answer_span_present": false,
+      "correct_with_original_support": true,
+      "source_windows_verified": 0,
+      "retained_evidence_chars": 2387
+    },
+    {
+      "case": "unknown-control-2",
+      "family": "unknown-control",
+      "system": "fused-excerpts",
+      "initial_answer_span_present": false,
+      "final_answer_span_present": false,
+      "correct_with_original_support": true,
+      "source_windows_verified": 0,
+      "retained_evidence_chars": 2387
+    },
+    {
+      "case": "unknown-control-2",
+      "family": "unknown-control",
+      "system": "fused-adaptive",
+      "initial_answer_span_present": false,
+      "final_answer_span_present": false,
+      "correct_with_original_support": true,
+      "source_windows_verified": 0,
+      "retained_evidence_chars": 2387
+    },
+    {
+      "case": "unknown-control-3",
+      "family": "unknown-control",
+      "system": "fused-adaptive",
+      "initial_answer_span_present": false,
+      "final_answer_span_present": false,
+      "correct_with_original_support": true,
+      "source_windows_verified": 0,
+      "retained_evidence_chars": 2390
+    },
+    {
+      "case": "unknown-control-3",
+      "family": "unknown-control",
+      "system": "fused-excerpts",
+      "initial_answer_span_present": false,
+      "final_answer_span_present": false,
+      "correct_with_original_support": true,
+      "source_windows_verified": 0,
+      "retained_evidence_chars": 2390
+    },
+    {
+      "case": "long-tail-0",
+      "family": "long-tail",
+      "system": "fused-adaptive",
+      "initial_answer_span_present": false,
+      "final_answer_span_present": true,
+      "correct_with_original_support": true,
+      "source_windows_verified": 1,
+      "retained_evidence_chars": 3145
+    },
+    {
+      "case": "long-tail-2",
+      "family": "long-tail",
+      "system": "fused-adaptive",
+      "initial_answer_span_present": false,
+      "final_answer_span_present": true,
+      "correct_with_original_support": true,
+      "source_windows_verified": 1,
+      "retained_evidence_chars": 3045
+    },
+    {
+      "case": "long-tail-3",
+      "family": "long-tail",
+      "system": "fused-adaptive",
+      "initial_answer_span_present": false,
+      "final_answer_span_present": true,
+      "correct_with_original_support": true,
+      "source_windows_verified": 1,
+      "retained_evidence_chars": 3085
+    },
+    {
+      "case": "mid-document-1",
+      "family": "mid-document",
+      "system": "fused-adaptive",
+      "initial_answer_span_present": false,
+      "final_answer_span_present": true,
+      "correct_with_original_support": true,
+      "source_windows_verified": 1,
+      "retained_evidence_chars": 4086
+    },
+    {
+      "case": "mid-document-0",
+      "family": "mid-document",
+      "system": "fused-adaptive",
+      "initial_answer_span_present": false,
+      "final_answer_span_present": true,
+      "correct_with_original_support": true,
+      "source_windows_verified": 1,
+      "retained_evidence_chars": 5486
+    },
+    {
+      "case": "head-control-1",
+      "family": "head-control",
+      "system": "fused-adaptive",
+      "initial_answer_span_present": true,
+      "final_answer_span_present": true,
+      "correct_with_original_support": false,
+      "source_windows_verified": 2,
+      "retained_evidence_chars": 5008
+    },
+    {
+      "case": "mid-document-3",
+      "family": "mid-document",
+      "system": "fused-adaptive",
+      "initial_answer_span_present": false,
+      "final_answer_span_present": true,
+      "correct_with_original_support": false,
+      "source_windows_verified": 1,
+      "retained_evidence_chars": 5838
+    }
+  ],
+  "complete": true
+}

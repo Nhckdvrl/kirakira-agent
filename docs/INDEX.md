@@ -18,7 +18,8 @@
 - [工程工作流](engineering/development-workflow.md)：实现、验证、交付与目录维护。
 - [维护脚本](../scripts/README.md)：源码校验、迁移、场景验证和清理命令。
 - [评测复现](../eval/README.md)：环境、模型条件、真实链路与公开记忆实验。
-- [记忆量化结果](operations/evaluations/2026-10-21-memory-runtime.md)：有依据的亮点、逐题对照、补全贡献、行动与恢复证据。
+- [记忆场景亮点](operations/evaluations/2026-10-22-memory-scenarios.md)：从线索继续查原文、历史参与行动、出处复核；最终答案、开销和失败。
+- [公开历史记忆质量](operations/evaluations/2026-10-21-memory-runtime.md)：逐题对照、补全贡献、真实主链与恢复证据。
 - [验证结果](operations/verification.md)：分主题报告和原始证据。
 
 ## 当前状态与后续工作

@@ -172,6 +172,31 @@ python -m eval.memory_depth \
 
 复核不重跑 reader、不追加原文、不改原报告；先复制一致的 SQLite 快照，judge 看不到方案名称。原机械规则、无效 judge 与新复核分别保存，不能挑高分替换首轮。确定性原文覆盖与有误差的答案评分分开解释。结果见[取证深度实测](../docs/operations/evaluations/2026-10-22-memory-depth.md)。运行实际渠道、工具与完整重启继续使用 `eval.memory_runtime`。
 
+### 记忆场景亮点
+
+以“初次只记得线索，还能否继续查到原始细节”为目标，运行固定相同初始材料的能力对照。它允许按需组追加材料和调用，分别记录代价；结果不用于整体排名。
+
+```sh
+python -m eval.memory_depth --suite source-followup-v2 \
+  --systems fused-excerpts fused-adaptive \
+  --model-config /private/path/model.json --key-file /private/path/model.key \
+  --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json \
+  --workspace /local-disk/eval/source-followup-new --output /private/path/source-followup.json \
+  --per-family 4 --candidates 4 --initial-chars 2400 --max-chars 6000 --parallel 3
+```
+
+公开证据包含合成原始消息和查询出处，**离线复核无需密钥、模型、向量权重或私有工作区**：
+
+```sh
+python -m eval.memory_depth \
+  --verify-existing docs/operations/evaluations/artifacts/2026-10-22-memory-scenarios/evidence.json \
+  --output /local-disk/eval/source-followup-verification-new.json
+```
+
+也可将 `--verify-existing` 指向自己跑出的原始报告，并用 `--corpus-db /local-disk/eval/source-followup-new/frozen-corpus/sessions.db` 读取真实 Ledger 快照。输出必须使用新文件；复核只重新渲染、复读原文与计分，不重跑 reader，不修复失败回答。
+
+场景收益、控制题失败、材料与调用成本见[记忆的场景亮点](../docs/operations/evaluations/2026-10-22-memory-scenarios.md)。`source-followup-v1` 是保留的开发诊断：初始片段差异造成答案可见性变化，不能用于证明原文展开收益。
+
 ## 工具读取与执行
 
 只测组件时不需要模型凭据；`--baseline-ref` 需要包含该提交的源码 checkout，省略它则只验证当前实现：
