@@ -7,7 +7,7 @@ name = "kirakira-agent"
 version = "0.1.0"
 license = "MIT"
 license-files = ["LICENSE", "UPSTREAM-LICENSE", "THIRD_PARTY.md"]
-description = "A multi-channel, extensible AI agent runtime with memory, plugins, and MCP."
+description = "A local-first personal AI companion with lasting memory, configurable personality, and proactive interaction."
 readme = "README.md"
 requires-python = ">=3.14,<3.15"
 dependencies = [
@@ -51,7 +51,7 @@ dependencies = [
     "websockets>=15.0,<16",
     "yoyo-migrations==9.0.0"
 ]
-keywords = ["agent", "harness", "tool-calling"]
+keywords = ["personal-agent", "companion", "memory", "proactive", "agent-runtime"]
 
 [project.scripts]
 kirakira-agent = "kirakira_agent.cli:main"
@@ -65,10 +65,6 @@ dev = [
     "pytest>=8,<10",
     "pytest-asyncio>=0.23,<2",
     "ruff>=0.15,<1",
-]
-eval = [
-    "fastembed==0.9.0",
-    "python-json-logger>=3,<5",
 ]
 
 [tool.setuptools]
@@ -95,6 +91,7 @@ cache_dir = ".cache/pytest"
 cache-dir = ".cache/ruff"
 
 [project.optional-dependencies]
+memory = ["fastembed==0.9.0"]
 providers = [
     "curl_cffi>=0.14.0",
     "grpcio>=1.78.0,<2",

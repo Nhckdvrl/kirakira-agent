@@ -1,9 +1,9 @@
 # 评测
 
-评测使用项目同一个 `.venv` / Python 3.14.6。工作区、数据集、模型权重和临时结果放仓库外的本机磁盘；正式结果统一进入 `docs/operations/`。
+评测使用项目同一个 `.venv` / Python 3.14.6。工作区、数据集、模型权重和临时结果放仓库外的本机磁盘；正式结果统一进入 `docs/operations/`。安装依赖后，下面的命令使用 `--no-sync` 沿用同一环境，不调用系统 Python。
 
 ```sh
-uv sync --frozen --group dev --group eval --extra providers
+uv sync --frozen --extra providers --extra memory
 ```
 
 ## 模型条件
@@ -30,42 +30,42 @@ uv sync --frozen --group dev --group eval --extra providers
 每次使用不存在或全新的隔离工作区：
 
 ```sh
-python -m eval.native_runtime \
+uv run --frozen --no-sync python -m eval.native_runtime \
   --model-config /private/path/model.json --key-file /private/path/model.key \
   --workspace /local-disk/eval/core-new --output /local-disk/eval/core.json
 
-python -m eval.native_alignment \
+uv run --frozen --no-sync python -m eval.native_alignment \
   --model-config /private/path/model.json --key-file /private/path/model.key \
   --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json \
   --workspace /local-disk/eval/features-new --output /local-disk/eval/features.json
 
-python -m eval.memory_runtime \
+uv run --frozen --no-sync python -m eval.memory_runtime \
   --model-config /private/path/model.json --key-file /private/path/model.key \
   --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json \
   --workspace /local-disk/eval/memory-new --output /local-disk/eval/memory.json
 
-python -m eval.native_web \
+uv run --frozen --no-sync python -m eval.native_web \
   --model-config /private/path/model.json --key-file /private/path/model.key \
   --workspace /local-disk/eval/web-new --output /local-disk/eval/web.json
 
-python -m eval.followups \
+uv run --frozen --no-sync python -m eval.followups \
   --model-config /private/path/model.json --key-file /private/path/model.key \
   --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json \
   --workspace /local-disk/eval/followups-new --output /local-disk/eval/followups.json \
   --isolated --long-source
 
-python -m eval.mail_followups \
+uv run --frozen --no-sync python -m eval.mail_followups \
   --model-config /private/path/model.json --key-file /private/path/model.key \
   --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json \
   --workspace /local-disk/eval/mail-new --output /local-disk/eval/mail.json \
   --with-functional
 
-python -m eval.runtime_settings \
+uv run --frozen --no-sync python -m eval.runtime_settings \
   --model-config /private/path/model.json --key-file /private/path/model.key \
   --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json \
   --workspace /local-disk/eval/settings-new --output /local-disk/eval/settings.json
 
-python -m eval.personality \
+uv run --frozen --no-sync python -m eval.personality \
   --model-config /private/path/model.json --key-file /private/path/model.key \
   --workspace /local-disk/eval/personality-new --output /local-disk/eval/personality.json
 ```
@@ -99,7 +99,7 @@ python -m eval.personality \
 个人伙伴的空闲思考使用独立工作区验证：
 
 ```sh
-python -m eval.idle_reflection --implicit-goal --fault-cases \
+uv run --frozen --no-sync python -m eval.idle_reflection --implicit-goal --fault-cases \
   --model-config /private/path/model.json --key-file /private/path/model.key \
   --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json \
   --workspace /local-disk/eval/idle-new --output /local-disk/eval/idle.json
@@ -112,11 +112,11 @@ python -m eval.idle_reflection --implicit-goal --fault-cases \
 缓存机制与真实链路分别运行，均使用新的本地工作区：
 
 ```sh
-python -m eval.prompt_cache --mode probe --rounds 8 \
+uv run --frozen --no-sync python -m eval.prompt_cache --mode probe --rounds 8 \
   --model-config /private/path/model.json --key-file /private/path/model.key \
   --workspace /local-disk/eval/cache-probe-new --output /local-disk/eval/cache-probe.json
 
-python -m eval.prompt_cache --mode mail --attention-cases \
+uv run --frozen --no-sync python -m eval.prompt_cache --mode mail --attention-cases \
   --model-config /private/path/model.json --key-file /private/path/model.key \
   --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json \
   --workspace /local-disk/eval/cache-mail-new --output /local-disk/eval/cache-mail.json
@@ -133,7 +133,7 @@ python -m eval.prompt_cache --mode mail --attention-cases \
 已有首轮出现地域条件误解时，可以在其原工作区执行一次独立干预；需要保留原报告与工作区。此操作会写入用户澄清规则并对原内容提交复查，不重算首轮分数：
 
 ```sh
-python -m eval.mail_followups \
+uv run --frozen --no-sync python -m eval.mail_followups \
   --model-config /private/path/model.json --key-file /private/path/model.key \
   --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json \
   --workspace /local-disk/eval/mail-original \
@@ -150,7 +150,7 @@ python -m eval.mail_followups \
 纯 Runtime 测量不发送 Telegram 消息；使用与实际运行相同的文件系统，保留冷启动与后续请求的差异：
 
 ```sh
-python -m eval.telegram_latency \
+uv run --frozen --no-sync python -m eval.telegram_latency \
   --model-config /private/path/model.json --key-file /private/path/model.key \
   --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json \
   --workspace /same-filesystem/eval/latency-new --output /private/path/latency.json
@@ -167,7 +167,7 @@ python -m eval.telegram_latency \
 这个受控组件实验测量片段外的原始事实是否恢复，使用固定合成历史、正式记忆组件与真实 Models reader；不是公开 benchmark。向量和图方案都有相同的原文读取机会。原文预算包含序列化说明；累计重发输入、调用数和用量另外报告。
 
 ```sh
-python -m eval.memory_depth \
+uv run --frozen --no-sync python -m eval.memory_depth \
   --model-config /private/path/model.json --key-file /private/path/model.key \
   --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json \
   --workspace /local-disk/eval/depth-new --output /private/path/depth.json \
@@ -179,7 +179,7 @@ python -m eval.memory_depth \
 保存首轮报告与其 `frozen-corpus/sessions.db` 后，可在另一个新工作区重新核对全部材料摘要、原文范围，并对已冻结回答作一次独立同模型语义复核：
 
 ```sh
-python -m eval.memory_depth \
+uv run --frozen --no-sync python -m eval.memory_depth \
   --model-config /private/path/model.json --key-file /private/path/model.key \
   --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json \
   --workspace /local-disk/eval/depth-grade-new --output /private/path/depth-grade.json \
@@ -194,7 +194,7 @@ python -m eval.memory_depth \
 以“初次只记得线索，还能否继续查到原始细节”为目标，运行固定相同初始材料的能力对照。它允许按需组追加材料和调用，分别记录代价；结果不用于整体排名。
 
 ```sh
-python -m eval.memory_depth --suite source-followup-v2 \
+uv run --frozen --no-sync python -m eval.memory_depth --suite source-followup-v2 \
   --systems fused-excerpts fused-adaptive \
   --model-config /private/path/model.json --key-file /private/path/model.key \
   --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json \
@@ -205,7 +205,7 @@ python -m eval.memory_depth --suite source-followup-v2 \
 公开证据包含合成原始消息和查询出处，**离线复核无需密钥、模型、向量权重或私有工作区**：
 
 ```sh
-python -m eval.memory_depth \
+uv run --frozen --no-sync python -m eval.memory_depth \
   --verify-existing docs/operations/evaluations/artifacts/2026-10-22-memory-scenarios/evidence.json \
   --output /local-disk/eval/source-followup-verification-new.json
 ```
@@ -219,10 +219,10 @@ python -m eval.memory_depth \
 只测组件时不需要模型凭据；`--baseline-ref` 需要包含该提交的源码 checkout，省略它则只验证当前实现：
 
 ```sh
-python -m eval.tool_runtime --component-only --baseline-ref fe1387c --samples 3 \
+uv run --frozen --no-sync python -m eval.tool_runtime --component-only --baseline-ref fe1387c --samples 3 \
   --workspace /local-disk/eval/tools-components-new --output /local-disk/eval/tools-components.json
 
-python -m eval.tool_runtime --baseline-ref fe1387c --samples 3 \
+uv run --frozen --no-sync python -m eval.tool_runtime --baseline-ref fe1387c --samples 3 \
   --model-config /private/path/model.json --key-file /private/path/model.key \
   --workspace /local-disk/eval/tools-agent-new --output /local-disk/eval/tools-agent.json
 ```
@@ -240,7 +240,7 @@ d6f21ea9d60a0d56f34a05b609c79c88a451d2ae03597821ea3d5a9678c3a442
 每题导入完整 haystack，包括干扰会话；参考答案和 `has_answer` 标签只参与评分。离线导入生成真实 Ledger 消息，由正式 Learning、MessageConsumer 和检索/呈现组件处理；reader/judge 走 Models 服务。这个组件实验与上面的实时渠道验收分别记录。
 
 ```sh
-python -m eval.memory \
+uv run --frozen --no-sync python -m eval.memory \
   --dataset /local-disk/data/longmemeval_s_cleaned.json \
   --model-config /private/path/model.json --key-file /private/path/model.key \
   --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-en-v1.5.json \
@@ -266,7 +266,7 @@ python -m eval.memory \
 合并完整分区与探索记录：
 
 ```sh
-python -m eval.memory_report \
+uv run --frozen --no-sync python -m eval.memory_report \
   --runs /local-disk/eval/quality-partition-0 /local-disk/eval/quality-partition-2 /local-disk/eval/quality-partition-4 \
   --exploratory /local-disk/eval/exploratory-run \
   --output /local-disk/eval/quality-report.json
@@ -279,7 +279,7 @@ python -m eval.memory_report \
 公开报告不依赖私有模型工作区即可重算；以下命令只读取 JSON，不调用模型，也不修改原始记录：
 
 ```sh
-python -m eval.memory_report \
+uv run --frozen --no-sync python -m eval.memory_report \
   --from-report docs/operations/evaluations/artifacts/2026-10-21-memory-runtime/memory-quality.json \
   --output /local-disk/eval/memory-findings.json
 ```
@@ -289,12 +289,12 @@ python -m eval.memory_report \
 ## 状态一致性和确定性链路
 
 ```sh
-python -m scripts.message_wake_scenario
-python -m scripts.scheduler_tools_scenario --output /local-disk/eval/scheduler-new
-python -m scripts.ledger_runtime_scenario
-python -m eval.upstream.akasha_cost_scenario --source . --output /local-disk/eval/state-new
-python -m eval.upstream.akasha_publish_replay_scenario --help
-python -m eval.upstream.akasha_derived_recovery_scenario --help
+uv run --frozen --no-sync python -m scripts.message_wake_scenario
+uv run --frozen --no-sync python -m scripts.scheduler_tools_scenario --output /local-disk/eval/scheduler-new
+uv run --frozen --no-sync python -m scripts.ledger_runtime_scenario
+uv run --frozen --no-sync python -m eval.upstream.akasha_cost_scenario --source . --output /local-disk/eval/state-new
+uv run --frozen --no-sync python -m eval.upstream.akasha_publish_replay_scenario --help
+uv run --frozen --no-sync python -m eval.upstream.akasha_derived_recovery_scenario --help
 ```
 
 这些入口检查提交、授权、调度、物理退出、图发布、消费进度和重建。Scheduler 使用本地确定性模型 HTTP 对端。记忆状态场景使用合成向量，适合证明一致性，不能证明真实语言理解或公开数据集上的质量。

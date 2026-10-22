@@ -28,124 +28,126 @@
 
 ## What is Kirakira?
 
-Kirakira is a personal AI companion and assistant for everyday conversations,
-interests, learning, life and work. Chat, think something through together, or
-ask it to do a task. With proactive interaction enabled, it can investigate new
-events or revisit a conversation while idle, then choose to help, reach out or stay quiet.
+Kirakira is a personal AI companion and assistant for everyday conversation,
+interests, learning, life and work. Talk something through, share a small discovery,
+or ask it to get something done. With proactive interaction enabled, it can also
+investigate incoming information or pick up an invited conversation after an idle wait.
 
-Shape how you interact: warm can also be candid, reserved can still be playful,
-and listening or offering advice are separate choices. Conversation, task replies
-and authorized proactive messages share those settings, with the current request
-taking priority. Memory keeps its original sources; tools, task state and delivery
-results belong to the same recoverable runtime.
+The focus is continuity: a familiar way of interacting, memory it can return to,
+and practical help that carries across conversations. Personality, memory and
+proactive behavior work within the same runtime as tools, tasks and delivery.
 
-Tested experiences include continuing invited conversations about painting,
-reading, guitar and gardening after a real idle wait, then stopping when the topic
-ends. Other experiments recover corrected plans or personal constraints before
-acting on a new event. Their [records and results](docs/operations/verification.md)
-are kept separately.
+## The experience
 
-## Experiences we focus on
+**Make it your kind of companion.** Combine warmth, candor, humor, curiosity,
+answer depth and emoji use independently. Choose whether it should listen first
+or offer a small next step, and whether casual chat should include suggestions.
+An editable character foundation and optional voice examples add room for a personal
+voice. Explicit requests and task formats take priority.
+[Personality and interaction →](docs/handbook/personality.md)
 
-| Experience | How it works | Evidence |
-| --- | --- | --- |
-| Make it your kind of companion | Combine a character foundation, six expression dimensions, support and suggestion preferences, and optional voice examples | [Expression, behavior and real-task experiments](docs/operations/evaluations/2026-10-22-companion-personality.md) |
-| Remember, then check the details | Follow a recalled source back to its original text and use confirmed or corrected history in current answers and actions | [Evidence-supported answers on eight difficult long-source questions: 0/8 → 5/8](docs/operations/evaluations/2026-10-22-memory-scenarios.md) |
-| Reach out, with a way to stop | Event investigation and idle initiative can share or skip, with separate controls, budgets, deduplication and pause | [Four everyday topics, real idle waits and stopping checks](docs/operations/evaluations/2026-10-22-companion-personality.md) |
-| Follow through on practical help | Use files, Shell, MCP and background tasks, check actual results and delivery, and support interruption, cancellation and recovery | [Real-model runtime and recovery records](docs/operations/verification.md) |
+**Remember, then check.** Akasha learns from completed conversations, combining
+semantic recall with episodic associations. When a recalled snippet is insufficient,
+the agent can locate and read the original text, including corrections and conditions.
+Markdown memory holds the long-term profile; source messages remain intact.
+[How memory works →](docs/architecture/memory.md)
 
-Results are scoped to their scenarios and implementation versions. The long-source
-comparison allows additional evidence and model calls; behavior checks and long-term
-user experience are evaluated separately. See the [product design](docs/architecture/design-direction.md)
-and [personality design](docs/architecture/personality.md) for choices and references.
+**Reach out for a reason.** Two paths share the same execution and delivery chain:
+configured sources can trigger investigation, and optional idle planning can propose
+a conversation, practical help or research. Both can choose to skip. Idle conversation
+has its own opt-in; budgets, deduplication, pause and topic completion bound initiative.
+[Memory and proactive setup →](docs/handbook/memory-proactive.md)
 
-## Built for ongoing companionship and work
+**Follow through on real tasks.** Streaming conversation, files, Shell, MCP, child
+agents and background tasks use the same task lifecycle. Tool results, interruption,
+cancellation, recovery and delivery receipts stay connected to their original execution.
+Models, channels and tools are replaceable plugins; chat and embedding models are
+configured independently.
+[Runtime architecture →](docs/architecture/overview.md)
 
-**Personality and interaction.** Keep a stable character foundation while adjusting
-expression and response habits independently. Temporary requests do not claim to save
-permanent preferences, and voice examples do not become shared history.
-See [personality settings](docs/handbook/personality.md).
+For example, an ongoing interest can become a conversation, a remembered constraint,
+and later a useful response to a new event. A configured feed, webpage or mailbox
+provides the event; the agent checks the relevant history before deciding to share
+or stay quiet. You can inspect the sources and delivery, change the rule, or pause it.
+[Follow-up workflows →](docs/handbook/followups.md)
 
-**Conversation and tools.** Streaming replies, ReAct tool execution, file operations,
-Shell and terminal sessions, managed processes, MCP, and child agents work within
-the same task lifecycle. Sessions support interruption, cancellation, and recovery.
+## Get started
 
-**Memory with evidence.** Akasha learns from completed conversation segments.
-Embeddings and graph state are derived from the message history and can be rebuilt;
-retrieved evidence remains traceable to its source. The local embedding provider
-runs on CPU after an explicit model download.
-
-**Proactive interaction.** Content, Alert, and Context events feed the agent's
-interest and wake decisions. Investigation, sharing, duplicate handling, and delivery
-confirmation are part of the execution flow. Optional idle planning can continue a
-conversation, help with an unfinished matter or research a discovery. Local integrations
-can submit events through authenticated RPC.
-
-**A runtime you can extend.** Models, tools, memory, channels, and the Web workspace
-are plugins. Configuration and state belong to each plugin, and selected plugins
-can be updated within the running composition. Chat and embedding models are independently
-configurable; messages and execution state stay in the local workspace.
-
-## Start
-
-Use Python 3.14.6, [uv](https://docs.astral.sh/uv/), and Node.js/npm for the Web
-workspace. Python commands use the single project `.venv` and the pinned `uv.lock`.
-Run these commands from the repository root:
+Use Python **3.14.6**, [uv](https://docs.astral.sh/uv/), and **Node.js 24** for the
+Web workspace. All Python commands use one project `.venv` and the checked-in lockfile.
+Choose a new, empty workspace on a local disk:
 
 ```bash
-uv sync --frozen --group dev --group eval --extra providers
+git clone https://github.com/Nhckdvrl/kirakira-agent.git
+cd kirakira-agent
+uv sync --frozen --extra providers --extra memory
 npm ci
 npm run build
 
-uv run kirakira-agent init --workspace /absolute/path/to/workspace --profile web
-uv run kirakira-agent gateway --config /absolute/path/to/workspace/config.toml --workspace /absolute/path/to/workspace
+uv run --frozen --no-sync kirakira-agent init --workspace "$HOME/.kirakira/workspace" --profile web
+uv run --frozen --no-sync kirakira-agent gateway --config "$HOME/.kirakira/workspace/config.toml" --workspace "$HOME/.kirakira/workspace"
 ```
 
-Replace the example paths with your own. Keep the workspace on a local disk and
-configure your preferred provider in the Web workspace. Model credentials stay private.
-For a headless workspace, choose `--profile headless` and skip the frontend build.
+Open **http://localhost:2236**. On first launch, the owner account is `kirakira`;
+the initial password is stored privately in `workspace/web-auth/initial-password`.
+Set your own password, connect a model, and start a conversation. The gateway runs
+in the foreground; keep it running while using the agent.
 
-To enable local memory or configure a proactive target, follow the
-[memory and proactive setup guide](docs/handbook/memory-proactive.md).
-Existing workspaces have separate [upgrade](docs/handbook/memory-proactive.md) and
-[migration](docs/handbook/start.md) instructions.
+Then shape its **Personality and interaction** settings, enable
+[local memory](docs/handbook/memory-proactive.md#本地记忆), or set up
+[follow-ups](docs/handbook/followups.md). Idle initiative is off by default.
+For terminal model configuration, headless use, Telegram and upgrades, follow the
+[getting started guide](docs/handbook/start.md).
 
-## Verification
+“Local-first” means messages and execution state live in your workspace.
+A configured remote model or external tool still receives the inputs needed for
+its request. The embedding encoder runs locally on CPU after an explicit model download.
+
+## What we have measured
+
+| Question | Observed result | Conditions and records |
+| --- | --- | --- |
+| Does following a memory clue back to the source help? | Evidence-supported answers **0/8 → 5/8** on difficult middle/tail questions | Same initial material; source access adds evidence and model calls. [Memory scenarios](docs/operations/evaluations/2026-10-22-memory-scenarios.md) |
+| Can past personal conditions affect a new event decision? | Relevant history presented **12/12**; correct share/skip decision **11/12** | Controlled mailbox scenarios, including the failed decision. [Follow-up experiment](docs/operations/evaluations/2026-10-21-mail-followups.md) |
+| Can it pick up everyday conversations and stop? | **32/32 assertions** across four invited topics | Actual idle waits; source, delivery, duplicate and stopping checks. [Companion experiment](docs/operations/evaluations/2026-10-22-companion-personality.md) |
+| Does the execution chain work with a real model? | **13/13 runtime scenarios** | Files, Shell, MCP, child tasks, interruption and recovery. [Verification records](docs/operations/verification.md) |
+
+These are scoped experiments, not a claim of overall memory superiority or user
+satisfaction. Personality controls are implemented and tested, while replies can
+still add unwanted advice or unsupported details. Cross-model consistency,
+long-term companionship and useful-versus-disruptive initiative need further study.
+The [reports](docs/operations/verification.md) retain failures, costs and version details;
+[design direction](docs/architecture/design-direction.md) explains the choices.
+
+## Development and verification
 
 ```bash
-uv run pytest -q
-uv run kirakira-verify-online --model-config /private/path/model.json --key-file /private/path/model.key --workspace /tmp/new-eval --output /tmp/native-eval.json
+uv run --frozen --no-sync pytest -q
+npm run typecheck
+uv run --frozen --no-sync python -m scripts.check_docs
 ```
 
-The online verifier calls the configured model provider in an isolated workspace. It exercises
-messages, files, Shell, MCP, managed processes, child agents, interruption, restart,
-and plugin updates. Memory and proactive experiments, including their measured
-results and conditions, are documented in the [verification record](docs/operations/verification.md).
-
-## Layout
+The [evaluation guide](eval/README.md) provides isolated real-model tests and
+reproducible memory experiments. The [maintenance guide](scripts/README.md) covers
+source checks and generated-file cleanup.
 
 ```text
-agent/            composition, lifecycle, configuration, and supervisor
-bootstrap/        host resources and application startup
-plugins/          conversation, models, tools, memory, proactive interaction, and channels
-frontend/         shared Web interface and theme
-kirakira_agent/   public CLI, workspace setup, and distribution integration
-sdk/              programmatic client
-eval/             functional verification and memory experiments
-tests/            runtime and integration contracts
-scripts/          build, migration, and verification tools
-docs/             architecture, guides, and evaluation records
+agent/          composition, lifecycle, configuration and supervisor
+bootstrap/      host resources and startup
+plugins/        conversation, personality, memory, tools, initiative and channels
+frontend/       Web interface and theme
+kirakira_agent/ public CLI and workspace setup
+sdk/            programmatic client
+eval/           functional verification and memory experiments
+tests/          runtime and integration contracts
+scripts/        build, migration and maintenance
+docs/           guides, architecture and evaluation evidence
 ```
 
-## Documentation
-
-[Documentation index](docs/INDEX.md) ·
-[Getting started](docs/handbook/start.md) ·
-[Memory and proactive interaction](docs/handbook/memory-proactive.md) ·
-[Personality and interaction](docs/handbook/personality.md) ·
-[Architecture](docs/architecture/overview.md) ·
-[Verification](docs/operations/verification.md) ·
-[SDK](sdk/python/README.md)
+[Documentation](docs/INDEX.md) · [Getting started](docs/handbook/start.md) ·
+[Personality](docs/handbook/personality.md) · [Memory and initiative](docs/handbook/memory-proactive.md) ·
+[Architecture](docs/architecture/overview.md) · [SDK](sdk/python/README.md) ·
+[Current state](docs/status/current.md) · [Roadmap](docs/status/roadmap.md)
 
 ## License
 

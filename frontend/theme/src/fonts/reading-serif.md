@@ -20,17 +20,8 @@ Noto Serif SC 按字频分层切片（Version 2.003，源 `NotoSerifSC[wght].ttf
 - `han-NN`、`ext-a-NN`：其余基本区汉字与扩展 A，按码位每 800 字一片；
 - `symbols`、`astral`：其余符号与兼容字形、增补平面。
 
-普通中文页面只需 `core` + `common-1`（约 1.5MB，构建时预加载），原先四段码位切片会下载全部约 11MB。
-每片只声明实际含有的码位，各分片的 `unicode-range` 互不重叠。不要用连续宽区间盖住生僻区、指望
-"重叠时后声明的规则先匹配"让常用字只命中常用层：Chromium 如此，但 Firefox 冷启动整页时会把与页面文字
-区间相交的宽分片一并下载（实测 7–8MB）；精确区间后两者都只取 `core`、`common-1` 与用到的二级字分片
-（约 1.7MB），出现一个生僻字只多一片。代价是 CSS 约 97KB（gzip 约 33KB）。
+构建直接消费这些已签入的字体与 `reading-serif.css`，不在启动或构建时重新生成。
+字体请求由 CSS 的 `unicode-range` 与页面实际字符决定；具体加载量取决于页面内容与浏览器缓存。
 
-重新生成（FontTools 4.66.1）：
-
-```bash
-python scripts/split-reading-font.py /path/to/NotoSerifSC[wght].ttf
-```
-
-脚本校验源摘要、分片与 CSS 区间都互不相交且并集等于源 cmap，并按 CSS 匹配规则模拟每个码位都落到含它的分片后，
-才替换仓库里的分片与 `reading-serif.css`。
+旧的一次性分片程序已不在发行版中。需要更换字体资产时，重新核对源文件、许可证、分片 cmap 与 CSS
+范围的完整性和互斥性，并在实际桌面、窄屏浏览器中检查中文、英文、斜体和代码显示。

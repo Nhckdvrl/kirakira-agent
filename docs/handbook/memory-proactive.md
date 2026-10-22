@@ -6,19 +6,21 @@
 ## 升级既有工作区
 
 ```sh
-uv sync --frozen --group dev --group eval --extra providers
-uv run --group eval kirakira-agent upgrade --workspace /local-disk/workspace
+uv sync --frozen --extra providers --extra memory
+uv run --frozen --no-sync kirakira-agent upgrade --workspace /local-disk/workspace
 ```
 
 upgrade 用 prepare/CAS 刷新当前已选内置插件输入，并加入 runtime_diagnostics、plugin_update、
 local-embedding、event-ingress；其余启停选择及市场安装输入保留。
 原 bundle.patch.toml、plugin-stable.json 与选择切换回执备份到工作区 operator-backups/。
-新建工作区已选中这些提供方。旧格式数据先按[迁移指南](start.md)转换，不能直接升级。
+新建工作区已选中这些提供方。旧格式数据先按[迁移指南](start.md#既有-kirakira-数据)转换，不能直接升级。
 
 ## 本地记忆
 
+需要安装 `memory` 可选依赖；安装与评测共用项目的同一个 `.venv`。
+
 ```sh
-uv run --group eval kirakira-agent configure-memory \
+uv run --frozen --no-sync kirakira-agent configure-memory \
   --workspace /local-disk/workspace --cache /local-disk/models --download
 ```
 
@@ -38,7 +40,7 @@ Akasha 从原始完整闭段学习；Markdown 档案与图记忆分别拥有自�
 先在工作台创建或使用一个本地会话，再配置：
 
 ```sh
-uv run --group eval kirakira-agent configure-proactive \
+uv run --frozen --no-sync kirakira-agent configure-proactive \
   --workspace /local-disk/workspace --session akashic:my-session --timezone Asia/Shanghai
 ```
 
@@ -81,7 +83,7 @@ await client.request("drift/status", {})
 ## 复现评测
 
 ```sh
-uv run --group eval python -m eval.memory_runtime \
+uv run --frozen --no-sync python -m eval.memory_runtime \
   --workspace /local-disk/fresh-memory-eval \
   --model-config /private/path/model.json --key-file /private/path/model.key \
   --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json \
@@ -116,7 +118,7 @@ async def report():
  reindex 只复用已缓存的向量，缺失时会明确跳过。需要纳入尚未编码的旧历史，先显式补算本地向量：
 
 ```sh
-uv run --group eval kirakira-agent configure-memory \
+uv run --frozen --no-sync kirakira-agent configure-memory \
   --workspace /local-disk/workspace --cache /local-disk/models --backfill-history
 ```
 

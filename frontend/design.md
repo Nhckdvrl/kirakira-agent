@@ -1,6 +1,6 @@
 # Kirakira 前端设计合同（design.md）
 
-本文件是所有前端工作的唯一设计入口：修改 `frontend/**/src`、插件 web UI（`frontend/plugins/`）或 `plugins/*/web_module.*` 前必读。它规定可观察的几何、token 和反模式；品牌理由与迁移历史见 [0043](../docs/decisions/0043-paper-brand-tokens-replace-material-visual-semantics.md) 与[纸张品牌系统](../docs/design/akashic-paper-brand-system.md)，窄屏行为细节见[共享 Web 窄屏阅读设计](../docs/design/web-narrow-reading.md)。规则冲突时以本文件的几何合同为准，以决策记录的理由为准。
+本文件是前端设计入口：修改 `frontend/**/src`、插件 web UI（`frontend/plugins/`）或 `plugins/*/web_module.*` 前必读。它规定可观察的几何、token、窄屏行为和反模式；产品方向见[个人伙伴设计](../docs/architecture/design-direction.md)，实现与验证遵循[开发工作流](../docs/engineering/development-workflow.md)。本文件描述当前设计，已退役的迁移记录通过 Git 查看。
 
 写法约定：每条规则必须可以观察或测量（"输入文字左缘 == 消息正文左缘"），不写主观词（"干净""高级感"）。评审中重复出现的视觉纠正，落成这里的一条规则、一个 token 或一个脚本检查，而不是逐处手调。
 
@@ -256,4 +256,4 @@ npm run build:chat        # 改 chat 时
 npm run build:web-plugins # 改插件 UI 时
 ```
 
-布局、断点或 token 变化另需在固定 Chromium 里做截图前后对比（`scripts/webui-performance/serve-desktop-fixture.mjs` 提供确定性桌面 fixture），窄屏行为变化跑 `check:narrow-ui`。截图保留在本地私有目录，不进 PR。
+布局、断点或 token 变化还需启动实际 Web 工作区，在桌面与窄屏浏览器中检查聊天、侧栏、输入框、设置和重连；记录浏览器版本及视口，并保留前后截图。截图和登录信息留在本地私有目录。认证 HTTP、项目范围和实际文件工具可另用 `eval.native_web` 验证；该入口不代替浏览器交互检查。

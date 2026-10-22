@@ -4,6 +4,7 @@ import json
 import shutil
 import sqlite3
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,34 @@ from plugins.ledger.contract import (
 from plugins.ledger.log import MessageLog
 from plugins.step_plan.driver import validate_endpoint
 from scripts.migrate_legacy_workspace import activate, migrate
+
+
+def test_public_cli_exposes_setup_and_rejects_invalid_configuration_before_startup(tmp_path):
+    """Exercise the shipped entry point without touching a live runtime or provider."""
+    root = Path(__file__).parents[1]
+
+    def cli(*arguments):
+        return subprocess.run([sys.executable, "-B", "-m", "kirakira_agent", *arguments],
+                              cwd=root, capture_output=True, text=True, timeout=30)
+
+    help_result = cli("--help")
+    assert help_result.returncode == 0
+    for command in ("init", "configure-model", "configure-memory", "configure-proactive", "upgrade", "gateway"):
+        assert command in help_result.stdout
+    missing = tmp_path / "missing"
+    key = tmp_path / "model.key"
+    key.write_text("private-fixture-only")
+    result = cli("configure-model", "--workspace", str(missing), "--key-file", str(key),
+                 "--model", "fixture", "--base-url", "http://127.0.0.1:1/v1")
+    assert result.returncode == 2 and not missing.exists()
+    workspace = tmp_path / "workspace"
+    assert cli("init", "--workspace", str(workspace), "--profile", "headless").returncode == 0
+    before = {p.relative_to(workspace): p.read_bytes() for p in workspace.rglob("*") if p.is_file()}
+    result = cli("configure-model", "--workspace", str(workspace), "--key-file", str(key),
+                 "--model", "fixture", "--base-url", "http://127.0.0.1:1/v1",
+                 "--context-window", "100", "--max-output-tokens", "100")
+    assert result.returncode == 2 and "max-output-tokens" in result.stderr
+    assert {p.relative_to(workspace): p.read_bytes() for p in workspace.rglob("*") if p.is_file()} == before
 
 
 def legacy_workspace(path, *, broken_result=False):

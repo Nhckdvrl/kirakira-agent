@@ -2,7 +2,7 @@
 
 ## 使用
 
-- [启动和迁移](handbook/start.md)：单一 Python 环境、模型配置、Web 界面和既有数据导入。
+- [启动与日常使用](handbook/start.md)：单一 Python 环境、Web、模型切换、Telegram 和既有数据导入。
 - [记忆与主动交互](handbook/memory-proactive.md)：记忆配置、事件入口、空闲思考和升级。
 - [个性与相处方式](handbook/personality.md)：组合表达与行为偏好、人物底稿、临时要求及任务边界。
 - [持续跟进](handbook/followups.md)：发布、网页与邮件接入，规则修改、复查和投递反馈。

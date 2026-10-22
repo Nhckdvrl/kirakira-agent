@@ -14,11 +14,11 @@ jobs:
         with:
           python-version-file: .python-version
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
-      - run: uv sync --frozen --group dev --extra providers
-      - run: uv run --frozen python scripts/check_upstream_kernel.py
-      - run: uv run --frozen pytest -q
-      - run: uv run --frozen python -m scripts.check_feature_alignment
-      - run: uv run --frozen python -m scripts.check_docs
+      - run: uv sync --frozen --extra providers --extra memory
+      - run: uv run --frozen --no-sync python -m scripts.check_upstream_kernel
+      - run: uv run --frozen --no-sync pytest -q
+      - run: uv run --frozen --no-sync python -m scripts.check_feature_alignment
+      - run: uv run --frozen --no-sync python -m scripts.check_docs
       - uses: actions/setup-node@v4
         with:
           node-version: '24.16.0'
@@ -27,5 +27,5 @@ jobs:
       - run: npm run build
       - run: npm run typecheck
       - run: uv build
-      - run: uv run python -m kirakira_agent --help
+      - run: uv run --frozen --no-sync python -m kirakira_agent --help
       # Paid/provider evaluations are explicit local commands, never CI defaults.

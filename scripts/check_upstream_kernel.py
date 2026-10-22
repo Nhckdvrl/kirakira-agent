@@ -11,6 +11,7 @@ def verify():
         if hashlib.sha256((ROOT / patch["patch"]).read_bytes()).hexdigest() != patch["patch_sha256"]:
             raise RuntimeError("upstream patch artifact changed")
     failures = []
+    failures.extend(name for name in pin.get("excluded", {}) if (ROOT / name).exists())
     for name, expected in pin["files"].items():
         allowed = {pin.get("patches", {}).get(name, {}).get("sha256", expected)}
         generated = pin.get("generated", {}).get(name)

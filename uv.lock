@@ -952,6 +952,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+memory = [
+    { name = "fastembed" },
+]
 providers = [
     { name = "curl-cffi" },
     { name = "grpcio" },
@@ -975,10 +978,6 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "ruff" },
 ]
-eval = [
-    { name = "fastembed" },
-    { name = "python-json-logger" },
-]
 
 [package.metadata]
 requires-dist = [
@@ -993,6 +992,7 @@ requires-dist = [
     { name = "curl-cffi", marker = "extra == 'providers'", specifier = ">=0.14.0" },
     { name = "docstring-parser" },
     { name = "fastapi", specifier = ">=0.134.0" },
+    { name = "fastembed", marker = "extra == 'memory'", specifier = "==0.9.0" },
     { name = "ftfy", specifier = ">=6.3.1" },
     { name = "genai-prices", specifier = "==0.0.71" },
     { name = "grpcio", marker = "extra == 'providers'", specifier = ">=1.78.0,<2" },
@@ -1033,7 +1033,7 @@ requires-dist = [
     { name = "yoyo-migrations", specifier = "==9.0.0" },
     { name = "yt-dlp", marker = "extra == 'providers'", specifier = ">=2026.0.0" },
 ]
-provides-extras = ["providers"]
+provides-extras = ["memory", "providers"]
 
 [package.metadata.requires-dev]
 comparison = [{ name = "mem0ai", specifier = ">=2.2.1" }]
@@ -1041,10 +1041,6 @@ dev = [
     { name = "pytest", specifier = ">=8,<10" },
     { name = "pytest-asyncio", specifier = ">=0.23,<2" },
     { name = "ruff", specifier = ">=0.15,<1" },
-]
-eval = [
-    { name = "fastembed", specifier = "==0.9.0" },
-    { name = "python-json-logger", specifier = ">=3,<5" },
 ]
 
 [[package]]

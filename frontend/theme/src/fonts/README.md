@@ -5,11 +5,7 @@ These four WOFF2 subsets come from
 cover the source font's complete Unicode cmap. Unicode ranges let the browser
 fetch only the subsets needed by a page.
 
-Regenerate them from the repository root with FontTools 4.63.0:
-
-```bash
-python scripts/split-paper-font.py
-```
-
-The script verifies the source digest, full cmap coverage, and generated CSS
-before replacing these checked-in runtime files.
+The checked-in subsets and CSS are runtime assets. The original source font
+and its SIL Open Font License remain in `frontend/theme/assets/fonts/`.
+The former one-off splitting script is not part of this distribution;
+`npm run build` consumes these assets directly and does not regenerate them.

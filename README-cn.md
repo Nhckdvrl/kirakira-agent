@@ -29,99 +29,109 @@
 ## Kirakira 是什么
 
 Kirakira 是一个陪伴型、助理型、主动交互型的个人 Agent，面向日常交流、兴趣、学习、生活与工作。
-你可以找它随便聊聊、一起想问题，或交办事情；开启主动交互后，它也能调查新事件，
-或者在空闲时回顾已经聊过的话题，决定继续帮忙、主动联系你或保持安静。
+你可以找它一起想问题，分享一点新发现，或者交办事情。开启主动交互后，它也能调查收到的新信息，
+或在空闲后接续用户愿意继续的话题。
 
-相处方式可以自己组合：温暖也可以直率，沉静也可以幽默，先听你说或顺带给个办法也能分别选择。
-聊天、办事后的回答和已获准的主动联系沿用同一套设定；当前任务与明确要求优先。
-长期记忆保留原始出处，工具操作、任务状态与投递结果留在同一个可恢复的 Runtime 中。
+我们重点打磨持续相处的体验：熟悉的交流方式、能够回头核对的记忆，以及跨对话接续的实际帮助。
+人格、记忆和主动行为与工具、任务、投递运行在同一套 Runtime 中。
 
-已经实测的体验包括：围绕画画、读书、吉他和薄荷的话题，在用户允许后空闲接续，结束后停止；
-也包括找回过去更正过的安排或个人条件，用于新事件的调查与提醒。
-场景与原始记录见[验证结果](docs/operations/verification.md)。
+## 怎样与你相处
 
-## Kirakira 重点打磨的体验
+**按你喜欢的方式交流。** 温暖、直率、幽默、追问、展开程度与表情可以独立组合；
+遇到困扰时先听你说或给个小办法，闲聊中是否顺带建议，也能分别选择。
+可编辑的人物底稿和可选说话示例保留个人化空间，当前明确要求与任务格式优先。
+[个性与相处方式 →](docs/handbook/personality.md)
 
-| 体验 | 怎样体现 | 证据 |
-| --- | --- | --- |
-| 按你喜欢的方式相处 | 人物底稿、六个表达维度、支持与建议偏好、说话示例分别组合；不把性格变化当成事实变化 | [同题表达、回应行为与真实任务实测](docs/operations/evaluations/2026-10-22-companion-personality.md) |
-| 记得过去，还能继续核对 | 召回不足时沿出处继续查原文，让过去确认或更正的条件参与今天的回答与行动 | [长原文困难题：有依据的正确回答 0/8 → 5/8](docs/operations/evaluations/2026-10-22-memory-scenarios.md) |
-| 会主动接续，也能停下 | 外部事件调查与空闲主动两条路径，可以分享或跳过；有独立开关、预算、去重和暂停 | [四类日常话题与真实等待、停止验收](docs/operations/evaluations/2026-10-22-companion-personality.md) |
-| 聊天之外能认真办事 | 实际使用文件、Shell、MCP 与后台任务，核对工具结果和交付；支持中断、取消与恢复 | [真实模型主链与恢复记录](docs/operations/verification.md) |
+**记得过去，也能继续核对。** Akasha 从已完成的对话段学习，结合语义召回与情景关联。
+召回片段不够时，可以继续定位和展开原始消息，检查更正、条件与原话；
+Markdown 长期档案保存常用背景，原始消息始终保留。
+[记忆怎样工作 →](docs/architecture/memory.md)
 
-量化结果按具体场景和版本报告。长原文对照允许追加材料与模型调用；行为实测与长期用户体验分别验证。
-设计取舍与开源参考见[产品定位](docs/architecture/design-direction.md)和[人格与言行一致](docs/architecture/personality.md)。
+**有理由地主动找你。** 两条路径共用执行和投递链路：已配置的信息源可以触发调查，
+可选的空闲规划则提出聊天接续、事项协助或研究。两者都可以选择跳过。
+主动接续聊天需要单独开启；预算、去重、暂停和话题完成后的停止约束主动行为。
+[记忆与主动交互配置 →](docs/handbook/memory-proactive.md)
 
-## 为长期相处与工作准备的能力
+**聊天之外能认真办事。** 流式对话、文件、Shell、MCP、子 Agent 与后台任务使用统一的任务生命周期。
+工具结果、中断、取消、恢复和投递回执与原执行关联。
+模型、渠道和工具可以通过插件替换，聊天模型与向量模型独立配置。
+[Runtime 架构 →](docs/architecture/overview.md)
 
-**个性与相处。** 人物底稿保留稳定气质与立场，表达和回应方式可以独立调整。临时要求不冒充永久偏好，
-说话示例不成为共同经历。使用方法见[个性与相处方式](docs/handbook/personality.md)。
-
-**对话与工具。** 流式回复、ReAct 工具执行、文件操作、Shell 与终端会话、托管进程、MCP 和
-子 Agent 使用统一的任务生命周期；会话支持插话、中断、取消和恢复。
-
-**可追溯的记忆。** Akasha 从已完成的对话段学习。向量和图状态由消息历史派生，可以重新构建；
-召回结果能够追溯到原文。本地向量提供方在显式下载模型后使用 CPU 编码。
-
-**主动交互。** Content、Alert、Context 三类事件进入兴趣判断与唤醒流程，串联调查、分享、
-去重和投递确认；可选的空闲规划接续聊天、协助事项或研究发现。本地集成可以通过已认证 RPC 提交事件。
-
-**插件化运行时。** 模型、工具、记忆、渠道和 Web 工作台都是插件。各插件管理自己的配置和状态，
-支持在运行中的组合内更新已选插件。聊天与向量模型独立配置，消息和执行状态保存在本地 workspace。
+例如，一个持续关注的兴趣可以从聊天变成记忆里的个人条件，再参与后续新事件的判断。
+已配置的订阅源、网页或邮箱提供事件，Agent 回看相关历史后决定分享或保持安静；
+你可以检查来源和投递结果，修改关注规则，或者暂停跟进。
+[持续跟进的使用路径 →](docs/handbook/followups.md)
 
 ## 快速开始
 
-使用 Python 3.14.6、[uv](https://docs.astral.sh/uv/)，Web 工作台另需 Node.js/npm。
-所有 Python 命令使用项目内唯一的 `.venv` 和固定的 `uv.lock`。在仓库根目录执行：
+使用 **Python 3.14.6**、[uv](https://docs.astral.sh/uv/)；Web 工作台另需 **Node.js 24**。
+所有 Python 命令使用项目唯一的 `.venv` 和固定依赖锁。
+工作区请选择本机磁盘上一个全新的空目录：
 
 ```bash
-uv sync --frozen --group dev --group eval --extra providers
+git clone https://github.com/Nhckdvrl/kirakira-agent.git
+cd kirakira-agent
+uv sync --frozen --extra providers --extra memory
 npm ci
 npm run build
 
-uv run kirakira-agent init --workspace /absolute/path/to/workspace --profile web
-uv run kirakira-agent gateway --config /absolute/path/to/workspace/config.toml --workspace /absolute/path/to/workspace
+uv run --frozen --no-sync kirakira-agent init --workspace "$HOME/.kirakira/workspace" --profile web
+uv run --frozen --no-sync kirakira-agent gateway --config "$HOME/.kirakira/workspace/config.toml" --workspace "$HOME/.kirakira/workspace"
 ```
 
-将示例路径替换为自己的目录。工作区使用本机磁盘，在 Web 工作台连接自己选择的模型。凭据保存在私有配置中。无界面运行时选择 `--profile headless`，可以跳过前端构建。
+打开 **http://localhost:2236**。首次启动的主人账号为 `kirakira`，
+初始密码保存在工作区的私有文件 `web-auth/initial-password` 中。
+登录后改成自己的密码，连接模型，即可开始对话。gateway 在前台运行，使用期间需要保持进程开启。
 
-启用本地记忆、配置主动投递目标，见[记忆与主动交互指南](docs/handbook/memory-proactive.md)。
-既有工作区分别按[升级说明](docs/handbook/memory-proactive.md)或[旧数据迁移指南](docs/handbook/start.md)处理。
+接着可以调整“**个性与相处**”、启用[本地记忆](docs/handbook/memory-proactive.md#本地记忆)，
+或者设置[持续跟进](docs/handbook/followups.md)。空闲主动默认关闭。
+终端模型配置、无界面使用、Telegram 与升级方式见[启动指南](docs/handbook/start.md)。
 
-## 验证
+本地优先指消息与执行状态保存在自己的工作区；使用远程模型或外部工具时，仍会向对应服务发送完成请求所需的输入。
+向量编码器在显式下载模型后使用本地 CPU 编码。
+
+## 已经测到了什么
+
+| 问题 | 实际结果 | 条件与完整记录 |
+| --- | --- | --- |
+| 沿记忆线索继续查原文是否有帮助？ | 长原文中部、末页困难题，有依据的正确回答 **0/8 → 5/8** | 初始材料相同，查原文增加材料和模型调用。[记忆场景实验](docs/operations/evaluations/2026-10-22-memory-scenarios.md) |
+| 过去的个人条件能否影响新事件判断？ | 对应历史呈现 **12/12**，分享或跳过判断正确 **11/12** | 受控邮箱场景，保留首轮误判。[历史参与行动](docs/operations/evaluations/2026-10-21-mail-followups.md) |
+| 能否接续日常话题，并在结束后停下？ | 四类受邀话题，**32/32 验收断言** | 实际等待空闲，检查出处、投递、去重和停止。[伙伴体验实测](docs/operations/evaluations/2026-10-22-companion-personality.md) |
+| 真实模型下执行主链是否跑通？ | **13/13 主链场景** | 文件、Shell、MCP、子任务、中断与恢复。[验证记录](docs/operations/verification.md) |
+
+这些结果属于各自的实验条件，不代表记忆全面领先或用户满意度。
+个性设置已经接通并实测，实际回复仍可能夹带建议或补写无依据细节；
+跨模型一致性、长期陪伴效果以及主动联系的价值和误打扰仍需继续验证。
+[报告](docs/operations/verification.md)保留失败、开销和版本；[设计依据](docs/architecture/design-direction.md)解释取舍。
+
+## 开发与验证
 
 ```bash
-uv run pytest -q
-uv run kirakira-verify-online --model-config /private/path/model.json --key-file /private/path/model.key --workspace /tmp/new-eval --output /tmp/native-eval.json
+uv run --frozen --no-sync pytest -q
+npm run typecheck
+uv run --frozen --no-sync python -m scripts.check_docs
 ```
 
-在线验证在隔离工作区调用配置的真实模型，覆盖消息、文件、Shell、MCP、托管进程、子 Agent、
-插话、重启和插件更新。记忆与主动交互实验的量化结果、运行条件见[验证记录](docs/operations/verification.md)。
-
-## 目录
+[评测说明](eval/README.md)提供隔离工作区的真实模型测试和记忆实验；
+[维护说明](scripts/README.md)提供来源校验、构建与缓存清理命令。
 
 ```text
-agent/            组合内核、生命周期、配置与 supervisor
-bootstrap/        宿主资源与应用启动
-plugins/          对话、模型、工具、记忆、主动交互与渠道
-frontend/         Web 公共界面与主题
-kirakira_agent/   公开 CLI、工作区设置与发行版集成
-sdk/              程序化客户端
-eval/             功能验证与记忆实验
-tests/            Runtime 与集成合同
-scripts/          构建、迁移与验证工具
-docs/             架构、使用指南与评测记录
+agent/          组合内核、生命周期、配置与 supervisor
+bootstrap/      宿主资源与启动
+plugins/        对话、人格、记忆、工具、主动交互与渠道
+frontend/       Web 界面与主题
+kirakira_agent/ 公开 CLI 与工作区设置
+sdk/            程序化客户端
+eval/           功能验证与记忆实验
+tests/          Runtime 与集成合同
+scripts/        构建、迁移与维护
+docs/           使用指南、架构与评测证据
 ```
 
-## 文档
-
-[文档索引](docs/INDEX.md) ·
-[启动指南](docs/handbook/start.md) ·
-[记忆与主动交互](docs/handbook/memory-proactive.md) ·
-[个性与相处](docs/handbook/personality.md) ·
-[架构总览](docs/architecture/overview.md) ·
-[验证记录](docs/operations/verification.md) ·
-[SDK](sdk/python/README.md)
+[文档](docs/INDEX.md) · [启动指南](docs/handbook/start.md) ·
+[个性与相处](docs/handbook/personality.md) · [记忆与主动交互](docs/handbook/memory-proactive.md) ·
+[架构](docs/architecture/overview.md) · [SDK](sdk/python/README.md) ·
+[当前状态](docs/status/current.md) · [后续工作](docs/status/roadmap.md)
 
 ## License
 

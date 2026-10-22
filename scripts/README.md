@@ -11,9 +11,13 @@
 - `build-web-plugins.mjs`：构建原生插件的工作台界面。
 - `stage-web-assets.mjs`：将构建结果放入对应插件制品。
 
-运行 `uv run python -m scripts.clean_workspace` 清理派生缓存与打包产物。
+运行 `uv run --frozen --no-sync python -m scripts.clean_workspace` 清理派生缓存与打包产物。
 会话、记忆、模型缓存、`.venv` 和 `node_modules` 不属于可自动删除的垃圾。
 运行数据使用仓库外的工作区；历史评测结果由 Git 保留，当前结果统一进入
 `docs/operations/evaluations/artifacts/<日期-主题>/`，报告放在上一级 `evaluations/`，不在根目录或 `eval/results/` 另留副本。
 
-完整运行说明见[启动和迁移](../docs/handbook/start.md)；真实模型验证入口和实验条件见[评测说明](../eval/README.md)。
+完整运行说明见[启动与日常使用](../docs/handbook/start.md)；真实模型验证入口和实验条件见[评测说明](../eval/README.md)。
+
+三个 `*_scenario.py` 是仍维护的源码验收入口，Scheduler 场景复用 `tests/` 夹具，需从完整 checkout 运行。
+它们与 `eval/` 的真实模型实验分开；构建和清理命令不依赖这些测试夹具。
+文档检查同时核对本地链接、页内锚点、图片和 Node 脚本入口，避免留下指向已退役程序的命令。
