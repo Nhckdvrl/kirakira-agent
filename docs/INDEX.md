@@ -4,12 +4,13 @@
 
 - [启动和迁移](handbook/start.md)：单一 Python 环境、模型配置、Web 界面和既有数据导入。
 - [记忆与主动交互](handbook/memory-proactive.md)：记忆配置、事件入口、空闲思考和升级。
-- [个性与相处方式](handbook/personality.md)：组合表达偏好、人物底稿、临时要求及任务边界。
+- [个性与相处方式](handbook/personality.md)：组合表达与行为偏好、人物底稿、临时要求及任务边界。
 - [持续跟进](handbook/followups.md)：发布、网页与邮件接入，规则修改、复查和投递反馈。
 
 ## 设计与实现
 
 - [产品定位与设计依据](architecture/design-direction.md)：个人 AI 伙伴的体验、设计取舍和实测依据。
+- [人格与言行一致](architecture/personality.md)：14 个开源项目的设计输入、可组合人格、具体行为与验证方法。
 - [Runtime 架构](architecture/overview.md)：统一执行主链、所有权、生命周期和恢复。
 - [记忆架构](architecture/memory.md)：第二代学习循环、查询、原文证据和预算。
 - [插件清单](status/plugin-inventory.md)：发行组件与默认选择。

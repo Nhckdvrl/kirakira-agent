@@ -17,12 +17,12 @@ from plugins.runtime_inspection.contract import DOCUMENTS, Document
 from plugins.ui.contract import Configuration, ModelSettings, mount_settings
 
 from .persona import read_veda_file, initialize_veda_if_missing
-from .personality import AXES, FIELDS, Config, compile_personality, expression_reminder
+from .personality import CHOICES, FIELDS, Config, compile_personality, expression_reminder
 from .text import build_behavior_rules, build_identity, build_telegram_rendering_prompt
 
 api_version = 3
 name = "prompt"
-version = "1.1.0"
+version = "1.2.0"
 desc = "每次请求读取人格与行为规则，附带已接纳输入的时间和渠道事实"
 workspace_files = ("memory/VEDA.md",)
 
@@ -36,7 +36,7 @@ class Settings(ModelSettings):
         result = await super().read()
         result["choices"] = {
             name: [{"value": value, "label": description[0]} for value, description in options.items()]
-            for name, options in AXES.items()
+            for name, options in CHOICES.items()
         }
         return result
 

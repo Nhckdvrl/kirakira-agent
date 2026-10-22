@@ -5,8 +5,8 @@
 <h1 align="center">Kirakira Agent</h1>
 
 <p align="center">
-  <strong>A local-first, continuously running, multi-channel AI Agent Runtime</strong><br>
-  <sub>Passive turns · Proactive execution · Memory · Plugins · MCP</sub>
+  <strong>A personal AI companion with lasting memory and a personality you can shape</strong><br>
+  <sub>Everyday companionship · Practical help · Proactive interaction · Local-first</sub>
 </p>
 
 <p align="center">
@@ -28,40 +28,43 @@
 
 ## What is Kirakira?
 
-Kirakira connects past decisions with ongoing work. It can recover a project’s
-updated plan and constraints from earlier conversations, investigate an incoming
-event, and send a reminder whose history and delivery can be traced.
-Conversation, memory, tools and proactive tasks run in one local-first runtime.
+Kirakira is a personal AI companion and assistant for everyday conversations,
+interests, learning, life and work. Chat, think something through together, or
+ask it to do a task. With proactive interaction enabled, it can investigate new
+events or revisit a conversation while idle, then choose to help, reach out or stay quiet.
 
-Its episodic memory keeps original conversations as the source of truth. Semantic
-recall and associative graph completion recover related experiences across sessions,
-with references the agent can follow back to the original exchange. Markdown memory
-holds explicit notes and preferences alongside those experiences.
+Shape how you interact: warm can also be candid, reserved can still be playful,
+and listening or offering advice are separate choices. Conversation, task replies
+and authorized proactive messages share those settings, with the current request
+taking priority. Memory keeps its original sources; tools, task state and delivery
+results belong to the same recoverable runtime.
 
-Proactive interaction starts with events and context: the agent can investigate new
-information, decide whether it warrants a message, and deliver it to a configured
-session. Conversations and proactive tasks share models, tools, and memory.
+Tested experiences include continuing invited conversations about painting,
+reading, guitar and gardening after a real idle wait, then stopping when the topic
+ends. Other experiments recover corrected plans or personal constraints before
+acting on a new event. Their [records and results](docs/operations/verification.md)
+are kept separately.
 
-A tested workflow: confirm a release plan, correct it in another session, then
-receive a release-check event that contains none of those decisions. The agent
-recovers the updated schedule, owner and data restrictions before sending a reminder.
-See the [memory design](docs/architecture/memory.md) and
-[verification record](docs/operations/verification.md) for evidence and limits.
+## Experiences we focus on
 
-## At a glance
+| Experience | How it works | Evidence |
+| --- | --- | --- |
+| Make it your kind of companion | Combine a character foundation, six expression dimensions, support and suggestion preferences, and optional voice examples | [Expression, behavior and real-task experiments](docs/operations/evaluations/2026-10-22-companion-personality.md) |
+| Remember, then check the details | Follow a recalled source back to its original text and use confirmed or corrected history in current answers and actions | [Evidence-supported answers on eight difficult long-source questions: 0/8 → 5/8](docs/operations/evaluations/2026-10-22-memory-scenarios.md) |
+| Reach out, with a way to stop | Event investigation and idle initiative can share or skip, with separate controls, budgets, deduplication and pause | [Four everyday topics, real idle waits and stopping checks](docs/operations/evaluations/2026-10-22-companion-personality.md) |
+| Follow through on practical help | Use files, Shell, MCP and background tasks, check actual results and delivery, and support interruption, cancellation and recovery | [Real-model runtime and recovery records](docs/operations/verification.md) |
 
-| Question | Kirakira's approach |
-| --- | --- |
-| How does the agent run? | Conversation and proactive tasks share a persistent runtime |
-| Where does data live? | Messages, memory, configuration, and execution state stay in the selected local workspace |
-| Can sessions work in different repos? | Projects and session working directories carry repository context into file tools, Shell, and child agents |
-| How does it remember? | Semantic recall, associative completion, and Markdown notes, with original-message evidence |
-| How is it extended? | Plugins, MCP servers, skills, tools, and event sources |
-| How is context managed? | Context projection and compaction keep requests within budget while preserving stored messages |
-| How is execution inspected? | Model usage, tool results, task state, and delivery receipts are recorded |
-| Is it tied to one model? | Chat and embedding providers are independently configurable plugins |
+Results are scoped to their scenarios and implementation versions. The long-source
+comparison allows additional evidence and model calls; behavior checks and long-term
+user experience are evaluated separately. See the [product design](docs/architecture/design-direction.md)
+and [personality design](docs/architecture/personality.md) for choices and references.
 
-## Built for ongoing work
+## Built for ongoing companionship and work
+
+**Personality and interaction.** Keep a stable character foundation while adjusting
+expression and response habits independently. Temporary requests do not claim to save
+permanent preferences, and voice examples do not become shared history.
+See [personality settings](docs/handbook/personality.md).
 
 **Conversation and tools.** Streaming replies, ReAct tool execution, file operations,
 Shell and terminal sessions, managed processes, MCP, and child agents work within
@@ -74,12 +77,14 @@ runs on CPU after an explicit model download.
 
 **Proactive interaction.** Content, Alert, and Context events feed the agent's
 interest and wake decisions. Investigation, sharing, duplicate handling, and delivery
-confirmation are part of the execution flow. Local integrations can submit events
-through authenticated RPC.
+confirmation are part of the execution flow. Optional idle planning can continue a
+conversation, help with an unfinished matter or research a discovery. Local integrations
+can submit events through authenticated RPC.
 
 **A runtime you can extend.** Models, tools, memory, channels, and the Web workspace
 are plugins. Configuration and state belong to each plugin, and selected plugins
-can be updated within the running composition.
+can be updated within the running composition. Chat and embedding models are independently
+configurable; messages and execution state stay in the local workspace.
 
 ## Start
 
@@ -137,6 +142,7 @@ docs/             architecture, guides, and evaluation records
 [Documentation index](docs/INDEX.md) ·
 [Getting started](docs/handbook/start.md) ·
 [Memory and proactive interaction](docs/handbook/memory-proactive.md) ·
+[Personality and interaction](docs/handbook/personality.md) ·
 [Architecture](docs/architecture/overview.md) ·
 [Verification](docs/operations/verification.md) ·
 [SDK](sdk/python/README.md)

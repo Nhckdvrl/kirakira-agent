@@ -37,6 +37,7 @@ async def test_personality_composition_preserves_owned_file_and_frozen_materials
     await root.mount(apply, name="prompt", inject=inject,
                      runtime=PluginRuntime("prompt", "personality-generation", tmp_path, tmp_path, tmp_path,
                                            {"warmth": "warm", "candor": "direct", "humor": "off",
+                                            "support": "listen_first", "suggestions": "on_request",
                                             "voice_examples": "我：我们去哪？你：月球。"},
                                            workspace_files=("memory/VEDA.md",)))
     try:
@@ -46,7 +47,8 @@ async def test_personality_composition_preserves_owned_file_and_frozen_materials
             assert conversation == proactive
             assert "你叫星灯" in conversation
             assert "warmth=warm" in conversation and "candor=direct" in conversation
-            assert "humor=off" in conversation and "curiosity=" not in conversation
+            assert "humor=off" in conversation and "- curiosity=" not in conversation
+            assert "support=listen_first" in conversation and "suggestions=on_request" in proactive
             assert "月球" in conversation and "不是发生过的对话或事实" in conversation
             assert path.read_bytes() == previous
             path.write_text("你叫星灯，这是用户明确修改后的底稿。\n")

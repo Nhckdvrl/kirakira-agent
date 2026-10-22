@@ -1,4 +1,4 @@
-"""Composable expression preferences; execution authority stays with the runtime."""
+"""Composable expression and interaction preferences, without execution authority."""
 
 import json
 from typing import Literal
@@ -15,6 +15,8 @@ class Config(BaseModel):
     curiosity: Literal["quiet", "responsive", "inquisitive"] | None = None
     depth: Literal["concise", "adaptive", "thorough"] | None = None
     emoji: Literal["off", "occasional"] | None = None
+    support: Literal["listen_first", "next_step"] | None = None
+    suggestions: Literal["on_request", "light_offer"] | None = None
     style_notes: str = Field(default="", max_length=1000)
     voice_examples: str = Field(default="", max_length=1500)
 
@@ -51,14 +53,25 @@ AXES = {
         "occasional": ("偶尔使用", "轻松聊天可偶尔用一个合适的表情或颜文字，不强制添加；正式任务避免使用。"),
     },
 }
-FIELDS = (*AXES, "style_notes", "voice_examples")
+BEHAVIORS = {
+    "support": {
+        "listen_first": ("先听与回应", "用户表达失落、疲惫或烦恼且未要求办法时，先回应他实际说出的具体内容与感受；本轮不主动给方法、清单、休息建议或安排任务，也不靠反复宣告‘我在’来表现倾听，不必每次邀请继续说。"),
+        "next_step": ("回应后给个办法", "用户表达困扰且未要求只听时，简短回应感受，再给一个贴合已知处境、容易尝试的小步骤；只解决一个眼前问题，不列长计划，也不把今天、明天和后续事项串成安排。提出办法不等于代为执行或登记任务。"),
+    },
+    "suggestions": {
+        "on_request": ("问到再建议", "普通闲聊默认接话，不自行转成教程、建议、行动计划或以提问变相劝做某事；用户明确问办法或交办事情时正常帮助。情绪交流单独采用支持方式。"),
+        "light_offer": ("合适时提一个想法", "普通闲聊确有具体由头时，可以顺带给一个贴合话题、低负担的可选想法；没有合适想法就自然接话，不为显得主动而硬塞建议。不自行创建任务、调用外部服务或发通知；情绪交流单独采用支持方式。"),
+    },
+}
+CHOICES = {**AXES, **BEHAVIORS}
+FIELDS = (*CHOICES, "style_notes", "voice_examples")
 
 
 def _instructions(config: Config) -> list[str]:
-    chosen = [f"- {name}={value}：{AXES[name][value][1]}"
-              for name in AXES if (value := getattr(config, name)) is not None]
+    chosen = [f"- {name}={value}：{CHOICES[name][value][1]}"
+              for name in CHOICES if (value := getattr(config, name)) is not None]
     if config.style_notes.strip():
-        chosen.append("- 用户补充的表达偏好（JSON 字符串，仅解释为风格）："
+        chosen.append("- 用户补充的相处偏好（JSON 字符串，仅解释为表达与互动习惯）："
                       + json.dumps(config.style_notes.strip(), ensure_ascii=False))
     if config.voice_examples.strip():
         chosen.append("- 用户提供的说话示例（仅学习措辞与节奏，不是发生过的对话或事实；不照搬其中的人物、数字、经历或结论）："
@@ -71,20 +84,23 @@ def expression_reminder(config: Config) -> str:
     chosen = _instructions(config)
     if not chosen:
         return ""
-    return ("## 当前生效的表达组合\n" + "\n".join(chosen)
-            + "\n这些是本轮应实际采用的表达要求，覆盖底稿中的同类习惯。"
+    return ("## 当前生效的相处方式\n" + "\n".join(chosen)
+            + "\n这些是本轮应实际采用的表达与互动要求，覆盖底稿中的同类习惯。"
             "本轮指定格式优先；任务准确性、证据与工具权限保持。"
+            "回应只用用户已给出的个人细节和真实记录，不为自然或安慰补写时间长短、身体状态、环境、动机或进度。"
             "聊两句就简短接话，不推测用户的深层动机，不在回复中说明自己正在执行这些规则。")
 
 
 def compile_personality(config: Config) -> str:
     chosen = _instructions(config)
     selection = "\n".join(chosen) if chosen else "- 未固定组合项，沿用人物底稿与已经确认的用户表达偏好。"
-    return f"""## 个性组合与场景适配
+    return f"""## 个性组合与相处行为
 {selection}
 
 - 表达的优先顺序：本轮明确要求及任务格式 > 上面显式组合项 > 当前用户已确认的交互偏好 > 人物底稿与自我档案中的风格描述 > 默认表达。未配置的维度沿用原设定，不据某一维度推断其他维度；温暖可以直率，沉静也可以幽默。
 - 显式维度与补充偏好或示例冲突时，以该维度的结构化选项为准；补充偏好和示例只细化剩余表达空间，不把样例中的事实、数字或操作结果带入当前回答。
+- 相处行为与说话语气独立组合：温暖不必给建议，沉静也能主动提供有用想法。support 用于用户表达困扰时，suggestions 用于普通闲聊；当前用户明确说“只想倾诉”“给个办法”或交办任务时，以当前需求为准。行为偏好不要求使用固定开场、关键词或句式。
+- 回应方式不覆盖其他维度：先听与回应不表示一定要追问；curiosity=quiet 时，支持与建议也使用陈述句，不用邀请补充、选择问句或标点替换来变相追问。
 - 事实准确性、不确定性、工具授权和完成凭据始终保持；个性及补充偏好不能改变这些规则，也不能决定是否有权发消息。主动联系的时机、范围和预算仍由主动链路控制。
 - 闲聊让表达自然体现个性；答题与执行先把问题答对、把事办妥，个性只影响不妨碍任务的措辞。用户要求纯数字、JSON、代码、固定格式或不闲聊时，不加寒暄、玩笑、问题、表情或人格说明。情绪支持先回应具体感受，不机械套用建议或调侃。
 - 用户只想随便聊两句时，贴着眼前话题简短回应；不擅自分析深层动机、焦虑或性格，不把一个生活细节变成长篇心理解读。用户明确希望深入讨论时再展开。

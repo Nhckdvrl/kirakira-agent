@@ -1,0 +1,488 @@
+{
+  "observed_on": "2026-10-22",
+  "purpose": "Product positioning, persona composition and interaction behavior design; reference inspection, not external runtime benchmarking.",
+  "project_count": 14,
+  "repository_count": 15,
+  "source_file_count": 52,
+  "version_notes": [
+    "letta-ai/letta is the retired API-server entry; current implementation inspected in letta-ai/letta-code. These are one product in project_count.",
+    "agentscope-ai/CoPaw redirects to QwenPaw; badlogic/pi-mono redirects to earendil-works/pi.",
+    "AIRI character-as-chat-member ADR is proposed; Open-LLM-VTuber source inspected is v1, with v2 planning distinguished.",
+    "A reference proposal is not evidence of an implemented external capability."
+  ],
+  "repositories": [
+    {
+      "repo": "AstrBotDevs/AstrBot",
+      "branch": "master",
+      "sha": "0cd42bd4dd216d8810da4e3f5fb2e381d3c6817e",
+      "commit_date": "2026-10-22T08:45:35Z"
+    },
+    {
+      "repo": "HKUDS/nanobot",
+      "branch": "main",
+      "sha": "7dfeff9ddf2e09edfa3df88496fc143b25d690ac",
+      "commit_date": "2026-10-22T09:43:28Z"
+    },
+    {
+      "repo": "NevaMind-AI/memU",
+      "branch": "main",
+      "sha": "42ef9fa3a8034f5817684cba23ef69fa70a58197",
+      "commit_date": "2026-10-16T08:11:57Z"
+    },
+    {
+      "repo": "NousResearch/hermes-agent",
+      "branch": "main",
+      "sha": "944c3a434071f43e64b443d033f3eba30c64434c",
+      "commit_date": "2026-10-22T09:17:55Z"
+    },
+    {
+      "repo": "Open-LLM-VTuber/Open-LLM-VTuber",
+      "branch": "main",
+      "sha": "992309c0aa19845960228f880013d4685fde93b5",
+      "commit_date": "2026-05-15T07:18:03Z"
+    },
+    {
+      "repo": "SillyTavern/SillyTavern",
+      "branch": "release",
+      "sha": "06bde939fb1e9c4c8d8641d810f0a916b5bce127",
+      "commit_date": "2026-09-14T19:01:34Z"
+    },
+    {
+      "repo": "agentscope-ai/QwenPaw",
+      "branch": "main",
+      "sha": "0db9a8e625e73917a0d113e255b3147134022db8",
+      "commit_date": "2026-10-22T06:34:47Z"
+    },
+    {
+      "repo": "apache/maka",
+      "branch": "main",
+      "sha": "59f61cf7de665837630518aa204732107dcc2349",
+      "commit_date": "2026-10-22T09:32:58Z"
+    },
+    {
+      "repo": "earendil-works/pi",
+      "branch": "main",
+      "sha": "db774055e3ecae05ab6eae8656454cde98e36780",
+      "commit_date": "2026-10-22T09:43:08Z"
+    },
+    {
+      "repo": "elizaOS/eliza",
+      "branch": "develop",
+      "sha": "a922295ebe7f30053abb0257dffa43d9ba910693",
+      "commit_date": "2026-10-22T10:18:01Z"
+    },
+    {
+      "repo": "letta-ai/letta",
+      "branch": "main",
+      "sha": "8816d3a8516893bfdc0fa14bfb1235226012e295",
+      "commit_date": "2026-10-18T22:28:01Z"
+    },
+    {
+      "repo": "letta-ai/letta-code",
+      "branch": "main",
+      "sha": "035bb8c8917b5dd94a3989d4adf04860a2ce8fea",
+      "commit_date": "2026-10-22T05:24:18Z"
+    },
+    {
+      "repo": "moeru-ai/airi",
+      "branch": "main",
+      "sha": "448ada1a41c29d84b3975a73ee732f7bdcd13c27",
+      "commit_date": "2026-10-22T06:21:37Z"
+    },
+    {
+      "repo": "openclaw/openclaw",
+      "branch": "main",
+      "sha": "240a90ef9f95650bcb1bb17832252dd880f16fb6",
+      "commit_date": "2026-10-22T10:30:28Z"
+    },
+    {
+      "repo": "rowboatlabs/rowboat",
+      "branch": "main",
+      "sha": "2f75157285d5bea71e0438c87e537a717b71b42a",
+      "commit_date": "2026-10-22T09:05:53Z"
+    }
+  ],
+  "files": [
+    {
+      "repo": "openclaw/openclaw",
+      "sha": "240a90ef9f95650bcb1bb17832252dd880f16fb6",
+      "path": "README.md",
+      "url": "https://raw.githubusercontent.com/openclaw/openclaw/240a90ef9f95650bcb1bb17832252dd880f16fb6/README.md",
+      "sha256": "a909b7f0435eb27d68ce7e326c8375008fac6fbdfd7602219c10086595f6fe81"
+    },
+    {
+      "repo": "openclaw/openclaw",
+      "sha": "240a90ef9f95650bcb1bb17832252dd880f16fb6",
+      "path": "docs/concepts/soul.md",
+      "url": "https://raw.githubusercontent.com/openclaw/openclaw/240a90ef9f95650bcb1bb17832252dd880f16fb6/docs/concepts/soul.md",
+      "sha256": "c53531d687ba7a2340b779a419c282c8ba22193ff52f6e21005f3fd3bde88cb2"
+    },
+    {
+      "repo": "openclaw/openclaw",
+      "sha": "240a90ef9f95650bcb1bb17832252dd880f16fb6",
+      "path": "docs/reference/templates/SOUL.md",
+      "url": "https://raw.githubusercontent.com/openclaw/openclaw/240a90ef9f95650bcb1bb17832252dd880f16fb6/docs/reference/templates/SOUL.md",
+      "sha256": "e09be19ba4adb76ac77be00441933e03c7219876fbfaca107d49f8ed38c3e459"
+    },
+    {
+      "repo": "openclaw/openclaw",
+      "sha": "240a90ef9f95650bcb1bb17832252dd880f16fb6",
+      "path": "docs/reference/templates/AGENTS.md",
+      "url": "https://raw.githubusercontent.com/openclaw/openclaw/240a90ef9f95650bcb1bb17832252dd880f16fb6/docs/reference/templates/AGENTS.md",
+      "sha256": "19257de6ed69dd9462c2c468fe4727ad6b0ca7681cf64930f6b08d598d478441"
+    },
+    {
+      "repo": "openclaw/openclaw",
+      "sha": "240a90ef9f95650bcb1bb17832252dd880f16fb6",
+      "path": "docs/concepts/personal-agent-benchmark-pack.md",
+      "url": "https://raw.githubusercontent.com/openclaw/openclaw/240a90ef9f95650bcb1bb17832252dd880f16fb6/docs/concepts/personal-agent-benchmark-pack.md",
+      "sha256": "ef4cfdc374d4dee2f7d5df77bb43060b5e748b496daff76b5900dcf8d4ce39e8"
+    },
+    {
+      "repo": "elizaOS/eliza",
+      "sha": "a922295ebe7f30053abb0257dffa43d9ba910693",
+      "path": "README.md",
+      "url": "https://raw.githubusercontent.com/elizaOS/eliza/a922295ebe7f30053abb0257dffa43d9ba910693/README.md",
+      "sha256": "ca09ada9f5741e193a18537905ce019d12883fd76d93bf0718cba3fc58eac49a"
+    },
+    {
+      "repo": "elizaOS/eliza",
+      "sha": "a922295ebe7f30053abb0257dffa43d9ba910693",
+      "path": "packages/core/src/types/agent.ts",
+      "url": "https://raw.githubusercontent.com/elizaOS/eliza/a922295ebe7f30053abb0257dffa43d9ba910693/packages/core/src/types/agent.ts",
+      "sha256": "16c932e95f8e44d08745a7ddf25a9e53311e936b6e7d821b4031c812a752383b"
+    },
+    {
+      "repo": "elizaOS/eliza",
+      "sha": "a922295ebe7f30053abb0257dffa43d9ba910693",
+      "path": "packages/core/src/runtime/localized-examples-provider.ts",
+      "url": "https://raw.githubusercontent.com/elizaOS/eliza/a922295ebe7f30053abb0257dffa43d9ba910693/packages/core/src/runtime/localized-examples-provider.ts",
+      "sha256": "26650837cba4c4c7ef2bc5ddae62643433dc7a1ec1d723244366dd88aba2596f"
+    },
+    {
+      "repo": "elizaOS/eliza",
+      "sha": "a922295ebe7f30053abb0257dffa43d9ba910693",
+      "path": "packages/core/src/runtime/state-composition.ts",
+      "url": "https://raw.githubusercontent.com/elizaOS/eliza/a922295ebe7f30053abb0257dffa43d9ba910693/packages/core/src/runtime/state-composition.ts",
+      "sha256": "0304f9c9cd92c82f07c59fca055ea06ca34d8caa885bfd90adaa49a44b7b086c"
+    },
+    {
+      "repo": "elizaOS/eliza",
+      "sha": "a922295ebe7f30053abb0257dffa43d9ba910693",
+      "path": "packages/core/src/runtime/response-handler-evaluators.ts",
+      "url": "https://raw.githubusercontent.com/elizaOS/eliza/a922295ebe7f30053abb0257dffa43d9ba910693/packages/core/src/runtime/response-handler-evaluators.ts",
+      "sha256": "a42eca32c1b4adbfb7a4080d3e87bc85f72433e20f2b869e1a01717a05c8a310"
+    },
+    {
+      "repo": "elizaOS/eliza",
+      "sha": "a922295ebe7f30053abb0257dffa43d9ba910693",
+      "path": "packages/core/src/character-utils.ts",
+      "url": "https://raw.githubusercontent.com/elizaOS/eliza/a922295ebe7f30053abb0257dffa43d9ba910693/packages/core/src/character-utils.ts",
+      "sha256": "a46339fd44dd8a63109daae1f2d904823ece4c6ddd92c251125b5e0e054010d5"
+    },
+    {
+      "repo": "moeru-ai/airi",
+      "sha": "448ada1a41c29d84b3975a73ee732f7bdcd13c27",
+      "path": "README.md",
+      "url": "https://raw.githubusercontent.com/moeru-ai/airi/448ada1a41c29d84b3975a73ee732f7bdcd13c27/README.md",
+      "sha256": "cb3bd22b7f6ca63f3e009933f117611857f5e1f9cbe253d86ef74b8038498b17"
+    },
+    {
+      "repo": "moeru-ai/airi",
+      "sha": "448ada1a41c29d84b3975a73ee732f7bdcd13c27",
+      "path": "docs/ai/adr/2026-10-09-character-as-chat-member.md",
+      "url": "https://raw.githubusercontent.com/moeru-ai/airi/448ada1a41c29d84b3975a73ee732f7bdcd13c27/docs/ai/adr/2026-10-09-character-as-chat-member.md",
+      "sha256": "b3fd5d901deb1a3a0d8a421b1af594b518433a406ac5c31d0805de703a8b88f1"
+    },
+    {
+      "repo": "moeru-ai/airi",
+      "sha": "448ada1a41c29d84b3975a73ee732f7bdcd13c27",
+      "path": "packages/stage-ui/src/constants/prompts/character-defaults.ts",
+      "url": "https://raw.githubusercontent.com/moeru-ai/airi/448ada1a41c29d84b3975a73ee732f7bdcd13c27/packages/stage-ui/src/constants/prompts/character-defaults.ts",
+      "sha256": "3931cd50818cdf7becdeb7348dd0697489327d127750fd2a55e7662bb0acfcb2"
+    },
+    {
+      "repo": "moeru-ai/airi",
+      "sha": "448ada1a41c29d84b3975a73ee732f7bdcd13c27",
+      "path": "integrations/telegram-bot/src/prompts/personality-v1.velin.md",
+      "url": "https://raw.githubusercontent.com/moeru-ai/airi/448ada1a41c29d84b3975a73ee732f7bdcd13c27/integrations/telegram-bot/src/prompts/personality-v1.velin.md",
+      "sha256": "d4c97693eb192b17fe5ec90303b0d2b1aa42c8e93bb08ac0523bfebe41e61b2b"
+    },
+    {
+      "repo": "moeru-ai/airi",
+      "sha": "448ada1a41c29d84b3975a73ee732f7bdcd13c27",
+      "path": "integrations/telegram-bot/src/prompts/system-ticking-v1.velin.md",
+      "url": "https://raw.githubusercontent.com/moeru-ai/airi/448ada1a41c29d84b3975a73ee732f7bdcd13c27/integrations/telegram-bot/src/prompts/system-ticking-v1.velin.md",
+      "sha256": "1eb7b02a4984e977296ba2645d62b09100d1ebd5ea8602903916fdc1c1863449"
+    },
+    {
+      "repo": "moeru-ai/airi",
+      "sha": "448ada1a41c29d84b3975a73ee732f7bdcd13c27",
+      "path": "packages/core-character/README.md",
+      "url": "https://raw.githubusercontent.com/moeru-ai/airi/448ada1a41c29d84b3975a73ee732f7bdcd13c27/packages/core-character/README.md",
+      "sha256": "e20ed6bca2114175ae36e4e443e9476e0bee4baeca23fdada7492d1f65712e40"
+    },
+    {
+      "repo": "NousResearch/hermes-agent",
+      "sha": "944c3a434071f43e64b443d033f3eba30c64434c",
+      "path": "README.md",
+      "url": "https://raw.githubusercontent.com/NousResearch/hermes-agent/944c3a434071f43e64b443d033f3eba30c64434c/README.md",
+      "sha256": "62c6d926309728eba97cfe2f266daeab87ce9ebd922e7e4f2756159e431db24e"
+    },
+    {
+      "repo": "NousResearch/hermes-agent",
+      "sha": "944c3a434071f43e64b443d033f3eba30c64434c",
+      "path": "SOUL.md",
+      "url": "https://raw.githubusercontent.com/NousResearch/hermes-agent/944c3a434071f43e64b443d033f3eba30c64434c/SOUL.md",
+      "sha256": "36c1f5a2e92cd1d018311eaf4c8f1e8886672eae78212e033c681d0e3d5d506f"
+    },
+    {
+      "repo": "NousResearch/hermes-agent",
+      "sha": "944c3a434071f43e64b443d033f3eba30c64434c",
+      "path": "website/docs/user-guide/features/personality.md",
+      "url": "https://raw.githubusercontent.com/NousResearch/hermes-agent/944c3a434071f43e64b443d033f3eba30c64434c/website/docs/user-guide/features/personality.md",
+      "sha256": "b51062d5888fec6babae8bd8e36b7efaab3e5165c1876c2cde08beca2f0ac1e6"
+    },
+    {
+      "repo": "NousResearch/hermes-agent",
+      "sha": "944c3a434071f43e64b443d033f3eba30c64434c",
+      "path": "website/docs/user-guide/which-file-does-what.md",
+      "url": "https://raw.githubusercontent.com/NousResearch/hermes-agent/944c3a434071f43e64b443d033f3eba30c64434c/website/docs/user-guide/which-file-does-what.md",
+      "sha256": "213dcffaffdda0c1a2c15f0589f1099936a88946eb62be4aad2e20447b2e6f16"
+    },
+    {
+      "repo": "NousResearch/hermes-agent",
+      "sha": "944c3a434071f43e64b443d033f3eba30c64434c",
+      "path": "agent/prompt_builder.py",
+      "url": "https://raw.githubusercontent.com/NousResearch/hermes-agent/944c3a434071f43e64b443d033f3eba30c64434c/agent/prompt_builder.py",
+      "sha256": "f4500660b1ba9cbce98236dfe92dab3dd30f2152daac1f5750c8de26f21f7b3c"
+    },
+    {
+      "repo": "HKUDS/nanobot",
+      "sha": "7dfeff9ddf2e09edfa3df88496fc143b25d690ac",
+      "path": "README.md",
+      "url": "https://raw.githubusercontent.com/HKUDS/nanobot/7dfeff9ddf2e09edfa3df88496fc143b25d690ac/README.md",
+      "sha256": "02dbc8e44a919b942e7c953f5a32ad755bb7d80e91b1a3742c3ead60b28bdd2c"
+    },
+    {
+      "repo": "HKUDS/nanobot",
+      "sha": "7dfeff9ddf2e09edfa3df88496fc143b25d690ac",
+      "path": "nanobot/templates/SOUL.md",
+      "url": "https://raw.githubusercontent.com/HKUDS/nanobot/7dfeff9ddf2e09edfa3df88496fc143b25d690ac/nanobot/templates/SOUL.md",
+      "sha256": "d58b7ed68cc05c8aaa1e0b97f6f78411e1959efbebb53f53f047f1a911632151"
+    },
+    {
+      "repo": "HKUDS/nanobot",
+      "sha": "7dfeff9ddf2e09edfa3df88496fc143b25d690ac",
+      "path": "nanobot/templates/USER.md",
+      "url": "https://raw.githubusercontent.com/HKUDS/nanobot/7dfeff9ddf2e09edfa3df88496fc143b25d690ac/nanobot/templates/USER.md",
+      "sha256": "bfd7f7a5e129a86f1d392374669e5375986b830fce9d0d591de15c296845725e"
+    },
+    {
+      "repo": "HKUDS/nanobot",
+      "sha": "7dfeff9ddf2e09edfa3df88496fc143b25d690ac",
+      "path": "nanobot/templates/agent/identity.md",
+      "url": "https://raw.githubusercontent.com/HKUDS/nanobot/7dfeff9ddf2e09edfa3df88496fc143b25d690ac/nanobot/templates/agent/identity.md",
+      "sha256": "ce2659acbb461d99ec73e5d967bfee3ed5605cf594384bb58eaefdfbc98f8a60"
+    },
+    {
+      "repo": "HKUDS/nanobot",
+      "sha": "7dfeff9ddf2e09edfa3df88496fc143b25d690ac",
+      "path": "nanobot/agent/context.py",
+      "url": "https://raw.githubusercontent.com/HKUDS/nanobot/7dfeff9ddf2e09edfa3df88496fc143b25d690ac/nanobot/agent/context.py",
+      "sha256": "9e7be55f48b3857dcf339e533e99c40805ba604edebf4239c3cbd1306dd8e825"
+    },
+    {
+      "repo": "agentscope-ai/QwenPaw",
+      "sha": "0db9a8e625e73917a0d113e255b3147134022db8",
+      "path": "README.md",
+      "url": "https://raw.githubusercontent.com/agentscope-ai/QwenPaw/0db9a8e625e73917a0d113e255b3147134022db8/README.md",
+      "sha256": "d287c698dc5c20419a94edfc033e8aa8aa57ab4165df8c8f56e08de917edf1ed"
+    },
+    {
+      "repo": "agentscope-ai/QwenPaw",
+      "sha": "0db9a8e625e73917a0d113e255b3147134022db8",
+      "path": "src/qwenpaw/agents/md_files/zh/SOUL.md",
+      "url": "https://raw.githubusercontent.com/agentscope-ai/QwenPaw/0db9a8e625e73917a0d113e255b3147134022db8/src/qwenpaw/agents/md_files/zh/SOUL.md",
+      "sha256": "c9364e0c3d5911a30c9adb3da3197e0a34aadedb7f56d876b84c1aed1faf8688"
+    },
+    {
+      "repo": "agentscope-ai/QwenPaw",
+      "sha": "0db9a8e625e73917a0d113e255b3147134022db8",
+      "path": "src/qwenpaw/agents/md_files/zh/PROFILE.md",
+      "url": "https://raw.githubusercontent.com/agentscope-ai/QwenPaw/0db9a8e625e73917a0d113e255b3147134022db8/src/qwenpaw/agents/md_files/zh/PROFILE.md",
+      "sha256": "1dda68ba8a6d00e4b589676ebb05366b53ae49d1fad6f5676b85b78b3c8ad165"
+    },
+    {
+      "repo": "agentscope-ai/QwenPaw",
+      "sha": "0db9a8e625e73917a0d113e255b3147134022db8",
+      "path": "src/qwenpaw/agents/md_files/zh/AGENTS.md",
+      "url": "https://raw.githubusercontent.com/agentscope-ai/QwenPaw/0db9a8e625e73917a0d113e255b3147134022db8/src/qwenpaw/agents/md_files/zh/AGENTS.md",
+      "sha256": "240b79beb71ca8799ce50f23b9c28615e99cdda8727543a70dd84ec6bb5f472c"
+    },
+    {
+      "repo": "rowboatlabs/rowboat",
+      "sha": "2f75157285d5bea71e0438c87e537a717b71b42a",
+      "path": "README.md",
+      "url": "https://raw.githubusercontent.com/rowboatlabs/rowboat/2f75157285d5bea71e0438c87e537a717b71b42a/README.md",
+      "sha256": "d075725c48f4f297ba7fda4063988ab7832ddbced644dacdef089a7913027885"
+    },
+    {
+      "repo": "letta-ai/letta",
+      "sha": "8816d3a8516893bfdc0fa14bfb1235226012e295",
+      "path": "README.md",
+      "url": "https://raw.githubusercontent.com/letta-ai/letta/8816d3a8516893bfdc0fa14bfb1235226012e295/README.md",
+      "sha256": "67ec50661bb95db1839101863f08eaaa3cae3f2cc804adb2250a058393e56417"
+    },
+    {
+      "repo": "SillyTavern/SillyTavern",
+      "sha": "06bde939fb1e9c4c8d8641d810f0a916b5bce127",
+      "path": "README.md",
+      "url": "https://raw.githubusercontent.com/SillyTavern/SillyTavern/06bde939fb1e9c4c8d8641d810f0a916b5bce127/README.md",
+      "sha256": "4692e1e411a617b19cfebc445c03f8760b55420e32fe0bc0d88cb1552ca9ff08"
+    },
+    {
+      "repo": "SillyTavern/SillyTavern",
+      "sha": "06bde939fb1e9c4c8d8641d810f0a916b5bce127",
+      "path": "src/character-card-parser.js",
+      "url": "https://raw.githubusercontent.com/SillyTavern/SillyTavern/06bde939fb1e9c4c8d8641d810f0a916b5bce127/src/character-card-parser.js",
+      "sha256": "b74541cd54bb3fe3ab39b3e040f6dba824b263ed9344e4dcf98363e4e148e07c"
+    },
+    {
+      "repo": "earendil-works/pi",
+      "sha": "db774055e3ecae05ab6eae8656454cde98e36780",
+      "path": "README.md",
+      "url": "https://raw.githubusercontent.com/earendil-works/pi/db774055e3ecae05ab6eae8656454cde98e36780/README.md",
+      "sha256": "69cb1e626257bd68d041f05513815e426717a843ddc0e7706802865ec7fd898c"
+    },
+    {
+      "repo": "earendil-works/pi",
+      "sha": "db774055e3ecae05ab6eae8656454cde98e36780",
+      "path": "packages/coding-agent/README.md",
+      "url": "https://raw.githubusercontent.com/earendil-works/pi/db774055e3ecae05ab6eae8656454cde98e36780/packages/coding-agent/README.md",
+      "sha256": "fbc7abec7d0829ac8bc4b217e950794e1ba4d8d1b3e0850f970da318ad72e863"
+    },
+    {
+      "repo": "apache/maka",
+      "sha": "59f61cf7de665837630518aa204732107dcc2349",
+      "path": "README.md",
+      "url": "https://raw.githubusercontent.com/apache/maka/59f61cf7de665837630518aa204732107dcc2349/README.md",
+      "sha256": "f85139a7d654f92f3b2ba235d9b8f989aa374af133af33e8ffa2f331799d156f"
+    },
+    {
+      "repo": "apache/maka",
+      "sha": "59f61cf7de665837630518aa204732107dcc2349",
+      "path": "packages/runtime/src/system-prompt/personalization-prompt.ts",
+      "url": "https://raw.githubusercontent.com/apache/maka/59f61cf7de665837630518aa204732107dcc2349/packages/runtime/src/system-prompt/personalization-prompt.ts",
+      "sha256": "e4104762df4c57471f1a5195f40a53b6c89cb9523afcb8ee33d67f907c1cb0aa"
+    },
+    {
+      "repo": "apache/maka",
+      "sha": "59f61cf7de665837630518aa204732107dcc2349",
+      "path": "docs/eval/terminal-bench-2.1-deepseek-v4-flash-nine-arm.md",
+      "url": "https://raw.githubusercontent.com/apache/maka/59f61cf7de665837630518aa204732107dcc2349/docs/eval/terminal-bench-2.1-deepseek-v4-flash-nine-arm.md",
+      "sha256": "331fb010cbcd05ab45b312e297dd5623bfaef3fe08814196b0739f9179cc7627"
+    },
+    {
+      "repo": "AstrBotDevs/AstrBot",
+      "sha": "0cd42bd4dd216d8810da4e3f5fb2e381d3c6817e",
+      "path": "README.md",
+      "url": "https://raw.githubusercontent.com/AstrBotDevs/AstrBot/0cd42bd4dd216d8810da4e3f5fb2e381d3c6817e/README.md",
+      "sha256": "2665d284c887882bc4af010d8b4874489f164a0d752cfd253f4cd258e60c7207"
+    },
+    {
+      "repo": "AstrBotDevs/AstrBot",
+      "sha": "0cd42bd4dd216d8810da4e3f5fb2e381d3c6817e",
+      "path": "astrbot/core/persona_mgr.py",
+      "url": "https://raw.githubusercontent.com/AstrBotDevs/AstrBot/0cd42bd4dd216d8810da4e3f5fb2e381d3c6817e/astrbot/core/persona_mgr.py",
+      "sha256": "78f31f5c5c8b580fa2a4f4c888c64ea451c6d19880f607c2ae9a8707a9571cb1"
+    },
+    {
+      "repo": "AstrBotDevs/AstrBot",
+      "sha": "0cd42bd4dd216d8810da4e3f5fb2e381d3c6817e",
+      "path": "astrbot/dashboard/services/persona_service.py",
+      "url": "https://raw.githubusercontent.com/AstrBotDevs/AstrBot/0cd42bd4dd216d8810da4e3f5fb2e381d3c6817e/astrbot/dashboard/services/persona_service.py",
+      "sha256": "1b494959fd3de2a9c6357751c736278ac9c8472ecafa21c92065f3cf55c45dfa"
+    },
+    {
+      "repo": "AstrBotDevs/AstrBot",
+      "sha": "0cd42bd4dd216d8810da4e3f5fb2e381d3c6817e",
+      "path": "docs/zh/use/proactive-agent.md",
+      "url": "https://raw.githubusercontent.com/AstrBotDevs/AstrBot/0cd42bd4dd216d8810da4e3f5fb2e381d3c6817e/docs/zh/use/proactive-agent.md",
+      "sha256": "ae013d0102b21f9a7725ea1101f0f96c213821a1bb9e8db2239873e8041d3ff6"
+    },
+    {
+      "repo": "Open-LLM-VTuber/Open-LLM-VTuber",
+      "sha": "992309c0aa19845960228f880013d4685fde93b5",
+      "path": "README.md",
+      "url": "https://raw.githubusercontent.com/Open-LLM-VTuber/Open-LLM-VTuber/992309c0aa19845960228f880013d4685fde93b5/README.md",
+      "sha256": "3b6cf6adbf7c49a00e89d99c0fdb582a316054f8bb44332f7c95800fdd674140"
+    },
+    {
+      "repo": "Open-LLM-VTuber/Open-LLM-VTuber",
+      "sha": "992309c0aa19845960228f880013d4685fde93b5",
+      "path": "src/open_llm_vtuber/config_manager/character.py",
+      "url": "https://raw.githubusercontent.com/Open-LLM-VTuber/Open-LLM-VTuber/992309c0aa19845960228f880013d4685fde93b5/src/open_llm_vtuber/config_manager/character.py",
+      "sha256": "0647ec0a75be41291bc858e69a4b59f6f0a66e4e54a03e8f391032a273052089"
+    },
+    {
+      "repo": "Open-LLM-VTuber/Open-LLM-VTuber",
+      "sha": "992309c0aa19845960228f880013d4685fde93b5",
+      "path": "src/open_llm_vtuber/agent/agents/basic_memory_agent.py",
+      "url": "https://raw.githubusercontent.com/Open-LLM-VTuber/Open-LLM-VTuber/992309c0aa19845960228f880013d4685fde93b5/src/open_llm_vtuber/agent/agents/basic_memory_agent.py",
+      "sha256": "d0124df26b4ca24fd5e135959927b355f9e388350f4d9bbbae575dc714d2e1b7"
+    },
+    {
+      "repo": "Open-LLM-VTuber/Open-LLM-VTuber",
+      "sha": "992309c0aa19845960228f880013d4685fde93b5",
+      "path": "prompts/utils/proactive_speak_prompt.txt",
+      "url": "https://raw.githubusercontent.com/Open-LLM-VTuber/Open-LLM-VTuber/992309c0aa19845960228f880013d4685fde93b5/prompts/utils/proactive_speak_prompt.txt",
+      "sha256": "0520ccd58da8c9c114842bff19fdd1297b4e7a16d0e96daf70d2a1aef99ff5f9"
+    },
+    {
+      "repo": "NevaMind-AI/memU",
+      "sha": "42ef9fa3a8034f5817684cba23ef69fa70a58197",
+      "path": "README.md",
+      "url": "https://raw.githubusercontent.com/NevaMind-AI/memU/42ef9fa3a8034f5817684cba23ef69fa70a58197/README.md",
+      "sha256": "8912aae50d53fabe4d53ef81cc3b9a825e3dc86ce5dd4ee59a94bc3541238d71"
+    },
+    {
+      "repo": "NevaMind-AI/memU",
+      "sha": "42ef9fa3a8034f5817684cba23ef69fa70a58197",
+      "path": "docs/adr/0007-three-independent-memory-lines-wiki-graph.md",
+      "url": "https://raw.githubusercontent.com/NevaMind-AI/memU/42ef9fa3a8034f5817684cba23ef69fa70a58197/docs/adr/0007-three-independent-memory-lines-wiki-graph.md",
+      "sha256": "08abf916b00d503715d4b3651ff1f5dfa6771caadfc8ea3f895ba075f9c994ce"
+    },
+    {
+      "repo": "letta-ai/letta-code",
+      "sha": "035bb8c8917b5dd94a3989d4adf04860a2ce8fea",
+      "path": "README.md",
+      "url": "https://raw.githubusercontent.com/letta-ai/letta-code/035bb8c8917b5dd94a3989d4adf04860a2ce8fea/README.md",
+      "sha256": "7543b5df7349bb8fbdbf7f377a161c3163b6ff062a9c6f7b7430a5ca9a3d0abe"
+    },
+    {
+      "repo": "letta-ai/letta-code",
+      "sha": "035bb8c8917b5dd94a3989d4adf04860a2ce8fea",
+      "path": "src/agent/prompts/letta_local_memfs.md",
+      "url": "https://raw.githubusercontent.com/letta-ai/letta-code/035bb8c8917b5dd94a3989d4adf04860a2ce8fea/src/agent/prompts/letta_local_memfs.md",
+      "sha256": "3a88ed3e193c8dac38b43a5ad6e3a5646b214a23231a9490161aa2fa10d190bc"
+    }
+  ],
+  "live_documentation": [
+    {
+      "url": "https://docs.sillytavern.app/usage/core-concepts/characterdesign/",
+      "observed_on": "2026-10-22",
+      "pinned": false
+    },
+    {
+      "url": "https://docs.letta.com/agent-sdk/memory",
+      "observed_on": "2026-10-22",
+      "pinned": false
+    },
+    {
+      "url": "https://airi.moeru.ai/docs/en/docs/manual/tamagotchi/setup-and-use/",
+      "observed_on": "2026-10-22",
+      "pinned": false
+    }
+  ]
+}
