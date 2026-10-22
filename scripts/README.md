@@ -13,6 +13,8 @@
 
 运行 `uv run --frozen --no-sync python -m scripts.clean_workspace` 清理派生缓存与打包产物。
 会话、记忆、模型缓存、`.venv` 和 `node_modules` 不属于可自动删除的垃圾。
+运行进程可能同时生成字节码缓存；清理器有限重试后将这些目录记入 `busy_paths`，继续处理其余产物，不停止服务。
+`failures` 表示其他未能完成的删除；`bytes` 是清理前候选文件体积，不是并发运行中的精确空间回收量。
 运行数据使用仓库外的工作区；历史评测结果由 Git 保留，当前结果统一进入
 `docs/operations/evaluations/artifacts/<日期-主题>/`，报告放在上一级 `evaluations/`，不在根目录或 `eval/results/` 另留副本。
 

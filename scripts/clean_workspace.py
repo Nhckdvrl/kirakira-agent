@@ -94,9 +94,17 @@ def remove_empty_directories(root: Path):
         visited.append(directory)
     removed = 0
     for directory in reversed(visited):
-        if directory != root and not any(directory.iterdir()):
-            directory.rmdir()
-            removed += 1
+        if directory == root:
+            continue
+        try:
+            if not any(directory.iterdir()):
+                directory.rmdir()
+                removed += 1
+        except FileNotFoundError:
+            continue
+        except OSError as error:
+            if error.errno != errno.ENOTEMPTY:
+                raise
     return removed
 
 
@@ -109,6 +117,7 @@ def main():
     paths = list(candidates(ROOT))
     size = 0
     failures = []
+    busy = []
     for path in paths:
         if path.is_dir():
             for current, _, files in os.walk(path):
@@ -133,6 +142,9 @@ def main():
                     if error.errno == errno.ENOTEMPTY and attempt < 3:
                         time.sleep(0.05)
                         continue
+                    if error.errno == errno.ENOTEMPTY:
+                        busy.append(str(path.relative_to(ROOT)))
+                        break
                     failures.append(
                         {"path": str(path.relative_to(ROOT)), "error": str(error)}
                     )
@@ -145,6 +157,7 @@ def main():
                 "paths": [str(p.relative_to(ROOT)) for p in paths],
                 "bytes": size,
                 "empty_directories": empty,
+                "busy_paths": busy,
                 "failures": failures,
             },
             indent=2,
