@@ -26,13 +26,17 @@ def source_identity():
              "eval/models.py", "plugins/akasha/contract.py", "plugins/akasha/plugin.py",
              "plugins/akasha/query.py", "plugins/akasha/recalls.py", "plugins/akasha/recall_tool.py",
              "plugins/akasha/runtime.py", "plugins/akasha/excerpts.py", "plugins/akasha/source_tool.py"]
+    names.extend(name for name in ("plugins/akasha/source_search.py",) if (ROOT / name).is_file())
     names.extend(str(path.relative_to(ROOT)) for path in sorted((ROOT / "plugins/followups").glob("*.py")))
     names.extend(str(path.relative_to(ROOT)) for path in sorted((ROOT / "plugins/drift").glob("*.py")))
+    names.extend(str(path.relative_to(ROOT)) for path in sorted((ROOT / "plugins/prompt").glob("*.py")))
+    names.extend(name for name in ("plugins/markdown_memory/store.py", "plugins/prompt/VEDA.md", "plugins/prompt/web_module.js",
+                                  "frontend/plugins/prompt/src/index.tsx") if (ROOT / name).is_file())
     names.extend(name for name in ("plugins/drift/web_module.js", "plugins/drift/web_module.css",
                                   "frontend/plugins/drift/src/index.tsx") if (ROOT / name).is_file())
     names.extend(["plugins/eventmail/store.py", "plugins/wake/api.py", "plugins/wake/messages.py",
                   "plugins/wake/runtime.py", "plugins/wake/program.py", "eval/followups.py"])
-    names.extend(name for name in ("eval/mail_followups.py", "eval/fixtures/mailbox.py", "eval/runtime_settings.py", "eval/idle_reflection.py") if (ROOT / name).is_file())
+    names.extend(name for name in ("eval/mail_followups.py", "eval/fixtures/mailbox.py", "eval/runtime_settings.py", "eval/idle_reflection.py", "eval/personality.py", "eval/prompt_cache.py") if (ROOT / name).is_file())
     if (ROOT / "UPSTREAM.json").is_file():
         names.append("UPSTREAM.json")
     names.extend(str(path.relative_to(ROOT)) for path in sorted((ROOT / "patches").glob("*.patch")))

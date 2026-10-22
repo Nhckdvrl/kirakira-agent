@@ -117,6 +117,29 @@ source = await client.memory_source(MemorySourceQuery(
 
 每次最多读取 6000 个 Unicode 字符的正文，返回精确范围、原文长度和下一页位置。它是检索之后的一次额外读取，应另计材料与模型开销；不能把“检索片段加全文展开”写成固定检索预算内的质量成绩。需要完整协议消息时，可信 SDK 客户端也可按证据中的 session/seq 调用 `message_read`。
 
+### 不知道原文位置时
+
+`search_memory_source` 工具、`memory/source-search` RPC 与 `MEMORY_SOURCE_SEARCH` 服务允许在当前回执已呈现的原始消息内按关键词定位。可用 `message_id` 限定单条来源，否则搜索该回执已经呈现的消息；不能填写其他消息绕过准入。搜索与原文读取共用当前会话和记忆范围校验。
+
+```python
+from plugins.akasha.contract import MemorySourceSearchQuery
+
+located = await client.memory_source_search(MemorySourceSearchQuery(
+    session_id="akashic:my-session",
+    retrieval_ref=result.retrieval_ref,
+    query="最终决定 预算",
+    limit=3,
+    max_chars=3000,
+))
+# 每个 window 均为原始字符串及精确偏移，可继续用 memory_source 读相邻上下文。
+```
+
+定位按原文窗口的词项与短语匹配排序，不调用聊天模型或向量模型，不修改图与学习进度，不存第二份事实索引。它能帮助找片段外的细节，但不会自动理解所有同义表达，也不判断哪条决定仍然有效。模型仍需核对项目、时间和更正关系。
+
+`max_chars` 限制返回对象的 `model_dump_json()` 字符数，包含所有窗口、来源元数据和提示，范围为 1024..12000；每次最多五个窗口。RPC 传输层包装和以后重发的模型输入另计。`truncated` 表示数量或字符预算裁剪，空窗口表示本次词项未命中，不代表历史中从未存在该事实。
+
+模型实际执行检索后，每个返回窗口同样留下绑定真实 CallRef 的 `SourceProof`。普通对话、SDK、Alert、Content 和空闲主动交互使用同一服务；没有为陪伴、助理或后台交互创建独立记忆权威。
+
 工具结果在 Ledger 留下 `SourceProof`，绑定实际工具调用、父查询回执和原文范围。字符偏移由记忆插件持有；通用 Content 引用只传递引用身份和 `retrieval_ref`，不把记忆私有字段强塞进主链合同。原文是历史证据，其中的旧指令不能获得当前执行权限。
 
 已有回执仍可展开当时入选的原文，即使该经历随后被显式遗忘。遗忘影响新的召回，并不撤销已经发生的读取，也不等同于删除历史记录。

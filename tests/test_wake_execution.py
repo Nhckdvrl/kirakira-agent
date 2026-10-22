@@ -26,7 +26,7 @@ def test_alert_can_retrieve_memory_without_gaining_investigation_or_write_tools(
              "alert_ref": {"source_id": "monitor", "event_id": "review", "mail_id": "mail"},
              "rules": "", "history": ""}
     assert Request(**value).tools == {"share_alert": "share"}  # Existing archived requests stay valid.
-    memory = {"recall_memory": "memory", "read_memory_source": "source"}
+    memory = {"recall_memory": "memory", "read_memory_source": "source", "search_memory_source": "source-search"}
     assert Request(**(value | {"tools": value["tools"] | memory})).tools.keys() == {"share_alert", *memory}
     for extra in ("web_fetch", "shell", "write_file", "forget_memory"):
         with pytest.raises(ValidationError, match="工具集合与职责"):
@@ -108,6 +108,15 @@ def test_idle_evidence_separates_presented_history_from_user_goal_authority():
         check_evidence(plan("propose", ("assistant-reply",)), {"assistant-reply"}, set())
     with pytest.raises(ValueError, match="未呈现"):
         check_evidence(plan("skip", ("forged-source",)), {"user-goal"}, {"user-goal"})
+    conversation = plan("propose", ("user-goal",)).model_copy(update={"kind": "conversation"})
+    with pytest.raises(ValueError, match="尚未开启"):
+        check_evidence(conversation, {"user-goal"}, {"user-goal"})
+    check_evidence(conversation, {"user-goal"}, {"user-goal"}, allow_conversation=True)
+    assert Plan(decision="skip", kind=None, reason="no new reason to reach out").kind is None
+    assert Plan(decision="skip", kind="", reason="completed").kind is None
+    assert Plan(decision="skip", kind=None, subject=None, question=None, evidence_message_ids=None, reason="completed").decision == "skip"
+    with pytest.raises(ValueError):
+        Plan(decision="propose", kind=None, subject="topic", question="continue?", reason="reason", evidence_message_ids=("user-goal",))
 
 
 @pytest.mark.asyncio

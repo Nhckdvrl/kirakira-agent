@@ -226,10 +226,12 @@ def upgrade_workspace(workspace):
         from agent.plugin_composition.config_input import load_config, save_config
         wake_directory = workspace / "plugin-data/wake-builtin"
         wake_values, _ = load_config(wake_directory)
-        old_default = tuple(wake_values.get("investigation_tools", ())) == ("recall_memory", "web_fetch")
+        old_default = tuple(wake_values.get("investigation_tools", ())) in {
+            ("recall_memory", "web_fetch"), ("recall_memory", "read_memory_source", "web_fetch"),
+        }
         if old_default:
             save_config(wake_directory, {**wake_values, "investigation_tools":
-                ["recall_memory", "read_memory_source", "web_fetch"]})
+                ["recall_memory", "read_memory_source", "search_memory_source", "web_fetch"]})
         (backup / "upgrade.json").write_text(
             json.dumps(
                 {

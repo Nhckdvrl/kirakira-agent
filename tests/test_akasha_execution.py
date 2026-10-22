@@ -35,7 +35,7 @@ async def test_program_memory_query_preserves_graph_budget_and_retry_identity(tm
     """A public read uses actual sources, a dated window and one durable receipt."""
     from types import SimpleNamespace
 
-    from plugins.akasha.contract import MemoryQuery, MemorySourceQuery
+    from plugins.akasha.contract import MemoryQuery, MemorySourceQuery, MemorySourceSearchQuery
     from plugins.akasha.query import MemoryQueries
     from plugins.akasha.recall_tool import RecallTool
     from plugins.models.contract import EmbeddingResult
@@ -121,6 +121,23 @@ async def test_program_memory_query_preserves_graph_budget_and_retry_identity(tm
         log.ensure_session("other", SessionAttributes())
         with pytest.raises(ValueError, match="another memory scope"):
             await queries.source(source_request.model_copy(update={"session_id": "other"}))
+        search_request = MemorySourceSearchQuery(session_id="conversation", retrieval_ref=excerpt.retrieval_ref,
+            query="RELEASE_FRIDAY", max_chars=1024)
+        found = await queries.search_source(search_request)
+        assert found.windows and any("RELEASE_FRIDAY" in window.text for window in found.windows)
+        assert len(found.model_dump_json()) <= 1024
+        for window in found.windows:
+            span = window.evidence.excerpt
+            raw = learning.text(log.reader(window.evidence.session_id).get(window.evidence.message_id))
+            assert raw[span.start:span.end] == window.text
+            assert window.evidence.message_id in excerpt.record.presented_message_ids
+        assert await queries.search_source(search_request) == found
+        assert not (await queries.search_source(search_request.model_copy(update={"query": "NONEXISTENT_409"}))).windows
+        with pytest.raises(ValueError, match="not presented"):
+            await queries.search_source(search_request.model_copy(update={"message_id": "user-1"}))
+        with pytest.raises(ValueError, match="another memory scope"):
+            await queries.search_source(search_request.model_copy(update={"session_id": "other"}))
+        assert len(encoded) == reads_before and logical_state_sha256(consumer.path) == before
         from plugins.akasha._boundaries import TOOLS, CallSource
         from plugins.akasha.recall_tool import tool_references
         from plugins.akasha.source_tool import SourceTool, check_source
@@ -142,12 +159,28 @@ async def test_program_memory_query_preserves_graph_budget_and_retry_identity(tm
                 ToolResult(CallRef(call.message_id, 0), result.outcome, result.parts))
         refs = tool_references(log.reader("conversation").snapshot(), "conversation", learning, bindings, records())
         assert refs and all(decode_reference(ref).resolved_ref == "user-0" for ref in refs)
+        from plugins.akasha.source_tool import SourceSearchTool
+        log.save_binding("search-binding", {"version": 1, "service": TOOLS.name, "root_ref": "fixture-archive",
+            "metadata": {"tool": {"owner": "akasha", "name": "search_memory_source"}}})
+        search_args = search_request.model_dump(mode="json", exclude={"session_id"})
+        search_call = log.writer("conversation", author="assistant", source="conversation", body_types=(Output,),
+            content={"text": check_text}, check_call=lambda _: None).append("search-call", Output((ToolCall("search-binding", search_args),), "continue"))
+        search_tool = SourceSearchTool(queries.search_source)
+        prepared_search = await search_tool.prepare(search_args, CallSource(CallRef(search_call.message_id, 0), log.reader("conversation").snapshot()))
+        assert not isinstance(prepared_search, str)
+        searched = await search_tool.invoke("search-call-key", prepared_search)
+        assert any(part.kind == "akasha.source" for part in searched.parts)
+        log.writer("conversation", author="assistant", source="conversation", body_types=(ToolResult,),
+            content={"text": check_text, "akasha.source": check_source}, call_ref=CallRef(search_call.message_id, 0)).append("search-result",
+                ToolResult(CallRef(search_call.message_id, 0), searched.outcome, searched.parts))
+        refs = tool_references(log.reader("conversation").snapshot(), "conversation", learning, bindings, records())
+        assert refs and all(decode_reference(ref).resolved_ref == "user-0" for ref in refs)
 
 
 @pytest.mark.asyncio
 async def test_program_memory_query_checks_scope_before_receipt_replay(tmp_path: Path) -> None:
     """A cached answer cannot bypass a current recall denial or invent a session."""
-    from plugins.akasha.contract import MemoryQuery
+    from plugins.akasha.contract import MemoryQuery, MemorySourceSearchQuery
     from plugins.akasha.query import MemoryQueries
     from plugins.akasha.scopes import MemoryDisabled
 
@@ -162,6 +195,34 @@ async def test_program_memory_query_checks_scope_before_receipt_replay(tmp_path:
             await queries.recall(MemoryQuery(key="cached", session_id="conversation", query="history"))
         with pytest.raises(ValueError, match="existing session"):
             await queries.recall(MemoryQuery(key="unknown", session_id="missing", query="history"))
+        with pytest.raises(MemoryDisabled, match="recall disabled"):
+            await queries.search_source(MemorySourceSearchQuery(session_id="conversation", retrieval_ref="cached", query="history"))
+        with pytest.raises(ValueError, match="existing session"):
+            await queries.search_source(MemorySourceSearchQuery(session_id="missing", retrieval_ref="cached", query="history"))
+
+
+def test_original_lookup_keeps_changed_values_while_suppressing_exact_repeated_lines():
+    from datetime import UTC, datetime
+    from plugins.akasha.contract import MemoryEvidence, MemorySourceSearchQuery
+    from plugins.akasha.source_search import search_originals
+
+    evidence = MemoryEvidence(message_id="source", session_id="history", seq=0,
+        recorded_at=datetime(2026, 10, 1, tzinfo=UTC), author="user")
+    original = ("流程检查，不代表最终决定。\n" * 220 + "最终决定：预算760，必须防水。\n"
+                + "后续清单不改变最终决定。\n" * 220)
+    request = MemorySourceSearchQuery(session_id="reader", retrieval_ref="receipt", query="最终决定", max_chars=2400)
+    found = search_originals(request, ((evidence, original),))
+    assert any("预算760" in window.text for window in found.windows)
+    assert len(found.model_dump_json()) <= 2400
+    for window in found.windows:
+        span = window.evidence.excerpt
+        assert original[span.start:span.end] == window.text
+    old = "预算决定：金额500。\n" + "配套条件保持不变。\n" * 50
+    new = "预算决定：金额760。\n" + "配套条件保持不变。\n" * 50
+    changed = old + "不相关背景。\n" * 200 + new
+    both = search_originals(request.model_copy(update={"query": "预算决定", "max_chars": 6000}), ((evidence, changed),))
+    assert any("金额500" in window.text for window in both.windows)
+    assert any("金额760" in window.text for window in both.windows)
 
 
 class WorkerGate:

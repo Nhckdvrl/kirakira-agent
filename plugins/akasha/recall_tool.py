@@ -80,7 +80,7 @@ def tool_references(
             if part.kind == "akasha.source":
                 proof = SourceProof.model_validate_json(json.dumps(json_value(part.value)))
                 parent = records.read(proof.retrieval_ref)
-                if (tool["name"] != "read_memory_source" or proof.call_ref != call_ref
+                if (tool["name"] not in {"read_memory_source", "search_memory_source"} or proof.call_ref != call_ref
                     or proof.caller_session_id != request.session_id or parent is None
                     or proof.span.message_id not in parent.presented_message_ids):
                     raise ValueError("原文展开出处不属于实际工具调用")

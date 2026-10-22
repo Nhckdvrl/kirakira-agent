@@ -10,10 +10,19 @@ from plugins.akasha.contract import (
     MemoryReadout,
     MemorySourceQuery,
     MemorySourceReadout,
+    MemorySourceSearchQuery,
+    MemorySourceSearchReadout,
 )
 
 
 class AsyncClient(AsyncAkashic):
+    async def memory_source_search(self, request: MemorySourceSearchQuery) -> MemorySourceSearchReadout:
+        """Locate details inside a recall receipt's admitted original messages."""
+        import json
+
+        result = await self.request("memory/source-search", request.model_dump(mode="json"))
+        return MemorySourceSearchReadout.model_validate_json(json.dumps(result))
+
     async def memory_source(self, request: MemorySourceQuery) -> MemorySourceReadout:
         """Read the original text behind a previously presented memory source."""
         import json

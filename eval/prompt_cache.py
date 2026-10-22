@@ -38,6 +38,7 @@ class Trace:
         self.previous = defaultdict(list)
         self.active = ContextVar("cache_probe_request", default=None)
         self.installed = set()
+        self.expected_fragments = ()
 
     def install_loaded(self, stack):
         # Native plugins import isolated generation modules. Patching the public
@@ -88,6 +89,9 @@ class Trace:
                     common_message_prefix_chars=best_chars,
                     prompt_cache_key_sent="prompt_cache_key" in wire,
                 )
+                if self.expected_fragments:
+                    system = "\n".join(str(m.get("content", "")) for m in messages if m["role"] == "system")
+                    row["expected_system_fragments"] = {fragment: fragment in system for fragment in self.expected_fragments}
             return encoded
 
         async def complete(bound, request):

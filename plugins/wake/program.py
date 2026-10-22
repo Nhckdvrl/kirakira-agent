@@ -56,7 +56,9 @@ async def run(ctx: Context, task: Task, reader: MessageReader, request: Request)
             max_output_tokens=0,
             max_steps=(
                 3
-                if phase.stage in {"screen", "alert"}
+                if phase.stage == "screen"
+                else 6
+                if phase.stage == "alert"
                 else 20
                 if phase.stage == "investigate"
                 else 40

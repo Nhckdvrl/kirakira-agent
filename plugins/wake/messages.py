@@ -120,10 +120,20 @@ HINTS = {
 }
 for _stage in ("screen", "investigate"):
     HINTS[_stage] += _ATTENTION_SCOPE
+for _stage in ("investigate", "drift", "alert"):
+    HINTS[_stage] += (
+        "若召回片段不足且不知道原文位置，可在已呈现来源内用search_memory_source按关键词定位，"
+        "再用read_memory_source读相邻上下文。搜索排序不表示事实仍有效；核对原文时间、更正和适用范围。"
+    )
 HINTS["drift"] += (
     "空闲提案只是待核实的想法，不是主人新指令。先用recall_memory核对所选对话范围内的目标、最新更正与已完成事项，"
     "再决定是否值得继续研究。可用read_memory_source核对原文，web_fetch核实实际页面；不能编造外部新消息。"
-    "有依据的新整理或研究结果才分享，已完成、被撤回、重复或缺少依据就skip_content。"
+    "按提案initiative_kind区分：conversation可以接续已授权的个人话题，发一句自然的轻量问题，不要求上网或伪造研究；"
+    "assist围绕未完事项做有依据的整理或准备，research分享实际查证的新发现。没有kind的旧提案按research处理。"
+    "不能从旧情绪推断主人现在的情绪，不能假定事项已完成，也不能把关心变成催促或强行安排。"
+    "对于生产者已授权的conversation，结合idle_wait中的实际等待判断时机；满足设置的等待、且主人邀请空闲后接续时，不需要等主人先回来发消息才允许主动。"
+    "如果主人明确要求等其回来、某个时间之后或暂时别打扰，则仍按该原始要求跳过；沉默本身不证明主人现在忙、难过或已经休息好了。"
+    "已完成、被撤回、重复、主人要求不再提或缺少依据就skip_content。"
     "分享时说明实际做了什么和核实到什么，不把仅提出的问题写成已经完成的工作。"
 )
 HINTS["alert"] += (

@@ -30,7 +30,7 @@ class Config(BaseModel):
     enabled: bool | None = True
     delivery: DeliveryTarget | None = None
     timezone: str = "Asia/Shanghai"
-    investigation_tools: tuple[str, ...] = ("recall_memory", "read_memory_source", "web_fetch")
+    investigation_tools: tuple[str, ...] = ("recall_memory", "read_memory_source", "search_memory_source", "web_fetch")
 
     @field_validator("timezone")
     @classmethod

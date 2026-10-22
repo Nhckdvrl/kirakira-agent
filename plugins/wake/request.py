@@ -37,7 +37,7 @@ STAGE_TOOLS: dict[Stage, tuple[str, ...]] = {
     "drift": ("share_content", "skip_content"),
     "alert": ("share_alert",),
 }
-ALERT_MEMORY_TOOLS = frozenset({"recall_memory", "read_memory_source"})
+ALERT_MEMORY_TOOLS = frozenset({"recall_memory", "read_memory_source", "search_memory_source"})
 
 
 class Request(BaseModel):

@@ -8,17 +8,23 @@ import json
 from collections.abc import Callable, Mapping
 from contextlib import AbstractAsyncContextManager
 
+from core.common.file_io import run_file_io
+
 from plugins.akasha.contract import (
     MemoryQuery,
     MemoryReadout,
     MemorySourceQuery,
     MemorySourceReadout,
+    MemoryEvidence,
+    MemorySourceSearchQuery,
+    MemorySourceSearchReadout,
 )
 from plugins.ledger.contract import ContentPart, Input, MessageCatalog, Output
 
 from .contract import ProgramSource
 from .recall_tool import RecallTool
 from .recalls import RecallRecords
+from .source_search import search_originals
 
 
 class MemoryQueries:
@@ -42,23 +48,8 @@ class MemoryQueries:
 
     async def source(self, request: MemorySourceQuery) -> MemorySourceReadout:
         """Expand a previously presented source without embedding or graph reads."""
-        if request.session_id not in self._catalog.snapshot_attributes():
-            raise ValueError("source read requires an existing session")
-        route = self._check_scope(request.session_id)
-        parent = self._records().read(request.retrieval_ref)
-        if parent is None:
-            raise ValueError("unknown memory retrieval reference")
-        origin = parent.source.session_id
-        if not origin or self._check_scope(origin) != route:
-            raise ValueError("source receipt belongs to another memory scope")
-        if request.message_id not in parent.presented_message_ids:
-            raise ValueError("message was not presented by this retrieval")
-        hit = next(hit for hit in parent.hits if request.message_id in hit.message_ids)
-        message = self._catalog.reader(hit.session_id).get(request.message_id)
-        if message is None or not isinstance(message.body, (Input, Output)):
-            raise ValueError("memory source is unavailable")
-        text = "".join(part.value for part in message.body.parts
-                       if isinstance(part, ContentPart) and part.kind == "text" and isinstance(part.value, str))
+        message = self._source_messages(request.session_id, request.retrieval_ref, request.message_id)[0]
+        text = self._source_text(message)
         if request.offset >= len(text):
             raise ValueError("source offset is at or beyond the end of the message")
         end = min(len(text), request.offset + request.length)
@@ -70,6 +61,37 @@ class MemoryQueries:
                              "start": request.offset, "end": end, "source_chars": len(text)}},
             "next_offset": end if end < len(text) else None,
         }))
+
+    def _source_messages(self, session_id, retrieval_ref, message_id=None):
+        if session_id not in self._catalog.snapshot_attributes():
+            raise ValueError("source read requires an existing session")
+        route = self._check_scope(session_id)
+        parent = self._records().read(retrieval_ref)
+        if parent is None:
+            raise ValueError("unknown memory retrieval reference")
+        origin = parent.source.session_id
+        if not origin or self._check_scope(origin) != route:
+            raise ValueError("source receipt belongs to another memory scope")
+        if message_id is not None and message_id not in parent.presented_message_ids:
+            raise ValueError("message was not presented by this retrieval")
+        identities = (message_id,) if message_id is not None else parent.presented_message_ids
+        sessions = {identity: hit.session_id for hit in parent.hits for identity in hit.message_ids}
+        messages = tuple(self._catalog.reader(sessions[identity]).get(identity) for identity in identities)
+        if any(message is None or not isinstance(message.body, (Input, Output)) for message in messages):
+            raise ValueError("memory source is unavailable")
+        return messages
+
+    @staticmethod
+    def _source_text(message):
+        return "".join(part.value for part in message.body.parts
+                       if isinstance(part, ContentPart) and part.kind == "text" and isinstance(part.value, str))
+
+    async def search_source(self, request: MemorySourceSearchQuery) -> MemorySourceSearchReadout:
+        messages = self._source_messages(request.session_id, request.retrieval_ref, request.message_id)
+        sources = tuple((MemoryEvidence(message_id=message.message_id, session_id=message.session_id,
+            seq=message.seq, recorded_at=message.recorded_at, author=message.author), self._source_text(message))
+            for message in messages)
+        return await run_file_io(lambda: search_originals(request, sources))
 
     async def recall(self, request: MemoryQuery) -> MemoryReadout:
         async with self._lock:

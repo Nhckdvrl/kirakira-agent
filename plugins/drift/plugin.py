@@ -37,7 +37,7 @@ workspace_roots = ()
 workspace_files = ()
 
 SETTINGS = ServiceKey[Configuration]("drift.settings.v1")
-FIELDS = ("auto_enabled", "context_session_id", "purpose", "idle_seconds", "interval_seconds", "daily_budget")
+FIELDS = ("auto_enabled", "allow_conversation", "context_session_id", "purpose", "idle_seconds", "interval_seconds", "daily_budget")
 
 
 class Empty(BaseModel):

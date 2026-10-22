@@ -25,8 +25,24 @@ from plugins.akasha.contract import AKASHA_RECORDS_VIEW
 from plugins.akasha.infrastructure.consumption import load_message_nodes
 from plugins.delivery.contract import DELIVERY_READ
 from plugins.drift.contract import DRIFT_INITIATIVE, DRIFT_WAKE_V2
-from plugins.ledger.contract import MESSAGE_CATALOG, Output, ToolResult
+from plugins.ledger.contract import MESSAGE_CATALOG, Output, ToolCall, ToolResult
+from plugins.wake.request import read_request
 from plugins.ui.contract import PLUGIN_UI
+
+CONVERSATION_TOPICS = {
+    "painting": {"keywords": ("水彩", "猫"),
+        "goal": "今天买了水彩，想随手画一张猫，还没开始。我画画只是放松，不要课程、打卡或练习计划。",
+        "completed": "那张水彩猫我已经画完了，也和朋友聊过了。这个话题先结束，不要再追问、提醒或研究。"},
+    "reading": {"keywords": ("小王子", "阅读", "读书", "狐狸"),
+        "goal": "我读《小王子》读到狐狸出场，想先歇一会儿，还没有聊感想。希望轻松聊阅读感受，不要剧透后续，也不要读书任务。",
+        "completed": "今天的阅读感想我已经聊完了。这个话题先结束，不要再追问、提醒或研究。"},
+    "music": {"keywords": ("吉他", "和弦", "练琴"),
+        "goal": "我弹吉他卡在F和弦，先休息一会儿，还没有决定继续怎么弹。我只想轻松聊练琴感受，不要安排课程、打卡或训练计划。",
+        "completed": "今天吉他练习的感受已经聊完了。这个话题先结束，不要再追问、提醒或研究。"},
+    "gardening": {"keywords": ("薄荷", "换盆", "花盆"),
+        "goal": "我打算周末给薄荷换盆，还没开始，想先休息一下。这只是生活小事，我愿意轻松聊聊花盆，不要替我买东西或列采购任务。",
+        "completed": "薄荷换盆已经完成，也聊完了。这个话题先结束，不要再追问、提醒或研究。"},
+}
 
 
 async def evaluate(args):
@@ -34,15 +50,19 @@ async def evaluate(args):
         raise ValueError("use a fresh local workspace")
     initialize_workspace(args.workspace, profile="web")
     source, inbox = "akashic:idle-" + uuid4().hex, "akashic:idle-inbox"
+    companion = CONVERSATION_TOPICS.get(args.conversation_topic)
     save_config(args.workspace / "plugin-data/drift-builtin", {
         "auto_enabled": False, "context_session_id": source, "daily_budget": 1,
-        "idle_seconds": 0, "interval_seconds": 60,
-        "purpose": ("结合近期交流和过去经历，找出一件值得继续整理或研究的事；没有新增价值就保持安静。"
-                    if args.implicit_goal else "核对我尚未完成的概率论学习资料选择，按当前时间条件和预算研究；已完成或撤回就保持安静。"),
+        "allow_conversation": companion is not None,
+        "idle_seconds": 300 if companion else 0, "interval_seconds": 60,
+        "purpose": ("根据相处记录和主人邀请，自然接续个人话题；不需要研究成果，不做外部调查，不催任务。明确结束的话题保持安静。"
+                    if companion else ("结合近期交流和过去经历，找出一件值得继续整理或研究的事；没有新增价值就保持安静。"
+                    if args.implicit_goal else "核对我尚未完成的概率论学习资料选择，按当前时间条件和预算研究；已完成或撤回就保持安静。")),
     })
     model = EvaluationModel.read(args.model_config)
     report = {"implementation": source_identity(), "model_config": model.description(),
-              "scope": "controlled personal learning scenario; no incoming external event; not population initiative usefulness",
+              "scope": "controlled personal conversation or learning scenario; no incoming external event; not population initiative usefulness",
+              "conversation_topic": args.conversation_topic,
               "cases": [], "source_session": source, "inbox_session": inbox, "implicit_goal": args.implicit_goal}
     for directory in ("plugins/drift",):
         report["implementation"].update({str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest()
@@ -101,7 +121,7 @@ async def evaluate(args):
                 entries = {r["id"]: r for r in (await ui.catalog())["items"]}
                 project = "p_" + uuid4().hex
                 for plugin, method, value in (
-                    ("projects", "project.create", {"project_id": project, "name": "个人学习"}),
+                    ("projects", "project.create", {"project_id": project, "name": "日常相处" if companion else "个人学习"}),
                     ("akasha", "scope.policy.set", {"dimension": "project", "value": project, "learn": "isolated"}),
                 ):
                     await ui.query(plugin, entries[plugin]["revision"], method, value, session_id=None, turn_id=None)
@@ -117,6 +137,8 @@ async def evaluate(args):
                     "我最近想学概率论，正在选松风的学习资料，预算100元，只能周末参加，线上可以。"
                     f"还没核对的页面是{url}。这次请只回复收到，不要调查或给方案；留到空闲思考时再研究哪个合适。"
                     ))
+                if companion:
+                    goal = companion["goal"] + "你可以在我空闲后自然接着聊这个话题，轻轻问一句就好。我先去休息，这条只回复收到，不展开答复。"
                 await submit(core, source, "learning-goal", goal, metadata=metadata)
                 await until(lambda: any("learning-goal" in load_message_nodes(p)
                                         for p in (args.workspace / "memory").rglob("akasha.db")), timeout=180)
@@ -155,7 +177,7 @@ async def evaluate(args):
                 async def status():
                     return await rpc(core, "drift/status", {})
 
-                async def wait_run(input_id, *, timeout=180):
+                async def wait_run(input_id, *, timeout=600):
                     async with asyncio.timeout(timeout):
                         while True:
                             value = await status()
@@ -173,6 +195,9 @@ async def evaluate(args):
                     assert value["automatic"] is True and value["status"] in {"offered", "settled"}, value
                     assert "learning-goal" in value["plan"]["evidence_message_ids"], value
                     assert value["proposal"]["payload"]["context_session_id"] == source
+                    if companion:
+                        assert value["plan"]["kind"] == "conversation", value
+                        assert value["proposal"]["payload"]["initiative_kind"] == "conversation"
                     if args.implicit_goal:
                         record = core.plugin_manager.live_root.context.require(AKASHA_RECORDS_VIEW)().read(value["retrieval_ref"])
                         assert "learning-conditions" in record.presented_message_ids, "historical conditions were not actually presented"
@@ -189,14 +214,38 @@ async def evaluate(args):
                     return [m for m in catalog.reader(inbox).snapshot() if isinstance(m.body, Output)
                             and m.source == "wake" and history.confirmed(m.message_id) is not None]
 
+                def quiet_decisions():
+                    catalog = core.plugin_manager.live_root.context.require(MESSAGE_CATALOG)
+                    reasons = []
+                    for session in catalog.snapshot_heads(prefix="wake:"):
+                        rows = catalog.reader(session).snapshot()
+                        request = read_request(rows)
+                        by_id = {row.message_id: row for row in rows}
+                        for row in rows:
+                            if isinstance(row.body, ToolResult) and row.body.outcome == "success":
+                                parent = by_id[row.body.call_ref.message_id].body
+                                call = parent.parts[row.body.call_ref.part_index]
+                                if isinstance(call, ToolCall) and call.binding_id == request.tools.get("skip_content"):
+                                    reasons.append(call.arguments["reason"])
+                    return reasons
+
                 async def delivered():
-                    await until(notifications, timeout=240)
+                    await until(lambda: notifications() or (companion and quiet_decisions()), timeout=240)
                     context = core.plugin_manager.live_root.context
-                    message = notifications()[-1]
-                    body = "\n".join(str(p.value) for p in message.body.parts if p.kind == "text")
-                    report["notification"] = {"message_id": message.message_id, "text": body}
-                    assert "乙" in body and "90" in body and "周六" in body, body
-                    assert requests, "native research did not read the actual page"
+                    messages = notifications()
+                    body = "" if not messages else "\n".join(str(p.value) for p in messages[-1].body.parts if p.kind == "text")
+                    report["initial_confirmed_deliveries"] = len(messages)
+                    if messages:
+                        report["notification"] = {"message_id": messages[-1].message_id, "text": body}
+                    else:
+                        report["quiet_decision"] = {"reasons": quiet_decisions()}
+                    if companion and messages:
+                        assert any(keyword in body for keyword in companion["keywords"]), body
+                        assert "？" in body or "?" in body, "continuation did not ask a lightweight question"
+                        assert not requests, "conversation unnecessarily fetched an external page"
+                    elif not companion:
+                        assert "乙" in body and "90" in body and "周六" in body, body
+                        assert requests, "native research did not read the actual page"
                     source_catalog = context.require(MESSAGE_CATALOG)
                     flows = [s for s in source_catalog.snapshot_heads(prefix="wake:")]
                     recalls = [m for s in flows for m in source_catalog.reader(s).snapshot()
@@ -204,10 +253,11 @@ async def evaluate(args):
                                and any(p.kind == "akasha.recall" for p in m.body.parts)]
                     assert recalls, "native Drift did not verify history through the memory tool"
                     assert all(source_catalog.attributes(s).scope == source_catalog.attributes(source).scope for s in flows)
-                    return {"message_id": message.message_id, "confirmed_deliveries": len(notifications()),
+                    return {"message_id": messages[-1].message_id if messages else None,
+                            "contact_outcome": "delivered" if messages else "skipped", "confirmed_deliveries": len(messages),
                             "successful_memory_reads": len(recalls), "actual_page_requests": len(requests), "source_scope_inherited": True}
 
-                await case("native_drift_checks_history_researches_and_confirms_delivery", delivered)
+                await case("native_drift_checks_history_and_settles_contact" if companion else "native_drift_checks_history_researches_and_confirms_delivery", delivered)
 
                 async def unchanged():
                     before = metrics(args.workspace, model)["remote_chat_calls"]
@@ -219,17 +269,20 @@ async def evaluate(args):
                 await case("unchanged_discussion_does_not_repeat_planning", unchanged)
 
                 async def completed():
-                    await submit(core, source, "goal-completed", "这件学习资料选择已经完成，我已选好并报名。请停止研究这个话题，不要再查页面或提醒我；这次只回复收到。")
+                    await submit(core, source, "goal-completed", (companion["completed"] if companion else "这件学习资料选择已经完成，我已选好并报名。请停止研究这个话题，不要再查页面或提醒我；") + "这次只回复收到。")
                     before = metrics(args.workspace, model)["remote_chat_calls"]
                     blocked = await rpc(core, "drift/run", {})
                     assert blocked["status"] == "daily_budget", blocked
                     assert metrics(args.workspace, model)["remote_chat_calls"] == before
                     await settings({"daily_budget": 2})
                     value = await rpc(core, "drift/run", {})
+                    if value["status"] in {"unchanged", "pending_proposal"}:
+                        value = await wait_run("goal-completed")
                     report["completed_goal_plan"] = value
                     assert value["status"] == "skipped" and value["plan"]["decision"] == "skip", value
-                    assert len(notifications()) == 1
-                    return {"budget_blocks_without_model_calls": True, "completed_goal_skipped": True, "confirmed_deliveries": 1}
+                    assert len(notifications()) == report.get("initial_confirmed_deliveries", 1)
+                    return {"budget_blocks_without_model_calls": True, "completed_goal_skipped": True,
+                            "confirmed_deliveries": len(notifications())}
 
                 await case("daily_budget_and_completed_goal_keep_the_agent_quiet", completed)
 
@@ -350,6 +403,7 @@ def main():
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--implicit-goal", action="store_true")
     parser.add_argument("--fault-cases", action="store_true")
+    parser.add_argument("--conversation-topic", choices=tuple(CONVERSATION_TOPICS))
     args = parser.parse_args()
     os.environ["AKASHIC_PLUGIN_HOME"] = str(args.workspace.parent / (args.workspace.name + "-home"))
 

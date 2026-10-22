@@ -22,6 +22,8 @@ from plugins.akasha.contract import (
     MemoryQuery,
     MemoryReadout,
     MemorySourceQuery,
+    MEMORY_SOURCE_SEARCH,
+    MemorySourceSearchQuery,
 )
 from plugins.akasha.infrastructure.consumption import load_message_nodes
 from plugins.akasha.infrastructure.persistence import logical_state_sha256
@@ -30,8 +32,45 @@ from plugins.ledger.contract import MESSAGE_CATALOG, Output, ToolResult
 from plugins.wake.request import read_request
 
 
+def verify_source_search(path, output):
+    """Recompute current windows offline; never execute code embedded in evidence."""
+    from plugins.akasha.contract import MemoryEvidence, MemorySourceSearchReadout
+    from plugins.akasha.source_search import search_originals
+
+    if output.exists() or output.resolve() == path.resolve():
+        raise ValueError("verification requires a new output file")
+    payload = path.read_bytes()
+    document = json.loads(payload)
+    evidence = document.get("source_navigation", document)
+    source = evidence["source"]
+    request = MemorySourceSearchQuery.model_validate_json(json.dumps(evidence["request"]))
+    original = MemoryEvidence.model_validate_json(json.dumps(source["evidence"]))
+    current_source = (ROOT / "plugins/akasha/source_search.py").read_bytes()
+    assert hashlib.sha256(current_source).hexdigest() == evidence["current_source_sha256"]
+    result = search_originals(request, ((original, source["text"]),))
+    assert result.model_dump(mode="json") == evidence["current"]
+    summaries = {}
+    for name in ("baseline", "current"):
+        value = MemorySourceSearchReadout.model_validate_json(json.dumps(evidence[name]))
+        assert len(value.model_dump_json()) <= request.max_chars
+        for window in value.windows:
+            span = window.evidence.excerpt
+            assert span.message_id == original.message_id and span.source_chars == len(source["text"])
+            assert source["text"][span.start:span.end] == window.text
+        summaries[name] = {"windows": len(value.windows), "json_chars": len(value.model_dump_json()),
+                           "expected_value_present": any(evidence["expected"] in window.text for window in value.windows)}
+    assert hashlib.sha256(evidence["baseline_source"].encode()).hexdigest() == evidence["baseline_sha256"]
+    assert path.read_bytes() == payload
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps({"complete": True, "model_calls": 0, "summaries": summaries,
+                                 "baseline_execution": "frozen code hash and output spans checked; embedded code was not executed"}, ensure_ascii=False, indent=2) + "\n")
+
+
 async def evaluate(args):
     initialize_workspace(args.workspace)
+    if args.personal_only:
+        from agent.plugin_composition.config_input import save_config
+        save_config(args.workspace / "plugin-data/akasha-builtin", {"inject_max_chars": 2400})
     extension = args.workspace.parent / (args.workspace.name + "-fixtures")
     shutil.copytree(ROOT / "eval/fixtures/alignment", extension / "alignment",
                     ignore=shutil.ignore_patterns("__pycache__"))
@@ -40,12 +79,18 @@ async def evaluate(args):
     implementation.update({name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
                            for name in ("eval/memory_runtime.py", "plugins/wake/request.py", "core/net/http.py")})
     report = {"model_config": model.description(), "implementation": implementation, "cases": []}
+    report["tool_recall_max_chars"] = 2400 if args.personal_only else 12000
 
     def save():
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
 
     async def case(name, action):
+        if args.personal_only and name not in {
+            "personal_history_source_navigation_sdk_and_agent",
+            "personal_event_uses_deep_history_and_confirms_one_delivery",
+        }:
+            return
         start = time.monotonic()
         try:
             detail = await action()
@@ -144,10 +189,12 @@ async def evaluate(args):
                     "all_offsets_match_original_text": True, "same_retry": True}
         await case("bounded_excerpts_preserve_original_ranges", excerpt_sources)
 
-        source_request = MemorySourceQuery(session_id=query_session,
-            retrieval_ref=report["readout"]["retrieval_ref"], message_id="history-constraint", length=2000)
+        source_request = None
 
         async def original_sources():
+            nonlocal source_request
+            source_request = MemorySourceQuery(session_id=query_session,
+                retrieval_ref=report["readout"]["retrieval_ref"], message_id="history-constraint", length=2000)
             async with await AsyncClient.for_workspace(args.workspace) as client:
                 source = await client.memory_source(source_request)
                 assert source == await client.memory_source(source_request)
@@ -260,6 +307,83 @@ async def evaluate(args):
                     "models_received_history_as_evidence": True}
         await case("agent_follows_excerpt_to_long_original_and_recovers_signature", long_source_follow_up)
 
+        async def source_navigation():
+            nonlocal before
+            history = ("海棠登山背包采购的完整讨论记录，过程条目不代表最终决定。\n"
+                + "例行核对海棠背包预算与出行条件；此处只讨论检查步骤，没有最终采购决定。\n" * 240
+                + "最终决定：海棠登山背包的预算已经从500元更正到760元，必须防水，只在周末出行使用。\n"
+                + "后续核对清单不改变上面的最终决定。\n" * 120
+                + "请只回复已记下，不转述原文，不写其他档案。")
+            await submit(core, "akashic:personal-backpack", "history-personal-backpack", history)
+            async with asyncio.timeout(180):
+                while "history-personal-backpack" not in load_message_nodes(path):
+                    await asyncio.sleep(0.05)
+            before = logical_state_sha256(path)
+            async with await AsyncClient.for_workspace(args.workspace) as client:
+                recall = await client.memory_recall(MemoryQuery(session_id=query_session, key="personal-source-navigation",
+                    query="海棠登山背包采购完整讨论", selection="fused", presentation="excerpts", limit=5, max_chars=2400))
+                assert "history-personal-backpack" in recall.record.presented_message_ids
+                search_request = MemorySourceSearchQuery(session_id=query_session, retrieval_ref=recall.retrieval_ref,
+                    message_id="history-personal-backpack", query="最终决定", max_chars=2400)
+                found = await client.memory_source_search(search_request)
+                assert found == await ctx.require(MEMORY_SOURCE_SEARCH)(search_request)
+                assert any("760" in window.text for window in found.windows)
+                assert len(found.model_dump_json()) <= search_request.max_chars
+                assert await client.memory_source_search(search_request) == found
+            head = catalog.reader(query_session).head()
+            answer = await submit(core, query_session, "locate-personal-backpack",
+                "请实际使用search_memory_source，在retrieval_ref='" + recall.retrieval_ref + "'、message_id='history-personal-backpack'中"
+                "检索海棠登山背包采购的最终决定，再告诉我当前预算和必要条件。原文没有目录位置提示，不要猜字符偏移。")
+            proofs = [part.value for message in catalog.reader(query_session).snapshot(after_seq=head)
+                if isinstance(message.body, ToolResult) and message.body.outcome == "success"
+                for part in message.body.parts if part.kind == "akasha.source"
+                and part.value["span"]["message_id"] == "history-personal-backpack"]
+            value = text(answer)
+            assert "760" in value and "防水" in value and "周末" in value, value
+            assert proofs and any(proof["span"]["start"] > 2000 for proof in proofs)
+            assert logical_state_sha256(path) == before
+            report["navigation_request"] = search_request.model_dump(mode="json")
+            report["navigation_readout"] = found.model_dump(mode="json")
+            return {"answer": value, "sdk_service_repeat_equal": True, "original_chars": len(history),
+                    "search_windows": len(found.windows), "tool_source_proofs": len(proofs),
+                    "query_contains_reference_answers": False, "exact_offset_supplied": False}
+        await case("personal_history_source_navigation_sdk_and_agent", source_navigation)
+
+        async def personal_event():
+            target = "akashic:personal-outing-inbox"
+            await rpc(core, "evaluation/seed", {"session_id": target, "records": [
+                {"kind": "input", "source": "conversation", "text": "这里接收海棠登山装备的消息，请结合先前的真实讨论判断。"},
+                {"kind": "output", "source": "conversation", "text": "收到。"},
+            ]})
+            await configure_proactive(core, args.workspace, target)
+            event = {"event_id": "personal-backpack-offer", "observed_at": datetime.now(UTC).isoformat(),
+                "payload": {"title": "海棠登山背包新报价", "content":
+                    "海棠背包有一条720元的防水款信息。请核对此前采购讨论的现行预算和使用安排后提醒主人。"
+                    "完整讨论很长，请实际先用excerpts召回，再用search_memory_source在原文中检索最终决定；"
+                    "读取失败先修正引用，核实原文成功后再分享。本事件不提供历史预算和出行安排。"}}
+            receipt = await rpc(core, "event-ingress/alert", event)
+            async with asyncio.timeout(180):
+                while True:
+                    outputs = [m for m in catalog.reader(target).snapshot() if m.source == "wake" and isinstance(m.body, Output) and m.body.finish == "complete"]
+                    if outputs and ctx.require(DELIVERY_READ).confirmed(outputs[-1].message_id):
+                        answer = outputs[-1]
+                        break
+                    await asyncio.sleep(0.05)
+            flows = [catalog.reader(session).snapshot() for session in catalog.snapshot_heads(prefix="wake:")]
+            rows = next(rows for rows in flows if read_request(rows).notification_id == answer.message_id)
+            value = text(answer)
+            assert "760" in value and "周末" in value and "防水" in value, value
+            proofs = [part.value for message in rows if isinstance(message.body, ToolResult) and message.body.outcome == "success"
+                for part in message.body.parts if part.kind == "akasha.source" and part.value["span"]["message_id"] == "history-personal-backpack"]
+            assert proofs, "personal alert did not verify the admitted original source"
+            duplicate = await rpc(core, "event-ingress/alert", event)
+            assert duplicate["mail_id"] == receipt["mail_id"] and not duplicate["accepted"]
+            assert logical_state_sha256(path) == before
+            report["personal_notification"] = {"message_id": answer.message_id, "text": value}
+            return {"delivered": True, "answer": value, "original_source_proofs": len(proofs),
+                    "history_not_in_inbox_or_event": True, "duplicate_event_reused": True}
+        await case("personal_event_uses_deep_history_and_confirms_one_delivery", personal_event)
+
         async def feedback(action):
             nonlocal before
             original = catalog.reader("akashic:history-decoy").get("history-decoy")
@@ -297,6 +421,10 @@ async def evaluate(args):
             assert result.model_dump(mode="json") == report["readout"]
             assert excerpts.model_dump(mode="json") == report["excerpt_readout"]
             assert source.model_dump(mode="json") == report["source_readout"]
+            if "navigation_request" in report:
+                async with await AsyncClient.for_workspace(args.workspace) as client:
+                    located = await client.memory_source_search(MemorySourceSearchQuery.model_validate_json(json.dumps(report["navigation_request"])))
+                assert located.model_dump(mode="json") == report["navigation_readout"]
             assert logical_state_sha256(path) == before
             if "follow_up_message_id" in report:
                 catalog = core.plugin_manager.live_root.context.require(MESSAGE_CATALOG)
@@ -310,12 +438,19 @@ async def evaluate(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--workspace", type=Path, required=True)
-    parser.add_argument("--key-file", type=Path, required=True)
-    parser.add_argument("--embedding-manifest", type=Path, required=True)
+    parser.add_argument("--workspace", type=Path)
+    parser.add_argument("--key-file", type=Path)
+    parser.add_argument("--embedding-manifest", type=Path)
     parser.add_argument("--model-config", type=Path)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--personal-only", action="store_true", help="Run the two personal-history and incoming-event cases.")
+    parser.add_argument("--verify-source-search", type=Path, help="Recompute frozen source-navigation evidence without a model or credentials.")
     args = parser.parse_args()
+    if args.verify_source_search:
+        verify_source_search(args.verify_source_search, args.output)
+        return
+    if not all((args.workspace, args.key_file, args.embedding_manifest)):
+        parser.error("live evaluation requires --workspace, --key-file and --embedding-manifest")
     os.environ.setdefault("AKASHIC_PLUGIN_HOME", str(args.workspace.parent / (args.workspace.name + "-home")))
     raise SystemExit(0 if asyncio.run(evaluate(args)) else 1)
 

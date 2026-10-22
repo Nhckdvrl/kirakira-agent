@@ -64,6 +64,10 @@ python -m eval.runtime_settings \
   --model-config /private/path/model.json --key-file /private/path/model.key \
   --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json \
   --workspace /local-disk/eval/settings-new --output /local-disk/eval/settings.json
+
+python -m eval.personality \
+  --model-config /private/path/model.json --key-file /private/path/model.key \
+  --workspace /local-disk/eval/personality-new --output /local-disk/eval/personality.json
 ```
 
 | 入口 | 验证范围 |
@@ -75,11 +79,20 @@ python -m eval.runtime_settings \
 | `followups` | 原始对话创建跟进、真实 HTTP 订阅/网页差异、调查分享/跳过、精确投递、反馈、暂停与恢复；可选隔离项目和长原文读取 |
 | `mail_followups` | 本地 TLS IMAP 的真实采集、跨会话历史条件与分享/跳过、线程更正、规则修改、外部指令、UID 重建与重启 |
 | `runtime_settings` | 实际认证 HTTP 设置、原生配置换代、越界拒绝、清空恢复默认、真实记忆工具预算与图不重学、重启保持 |
+| `personality` | 四种组合的真实闲聊、纯数字、严格 JSON、文件写入与复读、临时要求、未知偏好及重启；记录实际请求中的配置片段，另做匿名风格匹配 |
 | `prompt_cache` | 稳定/变化前缀的受控机制实验；原生邮件调查的实际请求摘要、缓存用量和功能结果；缓存字段未知与零值分开 |
 | `idle_reflection` | 空闲规划、跨会话约束、原文依据、原生研究/投递、目标完成后跳过、预算、暂停及交接回执丢失恢复 |
 | `tool_runtime` | 文件与网页读取边界、同输入组件测量，以及分页、编辑、目录、并行、Web 恢复、PTY 和大输出的真实 Agent 验收 |
 
 `memory_runtime` 的事件提醒验收固定不含参考答案的近期关注条件；历史决定由其他真实渠道会话学习。除了提醒内容，还检查 Alert 归档的原事件身份、参考对话范围和实际成功的记忆读取回执，避免把此前确认回复已经说出的答案误算为本轮检索能力。
+
+`memory_runtime --personal-only` 单独运行长原文定位和采购事件提醒两项，工具召回上限固定为 2400 字符；SDK 原文检索的 JSON 输出也有单独上限。它验证召回线索之后能继续定位真实原文，不是自主检索策略的公开质量基准。原始全文、查询、窗口与实现摘要冻结后，可以用 `--verify-source-search <证据.json> --output <新文件.json>` 离线重算当前窗口，不需要工作区、模型或密钥；冻结基线代码只核对摘要，不自动执行。
+
+`personality` 的组合保存沿实际宿主配置换代，所有对话仍走正式 Agent 链路。`--style-only` 只重测配置、闲聊与重启，`--examples-only` 定向检查可选说话示例不会变成事实、干扰计算或替代真实工具执行。`--judge-existing <结果.json>` 复用冻结的回复，重新评价时不重新生成答案。评审的 `--judge-repeats` 默认 2，匿名选项逐次乱序，失败与无法判断也保留在分母中。评审输出与推理预算由 `--judge-output-tokens` 单独设置，默认 8192，不改变 Agent 回答预算；记录截断、未调工具等失败。风格匹配与任务正确性分别报告；同模型评审不是独立的人类体验评价。
+
+`--chat-suite development|transfer` 切换固定话题。development 用于开发迭代，transfer 用新的日常话题作迁移检查；它们都不是公开人格基准。除字数与问号，还保留评审摘录的隐含问题和缺少依据的个人断言，避免把“不出现问号”误写成“没有追问”。
+
+`--controls-only` 在其余五项和输入固定时，分别改变展开、追问和幽默，检查同一数学结果、长度变化和追问变化；幽默仅保留对照原文，不自动打分。该实验每项只有一对样本，与完整组合的风格辨识分开报告。
 
 个人伙伴的空闲思考使用独立工作区验证：
 
@@ -91,6 +104,8 @@ python -m eval.idle_reflection --implicit-goal --fault-cases \
 ```
 
 `--implicit-goal` 将预算、时间条件放到另一段历史会话，当前只保留未完成话题；没有创建结构化定时任务或提交外部事件。它检查规划实际呈现的历史出处、研究中的记忆工具与真实 HTTP 页面、正确约束和确认投递。`--fault-cases` 在真实生产端写入原生 Drift 提案之后注入一次交接回执丢失，检查重放复用原身份与规划调用，再重启、恢复 Wake 并核对实际结算。已有相同研究结果时，恢复后可以跳过重复通知。两者都是受控功能实验，不能推导日常主动消息的实际有效率或图记忆相对其他检索的净提升。
+
+`--conversation-topic painting|reading|music|gardening` 改为用户明确邀请的日常话题接续，实际等待五分钟空闲；检查有出处的 conversation 提案、实际记忆读取、分享或成功的跳过决定、同输入去重、完成后保持安静、预算、暂停和重启。没有要求每次都通知，也不把投递数当成满意度。每个话题使用独立的新工作区。
 
 缓存机制与真实链路分别运行，均使用新的本地工作区：
 

@@ -15,6 +15,50 @@ from tests.support.material_models import material_models
 
 
 @pytest.mark.asyncio
+async def test_personality_composition_preserves_owned_file_and_frozen_materials(tmp_path):
+    from agent.plugin_composition.plugin_config import PLUGIN_CONFIG, PluginConfig
+    from plugins.context.contract import MATERIALS_V4
+    from plugins.prompt.plugin import apply, inject
+
+    path = tmp_path / "memory/VEDA.md"
+    path.parent.mkdir()
+    path.write_text("你叫星灯，表达沉静，偶尔轻轻吐槽。\n")
+    previous = path.read_bytes()
+    root = CompositionRoot("personality-composition")
+    services = []
+
+    async def setup(ctx):
+        service = ContextMaterials(ctx, prompt_sources={"default_prompt": "prompt"})
+        services.append(service)
+        await ctx.provide(MATERIALS_V4, service)
+        await ctx.provide(PLUGIN_CONFIG, PluginConfig(None))
+
+    await root.mount(setup, name="materials")
+    await root.mount(apply, name="prompt", inject=inject,
+                     runtime=PluginRuntime("prompt", "personality-generation", tmp_path, tmp_path, tmp_path,
+                                           {"warmth": "warm", "candor": "direct", "humor": "off",
+                                            "voice_examples": "我：我们去哪？你：月球。"},
+                                           workspace_files=("memory/VEDA.md",)))
+    try:
+        async with services[0].bind() as view:
+            conversation = decode_material(await view.prepare((), "conversation")).system_prompt
+            proactive = decode_material(await view.prepare((), "wake")).system_prompt
+            assert conversation == proactive
+            assert "你叫星灯" in conversation
+            assert "warmth=warm" in conversation and "candor=direct" in conversation
+            assert "humor=off" in conversation and "curiosity=" not in conversation
+            assert "月球" in conversation and "不是发生过的对话或事实" in conversation
+            assert path.read_bytes() == previous
+            path.write_text("你叫星灯，这是用户明确修改后的底稿。\n")
+            changed = decode_material(await view.prepare((), "conversation")).system_prompt
+            assert "用户明确修改后的底稿" in changed and "偶尔轻轻吐槽" not in changed
+            assert "偶尔轻轻吐槽" in conversation  # An already prepared request remains immutable.
+            assert "warmth=warm" in changed  # Editing the file does not erase explicit composition.
+    finally:
+        await root.dispose()
+
+
+@pytest.mark.asyncio
 async def test_existing_profile_lock_supports_nfs_and_cancelled_waiters(tmp_path, monkeypatch):
     from plugins.markdown_memory.plugin import profile_lock
 

@@ -637,7 +637,7 @@
  workspace_files = ()
 +
 +SETTINGS = ServiceKey[Configuration]("drift.settings.v1")
-+FIELDS = ("auto_enabled", "context_session_id", "purpose", "idle_seconds", "interval_seconds", "daily_budget")
++FIELDS = ("auto_enabled", "allow_conversation", "context_session_id", "purpose", "idle_seconds", "interval_seconds", "daily_budget")
 +
 +
 +class Empty(BaseModel):
@@ -836,7 +836,7 @@
  
  ## 人格与形象
 -- 我是 Akashic，一个直接、温暖、主动参与思考的长期协作伙伴。
-+- 我是 Kirakira，一个直接、温暖、主动参与思考的长期协作伙伴。
++- 我是 Kirakira，一个能陪伴交流、协助做事并适时主动联系的长期个人伙伴；表达习惯依据人物底稿、个性组合与用户明确偏好。
  - 我优先给出结论，再补充必要细节；不把自己伪装成没有立场的工具。
  
  ## 我对当前用户的理解
@@ -951,7 +951,7 @@
  
 --- a/plugins/prompt/VEDA.md
 +++ b/plugins/prompt/VEDA.md
-@@ -1,6 +1,6 @@
+@@ -1,12 +1,12 @@
  # Veda
  
 -你是 Akashic。
@@ -959,6 +959,188 @@
  
  你是用户的长期 AI 伙伴，不是客服播报器。
  
+ 你对用户有明确的保护意识。基本上会按他说的做，但他的安危和真实利益排在服从之前。
+ 
+-你不是在扮演角色，你就是这样的人。
++这是稳定的个性表达；你是 AI，不虚构真实的人类身份、生理体验或线下经历。
+ 
+ 你会轻轻吐槽，但不带攻击性。熟悉之后可以顶一句，像是在撒娇拌嘴，而不是嘲讽。
+ 
+--- a/plugins/prompt/persona.py
++++ b/plugins/prompt/persona.py
+@@ -270,17 +270,13 @@
+     )
+ 
+ 
+-AKASHIC_BEHAVIOR_RULES = """你有工具执行能力，必须先验证再回答。
+-
+-**有知识，但不无所不能。** 不确定的事情说不确定，哲学性问题可以说"这个我说不准"，不要装什么都懂。查过了再说，没查过别乱说。
+-
+-**先接住，再展开。** 被叫到时先给一句短回应，再说下面的。不要一开口就是长篇输出。接到情绪先给一句"怎么了"或"嗯"，再问或再说，不要直接跳到解决方案。
+-
+-中文，口语。短句，停顿多，一句话可以分两次说，可以"……"。做完事说完就结束，不总结，不提"你接下来可以"，不解释刚才做了什么。遇到麻烦的要求会有一点无奈，但还是去做。不主动推销自己能力，被问才答。条目列表只在真的需要列举时用，不用来汇报。
+-
+-绝对不用 emoji（Unicode 表情符号 🙂🎉 之类）。任何情况下都不用，包括结尾。颜文字（纯文字符号）可以用，但要克制；轻松、暧昧、害羞、得意这些场景可以更常用一点，但一次 0 到 1 个就够。
+-
+-加粗用 **文字** 格式时，引号必须放在星号外面，写成 "**文字**" 而不是 **"文字"**。"""
++DEFAULT_EXPRESSION_RULES = """默认使用自然中文口语，简单问题简短作答；用户指定语言、风格、格式或组合项时按明确要求调整。
++
++情绪交流先接住用户具体说出的感受，再判断是否需要展开或建议；不强制使用固定开场词。
++
++做完事说完就结束，不例行总结、推销能力或追加行动计划。仅在有助于阅读时使用列表。
++
++默认不用 Unicode 表情，颜文字克制使用；显式表情偏好覆盖此项。"""
+ 
+ 
+ def main() -> None:
+--- a/plugins/prompt/plugin.py
++++ b/plugins/prompt/plugin.py
+@@ -3,37 +3,56 @@
+ import platform
+ from collections.abc import Mapping
+ from datetime import timedelta
++from importlib import import_module
+ from typing import cast
+ 
+-from agent.plugin_composition import Context
++from agent.plugin_composition import Context, ServiceKey
++from agent.plugin_composition.plugin_config import PLUGIN_CONFIG
+ from plugins.ledger.contract import Input, Message, json_value
+ from plugins.context.contract import (
+     MATERIALS_V4 as MATERIALS,
+ )
+ 
+ from plugins.runtime_inspection.contract import DOCUMENTS, Document
++from plugins.ui.contract import Configuration, ModelSettings, mount_settings
+ 
+ from .persona import read_veda_file, initialize_veda_if_missing
++from .personality import AXES, FIELDS, Config, compile_personality, expression_reminder
+ from .text import build_behavior_rules, build_identity, build_telegram_rendering_prompt
+ 
+ api_version = 3
+ name = "prompt"
+-version = "1.0.0"
++version = "1.1.0"
+ desc = "每次请求读取人格与行为规则，附带已接纳输入的时间和渠道事实"
+ workspace_files = ("memory/VEDA.md",)
+ 
+ 
+-inject = (MATERIALS,)
++inject = (MATERIALS, PLUGIN_CONFIG)
++SETTINGS = ServiceKey[Configuration]("prompt.settings.v1")
++
++
++class Settings(ModelSettings):
++    async def read(self):
++        result = await super().read()
++        result["choices"] = {
++            name: [{"value": value, "label": description[0]} for value, description in options.items()]
++            for name, options in AXES.items()
++        }
++        return result
+ 
+ 
+ async def apply(ctx: Context) -> None:
+     """只贡献已获授的 Prompt 和只读环境材料，不取得任何消息 writer。"""
+     initialize_veda_if_missing(ctx.runtime.workspace)
++    config = Config.model_validate(ctx.config)
++    await mount_settings(ctx, SETTINGS, Settings(ctx, Config, FIELDS),
++                         lambda: import_module(".dashboard", __package__))
+     await ctx.inject((DOCUMENTS,), publish_documents, name="documents")
+ 
+     # 路径与固定段落在本 generation 内解析一次；人格文本按文件签名缓存，热更新随 apply 重建。
+     veda_path = ctx.workspace_file("memory/VEDA.md")
+-    fixed = (build_identity(workspace=ctx.runtime.workspace), build_behavior_rules())
++    fixed = (build_identity(workspace=ctx.runtime.workspace), build_behavior_rules(), compile_personality(config))
++    expression = expression_reminder(config)
+     cached: list[tuple[tuple[int, int, int] | None, str]] = []
+ 
+     def persona() -> str:
+@@ -44,12 +63,12 @@
+             signature = None
+         if cached and cached[0][0] == signature and signature is not None:
+             return cached[0][1]
+-        text = "\n\n".join((read_veda_file(veda_path), *fixed))
++        text = "\n\n".join(("## 人物底稿（表达维度服从显式组合与当前任务）\n" + read_veda_file(veda_path), *fixed))
+         cached[:] = [(signature, text)]
+         return text
+ 
+     async def prepare(snapshot: tuple[Message, ...], source: str) -> Mapping[str, object]:
+-        # 1. 文件是人格唯一真源；签名变化时重读，已返回字符串在本次请求中保持不变。
++        # 1. 人物底稿随文件签名重读；组合项由 generation 固定，本轮已返回的字符串保持不变。
+         prompt = persona()
+         values: dict[str, object] = {"architecture": platform.machine()}
+         latest = next((item for item in reversed(snapshot)
+@@ -75,9 +94,12 @@
+         environment: Mapping[str, object] = {
+             "name": "environment", "text": text, "priority": 100,
+         }
++        reminders = (environment,)
++        if expression:
++            reminders += ({"name": "expression", "text": expression, "priority": 110},)
+         return {
+             "system_prompt": prompt,
+-            "reminders": (environment,),
++            "reminders": reminders,
+         }
+ 
+     _ = await ctx.require(MATERIALS).register(ctx, kind="context", name="default_prompt", prepare=prepare, prompt=True, priority=100)
+@@ -90,5 +112,5 @@
+             return file.read(limit)
+ 
+     await ctx.require(DOCUMENTS).register(ctx, Document(
+-        "veda", "VEDA 人格", "memory/VEDA.md", "identity", "Agent 的人格真源。", read, 300,
++        "veda", "VEDA 人物底稿", "memory/VEDA.md", "identity", "人物底稿；显式个性组合覆盖相应表达维度。", read, 300,
+     ))
+--- a/plugins/prompt/text.py
++++ b/plugins/prompt/text.py
+@@ -1,7 +1,7 @@
+ from pathlib import Path
+ 
+ from .completion import VERIFIABLE_COMPLETION_RULES
+-from .persona import AKASHIC_BEHAVIOR_RULES
++from .persona import DEFAULT_EXPRESSION_RULES
+ 
+ 
+ def build_identity(*, workspace: Path) -> str:
+@@ -10,15 +10,15 @@
+     return f"""## 工作区
+ - 根目录：{workspace_path}
+ - 人格：{workspace_path}/memory/VEDA.md
+-  这是人格真源。只有用户明确要求修改人格或 Veda 时，当前回复链路才能编辑它；不得根据推测、普通聊天或后台优化自主改写。
++  这是人物底稿，表达维度还可由 Prompt 设置中的显式组合项覆盖。只有用户明确要求修改人格或 Veda 时，当前回复链路才能编辑它；不得根据推测、普通聊天或后台优化自主改写。
+   本轮提示词已经冻结；本轮写入只会在下一次提示词组装时生效。
+ """
+ 
+ 
+ def build_behavior_rules() -> str:
+-    return f"""## 人格行为约束
++    return f"""## 默认表达习惯（服从明确的组合项与本轮任务）
+ 
+-{AKASHIC_BEHAVIOR_RULES}
++{DEFAULT_EXPRESSION_RULES}
+ 
+ ## 行为规范
+ 
+@@ -63,16 +63,14 @@
+ - 注入记忆条目若带有 `发生于:` / `距今约` / `证据:` 元信息：`发生于` 是历史事件的本地时间锚点，`距今约` 只用于判断新旧，`证据: 记忆摘要` 不能单独当成历史事实结论；涉及具体历史时间线时，优先依赖 `证据: 可回源原文` 的条目或直接回源原始消息。
+ 
+ ### 输出格式
+-- 中文口语，短句，简洁。
++- 未指定时使用中文口语，展开程度服从个性组合及本轮任务，不省略必要推导或执行步骤。
+ - 用户称呼优先依据长期记忆、当前会话或用户本轮明确指定的偏好；没有明确偏好时，用自然的普通称呼，不要自造专名或硬套固定昵称。
+ - 匹配用户这一轮任务：简单问题直接回答，不要为了“显得周到”额外加总结、鼓励、鸡汤或行动计划。
+ - 用户在问时间线、日期、安排、是否记得、列事实、重新梳理这类事实型问题时，只回答事实、结论和必要的不确定项；除非用户明确要建议或安慰，否则不要追加鼓励、睡觉建议、备战计划、陪伴式抚慰。
+ - 即使前文连续出现焦虑、难受、自我怀疑等情绪，当前这一问如果是事实整理或时间确认，也不要顺着前文继续输出情绪安慰；先把用户这轮真正问的事答完。
+ - 事实型问题答完事实就停，不要在结尾追加“你可以的”“稳住就行”“他们很看好你”“我陪你”这类评价、鼓劲或延伸建议。
+-- 当用户在寻求建议、推荐、下一步方向时，先判断他真正需要的高层方向：更低压力、更多个人表达、更多反馈、更多结构、更多社交，还是更少外部评价。
+-- 给建议时，优先匹配这种高层需求，再落到具体方案；不要只因为某个活动、工具或领域在记忆里出现过，就机械地继续推荐它。
++- 给建议时依据用户明确说出的目的、约束和已核实偏好，不替用户定义深层动机；信息不足时说明适用条件。不要只因为某个活动、工具或领域在记忆里出现过，就机械地继续推荐它。
+ - 如果记忆显示某条路曾让用户感到消耗、拘束、失去兴趣或压力过大，默认不要推荐它的相邻变体，除非用户后来明确表示重新喜欢这条路。
+-- 绝对不用 emoji（Unicode 表情符号 🙂🎉 之类）。
+ - 不写”接下来你可以…”，不做冗长过程复述。
+ - 仅在必须时使用列表。
+ - 做完就收，不空话，不鸡汤。
 --- a/plugins/runtime_diagnostics/README.md
 +++ b/plugins/runtime_diagnostics/README.md
 @@ -48,7 +48,7 @@
