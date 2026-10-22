@@ -1,3 +1,173 @@
+--- a/plugins/compaction/plugin.py
++++ b/plugins/compaction/plugin.py
+@@ -4,6 +4,8 @@
+ from importlib import import_module
+ from collections.abc import Callable, Mapping, Sequence
+ import logging
++import hashlib
++import json
+ from uuid import uuid4
+ 
+ from core.common.file_io import run_file_io
+@@ -27,13 +29,15 @@
+ from plugins.ledger.contract import MESSAGE_CATALOG, OWNER_STATE
+ from plugins.ledger.contract import Input, Message
+ 
+-from .records import StoredSummary, SummaryLookup, SummaryRecord, SummaryRecords
++from .records import ManualResetRecord, StoredSummary, SummaryLookup, SummaryRecord, SummaryRecords
+ from .message_summary import SummaryError, clip_summary, closed_groups, recoverable, source_text, summarize, summary_groups, window_starts
+ from plugins.compaction.contract import COMPACTION_READER, COMPACTION_SUMMARIES
+ from plugins.turn_projection.contract import TURN_PROJECTION, TurnProjection
+ from agent.plugin_composition.plugin_config import PLUGIN_CONFIG
+ from agent.plugin_composition.model import ServiceKey
+ from plugins.ui.contract import Configuration, ModelSettings, mount_settings
++from plugins.commands.contract import COMMANDS, CommandDefinition, CommandResult
++from plugins.gateway.contract import RpcMethod
+ 
+ logger = logging.getLogger(__name__)
+ 
+@@ -51,6 +55,13 @@
+ class Config(BaseModel):
+     model_config = ConfigDict(extra="forbid")
+     keep_recent_tokens: int = Field(default=20_000, gt=0, strict=True)
++
++
++class StartNew(BaseModel):
++    model_config = ConfigDict(extra="forbid", strict=True)
++    session_id: str = Field(min_length=1)
++    request_id: str = Field(min_length=1, max_length=128)
++    expected_head: int = Field(ge=0)
+ 
+ 
+ class _CompactionReader:
+@@ -115,6 +126,56 @@
+     _ = await ctx.provide(COMPACTION_READER, _CompactionReader(
+         settled_prefixes=context.settled_prefixes,
+     ))
++
++    async def start_new(request: StartNew):
++        reader = ctx.require(MESSAGE_CATALOG).reader(request.session_id)
++        state = records()
++        reference = "manual-reset:" + hashlib.sha256(json.dumps(
++            [request.session_id, request.request_id], separators=(",", ":")
++        ).encode()).hexdigest()
++        existing = await run_file_io(lambda: state.read(reference))
++        if existing is not None:
++            if not isinstance(existing, ManualResetRecord):
++                raise ValueError("新对话请求标识已被其他操作使用")
++            ending = reader.get(existing.source_message_ids[-1])
++            if ending is None or ending.seq != request.expected_head:
++                raise ValueError("新对话请求标识已用于其他消息边界")
++            return {"reference": reference, "retained_messages": len(existing.source_message_ids)}
++        snapshot = await reader.snapshot_async(through_seq=request.expected_head)
++        if not snapshot or reader.head() != request.expected_head:
++            raise ValueError("会话已变化，请刷新后再开始新对话")
++        if len(snapshot) not in context.settled_prefixes(snapshot):
++            raise ValueError("仍有未结算工具调用，请先中断并等待操作结算")
++        parent = await run_file_io(lambda: state.head(request.session_id))
++        record = ManualResetRecord(
++            reference=reference, session_id=request.session_id,
++            generation=1 if parent is None else parent.generation + 1,
++            parent=None if parent is None else parent.reference,
++            source_message_ids=tuple(row.message_id for row in snapshot),
++            content="用户已明确开始新的短期对话。此前的聊天原文与长期记忆保留；这不是此前内容的语义摘要。",
++        )
++        await state.publish(record, reader, parent=parent, summary_range=context.summary_range)
++        return {"reference": reference, "retained_messages": len(snapshot)}
++
++    await ctx.provide(RpcMethod.key("compaction/start-new"), RpcMethod(StartNew, ctx.entrypoint(start_new)))
++
++    async def commands(child):
++        async def new_conversation(invocation):
++            async with ctx.runtime_scope():
++                reader = ctx.require(MESSAGE_CATALOG).reader(invocation.session_key)
++                message = reader.get(invocation.message_id)
++                if message is None or not isinstance(message.body, Input):
++                    return CommandResult("error", "新对话命令缺少实际用户输入")
++                # Include the command input in the boundary. Its durable reply
++                # remains visible; the previous conversation stays in Ledger.
++                await start_new(StartNew(session_id=invocation.session_key,
++                    request_id=invocation.message_id, expected_head=message.seq))
++                return CommandResult("success", "已开始新的短期对话。历史记录和长期记忆都保留。")
++        await child.require(COMMANDS).register(child, CommandDefinition(
++            name="new", description="开始新的短期对话，保留历史记录与长期记忆",
++            handler=new_conversation, recover=new_conversation,
++        ))
++    await ctx.inject((COMMANDS,), commands, name="new-conversation-command")
+ 
+     def material(record: StoredSummary) -> MaterialData:
+         reference = ctx.require(BINDINGS).bind(COMPACTION_SUMMARIES, {
+--- a/plugins/compaction/records.py
++++ b/plugins/compaction/records.py
+@@ -190,7 +190,20 @@
+         return self
+ 
+ 
+-StoredSummary: TypeAlias = SummaryRecord | NativeSummaryRecordV1 | ImportedSummaryRecord
++class ManualResetRecord(_SummaryIdentity):
++    """A user-requested short-term boundary, without invented model calls."""
++
++    version: Literal[3] = 3
++    trigger: Literal["manual_reset"] = "manual_reset"
++
++    @model_validator(mode="after")
++    def check_generation(self) -> Self:
++        if (self.generation == 1) != (self.parent is None):
++            raise ValueError("新对话边界的 generation 与 parent 不连续")
++        return self
++
++
++StoredSummary: TypeAlias = SummaryRecord | NativeSummaryRecordV1 | ImportedSummaryRecord | ManualResetRecord
+ 
+ 
+ def _check_lineage(
+@@ -291,6 +304,8 @@
+             record = NativeSummaryRecordV1.model_validate_json(raw)
+         elif version == 2:
+             record = SummaryRecord.model_validate_json(raw)
++        elif version == 3:
++            record = ManualResetRecord.model_validate_json(raw)
+         else:
+             raise ValueError("摘要记录 version 无效")
+         if record.reference != reference or row.version != 0:
+@@ -330,21 +345,21 @@
+         return (row.version, record)
+ 
+     async def publish(
+-        self, record: SummaryRecord, reader: MessageReader, *, parent: StoredSummary | None,
++        self, record: SummaryRecord | ManualResetRecord, reader: MessageReader, *, parent: StoredSummary | None,
+         summary_range: Callable[[tuple[Message, ...], tuple[str, ...]], range],
+-    ) -> SummaryRecord:
++    ) -> SummaryRecord | ManualResetRecord:
+         """原子检查 parent 与消息前缀，再只增摘要并推进本 Session 指针。"""
+         self._state.check_access(reader)
+         if reader.session_id != record.session_id:
+             raise ValueError("摘要 reader 与记录必须属于同一 Session")
+ 
+-        def commit(tx: OwnerTransaction) -> SummaryRecord:
++        def commit(tx: OwnerTransaction) -> SummaryRecord | ManualResetRecord:
+             # 1. 同一出处允许重放，不能改内容，也不能把 head 倒退到旧代。
+             existing = self.read(record.reference)
+             if existing is not None:
+                 if existing != record:
+                     raise ValueError("同一摘要出处的内容发生漂移")
+-                return cast(SummaryRecord, existing)
++                return cast(SummaryRecord | ManualResetRecord, existing)
+             current = self.head(record.session_id)
+             if current != parent:
+                 raise MessageConflict("摘要 parent 已被其他发布推进")
+@@ -359,7 +374,10 @@
+             _check_lineage(record, self._read_record, record.session_id)
+ 
+             # 2. 源消息与摘要在同一 authority 的事务中校验；读取模块无正文写权。
+-            _ = summary_range(tuple(reader.snapshot()), record.source_message_ids)
++            snapshot = tuple(reader.snapshot())
++            if isinstance(record, ManualResetRecord) and len(snapshot) != len(record.source_message_ids):
++                raise MessageConflict("会话已变化，请刷新后再开始新对话")
++            _ = summary_range(snapshot, record.source_message_ids)
+             _ = tx.save("summary:" + record.reference,
+                         cast(Mapping[str, object], record.model_dump(mode="json")), expected_version=None)
+             key = "head:" + record.session_id
 --- a/plugins/context/materials.py
 +++ b/plugins/context/materials.py
 @@ -6,6 +6,8 @@
@@ -55,6 +225,55 @@
              accepted = await open(session_id, extra).accept(message_id, Input(parts))
          log_timing("input.committed", session_id=session_id, request_id=message_id, counts={"seq": accepted.seq})
          return accepted
+--- a/plugins/delivery_policy/follow.py
++++ b/plugins/delivery_policy/follow.py
+@@ -7,7 +7,7 @@
+ 
+ from agent.plugin_composition import Context
+ from plugins.ledger.contract import MessageCatalog, MessageReader
+-from plugins.ledger.contract import Message, Output
++from plugins.ledger.contract import Control, Message, Output
+ 
+ from plugins.delivery.contract import GuardedDeliveries
+ 
+@@ -120,8 +120,9 @@
+     previous: dict[str, int] = {}
+     first = True
+     async with asyncio.TaskGroup() as group:
+-        # 只有 Output 可能被选路；其他消息在下一次 Output 唤醒时按游标顺序一并消费。
+-        async for heads in catalog.follow(wake_on=Output):
++        # A failed reply may never produce an Output. Its durable Control must
++        # wake delivery independently so external channels receive an outcome.
++        async for heads in catalog.follow(wake_on=(Output, Control)):
+             # 先建立日志订阅再取耐久 pending；恢复后不用扫描当前策略重选旧路由。
+             if first:
+                 async with ctx.runtime_scope():
+--- a/plugins/delivery_policy/plugin.py
++++ b/plugins/delivery_policy/plugin.py
+@@ -18,7 +18,7 @@
+ from plugins.ledger.contract import BINDINGS
+ from plugins.ledger.contract import MESSAGE_CATALOG, MessageReader
+ from agent.plugin_composition.tasks import ExternalRootPermit, RestartRejectedError
+-from plugins.ledger.contract import ContentPart, Input, Message, Output, ToolCall
++from plugins.ledger.contract import ContentPart, Control, Input, Message, Output, ToolCall
+ from plugins.delivery_policy.contract import (
+     INPUT_ORIGIN as INPUT_ORIGIN,
+ )
+@@ -63,6 +63,14 @@
+     if reader.attributes.visibility == "internal":
+         return None
+     body = message.body
++    if message.source in sources and isinstance(body, Control) and body.action == "failure":
++        latest = reader.latest_input(message.source, through_seq=reader.head())
++        # A newer input supersedes an old failure. Recovery must not flood a
++        # channel with historical errors or redirect them to a later recipient.
++        if latest is None or latest.seq > body.through_seq:
++            return None
++        return input_origin(reader, message.source, through_seq=body.through_seq,
++                            check_origin=check_origin)
+     if (message.source not in sources or not isinstance(body, Output) or body.finish != "complete"
+             or any(isinstance(part, ToolCall) for part in body.parts)):
+         return None
 --- a/plugins/markdown_memory/plugin.py
 +++ b/plugins/markdown_memory/plugin.py
 @@ -431,7 +431,7 @@
@@ -95,6 +314,29 @@
          while True:
              try:
                  fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+@@ -545,7 +547,11 @@
+             {"record_ref": current.parent, "session_id": record.session_id},
+             session_id=reader.session_id,
+         )
+-        if current.version == 2:
++        if current.version == 3:
++            # An explicit short-term reset is not a model summary or a request
++            # to relearn the omitted conversation. Existing memory is retained.
++            batches.append(())
++        elif current.version == 2:
+             batches.append(cast(PartitionedSummary, current).summary_message_ids)
+         else:
+             parent_size = 0 if parent is None else len(parent.source_message_ids)
+@@ -584,7 +590,8 @@
+         parent = None if current.parent is None else lookup.resolve(
+             {"record_ref": current.parent, "session_id": record.session_id}, session_id=reader.session_id,
+         )
+-        older = (cast(PartitionedSummary, current).summary_message_ids if current.version == 2 else
++        older = (() if current.version == 3 else
++                 cast(PartitionedSummary, current).summary_message_ids if current.version == 2 else
+                  current.source_message_ids[0 if parent is None else len(parent.source_message_ids):])
+         selected_ids.update(deferred.intersection(older))
+         deferred.difference_update(older)
 --- a/plugins/reply_program/program.py
 +++ b/plugins/reply_program/program.py
 @@ -2,6 +2,7 @@
@@ -218,10 +460,14 @@
  
      async def start(self) -> ChannelReady:
          """Resolve the formal credential and start polling with admission closed."""
-@@ -189,6 +203,11 @@
-             await self._app.bot.set_my_commands(
-                 [BotCommand("stop", "中断当前回复")]
+@@ -187,8 +201,13 @@
+                 error_callback=self._on_polling_error,
              )
+             await self._app.bot.set_my_commands(
+-                [BotCommand("stop", "中断当前回复")]
+-            )
++                [BotCommand("stop", "中断当前回复"), BotCommand("new", "新对话，保留历史与长期记忆")]
++            )
 +            if self._draft_deliveries is not None:
 +                identity = hashlib.sha256(token.encode()).hexdigest()
 +                self._unregister_drafts = self._draft_deliveries.register(identity, self._drafts)
@@ -377,11 +623,12 @@
  
 --- a/plugins/telegram_sender/sender.py
 +++ b/plugins/telegram_sender/sender.py
-@@ -1,17 +1,24 @@
+@@ -1,17 +1,25 @@
  """每个 Telegram 请求只发送一次；不确定效果交还 Delivery。"""
  import asyncio
 +import hashlib
  import json
++import re
 +from contextlib import asynccontextmanager
  from dataclasses import dataclass
  from typing import Literal, cast
@@ -406,7 +653,32 @@
  
  Status = Literal["delivered", "rejected", "failed"]
  
-@@ -110,16 +117,39 @@
+@@ -75,7 +83,23 @@
+ async def read_content(message: Message, catalog: MessageCatalog, artifacts: ArtifactRead) -> tuple[str | File, ...]:
+     """先读完全部附件，避免发送正文后才发现文件损坏。"""
+     if isinstance(message.body, Control):
+-        return ()
++        if message.body.action != "failure":
++            return ()
++        reason = message.body.reason or ""
++        status = re.search(r"HTTP[ :]*(\d{3})\b", reason)
++        if status is not None:
++            code = status.group(1)
++            detail = "模型服务拒绝了这次请求" if code in {"400", "403", "451"} else "模型服务暂时无法完成请求"
++            detail += f"（HTTP {code}）"
++        elif "超时" in reason or "Timeout" in reason:
++            detail = "等待模型服务超时"
++        elif "容量" in reason or "窗口" in reason or "ContextLength" in reason:
++            detail = "本次对话超出模型的上下文容量"
++        else:
++            detail = "处理回复时发生错误"
++        # Provider error bodies can contain credentials or request fragments.
++        # Send an actionable status without forwarding the raw exception.
++        return (f"这次没能生成回复：{detail}。请检查模型设置，或稍后重新发送。原始消息和已完成的操作仍保留。",)
+     refs = {ref.artifact_id: ref for ref in catalog.reader(message.session_id).attachments(message.message_id)}
+     parts: list[str | File] = []
+     for part in message.body.parts:
+@@ -110,16 +134,39 @@
      idempotent = False
  
      def __init__(self, client: aiohttp.ClientSession, api_base: str, token: str,

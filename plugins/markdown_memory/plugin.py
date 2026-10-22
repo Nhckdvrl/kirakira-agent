@@ -547,7 +547,11 @@ async def _unapplied_groups(
             {"record_ref": current.parent, "session_id": record.session_id},
             session_id=reader.session_id,
         )
-        if current.version == 2:
+        if current.version == 3:
+            # An explicit short-term reset is not a model summary or a request
+            # to relearn the omitted conversation. Existing memory is retained.
+            batches.append(())
+        elif current.version == 2:
             batches.append(cast(PartitionedSummary, current).summary_message_ids)
         else:
             parent_size = 0 if parent is None else len(parent.source_message_ids)
@@ -586,7 +590,8 @@ async def _unapplied_groups(
         parent = None if current.parent is None else lookup.resolve(
             {"record_ref": current.parent, "session_id": record.session_id}, session_id=reader.session_id,
         )
-        older = (cast(PartitionedSummary, current).summary_message_ids if current.version == 2 else
+        older = (() if current.version == 3 else
+                 cast(PartitionedSummary, current).summary_message_ids if current.version == 2 else
                  current.source_message_ids[0 if parent is None else len(parent.source_message_ids):])
         selected_ids.update(deferred.intersection(older))
         deferred.difference_update(older)

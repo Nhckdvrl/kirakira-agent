@@ -18,7 +18,7 @@ from agent.plugin_composition import (
 from plugins.ledger.contract import BINDINGS
 from plugins.ledger.contract import MESSAGE_CATALOG, MessageReader
 from agent.plugin_composition.tasks import ExternalRootPermit, RestartRejectedError
-from plugins.ledger.contract import ContentPart, Input, Message, Output, ToolCall
+from plugins.ledger.contract import ContentPart, Control, Input, Message, Output, ToolCall
 from plugins.delivery_policy.contract import (
     INPUT_ORIGIN as INPUT_ORIGIN,
 )
@@ -63,6 +63,14 @@ def origin(
     if reader.attributes.visibility == "internal":
         return None
     body = message.body
+    if message.source in sources and isinstance(body, Control) and body.action == "failure":
+        latest = reader.latest_input(message.source, through_seq=reader.head())
+        # A newer input supersedes an old failure. Recovery must not flood a
+        # channel with historical errors or redirect them to a later recipient.
+        if latest is None or latest.seq > body.through_seq:
+            return None
+        return input_origin(reader, message.source, through_seq=body.through_seq,
+                            check_origin=check_origin)
     if (message.source not in sources or not isinstance(body, Output) or body.finish != "complete"
             or any(isinstance(part, ToolCall) for part in body.parts)):
         return None

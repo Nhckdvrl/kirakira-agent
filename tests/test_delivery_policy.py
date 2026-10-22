@@ -14,6 +14,76 @@ from tests.test_default_reply import application, live_root
 
 
 @pytest.mark.asyncio
+async def test_failure_control_wakes_durable_delivery_without_exposing_exception(tmp_path):
+    from contextlib import asynccontextmanager
+    from agent.plugin_composition import CompositionRoot
+    from agent.plugin_composition.tasks import Tasks
+    from plugins.delivery.api import Receipt
+    from plugins.delivery.execution import Deliveries
+    from plugins.delivery_policy.follow import follow
+    from plugins.delivery_policy.plugin import origin
+    from plugins.ledger.contract import ContentPart, ContentReferences, Control, Input, SessionAttributes
+    from plugins.ledger.log import MessageLog
+    from plugins.telegram_sender.sender import read_content
+
+    log = MessageLog(tmp_path / "failures.db")
+    log.ensure_session("test:room", SessionAttributes())
+    inputs = log.writer("test:room", author="user", source="conversation", body_types=(Input,),
+                        content={"text": lambda _: ContentReferences(), "channel.origin": lambda _: ContentReferences()})
+    controls = log.writer("test:room", author="app", source="conversation", body_types=(Control,), content={})
+    first = inputs.append("first", Input((ContentPart("text", "hello"), ContentPart(
+        "channel.origin", {"channel": "test", "chat_id": "original"}))))
+    root, tasks, sent = CompositionRoot("failure-delivery"), Tasks(), []
+    done = asyncio.Event()
+
+    class Sender:
+        idempotent = True
+        async def send(self, key, address, message):
+            parts = await read_content(message, log.catalog(), None)
+            sent.append((message.message_id, address, parts))
+            done.set()
+            return Receipt(status="delivered")
+        async def query(self, key, address):
+            return None
+
+    @asynccontextmanager
+    async def open_sender(_):
+        yield Sender()
+
+    log.save_binding("sender", {"fixture": True})
+    records = DeliveryRecords(log.owner("delivery"), "policy")
+    delivery = Deliveries(records, log.catalog(), tasks, open_sender, task_key="failure-delivery")
+    def select(reader, message):
+        route = origin(reader, message, ("conversation",))
+        return () if route is None else ({"name": "test", "binding_id": "sender", "address": route[1]},)
+    job = asyncio.create_task(follow(root.context, log.catalog(), lambda: delivery, select))
+    try:
+        await asyncio.sleep(0)
+        failed = controls.append("failure", Control("failure", first.seq,
+            "模型服务拒绝请求（HTTP 451）。secret-key-fixture raw provider payload"))
+        await asyncio.wait_for(done.wait(), 3)
+        async with asyncio.timeout(3):
+            while records.read(failed.message_id, "test")[1].phase != "delivered":
+                await asyncio.sleep(0.01)
+        assert sent[0][0:2] == ("failure", "original")
+        assert "HTTP 451" in sent[0][2][0] and "secret-key-fixture" not in sent[0][2][0]
+        job.cancel()
+        await asyncio.gather(job, return_exceptions=True)
+        job = asyncio.create_task(follow(root.context, log.catalog(), lambda: delivery, select))
+        await asyncio.sleep(0.05)
+        assert len(sent) == 1
+        inputs.append("next", Input((ContentPart("text", "new question"), ContentPart(
+            "channel.origin", {"channel": "test", "chat_id": "later"}))))
+        assert origin(log.reader("test:room"), failed, ("conversation",)) is None
+    finally:
+        job.cancel()
+        await asyncio.gather(job, return_exceptions=True)
+        await tasks.close()
+        await root.dispose()
+        log.close()
+
+
+@pytest.mark.asyncio
 async def test_real_input_reply_and_archived_delivery_are_independent_consumers(tmp_path, monkeypatch):
     sources(tmp_path / "plugins")
     shutil.copytree(Path(__file__).parents[1] / "plugins/delivery_policy", tmp_path / "plugins/delivery_policy",

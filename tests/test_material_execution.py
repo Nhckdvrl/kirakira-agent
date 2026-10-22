@@ -15,6 +15,60 @@ from tests.support.material_models import material_models
 
 
 @pytest.mark.asyncio
+async def test_explicit_new_context_retains_history_and_does_not_replay_old_prompt(tmp_path):
+    from types import SimpleNamespace
+    from datetime import UTC, datetime
+    from agent.plugin_composition import ServiceKey
+    from kirakira_agent.runtime import rpc
+    from plugins.channels.contract import CHANNEL_INPUT_V2, ChannelInboundMessage
+    from plugins.compaction.contract import COMPACTION_SUMMARIES
+    from plugins.ledger.contract import Output
+    from tests.test_default_reply import application
+
+    async with application(tmp_path, replying=True, compaction=True) as (log, host):
+        root = host.live_root.context
+        accept = root.require(CHANNEL_INPUT_V2)
+        sid = "test:room"
+        async def send(identity, text):
+            await accept(sid, identity, ChannelInboundMessage("test", "user", "room", text,
+                         datetime.now(UTC), {}))
+            async with asyncio.timeout(10):
+                while True:
+                    rows = log.reader(sid).snapshot()
+                    latest = next(row for row in rows if row.message_id == identity)
+                    if any(row.seq > latest.seq and isinstance(row.body, Output)
+                           and row.body.finish == "complete" for row in rows):
+                        return rows
+                    await asyncio.sleep(0.01)
+
+        original = await send("old", "PRIOR_CONTEXT_MARKER")
+        request = {"session_id": sid, "request_id": "owner-new", "expected_head": original[-1].seq}
+        core = SimpleNamespace(plugin_manager=host)
+        with pytest.raises(ValueError, match="会话已变化"):
+            await rpc(core, "compaction/start-new", {**request, "expected_head": original[-1].seq - 1})
+        assert root.require(COMPACTION_SUMMARIES).head(sid) is None
+        first = await rpc(core, "compaction/start-new", request)
+        assert first == await rpc(core, "compaction/start-new", request)
+        lookup = root.require(COMPACTION_SUMMARIES)
+        assert lookup.head(sid).version == 3
+        await send("fresh", "CURRENT_CONTEXT_MARKER")
+        calls = root.require(ServiceKey("fixture.calls"))
+        assert "CURRENT_CONTEXT_MARKER" in str(calls[-1].messages)
+        assert "PRIOR_CONTEXT_MARKER" not in str(calls[-1].messages)
+        assert log.reader(sid).snapshot()[:len(original)] == original
+        before = len(calls)
+        await send("command-new", "/new")
+        assert len(calls) == before  # Starting over never requires a working model.
+        latest_reference = lookup.head(sid).reference
+        assert latest_reference != first["reference"]
+        assert first == await rpc(core, "compaction/start-new", request)
+        assert lookup.head(sid).reference == latest_reference
+        await send("again", "AFTER_SECOND_RESET")
+        assert "CURRENT_CONTEXT_MARKER" not in str(calls[-1].messages)
+        assert log.reader(sid).snapshot()[:len(original)] == original
+
+
+@pytest.mark.asyncio
 async def test_personality_composition_preserves_owned_file_and_frozen_materials(tmp_path):
     from agent.plugin_composition.plugin_config import PLUGIN_CONFIG, PluginConfig
     from plugins.context.contract import MATERIALS_V4

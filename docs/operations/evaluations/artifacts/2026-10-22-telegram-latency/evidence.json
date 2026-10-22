@@ -9140,5 +9140,209 @@
       "wheel_sha256": "5772ffc8065160fa41311e743c280603d73706fe81e7082eb784d5edb609cfc5",
       "sdist_sha256": "30cd9977669512ef49a8655d38dd11769d33f4da101948c96af3d67987f410e7"
     }
+  },
+  "failure_recovery_2026_10_23": {
+    "incident": {
+      "model_http_status": 451,
+      "failed_stage": "context_compaction",
+      "input_admission_s_approx": 0.23,
+      "model_wait_s_approx": 42,
+      "root_cause": "Failure Controls were durable but not selected or observed by the delivery follower."
+    },
+    "production": {
+      "loaded_sources_match": {
+        "compaction": true,
+        "delivery_policy": true,
+        "telegram_sender": true,
+        "telegram_channel": true,
+        "markdown_memory": true,
+        "openai-compatible": true,
+        "step-plan": true
+      },
+      "http_health": 200,
+      "original_history_rows": 36,
+      "history_sha256_before": "ea9eb1585c385d8ecad6e6c86927c3b2581cd4a84202fc6cd7376d4170fa7fc5",
+      "history_sha256_after": "ea9eb1585c385d8ecad6e6c86927c3b2581cd4a84202fc6cd7376d4170fa7fc5",
+      "all_original_messages_unchanged": true,
+      "memory_profile_count": 8,
+      "memory_profiles_unchanged": true,
+      "reset_replay_idempotent": true
+    },
+    "telegram_api": {
+      "getMyCommands_ok": true,
+      "new_registered": true,
+      "stop_registered": true
+    },
+    "real_model_reset": {
+      "checks": [
+        "real_model_before_reset",
+        "reset_replay_idempotent",
+        "real_model_after_reset",
+        "native_new_command_acknowledged",
+        "original_ledger_rows_unchanged",
+        "clean_runtime_shutdown",
+        "real_model_after_restart",
+        "history_preserved_across_restart"
+      ],
+      "passed": 8,
+      "total": 8,
+      "model_config": {
+        "model": "step-5-preview",
+        "endpoint": "https://api.stepfun.com/step_plan/v1",
+        "driver_id": "openai-compatible",
+        "model_id": "arbitrary-chat-id",
+        "context_window": 32768,
+        "max_output_tokens": 4096,
+        "reasoning_effort": "low"
+      },
+      "duration_s": 28.263
+    },
+    "real_model_core": {
+      "cases": [
+        {
+          "name": "native_reply",
+          "passed": true,
+          "duration_s": 2.38
+        },
+        {
+          "name": "bound_file_roundtrip",
+          "passed": true,
+          "duration_s": 7.294
+        },
+        {
+          "name": "managed_process_mcp",
+          "passed": true,
+          "duration_s": 3.661
+        },
+        {
+          "name": "native_shell",
+          "passed": true,
+          "duration_s": 4.278
+        },
+        {
+          "name": "tool_error_repair",
+          "passed": true,
+          "duration_s": 6.712
+        },
+        {
+          "name": "native_subagent",
+          "passed": true,
+          "duration_s": 6.799
+        },
+        {
+          "name": "driver_local_reload",
+          "passed": true,
+          "duration_s": 4.203
+        },
+        {
+          "name": "task_bound_steer_withdraw",
+          "passed": true,
+          "duration_s": 10.411
+        },
+        {
+          "name": "source_pause_resume_no_effect_replay",
+          "passed": true,
+          "duration_s": 13.997
+        },
+        {
+          "name": "new_input_revokes_old_source_task",
+          "passed": true,
+          "duration_s": 9.345
+        },
+        {
+          "name": "immutable_attachment_projection",
+          "passed": true,
+          "duration_s": 1.811
+        },
+        {
+          "name": "scheduler_native_source_delivery",
+          "passed": true,
+          "duration_s": 10.069
+        },
+        {
+          "name": "restart_reuses_native_history",
+          "passed": true,
+          "duration_s": 2.857
+        }
+      ],
+      "summary": {
+        "passed": 13,
+        "total": 13,
+        "python": "3.14.6",
+        "recorded_business_model_calls": 30,
+        "model_states": {
+          "success": 30
+        },
+        "driver_ids": [
+          "openai-compatible"
+        ],
+        "endpoints": [
+          "https://api.stepfun.com/step_plan/v1"
+        ],
+        "input_tokens": 233453,
+        "output_tokens": 2163,
+        "coverage": "native Models business-call ledger; connection/model setup probes are additional calls"
+      }
+    },
+    "regression": {
+      "affected_passed": 31,
+      "affected_total": 31,
+      "full_local_passed": 134,
+      "full_local_total": 134,
+      "development_failures": [
+        {
+          "failure": "RPC registration attempted an unavailable Context convenience method",
+          "status": "fixed_before_deployment"
+        },
+        {
+          "failure": "reset handler lacked a json import",
+          "status": "fixed_before_deployment"
+        }
+      ],
+      "after_atomic_boundary_guard": {
+        "passed": 12,
+        "total": 12
+      }
+    },
+    "limits": [
+      "Real-provider reset tests ran in an isolated workspace; they are not a phone-to-phone Telegram measurement.",
+      "No Telegram user input arrived after the production reset at the time of these checks.",
+      "Provider content refusals remain possible and are surfaced without raw error payloads."
+    ],
+    "real_model_reset_final": {
+      "checks": [
+        "real_model_before_reset",
+        "reset_replay_idempotent",
+        "real_model_after_reset",
+        "native_new_command_acknowledged",
+        "original_ledger_rows_unchanged",
+        "clean_runtime_shutdown",
+        "real_model_after_restart",
+        "history_preserved_across_restart"
+      ],
+      "passed": 8,
+      "total": 8,
+      "model_config": {
+        "model": "step-5-preview",
+        "endpoint": "https://api.stepfun.com/step_plan/v1",
+        "driver_id": "openai-compatible",
+        "model_id": "arbitrary-chat-id",
+        "context_window": 32768,
+        "max_output_tokens": 4096,
+        "reasoning_effort": "low"
+      },
+      "duration_s": 21.962
+    },
+    "implementation_sha256": {
+      "plugins/compaction/plugin.py": "49ab859a85a84f35534ea30ac48fced33ec742bd50ee0fe8ca8664b5ac2cbc0c",
+      "plugins/compaction/records.py": "400fe7ab186c0e0e29c57186f2a3a87851a9002b93f0f12cfe27cad4f56597fc",
+      "plugins/delivery_policy/follow.py": "ee50836110c343a291771ce9a731e1bfc74a6a73fb3f0c4dc2d1f264e76397d0",
+      "plugins/delivery_policy/plugin.py": "fc0c84d3ecd3177ff0340555d8f6172de4400775e578934e252f2d5291278060",
+      "plugins/telegram_sender/sender.py": "c9f490a7eabeba26b9d75f678298de0dbd08f06857d8e9e840a022e12b4c943c",
+      "plugins/telegram_channel/channel.py": "31752b543e700d364945080bb4d97aa5f65618766382b1a489f9a8b55849a556",
+      "plugins/markdown_memory/plugin.py": "0405360f47f21724b45415f0001cd143febc50e1132aba71e11aed951d217646",
+      "plugins/openai_compatible/driver.py": "003a15fe6f05b5ec851fb9b726cdd273d47afbd2d534f0c9e4a16c59aa750a02",
+      "plugins/step_plan/transport.py": "b04713f1ba0c854a5270f9c4d2a4b13ce17d9bbd301eccd98fff04bbb1e567d5"
+    }
   }
 }

@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 
 from agent.plugin_composition import Context
 from plugins.ledger.contract import MessageCatalog, MessageReader
-from plugins.ledger.contract import Message, Output
+from plugins.ledger.contract import Control, Message, Output
 
 from plugins.delivery.contract import GuardedDeliveries
 
@@ -120,8 +120,9 @@ async def follow(
     previous: dict[str, int] = {}
     first = True
     async with asyncio.TaskGroup() as group:
-        # 只有 Output 可能被选路；其他消息在下一次 Output 唤醒时按游标顺序一并消费。
-        async for heads in catalog.follow(wake_on=Output):
+        # A failed reply may never produce an Output. Its durable Control must
+        # wake delivery independently so external channels receive an outcome.
+        async for heads in catalog.follow(wake_on=(Output, Control)):
             # 先建立日志订阅再取耐久 pending；恢复后不用扫描当前策略重选旧路由。
             if first:
                 async with ctx.runtime_scope():

@@ -69,6 +69,7 @@ _SAFETY_CODES = (
     "content_filter",
     "content_policy_violation",
     "data_inspection_failed",
+    "the content you provided or machine outputted is blocked",
 )
 _CONTEXT_CODES = (
     "context_length_exceeded",

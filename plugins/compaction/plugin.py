@@ -4,6 +4,8 @@ from __future__ import annotations
 from importlib import import_module
 from collections.abc import Callable, Mapping, Sequence
 import logging
+import hashlib
+import json
 from uuid import uuid4
 
 from core.common.file_io import run_file_io
@@ -27,13 +29,15 @@ from plugins.ledger.contract import BINDINGS
 from plugins.ledger.contract import MESSAGE_CATALOG, OWNER_STATE
 from plugins.ledger.contract import Input, Message
 
-from .records import StoredSummary, SummaryLookup, SummaryRecord, SummaryRecords
+from .records import ManualResetRecord, StoredSummary, SummaryLookup, SummaryRecord, SummaryRecords
 from .message_summary import SummaryError, clip_summary, closed_groups, recoverable, source_text, summarize, summary_groups, window_starts
 from plugins.compaction.contract import COMPACTION_READER, COMPACTION_SUMMARIES
 from plugins.turn_projection.contract import TURN_PROJECTION, TurnProjection
 from agent.plugin_composition.plugin_config import PLUGIN_CONFIG
 from agent.plugin_composition.model import ServiceKey
 from plugins.ui.contract import Configuration, ModelSettings, mount_settings
+from plugins.commands.contract import COMMANDS, CommandDefinition, CommandResult
+from plugins.gateway.contract import RpcMethod
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +55,13 @@ SETTING_FIELDS = ("keep_recent_tokens",)
 class Config(BaseModel):
     model_config = ConfigDict(extra="forbid")
     keep_recent_tokens: int = Field(default=20_000, gt=0, strict=True)
+
+
+class StartNew(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    session_id: str = Field(min_length=1)
+    request_id: str = Field(min_length=1, max_length=128)
+    expected_head: int = Field(ge=0)
 
 
 class _CompactionReader:
@@ -115,6 +126,56 @@ async def apply(ctx: Context) -> None:
     _ = await ctx.provide(COMPACTION_READER, _CompactionReader(
         settled_prefixes=context.settled_prefixes,
     ))
+
+    async def start_new(request: StartNew):
+        reader = ctx.require(MESSAGE_CATALOG).reader(request.session_id)
+        state = records()
+        reference = "manual-reset:" + hashlib.sha256(json.dumps(
+            [request.session_id, request.request_id], separators=(",", ":")
+        ).encode()).hexdigest()
+        existing = await run_file_io(lambda: state.read(reference))
+        if existing is not None:
+            if not isinstance(existing, ManualResetRecord):
+                raise ValueError("新对话请求标识已被其他操作使用")
+            ending = reader.get(existing.source_message_ids[-1])
+            if ending is None or ending.seq != request.expected_head:
+                raise ValueError("新对话请求标识已用于其他消息边界")
+            return {"reference": reference, "retained_messages": len(existing.source_message_ids)}
+        snapshot = await reader.snapshot_async(through_seq=request.expected_head)
+        if not snapshot or reader.head() != request.expected_head:
+            raise ValueError("会话已变化，请刷新后再开始新对话")
+        if len(snapshot) not in context.settled_prefixes(snapshot):
+            raise ValueError("仍有未结算工具调用，请先中断并等待操作结算")
+        parent = await run_file_io(lambda: state.head(request.session_id))
+        record = ManualResetRecord(
+            reference=reference, session_id=request.session_id,
+            generation=1 if parent is None else parent.generation + 1,
+            parent=None if parent is None else parent.reference,
+            source_message_ids=tuple(row.message_id for row in snapshot),
+            content="用户已明确开始新的短期对话。此前的聊天原文与长期记忆保留；这不是此前内容的语义摘要。",
+        )
+        await state.publish(record, reader, parent=parent, summary_range=context.summary_range)
+        return {"reference": reference, "retained_messages": len(snapshot)}
+
+    await ctx.provide(RpcMethod.key("compaction/start-new"), RpcMethod(StartNew, ctx.entrypoint(start_new)))
+
+    async def commands(child):
+        async def new_conversation(invocation):
+            async with ctx.runtime_scope():
+                reader = ctx.require(MESSAGE_CATALOG).reader(invocation.session_key)
+                message = reader.get(invocation.message_id)
+                if message is None or not isinstance(message.body, Input):
+                    return CommandResult("error", "新对话命令缺少实际用户输入")
+                # Include the command input in the boundary. Its durable reply
+                # remains visible; the previous conversation stays in Ledger.
+                await start_new(StartNew(session_id=invocation.session_key,
+                    request_id=invocation.message_id, expected_head=message.seq))
+                return CommandResult("success", "已开始新的短期对话。历史记录和长期记忆都保留。")
+        await child.require(COMMANDS).register(child, CommandDefinition(
+            name="new", description="开始新的短期对话，保留历史记录与长期记忆",
+            handler=new_conversation, recover=new_conversation,
+        ))
+    await ctx.inject((COMMANDS,), commands, name="new-conversation-command")
 
     def material(record: StoredSummary) -> MaterialData:
         reference = ctx.require(BINDINGS).bind(COMPACTION_SUMMARIES, {

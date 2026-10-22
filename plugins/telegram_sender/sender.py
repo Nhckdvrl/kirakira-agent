@@ -2,6 +2,7 @@
 import asyncio
 import hashlib
 import json
+import re
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Literal, cast
@@ -82,7 +83,23 @@ def _strip_chunk(
 async def read_content(message: Message, catalog: MessageCatalog, artifacts: ArtifactRead) -> tuple[str | File, ...]:
     """先读完全部附件，避免发送正文后才发现文件损坏。"""
     if isinstance(message.body, Control):
-        return ()
+        if message.body.action != "failure":
+            return ()
+        reason = message.body.reason or ""
+        status = re.search(r"HTTP[ :]*(\d{3})\b", reason)
+        if status is not None:
+            code = status.group(1)
+            detail = "模型服务拒绝了这次请求" if code in {"400", "403", "451"} else "模型服务暂时无法完成请求"
+            detail += f"（HTTP {code}）"
+        elif "超时" in reason or "Timeout" in reason:
+            detail = "等待模型服务超时"
+        elif "容量" in reason or "窗口" in reason or "ContextLength" in reason:
+            detail = "本次对话超出模型的上下文容量"
+        else:
+            detail = "处理回复时发生错误"
+        # Provider error bodies can contain credentials or request fragments.
+        # Send an actionable status without forwarding the raw exception.
+        return (f"这次没能生成回复：{detail}。请检查模型设置，或稍后重新发送。原始消息和已完成的操作仍保留。",)
     refs = {ref.artifact_id: ref for ref in catalog.reader(message.session_id).attachments(message.message_id)}
     parts: list[str | File] = []
     for part in message.body.parts:

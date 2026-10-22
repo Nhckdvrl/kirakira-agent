@@ -201,7 +201,7 @@ class TelegramChannelAdapter:
                 error_callback=self._on_polling_error,
             )
             await self._app.bot.set_my_commands(
-                [BotCommand("stop", "中断当前回复")]
+                [BotCommand("stop", "中断当前回复"), BotCommand("new", "新对话，保留历史与长期记忆")]
             )
             if self._draft_deliveries is not None:
                 identity = hashlib.sha256(token.encode()).hexdigest()

@@ -872,7 +872,15 @@
  
 --- a/plugins/openai_compatible/driver.py
 +++ b/plugins/openai_compatible/driver.py
-@@ -402,7 +402,7 @@
+@@ -69,6 +69,7 @@
+     "content_filter",
+     "content_policy_violation",
+     "data_inspection_failed",
++    "the content you provided or machine outputted is blocked",
+ )
+ _CONTEXT_CODES = (
+     "context_length_exceeded",
+@@ -402,7 +403,7 @@
          async with asyncio.timeout(30):
              payload = await _request_limited_json(
                  connection, credential, "POST", "/embeddings",
@@ -881,7 +889,7 @@
                  max_bytes=4 * 1024 * 1024,
              )
      except TimeoutError as error:
-@@ -1134,16 +1134,22 @@
+@@ -1134,16 +1135,22 @@
              raise TransportError("stream tool call index must be non-negative").exception()
          slot = calls.setdefault(index, {"id": "", "name": "", "arguments": ""})
          raw_id = raw.get("id")
@@ -1179,7 +1187,15 @@
  成功接单不等于更新成功；提交之后不再操作，让本回合正常结束。
 --- a/plugins/step_plan/transport.py
 +++ b/plugins/step_plan/transport.py
-@@ -402,7 +402,7 @@
+@@ -69,6 +69,7 @@
+     "content_filter",
+     "content_policy_violation",
+     "data_inspection_failed",
++    "the content you provided or machine outputted is blocked",
+ )
+ _CONTEXT_CODES = (
+     "context_length_exceeded",
+@@ -402,7 +403,7 @@
          async with asyncio.timeout(30):
              payload = await _request_limited_json(
                  connection, credential, "POST", "/embeddings",

@@ -190,7 +190,20 @@ class ImportedSummaryRecord(_SummaryIdentity):
         return self
 
 
-StoredSummary: TypeAlias = SummaryRecord | NativeSummaryRecordV1 | ImportedSummaryRecord
+class ManualResetRecord(_SummaryIdentity):
+    """A user-requested short-term boundary, without invented model calls."""
+
+    version: Literal[3] = 3
+    trigger: Literal["manual_reset"] = "manual_reset"
+
+    @model_validator(mode="after")
+    def check_generation(self) -> Self:
+        if (self.generation == 1) != (self.parent is None):
+            raise ValueError("新对话边界的 generation 与 parent 不连续")
+        return self
+
+
+StoredSummary: TypeAlias = SummaryRecord | NativeSummaryRecordV1 | ImportedSummaryRecord | ManualResetRecord
 
 
 def _check_lineage(
@@ -291,6 +304,8 @@ class SummaryRecords:
             record = NativeSummaryRecordV1.model_validate_json(raw)
         elif version == 2:
             record = SummaryRecord.model_validate_json(raw)
+        elif version == 3:
+            record = ManualResetRecord.model_validate_json(raw)
         else:
             raise ValueError("摘要记录 version 无效")
         if record.reference != reference or row.version != 0:
@@ -330,21 +345,21 @@ class SummaryRecords:
         return (row.version, record)
 
     async def publish(
-        self, record: SummaryRecord, reader: MessageReader, *, parent: StoredSummary | None,
+        self, record: SummaryRecord | ManualResetRecord, reader: MessageReader, *, parent: StoredSummary | None,
         summary_range: Callable[[tuple[Message, ...], tuple[str, ...]], range],
-    ) -> SummaryRecord:
+    ) -> SummaryRecord | ManualResetRecord:
         """原子检查 parent 与消息前缀，再只增摘要并推进本 Session 指针。"""
         self._state.check_access(reader)
         if reader.session_id != record.session_id:
             raise ValueError("摘要 reader 与记录必须属于同一 Session")
 
-        def commit(tx: OwnerTransaction) -> SummaryRecord:
+        def commit(tx: OwnerTransaction) -> SummaryRecord | ManualResetRecord:
             # 1. 同一出处允许重放，不能改内容，也不能把 head 倒退到旧代。
             existing = self.read(record.reference)
             if existing is not None:
                 if existing != record:
                     raise ValueError("同一摘要出处的内容发生漂移")
-                return cast(SummaryRecord, existing)
+                return cast(SummaryRecord | ManualResetRecord, existing)
             current = self.head(record.session_id)
             if current != parent:
                 raise MessageConflict("摘要 parent 已被其他发布推进")
@@ -359,7 +374,10 @@ class SummaryRecords:
             _check_lineage(record, self._read_record, record.session_id)
 
             # 2. 源消息与摘要在同一 authority 的事务中校验；读取模块无正文写权。
-            _ = summary_range(tuple(reader.snapshot()), record.source_message_ids)
+            snapshot = tuple(reader.snapshot())
+            if isinstance(record, ManualResetRecord) and len(snapshot) != len(record.source_message_ids):
+                raise MessageConflict("会话已变化，请刷新后再开始新对话")
+            _ = summary_range(snapshot, record.source_message_ids)
             _ = tx.save("summary:" + record.reference,
                         cast(Mapping[str, object], record.model_dump(mode="json")), expected_version=None)
             key = "head:" + record.session_id
