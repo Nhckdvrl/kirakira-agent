@@ -1,6 +1,7 @@
 """Collection recovery crosses real OwnerState and EventMail commits."""
 
 import asyncio
+import json
 import sqlite3
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
@@ -30,6 +31,190 @@ from plugins.ledger.log import MessageLog
 from plugins.wake.pool import requests_review
 from plugins.wake.selection import propose_content
 from plugins.wake.state import ContentScore, WakeState
+
+
+@pytest.mark.asyncio
+async def test_chat_followup_scope_atomic_receipts_and_original_rule_survive_replay(
+    tmp_path,
+):
+    from plugins.followups.contract import check_policy_record
+    from plugins.followups.tools import FollowupTool
+    from plugins.tools.contract import CallSource
+
+    log = MessageLog(tmp_path / "chat.db")
+    for session in ("owner", "other"):
+        log.ensure_session(session, SessionAttributes())
+
+    def writer(session="owner", source="conversation"):
+        return log.writer(
+            session,
+            author="user",
+            source=source,
+            body_types=(Input,),
+            content={"text": check_text, "followups.policy": check_policy_record},
+        )
+
+    original = writer().append(
+        "request", Input((ContentPart("text", "盯着公告，周末开放才告诉我"),))
+    )
+    revised = writer().append(
+        "correction", Input((ContentPart("text", "之后只有票价低于90元才通知"),))
+    )
+    foreign = writer("other").append(
+        "foreign", Input((ContentPart("text", "暂停跟进"),))
+    )
+
+    def source(identity, user=original, source_name="conversation"):
+        calling = Message(
+            identity,
+            user.session_id,
+            user.seq + 1,
+            datetime.now(UTC),
+            "assistant",
+            source_name,
+            Output((ToolCall("binding", {}),), "continue"),
+        )
+        return CallSource(CallRef(identity, 0), (user, calling))
+
+    root, services = CompositionRoot("chat-followup-test"), []
+
+    async def mount(ctx):
+        service = Service(
+            ctx,
+            log.owner("followups"),
+            log.catalog(),
+            None,
+            None,
+            None,
+            None,
+            writers=lambda sid: writer(sid, "followups"),
+        )
+        await ctx.effect(lambda: service.http.aclose)
+        services.append(service)
+
+    try:
+        fiber = await root.mount(mount, name="followups")
+        assert fiber.error is None
+        service = services[0]
+
+        async def ready():
+            return {
+                "enabled": True,
+                "ready": True,
+                "reason": "",
+                "values": {"delivery": {"session_id": "owner", "channel": "local"}},
+            }
+
+        create, manage, read = (
+            FollowupTool(service, name, ready) for name in ("create", "manage", "read")
+        )
+        args = {
+            "name": "展览",
+            "purpose": "周末开放才告诉我",
+            "source_kind": "webpage",
+            "url": "https://example.test/exhibit",
+        }
+        assert isinstance(
+            await FollowupTool(service, "create").prepare(args, source("unconfigured")),
+            str,
+        )
+        assert not (await service.overview("owner"))["watches"]
+        assert isinstance(
+            await create.prepare({**args, "purpose": "每天无条件通知"}, source("bad")),
+            str,
+        )
+        assert isinstance(
+            await create.prepare(
+                args, source("background", source_name="scheduler:one")
+            ),
+            str,
+        )
+        prepared = await create.prepare(args, source("create"))
+        key = source("create").effect_key
+        created = await create.invoke(key, prepared)
+        identity = prepared["spec"]["watch_id"]
+        assert created.outcome == "success" and created == await create.query(key)
+        assert created == await create.invoke(key, prepared)
+        assert len((await service.overview("owner"))["watches"]) == 1
+        assert (await service.overview("other"))["watches"] == []
+        assert isinstance(
+            await manage.prepare(
+                {"watch_id": identity, "action": "pause"},
+                source("foreign-call", foreign),
+            ),
+            str,
+        )
+        assert isinstance(
+            await read.prepare({"watch_id": identity}, source("foreign-read", foreign)),
+            str,
+        )
+
+        pause = await manage.prepare(
+            {"watch_id": identity, "action": "pause"}, source("pause")
+        )
+        paused = await manage.invoke(source("pause").effect_key, pause)
+        resume = await manage.prepare(
+            {"watch_id": identity, "action": "resume"}, source("resume")
+        )
+        await manage.invoke(source("resume").effect_key, resume)
+        # An old pause replay must not undo a newer explicit resume.
+        assert paused == await manage.invoke(source("pause").effect_key, pause)
+        assert service._watch(identity)["enabled"]
+
+        revision = await manage.prepare(
+            {
+                "watch_id": identity,
+                "action": "revise",
+                "purpose": "只有票价低于90元才通知",
+            },
+            source("revise", revised),
+        )
+        transact = service.store.transact_async
+
+        async def crash(operation):
+            def commit(tx):
+                operation(tx)
+                raise RuntimeError("lost before commit")
+
+            return await transact(commit)
+
+        service.store.transact_async = crash
+        with pytest.raises(RuntimeError, match="before commit"):
+            await manage.invoke(source("revise", revised).effect_key, revision)
+        service.store.transact_async = transact
+        assert await manage.query(source("revise", revised).effect_key) is None
+        assert not any(
+            row.source == "followups" for row in log.reader("owner").snapshot()
+        )
+        saved = await manage.invoke(source("revise", revised).effect_key, revision)
+        assert saved == await manage.query(source("revise", revised).effect_key)
+        policy = service._policy(service._watch(identity))
+        assert (
+            policy["revision"] == 1
+            and policy["origin_message_id"] == revised.message_id
+        )
+        assert policy["purpose"] == "只有票价低于90元才通知"
+        assert log.reader("owner").get(original.message_id) == original
+        new_pause = await manage.prepare(
+            {"watch_id": identity, "action": "pause"}, source("pause-again")
+        )
+        stopped = await manage.invoke(source("pause-again").effect_key, new_pause)
+        assert (
+            json.loads(stopped.parts[0].value)["watch"]["purpose"] == policy["purpose"]
+        )
+
+        # New tool objects after owner disposal/reopen recover the same durable receipt.
+        await root.dispose()
+        root = CompositionRoot("chat-followup-reopened")
+        fiber = await root.mount(mount, name="followups")
+        assert fiber.error is None
+        restored = FollowupTool(services[-1], "manage")
+        assert await restored.query(source("revise", revised).effect_key) == saved
+        assert not services[-1]._watch(identity)["enabled"]
+
+    finally:
+        await root.dispose()
+        log.close()
 
 
 @pytest.mark.asyncio

@@ -71,6 +71,18 @@ provides the event; the agent checks the relevant history before deciding to sha
 or stay quiet. You can inspect the sources and delivery, change the rule, or pause it.
 [Follow-up workflows →](docs/handbook/followups.md)
 
+You can hand over practical work directly in chat:
+
+| Ask | What happens |
+| --- | --- |
+| “Read this page, save a table, then check the file.” | Fetch the page, write the file and read it back |
+| “Remind me to read five pages in ten minutes.” | Register a scheduled reminder and deliver it when due |
+| “Watch this event page and notify me when it fits my earlier conditions.” | Check proactive setup, bind the original request and investigate changes with history |
+| “Only notify me about weekends; pause this for now.” | Save the new rule, pause collection and retain the records |
+
+Follow-ups require configured memory and a notification destination. Decisions,
+supporting history and confirmed deliveries can also be inspected from chat.
+
 ## Get started
 
 Use Python **3.14.6**, [uv](https://docs.astral.sh/uv/), and **Node.js 24** for the

@@ -8,6 +8,12 @@ uv sync --frozen --extra providers --extra memory
 
 ## 模型条件
 
+`followups --chat --chat-scenario exhibit|lesson` 使用不同的生活与兴趣材料。
+用户请求不包含工具名称，检查实际工具结果与文件、规则和投递状态。
+一次性任务、未配置主动联系、跨会话更正、新事件判断、规则变更、暂停和重启分别记录。
+`--investigation-timeout` 默认 600 秒；这是功能验收等待上限，实际耗时另记，不代表响应时延目标。
+模型连接失败保留每次尝试，开发失败不通过重新运行覆盖。来源为受控的本地 HTTP 页面，通知只发到隔离本地会话。
+
 真实模型评测接受 `--model-config /private/path/model.json` 和 `--key-file /private/path/model.key`。配置文件不含密钥：
 
 ```json
@@ -54,6 +60,11 @@ uv run --frozen --no-sync python -m eval.followups \
   --workspace /local-disk/eval/followups-new --output /local-disk/eval/followups.json \
   --isolated --long-source
 
+uv run --frozen --no-sync python -m eval.followups --chat --chat-scenario exhibit \
+  --model-config /private/path/model.json --key-file /private/path/model.key \
+  --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json \
+  --workspace /local-disk/eval/chat-new --output /local-disk/eval/chat.json
+
 uv run --frozen --no-sync python -m eval.mail_followups \
   --model-config /private/path/model.json --key-file /private/path/model.key \
   --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json \
@@ -77,6 +88,7 @@ uv run --frozen --no-sync python -m eval.personality \
 | `memory_runtime` | 真实渠道学习到查询、RPC、Agent 工具、原文展开、项目提醒、显式反馈和重启 |
 | `native_web` | 认证后的工作台/聊天 HTTP、import map、项目作用域与实际文件工具 |
 | `followups` | 原始对话创建跟进、真实 HTTP 订阅/网页差异、调查分享/跳过、精确投递、反馈、暂停与恢复；可选隔离项目和长原文读取 |
+| `followups --chat` | 不点名工具的网页整理、文件核对、提醒、跟进创建/更正/暂停/恢复；跨会话条件改变新事件判断；核对实际回执 |
 | `mail_followups` | 本地 TLS IMAP 的真实采集、跨会话历史条件与分享/跳过、线程更正、规则修改、外部指令、UID 重建与重启 |
 | `runtime_settings` | 实际认证 HTTP 设置、原生配置换代、越界拒绝、清空恢复默认、真实记忆工具预算与图不重学、重启保持 |
 | `personality` | 四种组合的真实闲聊、纯数字、严格 JSON、文件写入与复读、临时要求、未知偏好及重启；记录实际请求中的配置片段，另做匿名风格匹配 |

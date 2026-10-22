@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 from agent.plugin_composition.tasks import Task, TaskAdmission, TaskSlot
 from .inputs import CallSource, Result
-from plugins.ledger.contract import ContentPart
+from plugins.ledger.contract import ContentPart, Input
 
 from .schedule import ScheduledJob, compute_fire_at, is_cron_expr, parse_duration
 from .store import JobStore, Operation
@@ -30,7 +30,7 @@ class ScheduleInput(BaseModel):
         "run 是否带上本会话的聊天历史；天气、新闻这类独立任务用 none，需要参考之前对话时用 session"))
     timezone: str = Field(default_factory=lambda: os.environ.get("TZ", ""))
     name: str | None = None
-    request_time: str | None = Field(default=None, description="原消息接收的 ISO 时间；after 从此刻计算延迟")
+    request_time: str | None = Field(default=None, description="无调用来源的程序接入可填 ISO 起算时间；聊天自动使用实际输入时间，不需要填写")
 
 
 # 调用所在会话及其投递渠道：(session_id, channel, address)。
@@ -105,8 +105,19 @@ class ScheduleTool:
         try:
             request = ScheduleInput.model_validate(dict(arguments))
             _ = ZoneInfo(request.timezone)
+            request_time = request.request_time
+            if request.trigger == "after" and source is not None:
+                caller = next((row for row in source.messages
+                               if row.message_id == source.call_ref.message_id), None)
+                inputs = [row for row in source.messages if caller is not None
+                          and row.session_id == caller.session_id and row.source == caller.source
+                          and row.seq < caller.seq and isinstance(row.body, Input)]
+                # Relative time belongs to the immutable input, not a model's clock
+                # conversion or the later moment at which inference finishes.
+                latest = max(inputs, key=lambda row: row.seq, default=None)
+                request_time = latest.recorded_at.isoformat() if latest else None
             fire_at = compute_fire_at(request.trigger, request.when, request.timezone,
-                                      request.request_time, self._now)
+                                      request_time, self._now)
             interval, cron = None, None
             if request.trigger == "every":
                 if is_cron_expr(request.when):
@@ -123,7 +134,8 @@ class ScheduleTool:
         except (ValidationError, ValueError, TypeError, OverflowError, ZoneInfoNotFoundError) as error:
             return str(error)
         label = f"「{job.name}」" if job.name else job.id[:8]
-        return {"job": payload, "response": f"已注册定时任务 {label}，首次触发时间：{fire_at.isoformat()}"}
+        display = fire_at.astimezone(ZoneInfo(job.timezone)).isoformat()
+        return {"job": payload, "response": f"已注册定时任务 {label}，首次触发时间：{display}（{job.timezone}）"}
 
     async def invoke(self, key: str, arguments: Mapping[str, object]) -> Result:
         """只接纳 Tool owner 已固定的执行参数，结果与文件变更同一次提交。"""

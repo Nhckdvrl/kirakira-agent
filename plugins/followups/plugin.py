@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from agent.plugin_composition import CREDENTIALS, RUNTIME_STARTED, RUNTIME_STOPPING
+from agent.plugin_composition import CREDENTIALS, RUNTIME_STARTED, RUNTIME_STOPPING, ServiceKey
 from agent.plugin_composition.plugin_config import PLUGIN_CONFIG
 from plugins.akasha.contract import AKASHA_RECORDS_VIEW
 from plugins.delivery.contract import DELIVERY_READ
@@ -20,7 +20,8 @@ from plugins.ledger.contract import (
     ContentReferences,
     Input,
 )
-from plugins.ui.contract import UI
+from plugins.ui.contract import Configuration, UI
+from plugins.tools.contract import TOOLS
 
 from .contract import (
     FOLLOWUPS,
@@ -38,7 +39,7 @@ from .service import Service
 
 api_version = 3
 name = "followups"
-version = "1.1.0"
+version = "1.2.0"
 desc = "从真实对话建立信息跟进，调查后分享或跳过，并查看依据与反馈"
 inject = (
     OWNER_STATE,
@@ -51,6 +52,7 @@ inject = (
     PLUGIN_CONFIG,
     MESSAGE_WRITERS,
 )
+WAKE_SETTINGS = ServiceKey[Configuration]("wake.settings.v1")
 
 
 class Session(BaseModel):
@@ -102,6 +104,16 @@ async def apply(ctx):
         }
     )
     await ctx.provide(FOLLOWUPS, api)
+
+    async def register_tools(child):
+        from .tools import register
+
+        # The tool fiber delegates mutations to the service's real owner, including
+        # its scoped Ledger writer. A direct method call would borrow the wrong owner.
+        owner_api = SimpleNamespace(**vars(api), operation=ctx.entrypoint(service.operation))
+        await register(child, owner_api, child.require(WAKE_SETTINGS).read)
+
+    await ctx.inject((TOOLS, WAKE_SETTINGS), register_tools, name="tools")
     for method, params, call in (
         ("overview", Session, lambda request: api.overview(request.session_id)),
         ("create", WatchSpec, api.create),

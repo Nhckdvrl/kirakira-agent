@@ -122,6 +122,7 @@ class Revise(WatchId):
     request_id: str = Field(min_length=1, max_length=128)
     expected_revision: int = Field(ge=0)
     purpose: str = Field(min_length=1, max_length=1000)
+    origin_message_id: str | None = Field(default=None, min_length=1, max_length=512)
 
     @field_validator("purpose")
     @classmethod

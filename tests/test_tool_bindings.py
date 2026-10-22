@@ -11,6 +11,44 @@ from plugins.tools.plugin import ToolCatalog, ToolRef
 
 TOOLS = ServiceKey("tools.v1")
 
+@pytest.mark.asyncio
+async def test_relative_reminder_binds_real_input_time_and_keeps_receipt(tmp_path):
+    from datetime import UTC, datetime, timedelta
+    from plugins.ledger.contract import CallRef, ContentPart, Input, Message, Output, ToolCall
+    from plugins.scheduler.store import JobStore
+    from plugins.scheduler.tools import ScheduleTool
+    from plugins.tools.contract import CallSource
+
+    received = datetime(2026, 10, 22, 16, 44, 32, tzinfo=UTC)
+    request = Message("request", "chat", 1, received, "user", "conversation",
+                      Input((ContentPart("text", "一分钟后提醒读书，用上海时区"),)))
+    other = Message("other", "chat", 2, received + timedelta(seconds=20), "system", "wake",
+                    Input((ContentPart("text", "Unrelated background input"),)))
+    caller = Message("call", "chat", 3, received + timedelta(seconds=30), "assistant", "conversation",
+                     Output((ToolCall("schedule-binding", {}),), "continue"))
+    source = CallSource(CallRef("call", 0), (request, other, caller))
+
+    async def target(_source):
+        return "chat", "local", "fixture"
+
+    store = JobStore(tmp_path / "schedules.json")
+    tool = ScheduleTool(store, None, "schedule", target,
+                        now=lambda: received + timedelta(seconds=45))
+    prepared = await tool.prepare({
+        "action": "notify", "trigger": "after", "when": "1m", "text": "读书",
+        "timezone": "Asia/Shanghai", "request_time": "2030-01-01T01:00:00+09:00",
+    }, source)
+    assert isinstance(prepared, dict)
+    fire_at = datetime.fromisoformat(prepared["job"]["fire_at"])
+    assert fire_at == received + timedelta(minutes=1)
+    assert "00:45:32+08:00（Asia/Shanghai）" in prepared["response"]
+    first = await tool.invoke(source.effect_key, prepared)
+    restored = ScheduleTool(JobStore(store.path), None, "schedule", target,
+                            now=lambda: received + timedelta(days=1))
+    assert await restored.query(source.effect_key) == first
+    assert await restored.invoke(source.effect_key, prepared) == first
+    assert len(store.load()) == 1 and store.load()[0].fire_at == fire_at
+
 def _runtime(tmp_path, plugin_id):
     return PluginRuntime(
         plugin_id,

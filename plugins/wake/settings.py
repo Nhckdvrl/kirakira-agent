@@ -83,8 +83,9 @@ class Settings:
                     reason = "当前发送渠道不可用，请在功能设置中改选目标或重新开启该渠道"
             enabled = config["enabled"]
             return {**self.ctx.require(PLUGIN_CONFIG).read(self.ctx), "enabled": enabled,
-                "ready": enabled is True and not reason and self.function.state.value == "active",
-                "can_enable": can_enable, "blocked": blocked, "reason": reason or fiber["error"] or "",
+                "ready": enabled is True and selected is not None and not reason and self.function.state.value == "active",
+                "can_enable": can_enable, "blocked": blocked,
+                "reason": reason or fiber["error"] or ("请先选择通知位置" if selected is None else ""),
                 "values": {"delivery": config["delivery"], "timezone": config["timezone"]}, "targets": self.targets()}
 
     async def save(self, request_id: str, expected_input: str, values: dict[str, object]) -> dict[str, object]:

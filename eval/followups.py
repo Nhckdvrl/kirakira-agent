@@ -68,7 +68,9 @@ async def source():
                     path, "<h1>云杉库发布记录</h1><p>暂无新公告。</p>"
                 )
                 body = (
-                    "<!doctype html><html><head><meta charset='utf-8'><title>云杉库发布记录</title></head><body><nav>导航</nav><main>"
+                    "<!doctype html><html><head><meta charset='utf-8'><title>"
+                    + escape(state.get("title", "云杉库发布记录"))
+                    + "</title></head><body><nav>导航</nav><main>"
                     + content
                     + "</main></body></html>"
                 ).encode()
@@ -647,6 +649,514 @@ async def evaluate(args):
     return all(row["passed"] for row in report["cases"])
 
 
+async def evaluate_chat(args):
+    """Natural requests select production tools; assertions inspect actual effects."""
+    from eval.native_runtime import text
+    from plugins.delivery.contract import DELIVERY_READ
+    from plugins.ledger.contract import BINDINGS, Output, ToolCall, ToolResult
+    from plugins.scheduler.contract import SCHEDULER_INSPECTION
+    from plugins.tools.contract import TOOLS
+
+    model = EvaluationModel.read(args.model_config)
+    initialize_workspace(args.workspace)
+    scenario = {
+        "exhibit": {
+            "topic": "云汐展",
+            "price_label": "成人票",
+            "old": 100,
+            "current": 150,
+            "offer": 120,
+            "limit": 90,
+            "rejected": 110,
+        },
+        "lesson": {
+            "topic": "木野陶艺课",
+            "price_label": "体验课价格",
+            "old": 80,
+            "current": 200,
+            "offer": 160,
+            "limit": 120,
+            "rejected": 150,
+        },
+    }[args.chat_scenario]
+    topic, price_label = scenario["topic"], scenario["price_label"]
+    report = {
+        "scope": "controlled personal-assistant workflow, not comparative success or user satisfaction",
+        "model_config": model.description(),
+        "implementation": source_identity(),
+        "cases": [],
+        "turns": [],
+        "events": [],
+        "tool_names_in_user_requests": False,
+        "scenario": scenario,
+        "investigation_timeout_seconds": args.investigation_timeout,
+    }
+    sid, general = "akashic:chat-followup", "akashic:everyday-assistant"
+    started_at = datetime.now(UTC)
+
+    def save():
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+
+    async def case(name, operation):
+        started = time.monotonic()
+        try:
+            row = {"name": name, "passed": True, "detail": await operation()}
+        except Exception as error:  # noqa: BLE001 - preserve the first attempt, including model failures
+            row = {
+                "name": name,
+                "passed": False,
+                "error": type(error).__name__ + ": " + str(error)[:1200],
+            }
+        row["seconds"] = round(time.monotonic() - started, 3)
+        report["cases"].append(row)
+        save()
+        print(
+            json.dumps({key: value for key, value in row.items() if key != "detail"}),
+            flush=True,
+        )
+        return row["passed"]
+
+    async def turn(core, session, identity, prompt, *, expected=None):
+        ctx = core.plugin_manager.live_root.context
+        catalog, bindings = ctx.require(MESSAGE_CATALOG), ctx.require(BINDINGS)
+        reader = catalog.reader(session)
+        before = reader.head() if catalog.exists(session) else -1
+        started = time.monotonic()
+        answer = await submit(core, session, identity, prompt)
+        rows = reader.snapshot(after_seq=before)
+        by_id = {row.message_id: row for row in rows}
+        calls = []
+        for row in rows:
+            if not isinstance(row.body, ToolResult):
+                continue
+            caller = by_id.get(row.body.call_ref.message_id)
+            if caller is None or not isinstance(caller.body, Output):
+                continue
+            call = caller.body.parts[row.body.call_ref.part_index]
+            if isinstance(call, ToolCall):
+                tool = bindings.describe(call.binding_id, TOOLS)["tool"]
+                calls.append(
+                    {
+                        "name": tool["name"],
+                        "outcome": row.body.outcome,
+                        "call_message_id": caller.message_id,
+                    }
+                )
+                if tool["name"] == "read_followups" and row.body.outcome == "success":
+                    calls[-1]["observation"] = json.loads(text(row))
+        value = {
+            "id": identity,
+            "request": prompt,
+            "answer": text(answer),
+            "tool_results": calls,
+            "seconds": round(time.monotonic() - started, 3),
+        }
+        report["turns"].append(value)
+        save()
+        if expected:
+            assert any(
+                row["name"] == expected and row["outcome"] == "success" for row in calls
+            ), value
+        return value
+
+    async with source() as site:
+        site["title"] = topic + "公告"
+        site["pages"]["/watched"] = (
+            f"<h1>{topic}公告</h1><p>只在周三开放，{price_label}240元。</p>"
+        )
+        site["pages"]["/reading"] = (
+            "星河读书会本周书目：纸船，页数37；灯塔，页数52。活动在周六举行。"
+        )
+        async with runtime(args.workspace) as core:
+            report["setup_attempts"] = []
+            for attempt in range(3):
+                try:
+                    await model.configure(core, args.key_file)
+                    report["setup_attempts"].append(
+                        {"attempt": attempt + 1, "passed": True}
+                    )
+                    save()
+                    break
+                except RuntimeError as error:
+                    report["setup_attempts"].append(
+                        {
+                            "attempt": attempt + 1,
+                            "passed": False,
+                            "error": str(error).replace(
+                                args.key_file.read_text().strip(), "[redacted]"
+                            )[:1200],
+                        }
+                    )
+                    save()
+                    if attempt == 2:
+                        return False
+                    await asyncio.sleep(2)
+            await configure_embedding(core, args.embedding_manifest)
+
+            async def answer_format():
+                row = await turn(core, general, "format", "17×19等于多少？只输出数字。")
+                assert row["answer"].strip() == "323", row
+                return {"exact_answer": True}
+
+            await case("personality_respects_explicit_answer_format", answer_format)
+
+            async def web_file():
+                path = args.workspace / "reading.csv"
+                row = await turn(
+                    core,
+                    general,
+                    "web-file",
+                    f"打开 {site['url']}/reading 看读书会书目，把书名和页数整理为两列CSV保存到 {path}，"
+                    "表头用title,pages，写完再读回来核对，告诉我两本总共多少页。不要持续监控这个页面。",
+                    expected="web_fetch",
+                )
+                import csv
+
+                with path.open() as handle:
+                    values = list(csv.DictReader(handle))
+                assert values == [
+                    {"title": "纸船", "pages": "37"},
+                    {"title": "灯塔", "pages": "52"},
+                ], values
+                assert "89" in row["answer"]
+                names = {
+                    item["name"]
+                    for item in row["tool_results"]
+                    if item["outcome"] == "success"
+                }
+                assert {"write_file", "read_file"} <= names
+                assert not (
+                    await rpc(core, "followups/overview", {"session_id": general})
+                )["watches"]
+                return {
+                    "actual_web_file_roundtrip": True,
+                    "total_pages": 89,
+                    "unsolicited_watches": 0,
+                }
+
+            await case("one_off_web_research_file_and_verification", web_file)
+
+            async def reminder():
+                await turn(
+                    core,
+                    general,
+                    "reminder",
+                    "请一分钟后提醒我：读五页纸船。提醒名称叫读书休息，用上海时区。到点直接提醒这句话就行。",
+                    expected="schedule",
+                )
+                jobs = await core.plugin_manager.live_root.context.require(
+                    SCHEDULER_INSPECTION
+                ).list_jobs()
+                job = next(row for row in jobs if row["name"] == "读书休息")
+                assert (
+                    job["action"] == "notify" and job["timezone"] == "Asia/Shanghai"
+                ), job
+                requested = (
+                    core.plugin_manager.live_root.context.require(MESSAGE_CATALOG)
+                    .reader(general)
+                    .get("reminder")
+                    .recorded_at
+                )
+                delay = (
+                    datetime.fromisoformat(job["fire_at"]) - requested
+                ).total_seconds()
+                assert 59 <= delay <= 90, (delay, job)
+                return {
+                    "durable_schedule_created": True,
+                    "seconds_from_user_input": round(delay, 3),
+                    "timezone": job["timezone"],
+                }
+
+            await case("natural_language_reminder", reminder)
+
+            async def unconfigured():
+                row = await turn(
+                    core,
+                    sid,
+                    "readiness",
+                    "查一下主动联系是否已开启，通知将发到哪里。先不要更改配置或创建跟进。",
+                    expected="read_followups",
+                )
+                observations = [
+                    item["observation"]
+                    for item in row["tool_results"]
+                    if "observation" in item
+                ]
+                assert observations and observations[-1]["proactive"]["ready"] is False
+                assert not (await rpc(core, "followups/overview", {"session_id": sid}))[
+                    "watches"
+                ]
+                return {"not_ready_reported": True, "implicit_watches": 0}
+
+            await case("disabled_proactive_is_reported_before_commitment", unconfigured)
+
+            training = (
+                (
+                    "akashic:past-exhibit",
+                    "budget-before",
+                    f"记一下我的{topic}安排：预算{scenario['old']}元，只能周末去。现在不用预订或提醒，确认收到就好。",
+                ),
+                (
+                    "akashic:updated-exhibit",
+                    "budget-now",
+                    f"更正{topic}的安排：我把预算从{scenario['old']}元提高到{scenario['current']}元了，周末才有空的条件不变。现在不用操作，确认即可。",
+                ),
+            )
+            for session, identity, prompt in training:
+                await turn(core, session, identity, prompt)
+
+            def learned():
+                nodes = {}
+                for path in (args.workspace / "memory").rglob("akasha.db"):
+                    nodes.update(load_message_nodes(path))
+                return all(identity in nodes for _, identity, _ in training)
+
+            await until(learned, timeout=240)
+            await configure_proactive(core, args.workspace, sid)
+
+            async def create():
+                await turn(
+                    core,
+                    sid,
+                    "chat-create",
+                    f"请持续关注这个{topic}公告页：{site['url']}/watched 。只有周末开放、{price_label}不超过我当前预算才通知。"
+                    f"每小时检查一次，名称叫{topic}。",
+                    expected="create_followup",
+                )
+                overview = await rpc(core, "followups/overview", {"session_id": sid})
+                assert len(overview["watches"]) == 1
+                watch = overview["watches"][0]
+                spec = watch["spec"]
+                assert (
+                    spec["source_kind"] == "webpage"
+                    and spec["interval_seconds"] == 3600
+                ), spec
+                assert spec["anchors"] == ["chat-create"] and spec["session_id"] == sid
+                report["watch_id"] = spec["watch_id"]
+                await rpc(core, "followups/poll", {"watch_id": spec["watch_id"]})
+                state = await rpc(
+                    core, "followups/timeline", {"watch_id": spec["watch_id"]}
+                )
+                assert state["cursor"]["initialized"] and not state["events"]
+                return {
+                    "created_by_chat": True,
+                    "original_input_bound": True,
+                    "baseline_notifications": 0,
+                }
+
+            if not await case("chat_creates_watch_with_original_request", create):
+                report["metrics"] = metrics(args.workspace, model)
+                save()
+                return False
+
+            async def event(price, expected):
+                site["pages"]["/watched"] = (
+                    f"<h1>{topic}公告</h1><p>每周六和周日开放，{price_label}{price}元。</p>"
+                )
+                site["version"] += 1
+                accepted = await rpc(
+                    core, "followups/poll", {"watch_id": report["watch_id"]}
+                )
+                assert accepted["submitted"] == 1, accepted
+
+                async def wait():
+                    while True:
+                        timeline = await rpc(
+                            core, "followups/timeline", {"watch_id": report["watch_id"]}
+                        )
+                        current = next(
+                            row
+                            for row in timeline["events"]
+                            if row["revision"] == accepted["refs"][0]["revision"]
+                        )
+                        terminal = [
+                            row
+                            for row in current["decisions"]
+                            if row["tool"] in {"share_content", "skip_content"}
+                        ]
+                        if terminal and (
+                            terminal[-1]["tool"] == "skip_content"
+                            or current["deliveries"]
+                        ):
+                            return current, terminal[-1]
+                        await asyncio.sleep(0.25)
+
+                current, decision = await asyncio.wait_for(
+                    wait(), args.investigation_timeout
+                )
+                report["events"].append(current)
+                save()
+                assert decision["tool"] == expected, decision
+                if expected == "share_content":
+                    assert len(current["deliveries"]) == 1
+                    assert str(scenario["offer"]) in current["deliveries"][0]["text"]
+                    assert any(
+                        row["message_id"] == "budget-now" for row in current["evidence"]
+                    ), current["evidence"]
+                else:
+                    assert not current["deliveries"]
+                repeated = await rpc(
+                    core, "followups/poll", {"watch_id": report["watch_id"]}
+                )
+                assert repeated["submitted"] == 0
+                return {
+                    "decision": decision["tool"],
+                    "confirmed_deliveries": len(current["deliveries"]),
+                    "history_message_ids": sorted(
+                        {row["message_id"] for row in current["evidence"]}
+                    ),
+                    "same_page_repeat_submissions": 0,
+                }
+
+            await case(
+                "corrected_cross_session_budget_changes_proactive_action",
+                lambda: event(scenario["offer"], "share_content"),
+            )
+
+            async def inspect():
+                row = await turn(
+                    core,
+                    sid,
+                    "inspect",
+                    f"查一下{topic}刚才这次变化怎么处理的，依据是什么，通知真的发出了吗？",
+                    expected="read_followups",
+                )
+                assert str(scenario["offer"]) in row["answer"]
+                observations = [
+                    event
+                    for item in row["tool_results"]
+                    for event in item.get("observation", {}).get("events", [])
+                ]
+                assert any(event["deliveries"] for event in observations)
+                assert any(
+                    proof["message_id"] == "budget-now" and proof["author"] == "user"
+                    for event in observations
+                    for proof in event["evidence"]
+                ), observations
+                assert any(
+                    str(scenario["offer"]) in event["source"]["content"]
+                    for event in observations
+                )
+                return {
+                    "read_actual_watch_results": True,
+                    "original_budget_correction_visible": True,
+                    "external_change_visible": True,
+                }
+
+            await case("chat_reads_decision_evidence_and_actual_delivery", inspect)
+
+            async def revise():
+                await turn(
+                    core,
+                    sid,
+                    "chat-revise",
+                    f"修改{topic}的关注规则：之后只有{price_label}不超过{scenario['limit']}元而且周末开放时通知，其他变化别提醒。",
+                    expected="manage_followup",
+                )
+                state = await rpc(
+                    core, "followups/timeline", {"watch_id": report["watch_id"]}
+                )
+                policy = state["watch"]["policy"]
+                assert (
+                    policy["revision"] == 1
+                    and policy["origin_message_id"] == "chat-revise"
+                ), policy
+                assert (
+                    str(scenario["limit"]) in policy["purpose"]
+                    and "周末" in policy["purpose"]
+                )
+                report["policy"] = policy
+                return {"rule_revision": 1, "original_user_quote_bound": True}
+
+            if await case("chat_revises_rule_with_exact_user_source", revise):
+                await case(
+                    "new_rule_stops_previously_eligible_notification",
+                    lambda: event(scenario["rejected"], "skip_content"),
+                )
+
+            async def pause():
+                await turn(
+                    core,
+                    sid,
+                    "chat-pause",
+                    f"先别再盯{topic}了，保留记录。",
+                    expected="manage_followup",
+                )
+                state = await rpc(
+                    core, "followups/timeline", {"watch_id": report["watch_id"]}
+                )
+                assert not state["watch"]["enabled"]
+                requests = len(site["requests"])
+                assert (
+                    await rpc(core, "followups/poll", {"watch_id": report["watch_id"]})
+                )["status"] == "paused"
+                assert len(site["requests"]) == requests
+                return {"paused": True, "http_requests_while_paused": 0}
+
+            await case("chat_pauses_collection", pause)
+
+            async def delivered_reminder():
+                history = core.plugin_manager.live_root.context.require(DELIVERY_READ)
+
+                def read():
+                    return next(
+                        (
+                            row
+                            for row in history.recent(
+                                since=started_at, until=datetime.now(UTC), limit=100
+                            )
+                            if row.message.source.startswith("scheduler:")
+                            and "读五页纸船" in text(row.message)
+                        ),
+                        None,
+                    )
+
+                delivery = await until(read, timeout=90)
+                return {
+                    "confirmed_message_id": delivery.message.message_id,
+                    "text": text(delivery.message),
+                    "channel": "local evaluation inbox",
+                }
+
+            await case(
+                "scheduled_reminder_has_actual_delivery_receipt", delivered_reminder
+            )
+
+        async with runtime(args.workspace) as core:
+
+            async def restored():
+                state = await rpc(
+                    core, "followups/timeline", {"watch_id": report["watch_id"]}
+                )
+                assert not state["watch"]["enabled"]
+                assert state["watch"]["policy"] == report["policy"]
+                await turn(
+                    core,
+                    sid,
+                    "chat-resume",
+                    f"恢复{topic}的跟进，沿用现在{scenario['limit']}元的规则。",
+                    expected="manage_followup",
+                )
+                state = await rpc(
+                    core, "followups/timeline", {"watch_id": report["watch_id"]}
+                )
+                assert (
+                    state["watch"]["enabled"]
+                    and state["watch"]["policy"] == report["policy"]
+                )
+                return {
+                    "pause_and_rule_survive_restart": True,
+                    "resumed_from_chat": True,
+                    "prior_events_retained": len(state["events"]),
+                }
+
+            await case("restart_then_chat_resume_preserves_rule_and_evidence", restored)
+            report["metrics"] = metrics(args.workspace, model)
+    save()
+    return all(row["passed"] for row in report["cases"])
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workspace", type=Path, required=True)
@@ -658,6 +1168,20 @@ def main():
     parser.add_argument("--isolated", action="store_true")
     parser.add_argument("--long-source", action="store_true")
     parser.add_argument("--webpage", action="store_true")
+    parser.add_argument(
+        "--chat",
+        action="store_true",
+        help="Natural-language assistant and follow-up lifecycle",
+    )
+    parser.add_argument(
+        "--chat-scenario", choices=("exhibit", "lesson"), default="exhibit"
+    )
+    parser.add_argument(
+        "--investigation-timeout",
+        type=float,
+        default=600,
+        help="Chat scenario investigation deadline; elapsed time is reported separately",
+    )
     args = parser.parse_args()
     os.environ["AKASHIC_PLUGIN_HOME"] = str(
         args.workspace.parent / (args.workspace.name + "-home")
@@ -667,7 +1191,7 @@ def main():
         async with provider_slot(
             EvaluationModel.read(args.model_config), args.key_file
         ):
-            return await evaluate(args)
+            return await (evaluate_chat(args) if args.chat else evaluate(args))
 
     raise SystemExit(0 if asyncio.run(run()) else 1)
 

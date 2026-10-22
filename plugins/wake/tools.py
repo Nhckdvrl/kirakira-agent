@@ -17,8 +17,8 @@ from .selection import propose_content
 class ScreenedItem(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     candidate_id: str = Field(min_length=1, description="逐字复制本轮候选的完整 candidate_id，不得截短、改写或自行生成。")
-    initial_interest: str = Field(min_length=1)
-    question: str = Field(min_length=1)
+    initial_interest: str = Field(min_length=1, description="初步值得调查的理由；这是兴趣假设，不是已核实结论。")
+    question: str = Field(min_length=1, description="调查阶段需要核实的问题，包括用户当前条件和历史更正。")
 
 
 class Screen(BaseModel):

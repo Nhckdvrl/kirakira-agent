@@ -158,6 +158,37 @@ class Service:
 
         await self.store.transact_async(commit)
 
+    async def operation(self, key):
+        """A tool retry reads the original commit, not today's watch state."""
+        record = await run_file_io(
+            lambda: self.store.read("operation:" + fingerprint(key))
+        )
+        return dict(json_value(record.value)) if record else None
+
+    def _previous_operation(self, tx, key, action, request):
+        if key is None:
+            return None
+        record = tx.read("operation:" + fingerprint(key))
+        if record is None:
+            return None
+        value = dict(json_value(record.value))
+        if value["action"] != action or value["request_hash"] != fingerprint(request):
+            raise ValueError("跟进操作标识已用于其他请求")
+        return value["result"]
+
+    def _record_operation(self, tx, key, action, request, result):
+        if key is not None:
+            tx.save(
+                "operation:" + fingerprint(key),
+                {
+                    "action": action,
+                    "request_hash": fingerprint(request),
+                    "result": result,
+                },
+                expected_version=None,
+            )
+        return result
+
     async def _source(self, identity):
         async with self.source_lock:
             if identity not in self.sources:
@@ -199,7 +230,7 @@ class Service:
 
         return await run_file_io(read)
 
-    async def create(self, spec):
+    async def create(self, spec, *, operation_key=None):
         spec = WatchSpec.model_validate(spec.model_dump())
         spec = spec.model_copy(
             update={
@@ -218,6 +249,11 @@ class Service:
         async with self.locks.setdefault(spec.watch_id, asyncio.Lock()):
 
             def commit(tx):
+                previous = self._previous_operation(
+                    tx, operation_key, "create", spec.model_dump(mode="json")
+                )
+                if previous is not None:
+                    return previous
                 existing = tx.read("watch:" + spec.watch_id)
                 if existing is not None:
                     value = dict(json_value(existing.value))
@@ -225,7 +261,9 @@ class Service:
                         mode="json"
                     ) != spec.model_dump(mode="json"):
                         raise ValueError("跟进标识已用于其他配置")
-                    return value
+                    return self._record_operation(
+                        tx, operation_key, "create", spec.model_dump(mode="json"), value
+                    )
                 if len(self._watches()) >= MAX_WATCHES:
                     raise ValueError("最多创建 100 个跟进")
                 value = {
@@ -237,26 +275,63 @@ class Service:
                     ),
                 }
                 tx.save("watch:" + spec.watch_id, value, expected_version=None)
-                return value
+                return self._record_operation(
+                    tx, operation_key, "create", spec.model_dump(mode="json"), value
+                )
 
             result = await self.store.transact_async(commit)
         self.changed.set()
         return result
 
-    async def set_enabled(self, request: SetEnabled):
+    async def set_enabled(self, request: SetEnabled, *, operation_key=None):
         async with self.locks.setdefault(request.watch_id, asyncio.Lock()):
-            value = await run_file_io(lambda: self._watch(request.watch_id))
-            value["enabled"] = request.enabled
-            await self._save("watch:" + request.watch_id, value)
+
+            def commit(tx):
+                previous = self._previous_operation(
+                    tx, operation_key, "set_enabled", request.model_dump(mode="json")
+                )
+                if previous is not None:
+                    return previous
+                current = tx.read("watch:" + request.watch_id)
+                if current is None:
+                    raise ValueError("跟进不存在")
+                value = dict(json_value(current.value))
+                value["enabled"] = request.enabled
+                tx.save(
+                    "watch:" + request.watch_id, value, expected_version=current.version
+                )
+                return self._record_operation(
+                    tx,
+                    operation_key,
+                    "set_enabled",
+                    request.model_dump(mode="json"),
+                    self._present(value),
+                )
+
+            value = await self.store.transact_async(commit)
         self.changed.set()
         return value
 
-    async def revise(self, request: Revise):
+    async def revise(self, request: Revise, *, operation_key=None):
         if self.writers is None:
             raise RuntimeError("跟进规则写入能力未提供")
         async with self.locks.setdefault(request.watch_id, asyncio.Lock()):
             watch = await run_file_io(lambda: self._watch(request.watch_id))
             self._session(watch["spec"]["session_id"])
+            if request.origin_message_id is not None:
+                original = await run_file_io(
+                    lambda: self.catalog.reader(watch["spec"]["session_id"]).get(
+                        request.origin_message_id
+                    )
+                )
+                if (
+                    original is None
+                    or original.author != "user"
+                    or original.source != "conversation"
+                    or not isinstance(original.body, Input)
+                    or request.purpose not in text(original)
+                ):
+                    raise ValueError("聊天规则必须逐字引用当前对话中的原始用户消息")
             identity = "followup-policy:" + fingerprint(
                 [request.watch_id, request.request_id]
             )
@@ -278,14 +353,27 @@ class Service:
             receipt_key = "policy-request:" + fingerprint(
                 [request.watch_id, request.request_id]
             )
-            request_hash = fingerprint(request.model_dump(mode="json"))
+            # Keep pre-chat UI request identities stable across workspace upgrades.
+            payload = request.model_dump(mode="json", exclude_none=True)
+            request_hash = fingerprint(payload)
 
             def commit(tx):
+                previous = self._previous_operation(
+                    tx, operation_key, "revise", payload
+                )
+                if previous is not None:
+                    return previous
                 receipt = tx.read(receipt_key)
                 if receipt is not None:
                     if receipt.value["request_hash"] != request_hash:
                         raise ValueError("规则修改请求标识已用于其他内容")
-                    return dict(json_value(receipt.value))
+                    return self._record_operation(
+                        tx,
+                        operation_key,
+                        "revise",
+                        payload,
+                        dict(json_value(receipt.value)),
+                    )
                 current = tx.read("watch:" + request.watch_id)
                 value = dict(json_value(current.value))
                 revision = value.get("policy", {}).get("revision", 0)
@@ -293,16 +381,23 @@ class Service:
                     raise ValueError("关注规则已被修改，请刷新后再提交")
                 tx.append_prepared(prepared)
                 value["policy"] = {"revision": revision + 1, "message_id": identity}
+                if request.origin_message_id is not None:
+                    value["policy"]["origin_message_id"] = request.origin_message_id
                 tx.save(
                     "watch:" + request.watch_id, value, expected_version=current.version
                 )
                 result = {
+                    "watch_id": request.watch_id,
                     "revision": revision + 1,
                     "message_id": identity,
                     "request_hash": request_hash,
                 }
+                if request.origin_message_id is not None:
+                    result["origin_message_id"] = request.origin_message_id
                 tx.save(receipt_key, result, expected_version=None)
-                return result
+                return self._record_operation(
+                    tx, operation_key, "revise", payload, result
+                )
 
             return await self.store.transact_async(commit)
 
@@ -767,6 +862,7 @@ class Service:
                                         {
                                             "retrieval_ref": value["retrieval_ref"],
                                             "message_id": identity,
+                                            "author": original.author,
                                             "recorded_at": original.recorded_at.isoformat(),
                                             "text": excerpt[:2000],
                                             "kind": "recall",
@@ -809,6 +905,7 @@ class Service:
                                     "recorded_at": original.recorded_at.isoformat()
                                     if original
                                     else None,
+                                    "author": original.author if original else None,
                                 }
                             )
         return decisions, evidence
