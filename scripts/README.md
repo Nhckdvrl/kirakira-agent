@@ -1,6 +1,6 @@
 # 维护入口
 
-- `check_upstream_kernel.py`：校验完整原生来源摘要及明确记录的补丁。
+- `check_upstream_kernel.py`：校验 `third_party/` 中的完整来源摘要及明确记录的补丁。
 - `check_feature_alignment.py`：核对运行组件清单和默认发行选择。
 - `check_docs.py`：核对维护文档的本地引用。
 - `migrate_legacy_workspace.py`：只读旧库，生成独立的新工作区。

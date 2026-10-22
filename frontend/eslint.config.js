@@ -10,7 +10,7 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ["frontend/dashboard/src/**/*.{ts,tsx}", "frontend/chat/src/**/*.{ts,tsx}", "plugins/**/*.ts", "types/**/*.d.ts"],
+    files: ["frontend/dashboard/src/**/*.{ts,tsx}", "frontend/chat/src/**/*.{ts,tsx}", "plugins/**/*.ts", "frontend/types/**/*.d.ts"],
     languageOptions: {
       ecmaVersion: 2021,
       globals: globals.browser,

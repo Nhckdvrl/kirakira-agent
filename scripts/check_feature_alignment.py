@@ -8,7 +8,7 @@ from scripts.check_upstream_kernel import verify
 
 
 def inventory():
-    pin = json.loads((ROOT / "UPSTREAM.json").read_text())
+    pin = json.loads((ROOT / "third_party/UPSTREAM.json").read_text())
     modules = []
     for directory in sorted((ROOT / "plugins").iterdir()):
         if not (directory / "plugin.py").is_file():

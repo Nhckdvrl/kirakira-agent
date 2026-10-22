@@ -1,12 +1,9 @@
-include UPSTREAM.json UPSTREAM-LICENSE THIRD_PARTY.md config.example.toml
-include package.json package-lock.json components.json tsconfig.json eslint.config.js
+include third_party/UPSTREAM.json third_party/UPSTREAM-LICENSE third_party/THIRD_PARTY.md config.example.toml
+include package.json package-lock.json
 recursive-include bundles *.toml
-recursive-include packages *.json *.js *.mjs *.ts *.mts
-recursive-include types *.ts
-recursive-include frontend *.ts *.tsx *.js *.mjs *.cjs *.css *.html *.json *.svg *.png *.woff2 *.md
+recursive-include frontend *.ts *.tsx *.js *.mjs *.mts *.cjs *.css *.html *.json *.svg *.png *.woff2 *.md
 recursive-include plugins *.js *.css *.html *.json *.svg *.png *.woff2 *.build *.toml *.md *.proto *.pyi *.txt *.ts *.tsx *.LICENSE *.NOTICE
 recursive-include scripts *.mjs
-recursive-include schema *
 recursive-include sdk *.py *.toml *.md *.ts *.json LICENSE
 recursive-include skills *.md
-recursive-include patches *.patch
+recursive-include third_party/patches *.patch

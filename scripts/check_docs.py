@@ -55,7 +55,7 @@ def document(path):
 
 def main():
     files = [ROOT / name for name in (
-        "README.md", "README-cn.md", "THIRD_PARTY.md", "eval/README.md", "scripts/README.md",
+        "README.md", "README-cn.md", "third_party/THIRD_PARTY.md", "eval/README.md", "scripts/README.md",
         "sdk/python/README.md", "migrations/README.md", "frontend/design.md",
         "frontend/theme/assets/fonts/README.md", "frontend/theme/src/fonts/README.md",
         "frontend/theme/src/fonts/reading-serif.md",

@@ -72,7 +72,7 @@
 
 - 架构：`docs/architecture/overview.md`
 - 运行与迁移：`docs/handbook/start.md`
-- 代码来源：`UPSTREAM.json`
+- 代码来源：`third_party/UPSTREAM.json`
 - 确定性回归：`tests/`、`eval/upstream/`
 - 真实模型：`eval/native_runtime.py`、`eval/native_web.py`、`eval/native_alignment.py`、`eval/native_proactive.py`
 - 全部评测命令与条件：[评测说明](../../eval/README.md)
@@ -86,13 +86,13 @@
 | `kirakira_agent/`、`main.py` | 发行入口、工作区初始化与命令封装 |
 | `agent/`、`bootstrap/`、`core/`、`infra/`、`utils/` | 宿主、插件生命周期、任务与公共基础设施 |
 | `plugins/`、`bundles/` | 业务组件、提供方和发行组合 |
-| `frontend/`、`packages/`、`types/` | Web 源码、共享前端包与类型合同 |
+| `frontend/` | Web 源码、共享前端包与类型合同 |
 | `sdk/` | 客户端 SDK |
-| `migrations/`、`schema/` | 数据升级与格式约束；历史迁移仍参与既有数据升级 |
+| `migrations/`、`plugins/gateway/schema/` | 数据升级与格式约束；历史迁移仍参与既有数据升级 |
 | `skills/` | 随发行版提供的技能 |
 | `tests/`、`eval/`、`scripts/` | 工程回归、可复现实验和维护入口 |
 | `docs/` | 使用、架构、状态与验证文档 |
-| `patches/`、`UPSTREAM.json`、许可证文件 | 代码来源、局部修改与许可证记录 |
+| `third_party/`、`LICENSE` | 代码来源、局部修改与许可证记录 |
 
 运行数据放在仓库外选定的工作区；凭据、模型权重、数据集、临时脚本、测试输出和完整启动日志也留在私有外部目录。
 只将报告实际引用的原始证据发布到统一证据目录，保留失败与实验版本，不提交重复工作区或原始服务器日志。

@@ -2,7 +2,7 @@
 
 Kirakira 以统一的任务生命周期组织对话、工具、记忆和主动执行。
 原始消息保存在 Ledger，派生状态由各自的插件管理；来源与许可证集中记录在
-[第三方声明](../../THIRD_PARTY.md)。
+[第三方声明](../../third_party/THIRD_PARTY.md)。
 
 宿主、插件更新、任务接纳、消息权限和恢复采用同一套版本化实现。
 发行入口、模型驱动、历史导入与评测保留各自边界；退出主链的旧实现不再保留第二个任务 owner 或权限体系。
@@ -73,7 +73,7 @@ Workloads 分别拥有实际资源及借用生命周期。Workload 的容器 con
 Akasha 消息界面由固定的前端源码和 npm lock 重建，生成摘要单独记录。
 
 Shell 的运行修复：zsh 函数快照解析期间关闭别名展开，随后恢复原选项。
-补丁和摘要在 `patches/zsh-snapshot-aliases.patch` 与 `UPSTREAM.json` 中。
+补丁和摘要在 `third_party/patches/zsh-snapshot-aliases.patch` 与 `third_party/UPSTREAM.json` 中。
 
 ## 记忆与主动交互
 
@@ -94,10 +94,10 @@ Drift 保存提案状态并提供 Wake/Delivery 窄合同；可选的空闲思�
 运行诊断和插件安装也是插件。新工作区默认选中；既有工作区使用显式 upgrade 命令，
 保留其余插件选择并备份原选择。各功能启用与验证状态见[当前状态](../status/current.md)和[后续路线](../status/roadmap.md)。
 
-发行构建另有 `patches/stage-web-assets.patch`：npm build 最后把 dashboard/chat 产物移入所属插件制品目录，
-避免源码已更新、运行时却读取旧构建。补丁、来源摘要与本地摘要均登记在 UPSTREAM.json。
+发行构建另有 `third_party/patches/stage-web-assets.patch`：npm build 最后把 dashboard/chat 产物移入所属插件制品目录，
+避免源码已更新、运行时却读取旧构建。补丁、来源摘要与本地摘要均登记在 third_party/UPSTREAM.json。
 
-空图重建已登记 `patches/akasha-empty-rebuild.patch`：只允许合法零节点通过既有发布分支，负数仍拒绝。
+空图重建已登记 `third_party/patches/akasha-empty-rebuild.patch`：只允许合法零节点通过既有发布分支，负数仍拒绝。
 旧历史的本地向量补算属于显式运维入口，只写 Ledger 派生缓存；Akasha 保持唯一学习与重建 owner。
 既有工作区升级通过 prepare_plugin_input / PluginSelection CAS 更新已选输入，
 不会通过删除稳定选择或重建另一张依赖图来升级。

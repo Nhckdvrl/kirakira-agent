@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 def verify():
-    pin = json.loads((ROOT / "UPSTREAM.json").read_text())
+    pin = json.loads((ROOT / "third_party/UPSTREAM.json").read_text())
     for patch in pin.get("patches", {}).values():
         if hashlib.sha256((ROOT / patch["patch"]).read_bytes()).hexdigest() != patch["patch_sha256"]:
             raise RuntimeError("upstream patch artifact changed")

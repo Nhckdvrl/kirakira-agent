@@ -17,7 +17,7 @@ def source_identity():
     """Hash installed implementation files, plus checkout provenance when present.
 
     Wheels contain runtime modules and license metadata, while the repository's
-    root source manifest and patch review files belong to the source archive.
+    third_party source manifest and patch review files belong to the source archive.
     """
     from kirakira_agent.runtime import ROOT
 
@@ -37,9 +37,9 @@ def source_identity():
     names.extend(["plugins/eventmail/store.py", "plugins/wake/api.py", "plugins/wake/messages.py",
                   "plugins/wake/runtime.py", "plugins/wake/program.py", "eval/followups.py"])
     names.extend(name for name in ("eval/mail_followups.py", "eval/fixtures/mailbox.py", "eval/runtime_settings.py", "eval/idle_reflection.py", "eval/personality.py", "eval/prompt_cache.py") if (ROOT / name).is_file())
-    if (ROOT / "UPSTREAM.json").is_file():
-        names.append("UPSTREAM.json")
-    names.extend(str(path.relative_to(ROOT)) for path in sorted((ROOT / "patches").glob("*.patch")))
+    if (ROOT / "third_party/UPSTREAM.json").is_file():
+        names.append("third_party/UPSTREAM.json")
+    names.extend(str(path.relative_to(ROOT)) for path in sorted((ROOT / "third_party/patches").glob("*.patch")))
     return {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in names}
 
 

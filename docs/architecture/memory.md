@@ -161,4 +161,4 @@ located = await client.memory_source_search(MemorySourceSearchQuery(
 
 后续[取证深度实验](../operations/evaluations/2026-10-22-memory-depth.md)进一步核对到原文值与具体窗口：固定图融合片段覆盖 4/12 个参考值，追加读取覆盖 9/12，平均保留材料减少 43.78%；向量采用相同策略也覆盖 8/12。它支持按需深入取证的价值，不证明图扩散普遍优于向量，也不把原文覆盖当作回答正确率。
 
-公开历史质量与真实主链见[记忆实测](../operations/evaluations/2026-10-21-memory-runtime.md)；运行方法及其他链路见[验证入口](../operations/verification.md)。来源与许可证集中在仓库根目录的 [THIRD_PARTY.md](../../THIRD_PARTY.md)。
+公开历史质量与真实主链见[记忆实测](../operations/evaluations/2026-10-21-memory-runtime.md)；运行方法及其他链路见[验证入口](../operations/verification.md)。来源与许可证集中在[第三方来源声明](../../third_party/THIRD_PARTY.md)。

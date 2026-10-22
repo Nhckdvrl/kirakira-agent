@@ -135,13 +135,14 @@ source checks and generated-file cleanup.
 agent/          composition, lifecycle, configuration and supervisor
 bootstrap/      host resources and startup
 plugins/        conversation, personality, memory, tools, initiative and channels
-frontend/       Web interface and theme
+frontend/       Web interface, theme, shared packages, types and tooling
 kirakira_agent/ public CLI and workspace setup
 sdk/            programmatic client
 eval/           functional verification and memory experiments
 tests/          runtime and integration contracts
 scripts/        build, migration and maintenance
 docs/           guides, architecture and evaluation evidence
+third_party/    source provenance, notices and reviewed patches
 ```
 
 [Documentation](docs/INDEX.md) · [Getting started](docs/handbook/start.md) ·

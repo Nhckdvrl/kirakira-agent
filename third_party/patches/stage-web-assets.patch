@@ -1,3 +1,25 @@
+--- a/frontend/dashboard/tailwind.config.ts
++++ b/frontend/dashboard/tailwind.config.ts
+@@ -1,7 +1,7 @@
+ import { fileURLToPath } from "node:url";
+ import { dirname, resolve } from "node:path";
+ import type { Config } from "tailwindcss";
+-import webUiPreset from "../../packages/akashic-web-ui-v1/tailwind-preset.mjs";
++import webUiPreset from "../packages/akashic-web-ui-v1/tailwind-preset.mjs";
+ 
+ // Content globs are resolved against this config's own location so scanning
+ // works regardless of the process cwd (npm runs from the repo root).
+--- a/frontend/eslint.config.js
++++ b/frontend/eslint.config.js
+@@ -10,7 +10,7 @@
+   js.configs.recommended,
+   ...tseslint.configs.recommended,
+   {
+-    files: ["frontend/dashboard/src/**/*.{ts,tsx}", "frontend/chat/src/**/*.{ts,tsx}", "plugins/**/*.ts", "types/**/*.d.ts"],
++    files: ["frontend/dashboard/src/**/*.{ts,tsx}", "frontend/chat/src/**/*.{ts,tsx}", "plugins/**/*.ts", "frontend/types/**/*.d.ts"],
+     languageOptions: {
+       ecmaVersion: 2021,
+       globals: globals.browser,
 --- a/frontend/theme/src/fonts/README.md
 +++ b/frontend/theme/src/fonts/README.md
 @@ -5,11 +5,7 @@
@@ -40,6 +62,69 @@
 -才替换仓库里的分片与 `reading-serif.css`。
 +旧的一次性分片程序已不在发行版中。需要更换字体资产时，重新核对源文件、许可证、分片 cmap 与 CSS
 +范围的完整性和互斥性，并在实际桌面、窄屏浏览器中检查中文、英文、斜体和代码显示。
+--- a/frontend/tsconfig.json
++++ b/frontend/tsconfig.json
+@@ -1,8 +1,14 @@
+ {
+   "compilerOptions": {
+     "target": "ES2022",
+-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+-    "types": ["node"],
++    "lib": [
++      "ES2022",
++      "DOM",
++      "DOM.Iterable"
++    ],
++    "types": [
++      "node"
++    ],
+     "module": "ESNext",
+     "moduleResolution": "bundler",
+     "allowImportingTsExtensions": true,
+@@ -13,14 +19,37 @@
+     "noImplicitReturns": true,
+     "baseUrl": ".",
+     "paths": {
+-      "@akashic/web-ui-v1": ["packages/akashic-web-ui-v1/index.d.ts"],
+-      "@akashic/chat-ui-v1": ["packages/akashic-chat-ui-v1/index.d.ts"],
+-      "@akashic/shell-ui-v1": ["packages/akashic-shell-ui-v1/index.d.ts"],
+-      "@akashic/conversation-tools-v2": ["packages/akashic-conversation-tools-v2/index.d.ts"],
+-      "@/*": ["frontend/chat/src/*"]
++      "@akashic/web-ui-v1": [
++        "packages/akashic-web-ui-v1/index.d.ts"
++      ],
++      "@akashic/chat-ui-v1": [
++        "packages/akashic-chat-ui-v1/index.d.ts"
++      ],
++      "@akashic/shell-ui-v1": [
++        "packages/akashic-shell-ui-v1/index.d.ts"
++      ],
++      "@akashic/conversation-tools-v2": [
++        "packages/akashic-conversation-tools-v2/index.d.ts"
++      ],
++      "@/*": [
++        "chat/src/*"
++      ]
+     },
+     "noEmit": true,
+     "jsx": "react-jsx"
+   },
+-  "include": ["frontend/plugins/**/*.ts", "frontend/plugins/**/*.tsx", "frontend/dashboard/src/**/*.ts", "frontend/dashboard/src/**/*.tsx", "frontend/chat/src/**/*.ts", "frontend/chat/src/**/*.tsx", "frontend/chat/harness/**/*.tsx", "frontend/theme/src/**/*.ts", "plugins/**/*.ts", "plugins/**/*.tsx", "packages/**/*.d.ts", "types/**/*.d.ts"]
++  "include": [
++    "plugins/**/*.ts",
++    "plugins/**/*.tsx",
++    "dashboard/src/**/*.ts",
++    "dashboard/src/**/*.tsx",
++    "chat/src/**/*.ts",
++    "chat/src/**/*.tsx",
++    "chat/harness/**/*.tsx",
++    "theme/src/**/*.ts",
++    "../plugins/**/*.ts",
++    "../plugins/**/*.tsx",
++    "packages/**/*.d.ts",
++    "types/**/*.d.ts"
++  ]
+ }
 --- a/migrations/README.md
 +++ b/migrations/README.md
 @@ -1,22 +1,18 @@
@@ -2036,17 +2121,19 @@
      "build:dashboard": "vite build --config frontend/dashboard/vite.config.ts",
      "build:dashboard:watch": "vite build --config frontend/dashboard/vite.config.ts --watch",
      "build:chat": "vite build --config frontend/chat/vite.config.ts",
-@@ -12,12 +12,7 @@
+@@ -11,13 +11,8 @@
+     "build:chat:watch": "vite build --config frontend/chat/vite.config.ts --watch",
      "dev:chat": "vite --config frontend/chat/vite.harness.config.ts",
      "dev": "vite --config frontend/dashboard/vite.config.ts",
-     "lint": "eslint \"frontend/dashboard/src/**/*.{ts,tsx}\" \"frontend/chat/src/**/*.{ts,tsx}\" \"plugins/**/*.ts\" \"types/**/*.d.ts\"",
+-    "lint": "eslint \"frontend/dashboard/src/**/*.{ts,tsx}\" \"frontend/chat/src/**/*.{ts,tsx}\" \"plugins/**/*.ts\" \"types/**/*.d.ts\"",
 -    "measure:webui-performance:browser": "node scripts/webui-performance/run-browser-scenarios.mjs",
 -    "serve:webui-performance:fixture": "node scripts/webui-performance/serve-desktop-fixture.mjs",
 -    "baseline:webui-performance:build": "node scripts/webui-performance/run-build-baseline.mjs --update-baseline",
 -    "baseline:webui-performance:browser": "node scripts/webui-performance/run-browser-scenarios.mjs --update-baseline",
 -    "typecheck": "tsc --noEmit",
 -    "check:narrow-ui": "node scripts/check_narrow_ui.mjs"
-+    "typecheck": "tsc --noEmit"
++    "lint": "eslint --config frontend/eslint.config.js \"frontend/dashboard/src/**/*.{ts,tsx}\" \"frontend/chat/src/**/*.{ts,tsx}\" \"plugins/**/*.ts\" \"frontend/types/**/*.d.ts\"",
++    "typecheck": "tsc --noEmit --project frontend/tsconfig.json"
    },
    "devDependencies": {
      "@eslint/js": "^10.0.1",

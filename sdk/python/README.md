@@ -48,7 +48,7 @@ loopback TCP 需传入 `workspace_token`：
 client = await AsyncClient.connect("127.0.0.1:2236", workspace_token=token)
 ```
 
-SDK 不启动 workspace owner。父进程托管可运行 `python main.py app-server --stdio` 并使用 JSON-RPC NDJSON；当前 Python 客户端使用 Unix socket 或 loopback TCP。服务端只接受 v2，旧 Thread/Turn 方法没有兼容入口。请求参数见 [协议 schema](../../schema/app-server-v2.json)。
+SDK 不启动 workspace owner。父进程托管可运行 `python main.py app-server --stdio` 并使用 JSON-RPC NDJSON；当前 Python 客户端使用 Unix socket 或 loopback TCP。服务端只接受 v2，旧 Thread/Turn 方法没有兼容入口。请求参数见 [协议 schema](../../plugins/gateway/schema/app-server-v2.json)。
 
 程序调用使用同一连接上的来源方法；Session ID 由调用方先生成并保存：
 

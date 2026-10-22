@@ -119,13 +119,14 @@ uv run --frozen --no-sync python -m scripts.check_docs
 agent/          组合内核、生命周期、配置与 supervisor
 bootstrap/      宿主资源与启动
 plugins/        对话、人格、记忆、工具、主动交互与渠道
-frontend/       Web 界面与主题
+frontend/       Web 界面、主题、共享包、类型与前端配置
 kirakira_agent/ 公开 CLI 与工作区设置
 sdk/            程序化客户端
 eval/           功能验证与记忆实验
 tests/          Runtime 与集成合同
 scripts/        构建、迁移与维护
 docs/           使用指南、架构与评测证据
+third_party/    来源、第三方声明与补丁
 ```
 
 [文档](docs/INDEX.md) · [启动指南](docs/handbook/start.md) ·

@@ -7,9 +7,12 @@ import autoprefixer from "autoprefixer";
 import { build as bundle, transform } from "esbuild";
 import tailwindcss from "tailwindcss";
 import { build } from "vite";
-import webUiPreset from "../packages/akashic-web-ui-v1/tailwind-preset.mjs";
+import webUiPreset from "../frontend/packages/akashic-web-ui-v1/tailwind-preset.mjs";
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+// Plugin UI also lives outside frontend/. Give every entry the same compiler
+// settings instead of depending on discovery of a tsconfig in its ancestors.
+const tsconfigRaw = await readFile(resolve(repoRoot, "frontend/tsconfig.json"), "utf8");
 const pluginsRoot = resolve(repoRoot, "plugins");
 const pluginNames = (await readdir(pluginsRoot, { withFileTypes: true }))
   .filter((entry) => entry.isDirectory())
@@ -52,6 +55,7 @@ for (const plugin of modules) {
   await build({
     configFile: false,
     root: repoRoot,
+    esbuild: { tsconfigRaw },
     plugins: [react(), compactGeneratedModules],
     define: {
       "process.env.NODE_ENV": JSON.stringify("production"),

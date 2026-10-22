@@ -1,6 +1,6 @@
 Kirakira includes the Akashic runtime from
 https://github.com/kachofugetsu09/akashic-agent at commit
-`94027a5cce9fc494f20bb7931fddf26f1e15e8df`, under the MIT license.
+`e4ba3e29ee5a259cac7eb306db91cb632ba98a13`, under the MIT license.
 The original copyright notice and license are preserved in [UPSTREAM-LICENSE](UPSTREAM-LICENSE).
 
 [UPSTREAM.json](UPSTREAM.json) records original source paths, digests, local patches
@@ -8,7 +8,7 @@ and generated assets. The base architecture and plugin implementations are upstr
 work. Local presentation changes do not change that attribution.
 
 The episodic memory plugin includes the Akasha v2 engine. Its own source provenance
-is retained in [plugins/akasha/UPSTREAM.json](plugins/akasha/UPSTREAM.json).
+is retained in [memory provenance](../plugins/akasha/UPSTREAM.json).
 Kirakira's additions include session-scoped memory queries, dated and bounded
 source evidence, optional candidate rank fusion, extractive evidence windows,
 receipt-bound original-text reads, SDK integration and evaluation tooling. They extend the existing learning and

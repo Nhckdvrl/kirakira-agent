@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "kirakira-agent"
 version = "0.1.0"
 license = "MIT"
-license-files = ["LICENSE", "UPSTREAM-LICENSE", "THIRD_PARTY.md"]
+license-files = ["LICENSE", "third_party/UPSTREAM-LICENSE", "third_party/THIRD_PARTY.md"]
 description = "A local-first personal AI companion with lasting memory, configurable personality, and proactive interaction."
 readme = "README.md"
 requires-python = ">=3.14,<3.15"
@@ -73,7 +73,7 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 where = [".", "sdk/python/src"]
-include = ["bundles*", "packages*", "schema*", "skills*", "types*", "agent*", "akashic_sdk*", "bootstrap*", "core*", "eval*", "frontend*", "infra*", "kirakira_agent*", "migrations*", "plugins*", "scripts*", "utils*"]
+include = ["bundles*", "skills*", "agent*", "akashic_sdk*", "bootstrap*", "core*", "eval*", "frontend*", "infra*", "kirakira_agent*", "migrations*", "plugins*", "scripts*", "utils*"]
 
 exclude = ["tests*", "node_modules*", "**.node_modules*", "**.__pycache__*"]
 

@@ -70,9 +70,10 @@ async def evaluate(workspace, key_file, *, model_config=None):
             core,
             "akashic:project",
             "project-input",
-            "Use write_file to create project-proof.txt in the current working directory containing exactly PROJECT_"
-            + nonce
-            + ". Report after writing.",
+            "Use write_file to create project-proof.txt in the current working directory. "
+            "Set its content to the exact JSON string value "
+            + json.dumps("PROJECT_" + nonce)
+            + ", with no extra whitespace, punctuation or trailing newline. Report after writing.",
             metadata={"session_dimensions": {"project": project_id}},
         )
         assert (directory / "project-proof.txt").read_text() == "PROJECT_" + nonce
