@@ -9532,5 +9532,1013 @@
       "proactive_enabled_unchanged": true,
       "notification_destination_unchanged": true
     }
+  },
+  "binding_and_live_context_2026_10_23": {
+    "component": {
+      "binding_count": 20,
+      "filesystem": "same NFS home as production",
+      "rounds": 5,
+      "scope": "Binding persistence component only; excludes model, conversation and Telegram.",
+      "before": {
+        "milliseconds": [
+          151.30150876939297,
+          95.3282043337822,
+          86.13828383386135,
+          84.98896285891533,
+          90.33551625907421
+        ],
+        "writer_sql_statements": 300,
+        "write_transactions": 100
+      },
+      "after": {
+        "milliseconds": [
+          2.9632169753313065,
+          2.924468368291855,
+          2.9205884784460068,
+          2.9035285115242004,
+          2.913067117333412
+        ],
+        "writer_sql_statements": 0,
+        "write_transactions": 0
+      }
+    },
+    "telegram_same_filesystem": {
+      "model_config": {
+        "model": "step-5-preview",
+        "endpoint": "https://api.stepfun.com/step_plan/v1",
+        "driver_id": "openai-compatible",
+        "model_id": "arbitrary-chat-id",
+        "context_window": 32768,
+        "max_output_tokens": 4096,
+        "reasoning_effort": "low"
+      },
+      "filesystem": "NFSv4, same home filesystem as production",
+      "scope": "Synthetic Update enters actual adapter/Core ingress. Real bot draft and final send APIs, actual native delivery receipt. No getUpdates, user-device or network-to-poller latency claim. Chat IDs and token URLs excluded.",
+      "memory_scope": "Markdown snapshots only; no production graph, credentials, sessions or polling copied.",
+      "cases": [
+        {
+          "case": "natural-greeting",
+          "passed": true,
+          "native_total_ms": 5295.814862474799,
+          "native_driver_ms": 2679.067948833108,
+          "native_first_visible_content_ms": 3682.482408359647,
+          "model_calls": 1,
+          "tool_results": 0,
+          "request_profile": {
+            "content_chars_by_role": {
+              "system": 8376,
+              "user": 936
+            },
+            "reasoning_chars": 0,
+            "tool_schema_chars": 8535,
+            "tool_schema_count": 15
+          },
+          "native_attempts": [
+            {
+              "usage": {
+                "input_tokens": 7766,
+                "cache_write_input_tokens": null,
+                "cached_input_tokens": 0,
+                "output_tokens": 80,
+                "reasoning_output_tokens": 0,
+                "request_count": 1,
+                "covered_request_count": 1,
+                "coverage": "exact"
+              },
+              "thinking_chars": 74,
+              "duration_ms": 2679.067948833108,
+              "first_raw_content_at_ms": 3682.444078847766,
+              "first_content_at_ms": 3682.482408359647
+            }
+          ],
+          "same_payload_replayed": false,
+          "final_delivered": true,
+          "timings": [
+            {
+              "phase": "telegram.update.received",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577964227541117
+            },
+            {
+              "phase": "input.received",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577964235708978
+            },
+            {
+              "phase": "input.attributes.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577964246955879
+            },
+            {
+              "phase": "input.content.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577964247075232
+            },
+            {
+              "phase": "input.committed",
+              "operation_id": "",
+              "counts": {
+                "seq": 0
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577964269293405
+            },
+            {
+              "phase": "reply.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577964323643758
+            },
+            {
+              "phase": "reply.selection.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577964328428082
+            },
+            {
+              "phase": "tools.menu.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577964334324064
+            },
+            {
+              "phase": "tools.menu.end",
+              "operation_id": "",
+              "counts": {
+                "tools": 28
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577964732860663
+            },
+            {
+              "phase": "react.begin",
+              "operation_id": "473c600bdd9b496684c083e06cfa3153",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577964733073368
+            },
+            {
+              "phase": "tools.settled",
+              "operation_id": "473c600bdd9b496684c083e06cfa3153",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577964738419437
+            },
+            {
+              "phase": "history.loaded",
+              "operation_id": "473c600bdd9b496684c083e06cfa3153",
+              "counts": {
+                "messages": 1
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577964740636534
+            },
+            {
+              "phase": "preparation.begin",
+              "operation_id": "473c600bdd9b496684c083e06cfa3153",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577964740689465
+            },
+            {
+              "phase": "materials.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577964740717506
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "akasha",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577964740912861
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "compaction",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577964752178522
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "job-notices",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577964752305625
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "job-notices",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577964752396337
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "markdown_memory",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577964752428958
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "default_prompt",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577964757936400
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "default_prompt",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577964758314090
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "shell-environment",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577964758357161
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "shell-environment",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577964758697640
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "skills",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577964758741921
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "working-directory",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577964758900785
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "working-directory",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577964761037090
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "compaction",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577964761242065
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "markdown_memory",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577964776249043
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "skills",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577964788061728
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "akasha",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577965684943603
+            },
+            {
+              "phase": "materials.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577965694074179
+            },
+            {
+              "phase": "preparation.end",
+              "operation_id": "473c600bdd9b496684c083e06cfa3153",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577965694146751
+            },
+            {
+              "phase": "context.build.begin",
+              "operation_id": "473c600bdd9b496684c083e06cfa3153",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577965694195872
+            },
+            {
+              "phase": "context.build.end",
+              "operation_id": "473c600bdd9b496684c083e06cfa3153",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577965695136297
+            },
+            {
+              "phase": "context.reduce.begin",
+              "operation_id": "473c600bdd9b496684c083e06cfa3153",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577965695229589
+            },
+            {
+              "phase": "context.reduce.end",
+              "operation_id": "473c600bdd9b496684c083e06cfa3153",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577965697501588
+            },
+            {
+              "phase": "request.claimed",
+              "operation_id": "473c600bdd9b496684c083e06cfa3153",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577965697573049
+            },
+            {
+              "phase": "model.begin",
+              "operation_id": "473c600bdd9b496684c083e06cfa3153",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577965697595280
+            },
+            {
+              "phase": "telegram.draft.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577968062067463
+            },
+            {
+              "phase": "model.end",
+              "operation_id": "473c600bdd9b496684c083e06cfa3153",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577968403558451
+            },
+            {
+              "phase": "output.decoded",
+              "operation_id": "473c600bdd9b496684c083e06cfa3153",
+              "counts": {
+                "tool_calls": 0
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577968415749496
+            },
+            {
+              "phase": "output.committed",
+              "operation_id": "473c600bdd9b496684c083e06cfa3153",
+              "counts": {
+                "seq": 1,
+                "tool_calls": 0
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577968426360870
+            },
+            {
+              "phase": "telegram.draft.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577968502161687
+            },
+            {
+              "phase": "telegram.delivery.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577968542922730
+            },
+            {
+              "phase": "telegram.delivery.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577969510530859
+            }
+          ]
+        },
+        {
+          "case": "natural-followup",
+          "passed": true,
+          "native_total_ms": 22848.552726209164,
+          "native_driver_ms": 20345.315327867866,
+          "native_first_visible_content_ms": 20808.725722134113,
+          "model_calls": 1,
+          "tool_results": 0,
+          "request_profile": {
+            "content_chars_by_role": {
+              "system": 8376,
+              "user": 1125,
+              "assistant": 84
+            },
+            "reasoning_chars": 74,
+            "tool_schema_chars": 8535,
+            "tool_schema_count": 15
+          },
+          "native_attempts": [
+            {
+              "usage": {
+                "input_tokens": 7898,
+                "cache_write_input_tokens": null,
+                "cached_input_tokens": 7168,
+                "output_tokens": 68,
+                "reasoning_output_tokens": 0,
+                "request_count": 1,
+                "covered_request_count": 1,
+                "coverage": "exact"
+              },
+              "thinking_chars": 73,
+              "duration_ms": 20345.315327867866,
+              "first_raw_content_at_ms": 20808.650821447372,
+              "first_content_at_ms": 20808.725722134113
+            }
+          ],
+          "same_payload_replayed": false,
+          "final_delivered": true,
+          "timings": [
+            {
+              "phase": "telegram.update.received",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577969530052762
+            },
+            {
+              "phase": "input.received",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577969542967676
+            },
+            {
+              "phase": "input.attributes.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577969550266445
+            },
+            {
+              "phase": "input.content.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577969550365847
+            },
+            {
+              "phase": "input.committed",
+              "operation_id": "",
+              "counts": {
+                "seq": 2
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577969572485498
+            },
+            {
+              "phase": "reply.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577969625329603
+            },
+            {
+              "phase": "reply.selection.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577969631278037
+            },
+            {
+              "phase": "tools.menu.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577969638102483
+            },
+            {
+              "phase": "tools.menu.end",
+              "operation_id": "",
+              "counts": {
+                "tools": 28
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577969786387703
+            },
+            {
+              "phase": "react.begin",
+              "operation_id": "97a7b97f65ca4717a5cbb9ceeb1e9e45",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577969786663560
+            },
+            {
+              "phase": "tools.settled",
+              "operation_id": "97a7b97f65ca4717a5cbb9ceeb1e9e45",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577969789867383
+            },
+            {
+              "phase": "history.loaded",
+              "operation_id": "97a7b97f65ca4717a5cbb9ceeb1e9e45",
+              "counts": {
+                "messages": 3
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577969792143282
+            },
+            {
+              "phase": "preparation.begin",
+              "operation_id": "97a7b97f65ca4717a5cbb9ceeb1e9e45",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577969792221184
+            },
+            {
+              "phase": "materials.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577969792263085
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "akasha",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577969792509821
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "compaction",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577969804995994
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "job-notices",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577969805175628
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "job-notices",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577969805311122
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "markdown_memory",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577969805360503
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "default_prompt",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577969810580958
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "default_prompt",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577969811035959
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "shell-environment",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577969811099311
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "shell-environment",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577969811338277
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "skills",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577969811394458
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "working-directory",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577969811619064
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "working-directory",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577969813734339
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "compaction",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577969814067638
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "markdown_memory",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577969817001883
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "skills",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577969818009869
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "akasha",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577970135113529
+            },
+            {
+              "phase": "materials.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577970142442139
+            },
+            {
+              "phase": "preparation.end",
+              "operation_id": "97a7b97f65ca4717a5cbb9ceeb1e9e45",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577970142558732
+            },
+            {
+              "phase": "context.build.begin",
+              "operation_id": "97a7b97f65ca4717a5cbb9ceeb1e9e45",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577970142642104
+            },
+            {
+              "phase": "context.build.end",
+              "operation_id": "97a7b97f65ca4717a5cbb9ceeb1e9e45",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577970146914454
+            },
+            {
+              "phase": "context.reduce.begin",
+              "operation_id": "97a7b97f65ca4717a5cbb9ceeb1e9e45",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577970147075498
+            },
+            {
+              "phase": "context.reduce.end",
+              "operation_id": "97a7b97f65ca4717a5cbb9ceeb1e9e45",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577970149552962
+            },
+            {
+              "phase": "request.claimed",
+              "operation_id": "97a7b97f65ca4717a5cbb9ceeb1e9e45",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577970149692896
+            },
+            {
+              "phase": "model.begin",
+              "operation_id": "97a7b97f65ca4717a5cbb9ceeb1e9e45",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577970149739857
+            },
+            {
+              "phase": "telegram.draft.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577990491560266
+            },
+            {
+              "phase": "model.end",
+              "operation_id": "97a7b97f65ca4717a5cbb9ceeb1e9e45",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577990518284868
+            },
+            {
+              "phase": "output.decoded",
+              "operation_id": "97a7b97f65ca4717a5cbb9ceeb1e9e45",
+              "counts": {
+                "tool_calls": 0
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577990532493445
+            },
+            {
+              "phase": "output.committed",
+              "operation_id": "97a7b97f65ca4717a5cbb9ceeb1e9e45",
+              "counts": {
+                "seq": 3,
+                "tool_calls": 0
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577990542111614
+            },
+            {
+              "phase": "telegram.delivery.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577990650675542
+            },
+            {
+              "phase": "telegram.draft.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577991419511649
+            },
+            {
+              "phase": "telegram.delivery.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16577992363258462
+            }
+          ]
+        }
+      ],
+      "shutdown_completed": true
+    },
+    "provider_minimal": {
+      "model": {
+        "model": "step-5-preview",
+        "endpoint": "https://api.stepfun.com/step_plan/v1",
+        "driver_id": "openai-compatible",
+        "model_id": "arbitrary-chat-id",
+        "context_window": 32768,
+        "max_output_tokens": 4096,
+        "reasoning_effort": "low"
+      },
+      "scope": "Four sequential minimal direct requests with one reused HTTP client; no harness, memory, tools or database.",
+      "cases": [
+        {
+          "attempt": 1,
+          "headers_s": 0.898,
+          "first_reasoning_s": 0.898757878690958,
+          "first_content_s": 1.0906896013766527,
+          "total_s": 1.119,
+          "answer_chars": 2,
+          "usage": {
+            "prompt_tokens": 26,
+            "completion_tokens": 15,
+            "total_tokens": 41,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          }
+        },
+        {
+          "attempt": 2,
+          "headers_s": 7.614,
+          "first_reasoning_s": 7.614264756441116,
+          "first_content_s": 7.918498681858182,
+          "total_s": 7.936,
+          "answer_chars": 2,
+          "usage": {
+            "prompt_tokens": 26,
+            "completion_tokens": 18,
+            "total_tokens": 44,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          }
+        },
+        {
+          "attempt": 3,
+          "headers_s": 1.789,
+          "first_reasoning_s": 1.7892412580549717,
+          "first_content_s": 2.3051770515739918,
+          "total_s": 2.324,
+          "answer_chars": 2,
+          "usage": {
+            "prompt_tokens": 26,
+            "completion_tokens": 36,
+            "total_tokens": 62,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          }
+        },
+        {
+          "attempt": 4,
+          "headers_s": 2.309,
+          "first_reasoning_s": 2.3091798834502697,
+          "first_content_s": 2.3785175550729036,
+          "total_s": 2.426,
+          "answer_chars": 2,
+          "usage": {
+            "prompt_tokens": 26,
+            "completion_tokens": 4,
+            "total_tokens": 30,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          }
+        }
+      ]
+    },
+    "core": {
+      "cases": [
+        {
+          "name": "native_reply",
+          "passed": true,
+          "duration_s": 2.432
+        },
+        {
+          "name": "bound_file_roundtrip",
+          "passed": true,
+          "duration_s": 6.173
+        },
+        {
+          "name": "managed_process_mcp",
+          "passed": true,
+          "duration_s": 6.995
+        },
+        {
+          "name": "native_shell",
+          "passed": true,
+          "duration_s": 3.531
+        },
+        {
+          "name": "tool_error_repair",
+          "passed": true,
+          "duration_s": 12.672
+        },
+        {
+          "name": "native_subagent",
+          "passed": true,
+          "duration_s": 8.603
+        },
+        {
+          "name": "driver_local_reload",
+          "passed": true,
+          "duration_s": 3.608
+        },
+        {
+          "name": "task_bound_steer_withdraw",
+          "passed": true,
+          "duration_s": 11.097
+        },
+        {
+          "name": "source_pause_resume_no_effect_replay",
+          "passed": true,
+          "duration_s": 4.845
+        },
+        {
+          "name": "new_input_revokes_old_source_task",
+          "passed": true,
+          "duration_s": 9.709
+        },
+        {
+          "name": "immutable_attachment_projection",
+          "passed": true,
+          "duration_s": 2.153
+        },
+        {
+          "name": "scheduler_native_source_delivery",
+          "passed": true,
+          "duration_s": 12.843
+        },
+        {
+          "name": "restart_reuses_native_history",
+          "passed": true,
+          "duration_s": 4.951
+        }
+      ],
+      "summary": {
+        "passed": 13,
+        "total": 13,
+        "python": "3.14.6",
+        "recorded_business_model_calls": 29,
+        "model_states": {
+          "success": 29
+        },
+        "driver_ids": [
+          "openai-compatible"
+        ],
+        "endpoints": [
+          "https://api.stepfun.com/step_plan/v1"
+        ],
+        "input_tokens": 230342,
+        "output_tokens": 2406,
+        "coverage": "native Models business-call ledger; connection/model setup probes are additional calls"
+      }
+    },
+    "regression": {
+      "full_local_passed": 136,
+      "full_local_total": 136,
+      "final_binding_tests_passed": 8,
+      "final_binding_tests_total": 8
+    },
+    "replay_policy": {
+      "live_only": [
+        "current environment",
+        "bound model descriptor",
+        "current expression settings"
+      ],
+      "original_ledger_preserved": true,
+      "existing_replay_facts_preserved": true,
+      "reasoning_protocol_unchanged": true
+    },
+    "binding_cache": {
+      "limit": 4096,
+      "publish_after_commit": true,
+      "conflict_validation": true,
+      "rollback_isolation": true,
+      "restart_reads_database": true
+    },
+    "implementation_sha256": {
+      "plugins/ledger/log.py": "081a74bb4ca72dcb7526ca6edfbd72d8c0238e41d433c4852a802651803176da",
+      "plugins/reply_program/program.py": "fbe1c25b52469eec60977c099d8d1665d1f118b67f9c0701d7e2f07ce4856383",
+      "plugins/prompt/plugin.py": "3280aa9ed0dafa54301923b27d8d28b2fa3a7a8818a4ef010d5ce2d8a1bb90d2",
+      "eval/telegram_latency.py": "431d35c9e3301f2a1c630b960c6f752b1a65bb9e6c2889b7f72d732920289603"
+    },
+    "limits": [
+      "Component SQL counts are not an end-to-end latency reduction.",
+      "The isolated NFS workspace contains Markdown snapshots but not the production graph or full conversation history.",
+      "The 22.85-second sample is retained. Provider cache hits did not guarantee low latency.",
+      "Four minimal requests are diagnostic observations, not a statistically established service-latency distribution."
+    ],
+    "deployment": {
+      "new_boot": true,
+      "loaded_sources_match": {
+        "prompt": true,
+        "ledger": true,
+        "reply_program": true
+      },
+      "health": 200,
+      "gateway_read_only_check": true
+    },
+    "preservation": {
+      "profiles_unchanged": true,
+      "configurations_unchanged": true,
+      "proactive_enabled_unchanged": true,
+      "notification_destination_unchanged": true
+    }
   }
 }

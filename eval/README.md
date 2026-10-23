@@ -175,6 +175,10 @@ uv run --frozen --no-sync python -m eval.telegram_latency \
 `--memory-documents /private/path/memory` 只把 Markdown 快照读入隔离工作区并记录摘要；不会复制生产图、
 会话、凭据或轮询配置。这种测试不代表复现了生产记忆召回；复现历史干扰需另外冻结实际召回材料。
 
+加入 `--case natural-followup --no-direct-replay` 可连续检查“你好”和“在吗”，两轮之间不额外重放模型请求。
+将隔离工作区放在生产同类文件系统上，才能观察相应磁盘开销。报告只记录各角色正文、推理字段与工具 schema
+的字符数和实际用量；字符数不是 token 数。默认模式仍保留原同字节重放诊断。
+
 报告分开记录原始 SSE 正文、公开正文回调、草稿 API 确认、最终回执和各材料阶段；推理字段不算正文。每次结束后顺序重放相同原生请求字节，只存摘要和大小，不保存正文或密钥。先后次序可能预热供应商缓存，因此不能据此计算产品 A/B 加速比。默认头部跟踪支持通用兼容驱动及既有订阅驱动，不依赖具体模型名。
 
 结果、慢样本与开发失败见 [Telegram 实测](../docs/operations/evaluations/2026-10-22-telegram-latency.md)。

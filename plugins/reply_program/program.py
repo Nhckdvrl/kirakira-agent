@@ -125,7 +125,7 @@ async def run_reply(
         materials as material_view,
     ):
         model = execution.chat("agent")
-        runtime_model = {"name": "runtime_model", "priority": 90, "text": (
+        runtime_model = {"name": "runtime_model", "priority": 90, "replay": False, "text": (
             "本次请求已绑定的对话模型：" + json.dumps({
                 "model": model.descriptor.model, "model_id": model.descriptor.model_id,
                 "driver": model.descriptor.driver_id,
@@ -178,16 +178,18 @@ async def run_reply(
             if render_content is None:
                 summary = cast(SummaryData | None, result.get("summary"))
                 start = 0 if summary is None else context.summary_range(messages, cast(tuple[str, ...], summary["source_message_ids"])).stop
-                refs = reader.attachments_for(tuple(
+                visible_ids = tuple(
                     message.message_id for index, message in enumerate(messages)
                     if index >= start or message.message_id in keep_input_ids
-                ))
+                )
+                refs = await run_file_io(lambda: reader.attachments_for(visible_ids))
                 if refs:
+                    current_refs = await run_file_io(lambda: reader.attachments_for(keep_input_ids))
                     artifacts = await model_content.load_artifacts(
                         artifact_reader, refs,
                         accepts_images="image" in model.descriptor.capabilities.input_modalities,
                         current_artifact_ids=frozenset(
-                            ref.artifact_id for ref in reader.attachments_for(keep_input_ids)
+                            ref.artifact_id for ref in current_refs
                         ),
                     )
             check()

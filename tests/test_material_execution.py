@@ -96,7 +96,9 @@ async def test_personality_composition_preserves_owned_file_and_frozen_materials
                                            workspace_files=("memory/VEDA.md",)))
     try:
         async with services[0].bind() as view:
-            conversation = decode_material(await view.prepare((), "conversation")).system_prompt
+            material = decode_material(await view.prepare((), "conversation"))
+            assert material.reminders and all(not part.replay for part in material.reminders)
+            conversation = material.system_prompt
             proactive = decode_material(await view.prepare((), "wake")).system_prompt
             assert conversation == proactive
             assert "你叫星灯" in conversation

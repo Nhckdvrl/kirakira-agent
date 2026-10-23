@@ -92,11 +92,11 @@ async def apply(ctx: Context) -> None:
                     prompt += build_telegram_rendering_prompt()
         text = "## 当前环境\n" + "\n".join(f"- {key}: {value}" for key, value in values.items())
         environment: Mapping[str, object] = {
-            "name": "environment", "text": text, "priority": 100,
+            "name": "environment", "text": text, "priority": 100, "replay": False,
         }
         reminders = (environment,)
         if expression:
-            reminders += ({"name": "expression", "text": expression, "priority": 110},)
+            reminders += ({"name": "expression", "text": expression, "priority": 110, "replay": False},)
         return {
             "system_prompt": prompt,
             "reminders": reminders,

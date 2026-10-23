@@ -268,7 +268,8 @@ async def evaluate(args):
                              ("long-stream", "直接用约400个汉字解释为什么人们喜欢星空。不要调用工具。")]
                     selected = getattr(args, "case_names", None)
                     if selected:
-                        available = dict(cases + [("natural-greeting", "你好")])
+                        available = dict(cases + [("natural-greeting", "你好"),
+                                                  ("natural-followup", "在吗")])
                         cases = [(label, available[label]) for label in dict.fromkeys(selected)]
                     for label, prompt in cases:
                         if not telegram:
@@ -301,6 +302,12 @@ async def evaluate(args):
                         if not calls:
                             raise RuntimeError("native wire capture was not attached")
                         body = calls[-1]["body"]
+                        wire = json.loads(body)
+                        role_chars = {}
+                        for message in wire["messages"]:
+                            role = message["role"]
+                            role_chars[role] = role_chars.get(role, 0) + len(json.dumps(
+                                message.get("content"), ensure_ascii=False))
                         rows = reader.snapshot(after_seq=head)
                         first = next((c["first_content_at"] for c in calls if c["first_content_at"] is not None), None)
                         row = {"case": label, "passed": True, "native_total_ms": total,
@@ -308,7 +315,12 @@ async def evaluate(args):
                                "native_driver_ms": sum(c["duration_ms"] for c in calls),
                                "native_first_visible_content_ms": None if first is None else (first - start) * 1000,
                                "request_sha256": hashlib.sha256(body).hexdigest(), "request_bytes": len(body),
-                               "same_payload_replayed": True, "direct": await replay(direct_client, body)}
+                               "request_profile": {"content_chars_by_role": role_chars,
+                                   "reasoning_chars": sum(len(m.get("reasoning_content") or "") for m in wire["messages"]),
+                                   "tool_schema_chars": len(json.dumps(wire.get("tools", []), ensure_ascii=False)),
+                                   "tool_schema_count": len(wire.get("tools", []))},
+                               "same_payload_replayed": not getattr(args, "no_direct_replay", False),
+                               "direct": None if getattr(args, "no_direct_replay", False) else await replay(direct_client, body)}
                         row["native_attempts"] = [{k: v for k, v in c.items() if k in (
                             "duration_ms", "legacy_think_tag_seen", "thinking_chars", "usage")}
                             | {k + "_ms": (c[k] - start) * 1000 for k in (
@@ -317,7 +329,7 @@ async def evaluate(args):
                         if label == "model-identity":
                             row["bound_model_named"] = model.model in text(answer)
                             row["passed"] = row["bound_model_named"] and row["tool_results"] == 0
-                        if label == "natural-greeting":
+                        if label in {"natural-greeting", "natural-followup"}:
                             row["passed"] = bool(text(answer).strip()) and row["tool_results"] == 0
                             row["prompt_forbids_tools"] = False
                         if telegram:
@@ -347,7 +359,9 @@ def main():
     parser.add_argument("--telegram-chat-file", type=Path)
     parser.add_argument("--expected-bot")
     parser.add_argument("--case", dest="case_names", action="append", choices=(
-        "natural-greeting", "short-cold", "short-warm", "model-identity", "long-stream"))
+        "natural-greeting", "natural-followup", "short-cold", "short-warm", "model-identity", "long-stream"))
+    parser.add_argument("--no-direct-replay", action="store_true",
+                        help="Measure only native turns without an intervening duplicate provider request")
     parser.add_argument("--memory-documents", type=Path,
                         help="Read-only Markdown snapshots copied into the isolated workspace")
     args = parser.parse_args()

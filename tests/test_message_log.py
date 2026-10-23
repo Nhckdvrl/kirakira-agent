@@ -64,6 +64,57 @@ def test_missing_resource_rolls_back_message_and_sequence(log):
     with pytest.raises(MessageConflict):
         log.save_binding("missing", {"artifact": "new-revision"})
 
+
+def test_committed_binding_reuse_avoids_sql_and_rejects_descriptor_drift(log, monkeypatch):
+    descriptor = {"nested": {"revision": [1, 2]}}
+    log.save_binding("immutable", descriptor)
+    statements = []
+    log._writer_connection.set_trace_callback(statements.append)
+    try:
+        for _ in range(20):
+            log.save_binding("immutable", {"nested": {"revision": [1, 2]}})
+            assert log.read_binding("immutable")["nested"]["revision"] == (1, 2)
+        with pytest.raises(MessageConflict):
+            log.save_binding("immutable", {"nested": {"revision": [3]}})
+        assert statements == []
+    finally:
+        log._writer_connection.set_trace_callback(None)
+    monkeypatch.setattr("plugins.ledger.log._BINDING_MEMO_SIZE", 2)
+    log.save_binding("second", {"revision": 2})
+    log.save_binding("third", {"revision": 3})
+    assert len(log._binding_payloads) == len(log._binding_cache) == 2
+    assert "immutable" not in log._binding_cache
+    assert log.read_binding("immutable")["nested"]["revision"] == (1, 2)
+    with pytest.raises(MessageConflict):
+        log.save_binding("immutable", {"revision": "drift after eviction"})
+
+
+def test_failed_binding_write_is_not_cached_and_reopened_data_remains_authoritative(tmp_path):
+    path = tmp_path / "bindings.db"
+    log = MessageLog(path)
+    try:
+        def reject_insert(action, *args):
+            return sqlite3.SQLITE_DENY if action == sqlite3.SQLITE_INSERT else sqlite3.SQLITE_OK
+        log._writer_connection.set_authorizer(reject_insert)
+        with pytest.raises(sqlite3.DatabaseError):
+            log.save_binding("retried", {"revision": 1})
+        log._writer_connection.set_authorizer(None)
+        with pytest.raises(KeyError):
+            log.read_binding("retried")
+        log.save_binding("retried", {"revision": 2})
+    finally:
+        log.close()
+    reopened = MessageLog(path)
+    try:
+        assert reopened.read_binding("retried")["revision"] == 2
+        with pytest.raises(MessageConflict):
+            reopened.save_binding("retried", {"revision": 1})
+        reopened.save_binding("retried", {"revision": 2})
+    finally:
+        reopened.close()
+    with pytest.raises(RuntimeError, match="已关闭"):
+        reopened.save_binding("retried", {"revision": 2})
+
 def test_session_scope_is_fixed_at_admission_and_absent_for_old_sessions(log, tmp_path):
     _ = writer(log).append("m1", Input(()))
     scoped = SessionAttributes.scoped({"project": "p_1"})

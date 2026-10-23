@@ -10,13 +10,12 @@ import logging
 import re
 import sqlite3
 import threading
-from collections.abc import AsyncGenerator, Callable, Generator, Iterable, Iterator, Mapping, Sequence
+from collections.abc import AsyncGenerator, Callable, Generator, Iterable, Mapping
 from bisect import bisect_right
 from contextlib import closing, contextmanager
 from datetime import UTC, datetime
 from dataclasses import dataclass, field
-from typing import Literal, TypeVar, cast, overload
-from itertools import islice
+from typing import Literal, TypeVar, cast
 from pathlib import Path
 from types import MappingProxyType
 from weakref import WeakValueDictionary
@@ -65,6 +64,7 @@ _DECODE_STRONG_BODY = 8192
 # 附件引用备忘：长会话一次材料准备就引用全部历史 id，容量小于历史时
 # FIFO 必抖穿且每轮重查；值多为共享空元组，32768 条约占几 MB。
 _ATTACHMENT_MEMO_SIZE = 32768
+_BINDING_MEMO_SIZE = 4096
 MESSAGE_BODY_KIND_INDEX_SCHEMA = """CREATE INDEX IF NOT EXISTS message_source_kind_seq
     ON messages (session_key, source, json_extract(body, '$.kind'), seq,
                  json_extract(body, '$.finish'));"""
@@ -422,6 +422,8 @@ class MessageLog:
         # 备忘查询结果，每轮材料准备只读取新增消息，由 _decode_lock 保护。键含 Session：
         # 命中缓存也不能绕过 reader 的会话授权。
         self._attachment_memo: dict[tuple[str, str], tuple[AttachmentRef, ...]] = {}
+        self._binding_cache: dict[str, Mapping[str, object]] = {}
+        self._binding_payloads: dict[str, str] = {}
         self._reads = _ReadLocal()
         self._path = Path(path).resolve()
         self._closed = False
@@ -892,6 +894,14 @@ class MessageLog:
             sort_keys=True,
             allow_nan=False,
         )
+        with self._lock, self._decode_lock:
+            if self._closed:
+                raise RuntimeError("MessageLog 已关闭")
+            known = self._binding_payloads.get(binding_id)
+            if known is not None:
+                if known != payload:
+                    raise MessageConflict("资源身份已用于另一份 descriptor")
+                return
         with self._lock, self._connection:
             _ = self._connection.execute("BEGIN IMMEDIATE")
             row = self._connection.execute(
@@ -901,20 +911,31 @@ class MessageLog:
             if row is not None:
                 if row[0] != payload:
                     raise MessageConflict("资源身份已用于另一份 descriptor")
-                return
-            _ = self._connection.execute(
-                "INSERT INTO bindings VALUES (?, ?)", (binding_id, payload)
-            )
+            else:
+                _ = self._connection.execute(
+                    "INSERT INTO bindings VALUES (?, ?)", (binding_id, payload)
+                )
+        # Only publish cache entries after the database context has committed.
+        # Reusing an immutable binding still validates its complete descriptor.
+        value = _json_object(payload, f"binding {binding_id}")
+        self._remember_binding(binding_id, payload, value)
+
+    def _remember_binding(self, identity: str, payload: str, value: Mapping[str, object]) -> None:
+        with self._decode_lock:
+            self._binding_cache[identity] = value
+            self._binding_payloads[identity] = payload
+            while len(self._binding_cache) > _BINDING_MEMO_SIZE:
+                oldest = next(iter(self._binding_cache))
+                del self._binding_cache[oldest]
+                del self._binding_payloads[oldest]
 
     def read_binding(self, binding_id: str) -> Mapping[str, object]:
         """读取不可变绑定；缺失引用不能用当前实现补齐。
 
         binding_id 是内容的 sha256，descriptor 不可变，解码结果可永久缓存。
         """
-        cached = getattr(self, "_binding_cache", None)
-        if cached is None:
-            cached = self._binding_cache = {}
-        value = cached.get(binding_id)
+        with self._decode_lock:
+            value = self._binding_cache.get(binding_id)
         if value is None:
             with self._read(snapshot=False):
                 row = self._connection.execute(
@@ -922,7 +943,8 @@ class MessageLog:
                 ).fetchone()
             if row is None:
                 raise KeyError(binding_id)
-            value = cached[binding_id] = _json_object(row[0], f"binding {binding_id}")
+            value = _json_object(row[0], f"binding {binding_id}")
+            self._remember_binding(binding_id, row[0], value)
         return value
 
     def close(self) -> None:
