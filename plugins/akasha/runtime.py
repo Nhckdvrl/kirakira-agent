@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+from html import escape
+import json
 import logging
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
@@ -9,7 +12,7 @@ from typing import cast
 
 from plugins.ledger.contract import Bindings
 from plugins.ledger.contract import MessageCatalog, MessageEmbeddings
-from plugins.ledger.contract import Input, Message
+from plugins.ledger.contract import ContentPart, Input, Message, Output
 
 from .application.consumer import MessageConsumer, run_memory_job
 from .learning import AKASHA_LEARNING, Learning, LearningConfig
@@ -22,6 +25,60 @@ from .recall_tool import tool_references
 
 MaterialData = Mapping[str, object]
 logger = logging.getLogger(__name__)
+AUTO_CONTEXT_CHARS = 2400
+
+
+def _receipt_reminder(identity, recall):
+    if not recall.presented_message_ids:
+        return None
+    return {"name": "recall_sources", "priority": 290, "text":
+        "## 已检索记忆的来源索引\n完整原文仍可用 read_memory_source 或 search_memory_source 展开。\n"
+        + json.dumps({"retrieval_ref": identity, "message_ids": recall.presented_message_ids[:3],
+                      "source_count": len(recall.presented_message_ids)}, ensure_ascii=False, separators=(",", ":"))}
+
+
+def _live_material(identity, recall, material):
+    reminders = tuple({**item, "replay": False} for item in material.get("reminders", ()))
+    pointer = _receipt_reminder(identity, recall)
+    return {**material, "reminders": reminders + (() if pointer is None else (pointer,))}
+
+
+async def _historical_patches(snapshot, source, *, records, bindings, catalog, cache):
+    """Replace only byte-verified legacy auto-recall material in the request view."""
+    current = next((row.message_id for row in reversed(snapshot)
+                    if row.source == source and isinstance(row.body, Input)), None)
+    patches = []
+    for message in snapshot:
+        if not isinstance(message.body, Output):
+            continue
+        facts = next((part.value for part in message.body.parts
+                      if isinstance(part, ContentPart) and part.kind == "model.facts"), None)
+        if not isinstance(facts, Mapping) or facts.get("reminder_input_id") in {None, current}:
+            continue
+        if message.message_id not in cache:
+            cache[message.message_id] = None
+            original = facts.get("reminder")
+            if not isinstance(original, str):
+                continue
+            identity = context_identity(message.session_id, message.source, facts["reminder_input_id"])
+            recall = await run_memory_job(lambda: records.read(identity))
+            if recall is None:
+                continue  # Unknown legacy provenance stays exactly as recorded.
+            async with bindings.open(recall.learning_binding, AKASHA_LEARNING) as (owner, _):
+                old = await run_memory_job(lambda: render_materials(identity, recall, owner, catalog, max_chars=recall.max_chars))
+            body = next((item["text"] for item in old.get("reminders", ()) if item["name"] == "recall"), "")
+            needle = escape(body, quote=False)
+            pointer = _receipt_reminder(identity, recall)
+            if needle and pointer is not None and original.count(needle) == 1:
+                start = original.index(needle)
+                cache[message.message_id] = {"message_id": message.message_id,
+                    "sha256": hashlib.sha256(original.encode()).hexdigest(), "start": start,
+                    "end": start + len(needle), "text": escape(pointer["text"], quote=False)}
+        if (patch := cache[message.message_id]) is not None:
+            patches.append(patch)
+    while len(cache) > 512:
+        del cache[next(iter(cache))]
+    return tuple(patches)
 
 
 def _reference_rows(material: MaterialData) -> tuple[Mapping[str, object], ...]:
@@ -62,6 +119,7 @@ class MessageMemory:
         self._max_chars = max_chars
         self._lock = asyncio.Lock()
         self._closing = False
+        self._replay_cache = {}
 
     def _check_open(self) -> None:
         if self._closing:
@@ -116,6 +174,7 @@ class MessageMemory:
                     learning_binding=self._learning_binding, learning=learning, rule=rule,
                     records=self._records, embed_batch=self._embed_batch,
                     limit=self._limit, max_chars=self._max_chars,
+                    replay_cache=self._replay_cache,
                 )
 
 
@@ -124,6 +183,7 @@ async def prepare_materials(
     catalog: MessageCatalog, embeddings: MessageEmbeddings, bindings: Bindings,
     learning_binding: str, learning: Learning, rule: LearningConfig, records: RecallRecords,
     embed_batch: Callable[[list[str]], Awaitable[list[list[float]]]], limit: int, max_chars: int,
+    replay_cache: dict | None = None,
 ) -> MaterialData:
     """在已核对空间的图上查询真实输入前缀，发布出处后交付材料。"""
     if not snapshot:
@@ -160,6 +220,7 @@ async def prepare_materials(
                 material = await run_memory_job(lambda: render_materials(
                     identity, recall, original, catalog, max_chars=recall.max_chars,
                 ))
+                material = _live_material(identity, recall, material)
         else:
             material = await query_inputs(
                 inputs, snapshot, source, identity=identity, cycle=cycle, state=state,
@@ -172,6 +233,10 @@ async def prepare_materials(
     tool_refs = await run_memory_job(lambda: tool_references(snapshot, source, learning, bindings, records))
     references.update((cast(str, ref["ref"]), ref) for ref in tool_refs)
     result = dict(material)
+    patches = await _historical_patches(snapshot, source, records=records,
+        bindings=bindings, catalog=catalog, cache={} if replay_cache is None else replay_cache)
+    if patches:
+        result["reminder_patches"] = patches
     # Character ranges belong to memory receipts/proofs. Content's reference
     # protocol carries only stable reference identities, never memory fields.
     result["references"] = tuple({key: value for key, value in ref.items()
@@ -213,10 +278,12 @@ async def query_inputs(
     recall = await run_memory_job(lambda: query_memory(
         cycle, state, learning_binding=learning_binding,
         text=text, dense=dense, stamp=stamp, source=origin, limit=limit,
+        selection="fused", presentation="excerpts",
     ))
+    max_chars = min(max_chars, AUTO_CONTEXT_CHARS)
     material = await run_memory_job(lambda: render_materials(
         identity, recall, learning, catalog, max_chars=max_chars,
     ))
     recall = record_materials(recall, material, max_chars=max_chars)
     _ = await run_memory_job(lambda: records.save(identity, recall))
-    return material
+    return _live_material(identity, recall, material)

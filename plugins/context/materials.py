@@ -21,6 +21,7 @@ from plugins.context.contract import (
 
 from .api import (
     Materials,
+    ReminderPatch,
     Reminder,
     Summary,
     decode_material,
@@ -81,6 +82,7 @@ class MaterialView:
             collect(caller.runtime.plugin_id, decode_material({"reminders": reminders}).reminders)
         summary: Summary | None = None
         references: dict[str, Mapping[str, object]] = {}
+        patches: dict[tuple[str, int, int], ReminderPatch] = {}
         async def prepare_owner(name: str, owner: _Source) -> Materials | Exception:
             """Keep each independent contribution inside its actual owner scope."""
             fields = {"session_id": snapshot[-1].session_id if snapshot else "",
@@ -109,6 +111,11 @@ class MaterialView:
                     raise PermissionError("此材料 owner 没有 Prompt 贡献权")
                 prompts.append((owner.priority, owner.plugin_id.encode("utf-8"), name.encode("utf-8"), material.system_prompt))
             collect(owner.plugin_id, material.reminders)
+            for patch in material.reminder_patches:
+                key = (patch.message_id, patch.start, patch.end)
+                if key in patches and patches[key] != patch:
+                    raise ValueError("同一历史提醒区间的投影发生冲突")
+                patches[key] = patch
             if material.summary is not None:
                 if not owner.summary:
                     raise PermissionError("此材料 owner 没有摘要发布权")
@@ -126,7 +133,8 @@ class MaterialView:
         ordered = tuple(block for _, block in sorted(
             blocks.items(), key=lambda item: (item[1].priority, item[0][0].encode("utf-8"), item[0][1].encode("utf-8")),
         ))
-        return material_data(Materials("\n\n".join(item[3] for item in sorted(prompts)), ordered, summary, tuple(references.values())))
+        return material_data(Materials("\n\n".join(item[3] for item in sorted(prompts)), ordered, summary,
+            tuple(references.values()), reminder_patches=tuple(patches.values())))
 
     async def reduce(
         self, snapshot: tuple[Message, ...], materials: MaterialData,

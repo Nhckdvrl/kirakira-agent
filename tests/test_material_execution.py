@@ -15,6 +15,106 @@ from tests.support.material_models import material_models
 
 
 @pytest.mark.asyncio
+async def test_provider_reuses_connections_across_real_executions_without_reusing_credentials(tmp_path):
+    """Socket reuse must survive execution disposal, but not provider disposal."""
+    import json
+    from plugins.models.contract import MODEL_DRIVERS, CapabilitySources, ModelCapabilities, ModelRequest
+    from plugins.models.settings import AddConnection, AddModel, CreateConnectionWithModel
+    from plugins.openai_compatible.plugin import apply
+
+    requests, sockets, tasks = [], [], set()
+
+    async def handle(reader, writer):
+        task = asyncio.current_task()
+        tasks.add(task)
+        sockets.append(writer)
+        try:
+            while True:
+                head = await reader.readuntil(b"\r\n\r\n")
+                lines = head.decode().split("\r\n")
+                headers = dict((name.lower(), value) for line in lines[1:] if ": " in line
+                               for name, value in (line.split(": ", 1),))
+                body = await reader.readexactly(int(headers.get("content-length", 0)))
+                if lines[0].startswith("POST"):
+                    requests.append((writer, headers, json.loads(body)))
+                    if json.loads(body).get("stream"):
+                        payload = ('data: {"choices":[{"index":0,"delta":{"content":"OK"},'
+                                   '"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n').encode()
+                        content_type = b"text/event-stream"
+                    else:
+                        payload = b'{"choices":[{"message":{"content":"OK"},"finish_reason":"stop"}]}'
+                        content_type = b"application/json"
+                else:
+                    payload, content_type = b'{"data":[]}', b"application/json"
+                writer.write(b"HTTP/1.1 200 OK\r\nContent-Length: " + str(len(payload)).encode()
+                             + b"\r\nContent-Type: " + content_type
+                             + b"\r\nSet-Cookie: stale=credential; Path=/\r\n\r\n" + payload)
+                await writer.drain()
+        except (asyncio.IncompleteReadError, ConnectionError):
+            pass
+        finally:
+            writer.close()
+            await writer.wait_closed()
+            tasks.remove(task)
+
+    server = await asyncio.start_server(handle, "127.0.0.1", 0)
+    endpoint = f"http://127.0.0.1:{server.sockets[0].getsockname()[1]}/v1"
+    try:
+        async with material_models(tmp_path) as models:
+            provider = await models.root.mount(apply, name="http-provider", inject=(MODEL_DRIVERS,))
+            assert not sockets  # Registration must remain lazy.
+            revision = models.store.read_snapshot().revision
+            receipt = await models.settings.apply(CreateConnectionWithModel(
+                AddConnection(revision, "http", "fixture", "openai-compatible", endpoint,
+                              "identity", {"token": "first"}),
+                AddModel(revision, "http-chat", "http", "chat", "arbitrary-model",
+                         ModelCapabilities(context_window=8192, max_output_tokens=1024),
+                         CapabilitySources(context_window="user", max_output_tokens="user")),
+            ))
+            requests.clear()  # Settings verification is a separate network probe.
+
+            async def delta(_):
+                pass
+
+            async def send():
+                async with models.chat_models.execution(model_id="http-chat") as execution:
+                    bound = execution.chat("agent")
+                    assert (await bound.complete(ModelRequest(messages=(
+                        {"role": "user", "content": "hello"},), max_output_tokens=128,
+                        on_delta=delta))).content == "OK"
+                    return bound
+
+            expired = await send()
+            await models.store.credential_handle("http", "identity").refresh({"token": "second"})
+            await send()
+            assert requests[0][0] is requests[1][0]
+            assert [row[1]["authorization"] for row in requests] == ["Bearer first", "Bearer second"]
+            assert all("cookie" not in row[1] for row in requests)
+            with pytest.raises(RuntimeError):
+                await expired.complete(ModelRequest(messages=({"role": "user", "content": "expired"},)))
+
+            # Endpoint/auth changes cannot borrow an old identity's pooled socket.
+            await models.settings.apply(UpdateConnection(
+                receipt.revision, "http", "changed", "replacement", endpoint + "/changed", {"token": "third"}))
+            await send()
+            changed = requests[-1]
+            assert changed[0] is not requests[1][0]
+            assert changed[1]["authorization"] == "Bearer third"
+            await provider.dispose()
+            await asyncio.sleep(0)
+            assert requests[0][0].is_closing() and changed[0].is_closing()
+            await models.root.mount(apply, name="http-provider-reloaded", inject=(MODEL_DRIVERS,))
+            await send()
+            assert requests[-1][0] is not changed[0]
+    finally:
+        server.close()
+        await server.wait_closed()
+        for writer in sockets:
+            writer.close()
+        await asyncio.gather(*tuple(tasks), return_exceptions=True)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("release", [True, False])
 async def test_slow_context_maintenance_does_not_block_replies_and_drains_on_shutdown(tmp_path, release):
     from datetime import UTC, datetime
@@ -164,6 +264,49 @@ async def test_explicit_new_context_retains_history_and_does_not_replay_old_prom
         await send("again", "AFTER_SECOND_RESET")
         assert "CURRENT_CONTEXT_MARKER" not in str(calls[-1].messages)
         assert log.reader(sid).snapshot()[:len(original)] == original
+
+
+@pytest.mark.asyncio
+async def test_topic_material_is_live_per_input_and_does_not_disappear_on_repeated_questions(tmp_path):
+    import shutil
+    from pathlib import Path
+    from agent.plugin_composition.config_input import save_config
+    from plugins.context.contract import MATERIALS_V4
+    from plugins.ledger.contract import ContentPart, ContentReferences, Input
+    from plugins.markdown_memory.documents import topic_text
+    from tests.test_default_reply import application
+
+    topic = tmp_path / "workspace/memory/topics/needle.md"
+
+    def sources(directory):
+        shutil.copytree(Path(__file__).parents[1] / "plugins/markdown_memory", directory / "markdown_memory",
+                        ignore=shutil.ignore_patterns("__pycache__"))
+        save_config(tmp_path / "workspace/plugin-data/context-builtin", {
+            "summary_source": ["compaction", "compaction"],
+            "prompt_sources": {"markdown_memory": "markdown_memory"}})
+        save_config(tmp_path / "workspace/plugin-data/markdown_memory-builtin",
+                    {"surface_min_score": 0.01, "consolidate": False})
+        topic.parent.mkdir(parents=True)
+        topic.write_text(topic_text("needle project", "- needle budget BUDGET=760."))
+
+    async with application(tmp_path, replying=False, compaction=True, extra_sources=sources) as (log, host):
+        writer = log.writer("topics", author="user", source="conversation", body_types=(Input,),
+                            content={"text": lambda part: ContentReferences()})
+        async with host.live_root.context.require(MATERIALS_V4).bind() as view:
+            writer.append("first-topic-input", Input((ContentPart("text", "needle budget"),)))
+            async def material():
+                return decode_material(await view.prepare(log.reader("topics").snapshot(), "conversation"))
+            first = await material()
+            assert first.reminders and all(not item.replay for item in first.reminders)
+            assert "BUDGET=760" in str(first.reminders)
+            topic.write_text(topic_text("needle project", "- needle budget BUDGET=900."))
+            assert await material() == first  # A tool continuation retains its frozen Input material.
+            writer.append("second-topic-input", Input((ContentPart("text", "needle budget"),)))
+            second = await material()
+            assert "BUDGET=900" in str(second.reminders) and "BUDGET=760" not in str(second.reminders)
+            assert all(not item.replay for item in second.reminders)
+            writer.append("unrelated-input", Input((ContentPart("text", "unrelated question"),)))
+            assert not (await material()).reminders
 
 
 @pytest.mark.asyncio

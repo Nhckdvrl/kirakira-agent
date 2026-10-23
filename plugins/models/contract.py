@@ -495,6 +495,7 @@ class ContextModel(Protocol):
         current_reminder: str | None = None,
         current_reminder_input_id: str | None = None,
         current_context: str | None = None,
+        reminder_patches: Sequence[Mapping[str, Any]] = (),
     ) -> ModelRequest:
         """接收完整事实；after_seq 是摘要覆盖末尾，-1 表示没有覆盖。
 

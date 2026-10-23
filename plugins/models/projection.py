@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from itertools import chain
 from typing import Any, cast
 
@@ -307,6 +307,7 @@ class MessageProjection:
         current_reminder: str | None = None,
         current_reminder_input_id: str | None = None,
         current_context: str | None = None,
+        reminder_patches: Sequence[Mapping[str, Any]] = (),
     ) -> ModelRequest:
         """按日志重建协议；交错输入保留，工具观察只在请求视图中与调用成组。"""
         keep = set(self._keep_input_ids)
@@ -363,6 +364,30 @@ class MessageProjection:
                     "当前投影不能证明摘要与 opaque continuation 可共同重放"
                 )
 
+        replacements: dict[str, str] = {}
+        grouped: dict[str, list[Mapping[str, Any]]] = {}
+        for patch in reminder_patches:
+            if set(patch) != {"message_id", "sha256", "start", "end", "text"}:
+                raise ValueError("历史提醒投影字段无效")
+            grouped.setdefault(patch["message_id"], []).append(patch)
+        for identity, edits in grouped.items():
+            facts = fold.recorded.get(identity)
+            original = None if facts is None else facts.get("reminder")
+            if not isinstance(original, str) or facts.get("reminder_input_id") == latest_input:
+                raise ValueError("只能投影已经结束的历史 runtime 提醒")
+            digest = hashlib.sha256(original.encode()).hexdigest()
+            end = 0
+            for edit in sorted(edits, key=lambda item: item["start"]):
+                if (edit["sha256"] != digest or type(edit["start"]) is not int
+                        or type(edit["end"]) is not int or not end <= edit["start"] < edit["end"] <= len(original)
+                        or not isinstance(edit["text"], str)):
+                    raise ValueError("历史提醒投影摘要、范围或重叠校验失败")
+                end = edit["end"]
+            changed = original
+            for edit in sorted(edits, key=lambda item: -item["start"]):
+                changed = changed[:edit["start"]] + edit["text"] + changed[edit["end"]:]
+            replacements[identity] = changed
+
         # 2. 渲染读面只重编译变化；失败后丢弃未完成的派生状态，下次仍如实校验。
         try:
             rows, content_refs, changed_content = self._render_rows(
@@ -370,6 +395,7 @@ class MessageProjection:
                 current_reminder=current_reminder,
                 current_reminder_identity=current_reminder_identity,
                 current_context=current_context,
+                reminder_replacements=replacements,
             )
             request = ModelRequest(
                 messages=rows, continuation=None if changed_content else continuation,
@@ -386,6 +412,7 @@ class MessageProjection:
         current_reminder: str | None,
         current_reminder_identity: tuple[str, str] | None,
         current_context: str | None,
+        reminder_replacements: Mapping[str, str],
     ) -> tuple[list[Mapping[str, Any]], tuple[tuple[str, int], ...], bool]:
         """维护当前窗口的有序分段；日志变化编译正文，实时材料只在装配时插入。"""
         # 1. 窗口或日志前缀改变时重建同一读面，旧工具结果也重新检查可见调用。
@@ -399,6 +426,9 @@ class MessageProjection:
         ))
         cache_ok = transform is None or bool(self._dynamic_content_kinds)
         dirty = set(view.dynamic) if cache_ok else set(view.units)
+        dirty.update(identity for identity in view.replacements.keys() | reminder_replacements.keys()
+                     if identity in view.units and view.replacements.get(identity) != reminder_replacements.get(identity))
+        view.replacements = dict(reminder_replacements)
         for message in tail:
             if isinstance(message.body, ToolResult):
                 caller = message.body.call_ref.message_id
@@ -414,20 +444,23 @@ class MessageProjection:
         # 2. 冷构建和追加共用编译操作；一份有序单元表拥有冻结行与首个提醒载体。
         for message in changed:
             previous = view.units.get(message.message_id)
-            if previous is None:
-                index = len(view.units)
-                facts = fold.recorded.get(message.message_id)
-                reminder = None if facts is None else facts.get("reminder")
-                if reminder is not None and facts is not None and "reminder_input_id" in facts:
-                    identity = (cast(str, facts["reminder_input_id"]), cast(str, facts["reminder_sha256"]))
-                    if identity in view.reminders:
-                        reminder = None
-                    else:
-                        view.reminders[identity] = message.message_id
-            else:
-                index, reminder = previous.index, previous.reminder
+            index = len(view.units) if previous is None else previous.index
+            facts = fold.recorded.get(message.message_id)
+            reminder = None if facts is None else facts.get("reminder")
+            if reminder is not None and facts is not None and "reminder_input_id" in facts:
+                identity = (cast(str, facts["reminder_input_id"]), cast(str, facts["reminder_sha256"]))
+                carrier = view.reminders.get(identity)
+                if carrier is not None and carrier != message.message_id:
+                    reminder = None
+                else:
+                    view.reminders[identity] = message.message_id
+            patched = reminder is not None and message.message_id in reminder_replacements
+            if patched:
+                reminder = reminder_replacements[message.message_id]
             unit = self._compile_unit(message, fold, transform, position=index,
                                       reminder=reminder, cache_ok=cache_ok, previous=previous)
+            if patched:
+                unit = replace(unit, transformed=True)
             view.units[message.message_id] = unit
             if unit.dynamic:
                 view.dynamic.add(message.message_id)
@@ -879,6 +912,7 @@ class _RenderView:
         self.units: dict[str, _RenderedMessage] = {}
         self.reminders: dict[tuple[str, str], str] = {}
         self.dynamic: set[str] = set()
+        self.replacements: dict[str, str] = {}
 
 
 def _static_parts(message: Message, dynamic_kinds: frozenset[str] | None = None) -> bool:

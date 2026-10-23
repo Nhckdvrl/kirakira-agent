@@ -110,6 +110,27 @@ class Reminder:
 
 
 @dataclass(frozen=True, slots=True)
+class ReminderPatch:
+    """A read-only edit to an exact saved runtime reminder, never to user text."""
+
+    message_id: str
+    sha256: str
+    start: int
+    end: int
+    text: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.message_id, str) or not self.message_id:
+            raise ValueError("提醒投影缺少消息身份")
+        if not isinstance(self.sha256, str) or len(self.sha256) != 64 or any(c not in "0123456789abcdef" for c in self.sha256):
+            raise ValueError("提醒投影缺少原文摘要")
+        if type(self.start) is not int or type(self.end) is not int or not 0 <= self.start < self.end:
+            raise ValueError("提醒投影范围无效")
+        if not isinstance(self.text, str):
+            raise TypeError("提醒投影正文必须是字符串")
+
+
+@dataclass(frozen=True, slots=True)
 class Materials:
     """权限已由组合确定的 Prompt，以及保持低信任的检索材料。"""
 
@@ -118,6 +139,7 @@ class Materials:
     summary: Summary | None = None
     references: tuple[Mapping[str, object], ...] = ()
     notices: tuple[str, ...] = ()
+    reminder_patches: tuple[ReminderPatch, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.system_prompt, str):
@@ -139,6 +161,10 @@ class Materials:
             normalized_references.append(MappingProxyType(dict(reference)))
         object.__setattr__(self, "reminders", parts)
         object.__setattr__(self, "references", tuple(normalized_references))
+        patches = tuple(self.reminder_patches)
+        if any(not isinstance(item, ReminderPatch) for item in patches):
+            raise TypeError("提醒投影必须是已校验的区间")
+        object.__setattr__(self, "reminder_patches", patches)
 
 
 def _object(value: object, label: str) -> Mapping[str, object]:
@@ -194,7 +220,7 @@ def _reminder(value: object) -> Reminder:
 def decode_material(value: object) -> Materials:
     """在 Context 边界把 provider 的普通映射转换为内部材料值。"""
     data = _object(value, "materials")
-    unknown = set(data) - {"system_prompt", "reminders", "summary", "references", "notices"}
+    unknown = set(data) - {"system_prompt", "reminders", "summary", "references", "notices", "reminder_patches"}
     if unknown:
         raise ValueError(f"materials 包含未知字段: {sorted(unknown)}")
     prompt = data.get("system_prompt", "")
@@ -206,7 +232,13 @@ def decode_material(value: object) -> Materials:
     notices = _sequence(data.get("notices", ()), "materials.notices")
     if any(not isinstance(item, str) for item in notices):
         raise TypeError("materials.notices 必须是字符串数组")
-    return Materials(prompt, reminders, summary, references, cast(tuple[str, ...], notices))
+    patches = []
+    for raw in _sequence(data.get("reminder_patches", ()), "materials.reminder_patches"):
+        patch = _object(raw, "reminder patch")
+        if set(patch) != {"message_id", "sha256", "start", "end", "text"}:
+            raise ValueError("提醒投影字段无效")
+        patches.append(ReminderPatch(**patch))
+    return Materials(prompt, reminders, summary, references, cast(tuple[str, ...], notices), tuple(patches))
 
 
 def material_data(materials: Materials) -> MaterialData:
@@ -223,6 +255,9 @@ def material_data(materials: Materials) -> MaterialData:
         "summary": summary,
         "references": tuple(dict(item) for item in materials.references),
         **({"notices": materials.notices} if materials.notices else {}),
+        **({"reminder_patches": tuple({"message_id": p.message_id, "sha256": p.sha256,
+            "start": p.start, "end": p.end, "text": p.text} for p in materials.reminder_patches)}
+           if materials.reminder_patches else {}),
     }
 
 

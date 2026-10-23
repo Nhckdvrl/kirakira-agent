@@ -134,6 +134,8 @@ class ContextBuilder:
         current_context = self._reminder_content(decoded_materials, replay=False)
         # 无 Input 身份的调用者仍自行追加材料，不能把它认成已保存的 replay。
         projected_context = current_context if reminder is None or replay_reminder is not None else None
+        history_options = {"reminder_patches": tuple({"message_id": p.message_id, "sha256": p.sha256,
+            "start": p.start, "end": p.end, "text": p.text} for p in decoded_materials.reminder_patches)} if decoded_materials.reminder_patches else {}
         if window_start is not None:
             if decoded_materials.summary is not None:
                 raise ValueError("已有摘要的请求不能重新选择首次窗口")
@@ -151,6 +153,7 @@ class ContextBuilder:
                 current_reminder=replay_reminder,
                 current_reminder_input_id=current_reminder_input_id,
                 current_context=projected_context,
+                **history_options,
             )
         else:
             rendered = model.render(
@@ -159,6 +162,7 @@ class ContextBuilder:
                 current_reminder=replay_reminder,
                 current_reminder_input_id=current_reminder_input_id,
                 current_context=projected_context,
+                **history_options,
             )
         if any(
             row["role"] not in {"user", "assistant", "tool"}

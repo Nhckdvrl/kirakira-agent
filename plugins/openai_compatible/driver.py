@@ -16,12 +16,13 @@ import math
 import re
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
+from http.cookiejar import CookieJar, DefaultCookiePolicy
 from typing import Any, cast
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
-from core.net.http import HttpClient, StreamProgress, finish_response, retry_after_time
+from core.net.http import HttpClient, HttpClientPool, StreamProgress, finish_response, retry_after_time
 
 from core.common.frozen_json import freeze_json
 
@@ -331,13 +332,16 @@ class _BoundEmbedding:
         return EmbeddingResult(vectors=tuple(vectors), usage=_merge_usage(usages))
 
 
-def definition() -> ModelDriverDefinition:
+def definition(pool: HttpClientPool | None = None) -> ModelDriverDefinition:
     """Build this artifact's immutable driver contribution."""
+
+    async def open_connection(descriptor, credential):
+        return await _open(descriptor, credential, pool=pool)
 
     return ModelDriverDefinition(
         driver_id=_DRIVER_ID,
         contract_version=_CONTRACT_VERSION,
-        open=_open,
+        open=open_connection,
         discover=_discover,
         probe=_probe,
         probe_embedding=_probe_embedding,
@@ -355,6 +359,8 @@ def _icon(descriptor: DriverConnectionDescriptor) -> str | None:
 async def _open(
     descriptor: DriverConnectionDescriptor,
     credential: CredentialHandle,
+    *,
+    pool: HttpClientPool | None = None,
 ) -> DriverConnection:
     connection = _connection_config(descriptor)
     if credential.connection_id != descriptor.connection_id:
@@ -362,7 +368,12 @@ async def _open(
     if credential.auth_identity != descriptor.auth_identity:
         raise AuthenticationError("credential auth identity does not match").exception()
 
-    http = HttpClient(lambda: _client(connection))
+    # Models owns each execution's binding and credential handle. The provider
+    # owns only the transport, so successive executions can reuse TCP/TLS.
+    http = (HttpClient(lambda: _client(connection)) if pool is None else pool.lease(
+        (descriptor.connection_id, descriptor.auth_identity, connection),
+        lambda: _client(connection),
+    ))
 
     def bind_chat(
         model: BoundModelDescriptor,
@@ -984,6 +995,11 @@ async def _emit_delta(
         raise _CallbackError(error) from error
 
 
+class _NoCookies(DefaultCookiePolicy):
+    def set_ok(self, cookie, request) -> bool:
+        return False
+
+
 def _client(connection: _ConnectionConfig, token: str | None = None) -> httpx.AsyncClient:
     headers = {} if token is None else {"Authorization": f"Bearer {token}"}
     timeout = httpx.Timeout(
@@ -995,7 +1011,9 @@ def _client(connection: _ConnectionConfig, token: str | None = None) -> httpx.As
     return httpx.AsyncClient(
         base_url=connection.base_url,
         headers=headers,
+        cookies=CookieJar(policy=_NoCookies()),
         timeout=timeout,
+        limits=httpx.Limits(max_connections=20, max_keepalive_connections=10, keepalive_expiry=60),
         follow_redirects=False,
     )
 

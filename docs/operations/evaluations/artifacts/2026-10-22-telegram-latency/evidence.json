@@ -16256,5 +16256,3317 @@
       "Hard-capacity compaction can still delay a request. Soft maintenance starts after a reply and is opportunistic; restart retains raw facts and replans on a future request.",
       "NFS and network variability remain. Short-preview samples include a 12.61-second cold reply; no slow sample was excluded."
     ]
+  },
+  "bounded_recall_transport_admission_2026_10_23": {
+    "scope": "Traceable bounded automatic recall; exact historical reminder spans only; provider-owned HTTP leases; read-only immutable session admission. Retains every slow observation. Controlled Telegram inputs are synthetic, not phone-to-phone. Local regression ran concurrently with controlled queue.",
+    "production_history_projection": {
+      "scope": "Read-only production history + an uncommitted synthetic greeting, projected by native Context/Model code. System/tools copied from a separate native run with Markdown snapshots. Diagnostic of historical-reminder rendering, not a phone or exact production-request replay.",
+      "production_prefix_sha256": "19ae331b782c9f52f50dfda781c265c252c223bd9c736562c725034ff07ffb19",
+      "production_messages": 62,
+      "retained_tail_messages": 7,
+      "verified_reminder_patches": 10,
+      "replaced_source_chars": 35863,
+      "receipt_chars": 2454,
+      "request_bytes": {
+        "full": 71616,
+        "receipt": 43401
+      },
+      "cases": [
+        {
+          "variant": "receipt",
+          "repetition": 2,
+          "headers_s": 1.8780164159834385,
+          "first_content_s": 2.34045098349452,
+          "total_s": 2.542355915531516,
+          "answer_chars": 27,
+          "requested_tools": false,
+          "usage": {
+            "prompt_tokens": 10841,
+            "completion_tokens": 46,
+            "total_tokens": 10887,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          }
+        },
+        {
+          "variant": "full",
+          "repetition": 3,
+          "headers_s": 2.5367823112756014,
+          "first_content_s": 2.571297410875559,
+          "total_s": 2.951257858425379,
+          "answer_chars": 28,
+          "requested_tools": false,
+          "usage": {
+            "cached_tokens": 7936,
+            "prompt_tokens": 19372,
+            "completion_tokens": 27,
+            "total_tokens": 19399,
+            "prompt_tokens_details": {
+              "cached_tokens": 7936
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          }
+        },
+        {
+          "variant": "full",
+          "repetition": 1,
+          "headers_s": 1.4897916112095118,
+          "first_content_s": 2.594613280147314,
+          "total_s": 3.133333507925272,
+          "answer_chars": 24,
+          "requested_tools": false,
+          "usage": {
+            "cached_tokens": 18944,
+            "prompt_tokens": 19372,
+            "completion_tokens": 84,
+            "total_tokens": 19456,
+            "prompt_tokens_details": {
+              "cached_tokens": 18944
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          }
+        },
+        {
+          "variant": "receipt",
+          "repetition": 1,
+          "headers_s": 2.80604793317616,
+          "first_content_s": 3.2624132484197617,
+          "total_s": 3.5315234158188105,
+          "answer_chars": 38,
+          "requested_tools": false,
+          "usage": {
+            "cached_tokens": 10496,
+            "prompt_tokens": 10841,
+            "completion_tokens": 45,
+            "total_tokens": 10886,
+            "prompt_tokens_details": {
+              "cached_tokens": 10496
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          }
+        },
+        {
+          "variant": "full",
+          "repetition": 4,
+          "headers_s": 4.106191897764802,
+          "first_content_s": 5.000453647226095,
+          "total_s": 5.06231677159667,
+          "answer_chars": 21,
+          "requested_tools": false,
+          "usage": {
+            "cached_tokens": 18944,
+            "prompt_tokens": 19372,
+            "completion_tokens": 62,
+            "total_tokens": 19434,
+            "prompt_tokens_details": {
+              "cached_tokens": 18944
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          }
+        },
+        {
+          "variant": "full",
+          "repetition": 2,
+          "headers_s": 1.7822287119925022,
+          "first_content_s": 5.292793897911906,
+          "total_s": 5.433672867715359,
+          "answer_chars": 22,
+          "requested_tools": false,
+          "usage": {
+            "cached_tokens": 18944,
+            "prompt_tokens": 19372,
+            "completion_tokens": 224,
+            "total_tokens": 19596,
+            "prompt_tokens_details": {
+              "cached_tokens": 18944
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          }
+        },
+        {
+          "variant": "receipt",
+          "repetition": 3,
+          "headers_s": 1.0164815243333578,
+          "first_content_s": 1.437585987150669,
+          "total_s": 1.7085340078920126,
+          "answer_chars": 26,
+          "requested_tools": false,
+          "usage": {
+            "cached_tokens": 10496,
+            "prompt_tokens": 10841,
+            "completion_tokens": 49,
+            "total_tokens": 10890,
+            "prompt_tokens_details": {
+              "cached_tokens": 10496
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          }
+        },
+        {
+          "variant": "receipt",
+          "repetition": 4,
+          "headers_s": 2.259766271337867,
+          "first_content_s": 2.759816998615861,
+          "total_s": 3.0369552336633205,
+          "answer_chars": 18,
+          "requested_tools": false,
+          "usage": {
+            "cached_tokens": 10496,
+            "prompt_tokens": 10841,
+            "completion_tokens": 39,
+            "total_tokens": 10880,
+            "prompt_tokens_details": {
+              "cached_tokens": 10496
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          }
+        }
+      ],
+      "canonical_in_memory_prefix_unchanged": true
+    },
+    "minimal_provider_requests": {
+      "model": {
+        "model": "step-5-preview",
+        "endpoint": "https://api.stepfun.com/step_plan/v1",
+        "driver_id": "openai-compatible",
+        "model_id": "arbitrary-chat-id",
+        "context_window": 32768,
+        "max_output_tokens": 4096,
+        "reasoning_effort": "low"
+      },
+      "scope": "Eight sequential minimal direct requests with one reused HTTP client; no harness, memory, tools or database.",
+      "cases": [
+        {
+          "attempt": 1,
+          "headers_s": 1.93,
+          "first_reasoning_s": 1.9299794267863035,
+          "first_content_s": 1.9998692516237497,
+          "total_s": 2.074,
+          "answer_chars": 2,
+          "usage": {
+            "prompt_tokens": 26,
+            "completion_tokens": 10,
+            "total_tokens": 36,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          }
+        },
+        {
+          "attempt": 2,
+          "headers_s": 0.603,
+          "first_reasoning_s": null,
+          "first_content_s": 0.6397542264312506,
+          "total_s": 0.675,
+          "answer_chars": 2,
+          "usage": {
+            "prompt_tokens": 26,
+            "completion_tokens": 3,
+            "total_tokens": 29,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          }
+        },
+        {
+          "attempt": 3,
+          "headers_s": 3.163,
+          "first_reasoning_s": 3.163490731269121,
+          "first_content_s": 3.2533466778695583,
+          "total_s": 3.316,
+          "answer_chars": 2,
+          "usage": {
+            "prompt_tokens": 26,
+            "completion_tokens": 10,
+            "total_tokens": 36,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          }
+        },
+        {
+          "attempt": 4,
+          "headers_s": 1.032,
+          "first_reasoning_s": null,
+          "first_content_s": 1.076179888099432,
+          "total_s": 1.115,
+          "answer_chars": 2,
+          "usage": {
+            "prompt_tokens": 26,
+            "completion_tokens": 3,
+            "total_tokens": 29,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          }
+        },
+        {
+          "attempt": 5,
+          "headers_s": 0.701,
+          "first_reasoning_s": 0.7007578611373901,
+          "first_content_s": 1.145595494657755,
+          "total_s": 1.172,
+          "answer_chars": 2,
+          "usage": {
+            "prompt_tokens": 26,
+            "completion_tokens": 29,
+            "total_tokens": 55,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          }
+        },
+        {
+          "attempt": 6,
+          "headers_s": 0.633,
+          "first_reasoning_s": 0.6328670885413885,
+          "first_content_s": 0.9441525787115097,
+          "total_s": 0.965,
+          "answer_chars": 2,
+          "usage": {
+            "prompt_tokens": 26,
+            "completion_tokens": 21,
+            "total_tokens": 47,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          }
+        },
+        {
+          "attempt": 7,
+          "headers_s": 2.855,
+          "first_reasoning_s": 2.8557004891335964,
+          "first_content_s": 2.9309614542871714,
+          "total_s": 2.999,
+          "answer_chars": 2,
+          "usage": {
+            "prompt_tokens": 26,
+            "completion_tokens": 10,
+            "total_tokens": 36,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          }
+        },
+        {
+          "attempt": 8,
+          "headers_s": 1.506,
+          "first_reasoning_s": 1.5060607884079218,
+          "first_content_s": 2.194657627493143,
+          "total_s": 2.224,
+          "answer_chars": 2,
+          "usage": {
+            "prompt_tokens": 26,
+            "completion_tokens": 38,
+            "total_tokens": 64,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            }
+          }
+        }
+      ]
+    },
+    "controlled_telegram_before_admission": {
+      "implementation": {
+        "kirakira_agent/runtime.py": "1e9e0dc2e980c54bffa568dced9ecd5b9a23bf15d90c581c2cafb77515651958",
+        "kirakira_agent/setup.py": "000e5c4c0727363627ecbc1fa58a450abffb31538305749d00d856e34c5897e3",
+        "kirakira_agent/environment.py": "d7a2c67bb5c6efb2ef2d2c8ef011c958e012a25e87a19fb7e1cbf3bc31b88c05",
+        "kirakira_agent/client.py": "c60a6613d6d9f507560101c4310e29c8d4bc53914d1398dc5f7c46924b3a8403",
+        "eval/models.py": "7eb7bc7d24fd9b6927ff61ebe26273d55df900cebea4979ce1e36e184c5971ee",
+        "plugins/akasha/contract.py": "c6d7d0c7f0969cef4426ea295c58e7045d784471aee66e039be22b9c9d766167",
+        "plugins/akasha/plugin.py": "67f6ef2c90b78e687662d7f8e47118c99c290149cf2b5de43f6c07b0a05aafc2",
+        "plugins/akasha/query.py": "031b25033f2126da436a4229bf238a814b5bad5f5cad75cd99c71940feb78554",
+        "plugins/akasha/recalls.py": "9f8a404c33fcfe5a5211109fffaf651b501945aaaf72f44c4e31d2bb890c41ac",
+        "plugins/akasha/recall_tool.py": "a1a38c3b47a92c761c010a78335c2f5e179b5df6becb5e0b0ae89225ee353f3c",
+        "plugins/akasha/runtime.py": "ded8b5eb501497adbb03d57870263657b9c6d93ed7888ea05089cd685d487284",
+        "plugins/akasha/excerpts.py": "9a408c9017de5722d68265c7012268bc4801c516137c8cd17b010fdbad19da7d",
+        "plugins/akasha/source_tool.py": "5cd6ba14202ac9a99e36c83e9deccc0c7872998cd67226fd856450a4439cbc41",
+        "plugins/akasha/source_search.py": "87753df2c606ed7a62341630f87f7e130af15a86a90681fbd8fca692ea418843",
+        "plugins/followups/__init__.py": "2f43daa4738a0b465626801fbefd89cd2dff70e5a26f1cf63afa84d7a571472b",
+        "plugins/followups/contract.py": "48ff8dc12ae08b171e086494b880c7bcfc49964f85cbac5495f9e20fa7e1fdd7",
+        "plugins/followups/dashboard.py": "5bdd51774087739ddc6f371023d36a493ab47d0f886139fe4a85ba2045a4f05b",
+        "plugins/followups/feeds.py": "a7da435624fef92a3581a2f0b2cac3a37f5d24a2e88dde6518b62c598299efcf",
+        "plugins/followups/mail_settings.py": "6008e854ee51a4b55af8305d5e3d0b71a6fdaf9b8699a02d47c0703a11dd70f6",
+        "plugins/followups/mailbox.py": "47b30034995e3ca92b25cd44069a4f7a0aeeb90c8347c160c3037198369ea934",
+        "plugins/followups/plugin.py": "89081d40cf08ef012670a49592e40cca8577ae5f674df8504f0483c2baecde28",
+        "plugins/followups/service.py": "6814a70a78e1514cbbb5dc525f8e3baa9351eef83ed96d24d37845068743a7b4",
+        "plugins/followups/tools.py": "a791a534d1544d5c1d94aaf78828e6662c1b195b3c040a1a437efdf42e20fe55",
+        "plugins/followups/webpages.py": "4a29a3d73924fdc0ca31a3f574c91e9ef70d6812f96d4c2b88e9a7e446d03d82",
+        "plugins/drift/__init__.py": "8905bcb66bd1258847589e4b4b0a4eac1f72ea044c09d3b394e98a85d265fa2e",
+        "plugins/drift/contract.py": "2b73654b779b267ec20822193408287a4abeb3426b238d08a04fa5ff2a35e278",
+        "plugins/drift/dashboard.py": "3f793998f1b35c5342298421eb446d79b7d2bf5f7d7baa9fba161c2f562c225e",
+        "plugins/drift/plugin.py": "51aa47ffbb56d487b4fdc572ba1b4df4027b6d38ef695ce0064bd8db0b7e59de",
+        "plugins/drift/producer.py": "281bc2eeb72cd2ad615ca4c868d22aae98de59248cd113b66a86d7920865cfae",
+        "plugins/drift/store.py": "256c225436b0c875f16e3f867b3ff8449cd374198811a5eba7c4114679181d6e",
+        "plugins/prompt/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "plugins/prompt/completion.py": "22df7c364b49c61d44cb71f11530faa213af8c6474cba9d045546608bdc3e1b1",
+        "plugins/prompt/dashboard.py": "32dc7b3cbdb8963d0b90f77cf28d1b18dae6ed400160cfd44d2fb66ddee9c309",
+        "plugins/prompt/persona.py": "979da6581d60524a7b4681dd36e5bb0c3e0d748b5ee31ab5c0980629a0fbb716",
+        "plugins/prompt/personality.py": "a99bfd88e77f79cc7640dc4ed469ee3ed536cb3edb5c834d060103e1f2b76fc9",
+        "plugins/prompt/plugin.py": "3280aa9ed0dafa54301923b27d8d28b2fa3a7a8818a4ef010d5ce2d8a1bb90d2",
+        "plugins/prompt/text.py": "93d2e087d6e9a6524c4464d7f25852bb7b8f88e35ce5f497fc02219a2d27464f",
+        "plugins/markdown_memory/store.py": "774012fb4ea35c4941e805e377fa57ab787997294e03b6fa7d2736df727f4e16",
+        "plugins/prompt/VEDA.md": "f387d558f7cd1ffbf217ea3ff685354af9caee59fc27ac2fa67efb8cee190db4",
+        "plugins/prompt/web_module.js": "3b6bd60494365a50d76fc6320b06ce9953a0247854fbd1bfe8f4f17d3112bf69",
+        "frontend/plugins/prompt/src/index.tsx": "32b66e799d718e573035b5a7af5b8d405425f4b97830086deb00e77469fde76b",
+        "plugins/drift/web_module.js": "87dc03aa145f6e4967498178d7c58f5327767935e6140de0301d8f091b808030",
+        "plugins/drift/web_module.css": "203990074b89d27235fd85b124e8d22b9956b9dd4c2685403ae7fa2fbab37994",
+        "frontend/plugins/drift/src/index.tsx": "739ca8ba40c8b858652efe44bfd2cb94f11ed6ceedd1168e572f3ff0ff5bb3ee",
+        "plugins/eventmail/store.py": "654f6b4c3984e625d7aab3f2b30ed4c9c7f588ce85f0502f9f6e73b0e1c2764f",
+        "plugins/wake/api.py": "c0ee0e1edf5ce0b85fdc45edd887d3c7ff598235dc7e96fb01459d11a3f29a73",
+        "plugins/wake/messages.py": "4429fa781ddbb0b956c36423658507f7769d7181299c629724609a421ff985a2",
+        "plugins/wake/runtime.py": "aefaf7cdce408d0872b91019a93f554d7bc9394ec18811b569b086cf4f8a1e04",
+        "plugins/wake/program.py": "53a89048c03a4eeca761a03035f32750e083f99685ea21860650649a6f70b2ab",
+        "eval/followups.py": "713dfb1bd00d774a8bafb403fd8f7fe80e0aaf889f186efa6b97e8329284420c",
+        "eval/mail_followups.py": "aded8879d90a2bd5291ac16cb31a31d721e6dc82588235824712659e38b12afb",
+        "eval/fixtures/mailbox.py": "ec3f108c4caf2d1108440d526da0b87b1466e07860e2fe19db9deea91796f7fc",
+        "eval/runtime_settings.py": "c5c85f54158bd265e15d19b48cc50fd938d0a878b49fa6d19694c502fc9b8acb",
+        "eval/idle_reflection.py": "4120504207b889bdcd0e4012c0f2b85d42f23355661a229ac9955be6e55f1758",
+        "eval/personality.py": "eec5f440d38cbaff720357e087355d3c3e75972ff411b5d6a383c3156e2eee8f",
+        "eval/prompt_cache.py": "fe19586d98d72e8e1e7db052e12ea114d4970d542471080874a953db066213e0",
+        "third_party/UPSTREAM.json": "990bb09e3c53d097d4537dab02d89e0a3851f547e3ebf9561427d0e09e8d9f10",
+        "third_party/patches/akasha-empty-rebuild.patch": "acc310c996d2590d54fe89f1147072e0c2fabb909ad17d779c48cd65c95e4230",
+        "third_party/patches/cache-usage-coverage.patch": "8aa98fee2ab5f89a1f6be07322510981987e3525c3161d71435f940abbfe1e4f",
+        "third_party/patches/distribution-branding.patch": "679effd6bd0b72a27bfe64bf950e6a06b7f3589ed352f78c6321d5d740946295",
+        "third_party/patches/followup-investigation.patch": "53ea17898a225fdc7d9bb41d124908a227ea1e8c8775f16b5ed1ab01754f1eb7",
+        "third_party/patches/idle-reflection.patch": "11a2ed5bfde2629b933f1e6454a6ec8596542011cf0155668fda07126ce3433a",
+        "third_party/patches/memory-query-api.patch": "ae31cf4aeb361b85f1c27b962b0420105e45897f0f020bad5d7680e457f985d3",
+        "third_party/patches/stage-web-assets.patch": "f23c035cf5897c61ee4dcfade30bafa8dd71c32ebdcf3c21743e31c9800abcc4",
+        "third_party/patches/telegram-latency.patch": "4077f67d80a8d143d4937ff72d409acce5c575fbd3414b0bb4983312a5b5ebef",
+        "third_party/patches/tool-io-bounds.patch": "e6988d6661a545a065ba70311d92dab501e4afa16fe6461c842b3295e898eba3",
+        "third_party/patches/zsh-snapshot-aliases.patch": "a2d4a1cd3635d62edd6ca11a8b2e7ace6b68d0dbec908feeb4bf4a17e1354f55",
+        "eval/telegram_latency.py": "81eccd58a6042e03b9ce1ef7aaa80de2e2f94d70489bb5f2ba81bc0e3fde9964",
+        "plugins/reply_program/program.py": "fbe1c25b52469eec60977c099d8d1665d1f118b67f9c0701d7e2f07ce4856383",
+        "plugins/telegram_sender/sender.py": "08da1aa1038f4d5ed4fc8568477c885c37331111e6ded20f1825661552b3ad3d",
+        "plugins/compaction/plugin.py": "be4e996c40f056ed3c390b8e31e82ed55d4688e44e9688a864518eac7d5ba1b3",
+        "plugins/compaction/message_summary.py": "2c0bc817259399a58572cc1c4d31398b04e715e58aafafa8abf7ae64481403b1",
+        "plugins/openai_compatible/driver.py": "49552bb4aa9251c36f040ebd334ad83403aa44a89bea86dbd66704d6eedb1b20",
+        "plugins/telegram_channel/drafts.py": "143574478f4f802e8a7ca58c526008d832152f47605da314addcff48de4ac479",
+        "plugins/context/materials.py": "c4472e74d6535ea6fa2424b87e53e56ec67f4aae8c6d19cdedcdba2014d736c5"
+      },
+      "model_config": {
+        "model": "step-5-preview",
+        "endpoint": "https://api.stepfun.com/step_plan/v1",
+        "driver_id": "openai-compatible",
+        "model_id": "arbitrary-chat-id",
+        "context_window": 32768,
+        "max_output_tokens": 4096,
+        "reasoning_effort": "low"
+      },
+      "scope": "Isolated native graph; same configured memory and tools. Exact final native payload replayed directly after its native run; native-first order may warm provider cache. These are observations, not randomized A/B speedups.",
+      "telegram": true,
+      "cases": [
+        {
+          "case": "natural-greeting",
+          "passed": true,
+          "native_total_ms": 5381.539151072502,
+          "model_calls": 1,
+          "tool_results": 0,
+          "native_driver_ms": 2890.9864146262407,
+          "native_reply_driver_ms": 2890.9864146262407,
+          "native_summary_driver_ms": 0,
+          "native_first_visible_content_ms": 3831.1982601881027,
+          "request_sha256": "0a26f28a9ca85b7b8f137a32b4cc95c8f6d3f09e0bb44caf36e141317d4bb127",
+          "request_bytes": 31979,
+          "request_profile": {
+            "content_chars_by_role": {
+              "system": 8367,
+              "user": 936
+            },
+            "reasoning_chars": 0,
+            "tool_schema_chars": 8535,
+            "tool_schema_count": 15
+          },
+          "same_payload_replayed": false,
+          "direct": null,
+          "native_attempts": [
+            {
+              "purpose": "reply",
+              "usage": {
+                "input_tokens": 7758,
+                "cache_write_input_tokens": null,
+                "cached_input_tokens": 0,
+                "output_tokens": 49,
+                "reasoning_output_tokens": 0,
+                "request_count": 1,
+                "covered_request_count": 1,
+                "coverage": "exact"
+              },
+              "thinking_chars": 40,
+              "duration_ms": 2890.9864146262407,
+              "begin_ms": 1346.1117148399353,
+              "request_policy": {
+                "max_tokens": 4096,
+                "reasoning_effort": "low"
+              },
+              "first_raw_content_at_ms": 3831.1402071267366,
+              "first_content_at_ms": 3831.1982601881027
+            }
+          ],
+          "prompt_forbids_tools": false,
+          "drafts": 0,
+          "final_delivered": true,
+          "first_draft_ack_ms": null,
+          "draft_network_ms": [],
+          "timings": [
+            {
+              "phase": "telegram.update.received",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609094370644305
+            },
+            {
+              "phase": "input.received",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609094378652364
+            },
+            {
+              "phase": "input.attributes.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609094388177646
+            },
+            {
+              "phase": "input.content.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609094388238817
+            },
+            {
+              "phase": "input.committed",
+              "operation_id": "",
+              "counts": {
+                "seq": 0
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609094407943251
+            },
+            {
+              "phase": "reply.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609094460232345
+            },
+            {
+              "phase": "reply.selection.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609094464166827
+            },
+            {
+              "phase": "tools.menu.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609094468598114
+            },
+            {
+              "phase": "tools.menu.end",
+              "operation_id": "",
+              "counts": {
+                "tools": 28
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609094821310043
+            },
+            {
+              "phase": "react.begin",
+              "operation_id": "4b1b1e95090f487298652139bcc79b21",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609094821511719
+            },
+            {
+              "phase": "tools.settled",
+              "operation_id": "4b1b1e95090f487298652139bcc79b21",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609094826845061
+            },
+            {
+              "phase": "history.loaded",
+              "operation_id": "4b1b1e95090f487298652139bcc79b21",
+              "counts": {
+                "messages": 1
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609094829155987
+            },
+            {
+              "phase": "preparation.begin",
+              "operation_id": "4b1b1e95090f487298652139bcc79b21",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609094829197418
+            },
+            {
+              "phase": "materials.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609094829219289
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "akasha",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609094829402054
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "compaction",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609094839053210
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "job-notices",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609094839173764
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "job-notices",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609094839248726
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "markdown_memory",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609094839272617
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "default_prompt",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609094844650630
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "default_prompt",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609094844965629
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "shell-environment",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609094844997460
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "shell-environment",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609094845332800
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "skills",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609094845361690
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "working-directory",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609094845485014
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "working-directory",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609094847486301
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "compaction",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609094847726878
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "markdown_memory",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609094856083757
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "skills",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609094880372741
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "akasha",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609095686411724
+            },
+            {
+              "phase": "materials.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609095694860546
+            },
+            {
+              "phase": "preparation.end",
+              "operation_id": "4b1b1e95090f487298652139bcc79b21",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609095694985669
+            },
+            {
+              "phase": "context.build.begin",
+              "operation_id": "4b1b1e95090f487298652139bcc79b21",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609095695071642
+            },
+            {
+              "phase": "context.build.end",
+              "operation_id": "4b1b1e95090f487298652139bcc79b21",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609095696737399
+            },
+            {
+              "phase": "context.reduce.begin",
+              "operation_id": "4b1b1e95090f487298652139bcc79b21",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609095696894454
+            },
+            {
+              "phase": "context.reduce.end",
+              "operation_id": "4b1b1e95090f487298652139bcc79b21",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609095699167489
+            },
+            {
+              "phase": "request.claimed",
+              "operation_id": "4b1b1e95090f487298652139bcc79b21",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609095699342624
+            },
+            {
+              "phase": "model.begin",
+              "operation_id": "4b1b1e95090f487298652139bcc79b21",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609095699411136
+            },
+            {
+              "phase": "model.end",
+              "operation_id": "4b1b1e95090f487298652139bcc79b21",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609098617111791
+            },
+            {
+              "phase": "output.decoded",
+              "operation_id": "4b1b1e95090f487298652139bcc79b21",
+              "counts": {
+                "tool_calls": 0
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609098629819125
+            },
+            {
+              "phase": "output.committed",
+              "operation_id": "4b1b1e95090f487298652139bcc79b21",
+              "counts": {
+                "seq": 1,
+                "tool_calls": 0
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609098639775559
+            },
+            {
+              "phase": "telegram.delivery.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609098747939820
+            },
+            {
+              "phase": "telegram.delivery.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609099741011058
+            }
+          ]
+        },
+        {
+          "case": "natural-followup",
+          "passed": true,
+          "native_total_ms": 4620.420096442103,
+          "model_calls": 1,
+          "tool_results": 0,
+          "native_driver_ms": 3480.2815783768892,
+          "native_reply_driver_ms": 3480.2815783768892,
+          "native_summary_driver_ms": 0,
+          "native_first_visible_content_ms": 3801.0148648172617,
+          "request_sha256": "e8350e690d61a1e23e60c18fd14ecde13caa8af05e349371f00068e7e34dcc1d",
+          "request_bytes": 32491,
+          "request_profile": {
+            "content_chars_by_role": {
+              "system": 8367,
+              "user": 1125,
+              "assistant": 69
+            },
+            "reasoning_chars": 40,
+            "tool_schema_chars": 8535,
+            "tool_schema_count": 15
+          },
+          "same_payload_replayed": false,
+          "direct": null,
+          "native_attempts": [
+            {
+              "purpose": "reply",
+              "usage": {
+                "input_tokens": 7863,
+                "cache_write_input_tokens": null,
+                "cached_input_tokens": 7168,
+                "output_tokens": 25,
+                "reasoning_output_tokens": 0,
+                "request_count": 1,
+                "covered_request_count": 1,
+                "coverage": "exact"
+              },
+              "thinking_chars": 13,
+              "duration_ms": 3480.2815783768892,
+              "begin_ms": 532.6955821365118,
+              "request_policy": {
+                "max_tokens": 4096,
+                "reasoning_effort": "low"
+              },
+              "first_raw_content_at_ms": 3800.954492762685,
+              "first_content_at_ms": 3801.0148648172617
+            }
+          ],
+          "prompt_forbids_tools": false,
+          "drafts": 0,
+          "final_delivered": true,
+          "first_draft_ack_ms": null,
+          "draft_network_ms": [],
+          "timings": [
+            {
+              "phase": "telegram.update.received",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609099758518337
+            },
+            {
+              "phase": "input.received",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609099764492978
+            },
+            {
+              "phase": "input.attributes.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609099776796290
+            },
+            {
+              "phase": "input.content.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609099776850691
+            },
+            {
+              "phase": "input.committed",
+              "operation_id": "",
+              "counts": {
+                "seq": 2
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609099797411259
+            },
+            {
+              "phase": "reply.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609099850375852
+            },
+            {
+              "phase": "reply.selection.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609099855741616
+            },
+            {
+              "phase": "tools.menu.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609099861284234
+            },
+            {
+              "phase": "tools.menu.end",
+              "operation_id": "",
+              "counts": {
+                "tools": 28
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609099984102714
+            },
+            {
+              "phase": "react.begin",
+              "operation_id": "c0c2e3052a8049b1a46f6290fb759004",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609099984395212
+            },
+            {
+              "phase": "tools.settled",
+              "operation_id": "c0c2e3052a8049b1a46f6290fb759004",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609099986967605
+            },
+            {
+              "phase": "history.loaded",
+              "operation_id": "c0c2e3052a8049b1a46f6290fb759004",
+              "counts": {
+                "messages": 3
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609099989237530
+            },
+            {
+              "phase": "preparation.begin",
+              "operation_id": "c0c2e3052a8049b1a46f6290fb759004",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609099989314853
+            },
+            {
+              "phase": "materials.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609099989362574
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "akasha",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609099989609551
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "compaction",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609099999982258
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "job-notices",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609100000174883
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "job-notices",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609100000305387
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "markdown_memory",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609100000354068
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "default_prompt",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609100005005401
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "default_prompt",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609100005289269
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "shell-environment",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609100005347111
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "shell-environment",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609100005699621
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "skills",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609100005759903
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "working-directory",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609100005995999
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "working-directory",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609100008014847
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "compaction",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609100008279544
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "skills",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609100011485146
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "markdown_memory",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609100011760434
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "akasha",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609100265411062
+            },
+            {
+              "phase": "materials.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609100272765043
+            },
+            {
+              "phase": "preparation.end",
+              "operation_id": "c0c2e3052a8049b1a46f6290fb759004",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609100272824864
+            },
+            {
+              "phase": "context.build.begin",
+              "operation_id": "c0c2e3052a8049b1a46f6290fb759004",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609100272864405
+            },
+            {
+              "phase": "context.build.end",
+              "operation_id": "c0c2e3052a8049b1a46f6290fb759004",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609100275882392
+            },
+            {
+              "phase": "context.reduce.begin",
+              "operation_id": "c0c2e3052a8049b1a46f6290fb759004",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609100275960694
+            },
+            {
+              "phase": "context.reduce.end",
+              "operation_id": "c0c2e3052a8049b1a46f6290fb759004",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609100278092365
+            },
+            {
+              "phase": "request.claimed",
+              "operation_id": "c0c2e3052a8049b1a46f6290fb759004",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609100278157477
+            },
+            {
+              "phase": "model.begin",
+              "operation_id": "c0c2e3052a8049b1a46f6290fb759004",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609100278180057
+            },
+            {
+              "phase": "model.end",
+              "operation_id": "c0c2e3052a8049b1a46f6290fb759004",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609103781164215
+            },
+            {
+              "phase": "output.decoded",
+              "operation_id": "c0c2e3052a8049b1a46f6290fb759004",
+              "counts": {
+                "tool_calls": 0
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609103793295702
+            },
+            {
+              "phase": "output.committed",
+              "operation_id": "c0c2e3052a8049b1a46f6290fb759004",
+              "counts": {
+                "seq": 3,
+                "tool_calls": 0
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609103802387431
+            },
+            {
+              "phase": "telegram.delivery.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609103905120147
+            },
+            {
+              "phase": "telegram.delivery.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609104367652394
+            }
+          ]
+        },
+        {
+          "case": "model-identity",
+          "passed": true,
+          "native_total_ms": 7489.338271319866,
+          "model_calls": 1,
+          "tool_results": 0,
+          "native_driver_ms": 1706.8291027098894,
+          "native_reply_driver_ms": 1706.8291027098894,
+          "native_summary_driver_ms": 0,
+          "native_first_visible_content_ms": 6814.526358619332,
+          "request_sha256": "21d50e0b8ee4028f71c513e7b8493df4c870894e9805b11fe9e3d84c914e1aa4",
+          "request_bytes": 32907,
+          "request_profile": {
+            "content_chars_by_role": {
+              "system": 8367,
+              "user": 1321,
+              "assistant": 120
+            },
+            "reasoning_chars": 53,
+            "tool_schema_chars": 8535,
+            "tool_schema_count": 15
+          },
+          "same_payload_replayed": false,
+          "direct": null,
+          "native_attempts": [
+            {
+              "purpose": "reply",
+              "usage": {
+                "input_tokens": 7941,
+                "cache_write_input_tokens": null,
+                "cached_input_tokens": 7424,
+                "output_tokens": 42,
+                "reasoning_output_tokens": 0,
+                "request_count": 1,
+                "covered_request_count": 1,
+                "coverage": "exact"
+              },
+              "thinking_chars": 56,
+              "duration_ms": 1706.8291027098894,
+              "begin_ms": 5182.614378631115,
+              "request_policy": {
+                "max_tokens": 4096,
+                "reasoning_effort": "low"
+              },
+              "first_raw_content_at_ms": 6814.4861571490765,
+              "first_content_at_ms": 6814.526358619332
+            }
+          ],
+          "bound_model_named": true,
+          "drafts": 0,
+          "final_delivered": true,
+          "first_draft_ack_ms": null,
+          "draft_network_ms": [],
+          "timings": [
+            {
+              "phase": "telegram.update.received",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609104387471180
+            },
+            {
+              "phase": "input.received",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609104395686945
+            },
+            {
+              "phase": "input.attributes.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609108995440849
+            },
+            {
+              "phase": "input.content.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609108995576073
+            },
+            {
+              "phase": "input.committed",
+              "operation_id": "",
+              "counts": {
+                "seq": 4
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109016425649
+            },
+            {
+              "phase": "reply.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109071202234
+            },
+            {
+              "phase": "reply.selection.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109077226426
+            },
+            {
+              "phase": "tools.menu.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109083979039
+            },
+            {
+              "phase": "tools.menu.end",
+              "operation_id": "",
+              "counts": {
+                "tools": 28
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109218833753
+            },
+            {
+              "phase": "react.begin",
+              "operation_id": "d39ea28ec45e40ceb76401f3a2762afb",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109219083830
+            },
+            {
+              "phase": "tools.settled",
+              "operation_id": "d39ea28ec45e40ceb76401f3a2762afb",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109222024834
+            },
+            {
+              "phase": "history.loaded",
+              "operation_id": "d39ea28ec45e40ceb76401f3a2762afb",
+              "counts": {
+                "messages": 5
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109224275438
+            },
+            {
+              "phase": "preparation.begin",
+              "operation_id": "d39ea28ec45e40ceb76401f3a2762afb",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109224345760
+            },
+            {
+              "phase": "materials.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109224386961
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "akasha",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109224613598
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "compaction",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109237334191
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "job-notices",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109237511096
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "job-notices",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109237630730
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "markdown_memory",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109237677801
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "default_prompt",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109243951441
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "default_prompt",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109244392843
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "shell-environment",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109244454125
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "shell-environment",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109244679532
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "skills",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109244733283
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "working-directory",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109244945609
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "working-directory",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109246979517
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "compaction",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109247398689
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "markdown_memory",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109250175358
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "skills",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109258092924
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "akasha",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109542182732
+            },
+            {
+              "phase": "materials.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109550815769
+            },
+            {
+              "phase": "preparation.end",
+              "operation_id": "d39ea28ec45e40ceb76401f3a2762afb",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109550872440
+            },
+            {
+              "phase": "context.build.begin",
+              "operation_id": "d39ea28ec45e40ceb76401f3a2762afb",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109550912332
+            },
+            {
+              "phase": "context.build.end",
+              "operation_id": "d39ea28ec45e40ceb76401f3a2762afb",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109554147774
+            },
+            {
+              "phase": "context.reduce.begin",
+              "operation_id": "d39ea28ec45e40ceb76401f3a2762afb",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109554233646
+            },
+            {
+              "phase": "context.reduce.end",
+              "operation_id": "d39ea28ec45e40ceb76401f3a2762afb",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109556572443
+            },
+            {
+              "phase": "request.claimed",
+              "operation_id": "d39ea28ec45e40ceb76401f3a2762afb",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109556639105
+            },
+            {
+              "phase": "model.begin",
+              "operation_id": "d39ea28ec45e40ceb76401f3a2762afb",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609109556661346
+            },
+            {
+              "phase": "model.end",
+              "operation_id": "d39ea28ec45e40ceb76401f3a2762afb",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609111284714023
+            },
+            {
+              "phase": "output.decoded",
+              "operation_id": "d39ea28ec45e40ceb76401f3a2762afb",
+              "counts": {
+                "tool_calls": 0
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609111296183370
+            },
+            {
+              "phase": "output.committed",
+              "operation_id": "d39ea28ec45e40ceb76401f3a2762afb",
+              "counts": {
+                "seq": 5,
+                "tool_calls": 0
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609111304743315
+            },
+            {
+              "phase": "telegram.delivery.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609111410180218
+            },
+            {
+              "phase": "telegram.delivery.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609111864611432
+            }
+          ]
+        }
+      ],
+      "memory_document_sha256": {
+        "MEMORY.md": "e420920ea13508d6a573fa07f4a928e2545c7c4dcdced2b44fb878cd9c12f90d",
+        "SELF.md": "1375e38f4b8a7b590507b804522bd77f6145ebea571b1d28c7b4a4391cbd8941",
+        "VEDA.md": "6a5556141d41f4f077ef45fb4c1a3a651865c0c34d7e435123d49cb6e0810757",
+        "topics/legacy-history.md": "96e379e085e2d2ec7574ac8b805d31476f009bdc182659932409d074c771788e",
+        "topics/legacy-memory.md": "ee31bb6ae309bb40f4c934ab3c8f1c07e1cdb4d920bd48dfda014475e360690e",
+        "topics/legacy-pending.md": "329846c8bf7096820d2ce865d4f2ea008f4a6d9a9205346b6ecf626a68bca309",
+        "topics/legacy-recent_context.md": "0b448517da6cf9e8a2aa5af779a16feb9d52e78f90caedc24d5c8a34040a9ca1",
+        "topics/legacy-self.md": "09b2690db337c32da3eff0a280c7e0c7c8b7fa57fa2865e313695e5965ea996c"
+      },
+      "memory_document_scope": "Markdown snapshots only; no production graph, credentials, sessions or polling copied.",
+      "telegram_scope": "Synthetic Update enters actual adapter/Core ingress. Real bot draft and final send APIs, actual native delivery receipt. No getUpdates, user-device or network-to-poller latency claim. Chat IDs and token URLs excluded.",
+      "shutdown_completed": true,
+      "passed": true
+    },
+    "controlled_telegram_final": {
+      "implementation": {
+        "kirakira_agent/runtime.py": "1e9e0dc2e980c54bffa568dced9ecd5b9a23bf15d90c581c2cafb77515651958",
+        "kirakira_agent/setup.py": "000e5c4c0727363627ecbc1fa58a450abffb31538305749d00d856e34c5897e3",
+        "kirakira_agent/environment.py": "d7a2c67bb5c6efb2ef2d2c8ef011c958e012a25e87a19fb7e1cbf3bc31b88c05",
+        "kirakira_agent/client.py": "c60a6613d6d9f507560101c4310e29c8d4bc53914d1398dc5f7c46924b3a8403",
+        "eval/models.py": "7eb7bc7d24fd9b6927ff61ebe26273d55df900cebea4979ce1e36e184c5971ee",
+        "plugins/akasha/contract.py": "c6d7d0c7f0969cef4426ea295c58e7045d784471aee66e039be22b9c9d766167",
+        "plugins/akasha/plugin.py": "67f6ef2c90b78e687662d7f8e47118c99c290149cf2b5de43f6c07b0a05aafc2",
+        "plugins/akasha/query.py": "031b25033f2126da436a4229bf238a814b5bad5f5cad75cd99c71940feb78554",
+        "plugins/akasha/recalls.py": "9f8a404c33fcfe5a5211109fffaf651b501945aaaf72f44c4e31d2bb890c41ac",
+        "plugins/akasha/recall_tool.py": "a1a38c3b47a92c761c010a78335c2f5e179b5df6becb5e0b0ae89225ee353f3c",
+        "plugins/akasha/runtime.py": "ded8b5eb501497adbb03d57870263657b9c6d93ed7888ea05089cd685d487284",
+        "plugins/akasha/excerpts.py": "9a408c9017de5722d68265c7012268bc4801c516137c8cd17b010fdbad19da7d",
+        "plugins/akasha/source_tool.py": "5cd6ba14202ac9a99e36c83e9deccc0c7872998cd67226fd856450a4439cbc41",
+        "plugins/akasha/source_search.py": "87753df2c606ed7a62341630f87f7e130af15a86a90681fbd8fca692ea418843",
+        "plugins/followups/__init__.py": "2f43daa4738a0b465626801fbefd89cd2dff70e5a26f1cf63afa84d7a571472b",
+        "plugins/followups/contract.py": "48ff8dc12ae08b171e086494b880c7bcfc49964f85cbac5495f9e20fa7e1fdd7",
+        "plugins/followups/dashboard.py": "5bdd51774087739ddc6f371023d36a493ab47d0f886139fe4a85ba2045a4f05b",
+        "plugins/followups/feeds.py": "a7da435624fef92a3581a2f0b2cac3a37f5d24a2e88dde6518b62c598299efcf",
+        "plugins/followups/mail_settings.py": "6008e854ee51a4b55af8305d5e3d0b71a6fdaf9b8699a02d47c0703a11dd70f6",
+        "plugins/followups/mailbox.py": "47b30034995e3ca92b25cd44069a4f7a0aeeb90c8347c160c3037198369ea934",
+        "plugins/followups/plugin.py": "89081d40cf08ef012670a49592e40cca8577ae5f674df8504f0483c2baecde28",
+        "plugins/followups/service.py": "6814a70a78e1514cbbb5dc525f8e3baa9351eef83ed96d24d37845068743a7b4",
+        "plugins/followups/tools.py": "a791a534d1544d5c1d94aaf78828e6662c1b195b3c040a1a437efdf42e20fe55",
+        "plugins/followups/webpages.py": "4a29a3d73924fdc0ca31a3f574c91e9ef70d6812f96d4c2b88e9a7e446d03d82",
+        "plugins/drift/__init__.py": "8905bcb66bd1258847589e4b4b0a4eac1f72ea044c09d3b394e98a85d265fa2e",
+        "plugins/drift/contract.py": "2b73654b779b267ec20822193408287a4abeb3426b238d08a04fa5ff2a35e278",
+        "plugins/drift/dashboard.py": "3f793998f1b35c5342298421eb446d79b7d2bf5f7d7baa9fba161c2f562c225e",
+        "plugins/drift/plugin.py": "51aa47ffbb56d487b4fdc572ba1b4df4027b6d38ef695ce0064bd8db0b7e59de",
+        "plugins/drift/producer.py": "281bc2eeb72cd2ad615ca4c868d22aae98de59248cd113b66a86d7920865cfae",
+        "plugins/drift/store.py": "256c225436b0c875f16e3f867b3ff8449cd374198811a5eba7c4114679181d6e",
+        "plugins/prompt/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "plugins/prompt/completion.py": "22df7c364b49c61d44cb71f11530faa213af8c6474cba9d045546608bdc3e1b1",
+        "plugins/prompt/dashboard.py": "32dc7b3cbdb8963d0b90f77cf28d1b18dae6ed400160cfd44d2fb66ddee9c309",
+        "plugins/prompt/persona.py": "979da6581d60524a7b4681dd36e5bb0c3e0d748b5ee31ab5c0980629a0fbb716",
+        "plugins/prompt/personality.py": "a99bfd88e77f79cc7640dc4ed469ee3ed536cb3edb5c834d060103e1f2b76fc9",
+        "plugins/prompt/plugin.py": "3280aa9ed0dafa54301923b27d8d28b2fa3a7a8818a4ef010d5ce2d8a1bb90d2",
+        "plugins/prompt/text.py": "93d2e087d6e9a6524c4464d7f25852bb7b8f88e35ce5f497fc02219a2d27464f",
+        "plugins/markdown_memory/store.py": "774012fb4ea35c4941e805e377fa57ab787997294e03b6fa7d2736df727f4e16",
+        "plugins/prompt/VEDA.md": "f387d558f7cd1ffbf217ea3ff685354af9caee59fc27ac2fa67efb8cee190db4",
+        "plugins/prompt/web_module.js": "3b6bd60494365a50d76fc6320b06ce9953a0247854fbd1bfe8f4f17d3112bf69",
+        "frontend/plugins/prompt/src/index.tsx": "32b66e799d718e573035b5a7af5b8d405425f4b97830086deb00e77469fde76b",
+        "plugins/drift/web_module.js": "87dc03aa145f6e4967498178d7c58f5327767935e6140de0301d8f091b808030",
+        "plugins/drift/web_module.css": "203990074b89d27235fd85b124e8d22b9956b9dd4c2685403ae7fa2fbab37994",
+        "frontend/plugins/drift/src/index.tsx": "739ca8ba40c8b858652efe44bfd2cb94f11ed6ceedd1168e572f3ff0ff5bb3ee",
+        "plugins/eventmail/store.py": "654f6b4c3984e625d7aab3f2b30ed4c9c7f588ce85f0502f9f6e73b0e1c2764f",
+        "plugins/wake/api.py": "c0ee0e1edf5ce0b85fdc45edd887d3c7ff598235dc7e96fb01459d11a3f29a73",
+        "plugins/wake/messages.py": "4429fa781ddbb0b956c36423658507f7769d7181299c629724609a421ff985a2",
+        "plugins/wake/runtime.py": "aefaf7cdce408d0872b91019a93f554d7bc9394ec18811b569b086cf4f8a1e04",
+        "plugins/wake/program.py": "53a89048c03a4eeca761a03035f32750e083f99685ea21860650649a6f70b2ab",
+        "eval/followups.py": "713dfb1bd00d774a8bafb403fd8f7fe80e0aaf889f186efa6b97e8329284420c",
+        "eval/mail_followups.py": "aded8879d90a2bd5291ac16cb31a31d721e6dc82588235824712659e38b12afb",
+        "eval/fixtures/mailbox.py": "ec3f108c4caf2d1108440d526da0b87b1466e07860e2fe19db9deea91796f7fc",
+        "eval/runtime_settings.py": "c5c85f54158bd265e15d19b48cc50fd938d0a878b49fa6d19694c502fc9b8acb",
+        "eval/idle_reflection.py": "4120504207b889bdcd0e4012c0f2b85d42f23355661a229ac9955be6e55f1758",
+        "eval/personality.py": "eec5f440d38cbaff720357e087355d3c3e75972ff411b5d6a383c3156e2eee8f",
+        "eval/prompt_cache.py": "fe19586d98d72e8e1e7db052e12ea114d4970d542471080874a953db066213e0",
+        "third_party/UPSTREAM.json": "bf601bf9ceec1488e48090eb1debc6ca691bdc70c891886ac51161c79edc8120",
+        "third_party/patches/akasha-empty-rebuild.patch": "acc310c996d2590d54fe89f1147072e0c2fabb909ad17d779c48cd65c95e4230",
+        "third_party/patches/cache-usage-coverage.patch": "8aa98fee2ab5f89a1f6be07322510981987e3525c3161d71435f940abbfe1e4f",
+        "third_party/patches/distribution-branding.patch": "679effd6bd0b72a27bfe64bf950e6a06b7f3589ed352f78c6321d5d740946295",
+        "third_party/patches/followup-investigation.patch": "53ea17898a225fdc7d9bb41d124908a227ea1e8c8775f16b5ed1ab01754f1eb7",
+        "third_party/patches/idle-reflection.patch": "11a2ed5bfde2629b933f1e6454a6ec8596542011cf0155668fda07126ce3433a",
+        "third_party/patches/memory-query-api.patch": "ae31cf4aeb361b85f1c27b962b0420105e45897f0f020bad5d7680e457f985d3",
+        "third_party/patches/stage-web-assets.patch": "f23c035cf5897c61ee4dcfade30bafa8dd71c32ebdcf3c21743e31c9800abcc4",
+        "third_party/patches/telegram-latency.patch": "271456866c2fce4bc6ff4e4704546082125aa1ac3d8cebc2cc6791f1f8793204",
+        "third_party/patches/tool-io-bounds.patch": "e6988d6661a545a065ba70311d92dab501e4afa16fe6461c842b3295e898eba3",
+        "third_party/patches/zsh-snapshot-aliases.patch": "a2d4a1cd3635d62edd6ca11a8b2e7ace6b68d0dbec908feeb4bf4a17e1354f55",
+        "eval/telegram_latency.py": "81eccd58a6042e03b9ce1ef7aaa80de2e2f94d70489bb5f2ba81bc0e3fde9964",
+        "plugins/reply_program/program.py": "fbe1c25b52469eec60977c099d8d1665d1f118b67f9c0701d7e2f07ce4856383",
+        "plugins/telegram_sender/sender.py": "08da1aa1038f4d5ed4fc8568477c885c37331111e6ded20f1825661552b3ad3d",
+        "plugins/compaction/plugin.py": "be4e996c40f056ed3c390b8e31e82ed55d4688e44e9688a864518eac7d5ba1b3",
+        "plugins/compaction/message_summary.py": "2c0bc817259399a58572cc1c4d31398b04e715e58aafafa8abf7ae64481403b1",
+        "plugins/openai_compatible/driver.py": "49552bb4aa9251c36f040ebd334ad83403aa44a89bea86dbd66704d6eedb1b20",
+        "plugins/telegram_channel/drafts.py": "143574478f4f802e8a7ca58c526008d832152f47605da314addcff48de4ac479",
+        "plugins/context/materials.py": "c4472e74d6535ea6fa2424b87e53e56ec67f4aae8c6d19cdedcdba2014d736c5"
+      },
+      "model_config": {
+        "model": "step-5-preview",
+        "endpoint": "https://api.stepfun.com/step_plan/v1",
+        "driver_id": "openai-compatible",
+        "model_id": "arbitrary-chat-id",
+        "context_window": 32768,
+        "max_output_tokens": 4096,
+        "reasoning_effort": "low"
+      },
+      "scope": "Isolated native graph; same configured memory and tools. Exact final native payload replayed directly after its native run; native-first order may warm provider cache. These are observations, not randomized A/B speedups.",
+      "telegram": true,
+      "cases": [
+        {
+          "case": "natural-greeting",
+          "passed": true,
+          "native_total_ms": 13082.902139052749,
+          "model_calls": 1,
+          "tool_results": 0,
+          "native_driver_ms": 9595.855750143528,
+          "native_reply_driver_ms": 9595.855750143528,
+          "native_summary_driver_ms": 0,
+          "native_first_visible_content_ms": 11905.201790854335,
+          "request_sha256": "cb21a93e926e93a0a481f7157b41b8ade4a74076d68da75311d572bbce8872fc",
+          "request_bytes": 31988,
+          "request_profile": {
+            "content_chars_by_role": {
+              "system": 8376,
+              "user": 936
+            },
+            "reasoning_chars": 0,
+            "tool_schema_chars": 8535,
+            "tool_schema_count": 15
+          },
+          "same_payload_replayed": false,
+          "direct": null,
+          "native_attempts": [
+            {
+              "purpose": "reply",
+              "usage": {
+                "input_tokens": 7758,
+                "cache_write_input_tokens": null,
+                "cached_input_tokens": 0,
+                "output_tokens": 25,
+                "reasoning_output_tokens": 0,
+                "request_count": 1,
+                "covered_request_count": 1,
+                "coverage": "exact"
+              },
+              "thinking_chars": 22,
+              "duration_ms": 9595.855750143528,
+              "begin_ms": 2329.7442328184843,
+              "request_policy": {
+                "max_tokens": 4096,
+                "reasoning_effort": "low"
+              },
+              "first_raw_content_at_ms": 11905.088810250163,
+              "first_content_at_ms": 11905.201790854335
+            }
+          ],
+          "prompt_forbids_tools": false,
+          "drafts": 0,
+          "final_delivered": true,
+          "first_draft_ack_ms": null,
+          "draft_network_ms": [],
+          "timings": [
+            {
+              "phase": "telegram.update.received",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609304352435983
+            },
+            {
+              "phase": "input.received",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609304376231301
+            },
+            {
+              "phase": "input.attributes.read.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609304389455789
+            },
+            {
+              "phase": "input.attributes.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609304395269625
+            },
+            {
+              "phase": "input.content.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609304395325986
+            },
+            {
+              "phase": "input.committed",
+              "operation_id": "",
+              "counts": {
+                "seq": 0
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609304450875912
+            },
+            {
+              "phase": "reply.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609304573368599
+            },
+            {
+              "phase": "reply.selection.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609304586096362
+            },
+            {
+              "phase": "tools.menu.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609304599568597
+            },
+            {
+              "phase": "tools.menu.end",
+              "operation_id": "",
+              "counts": {
+                "tools": 28
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609305578703437
+            },
+            {
+              "phase": "react.begin",
+              "operation_id": "8bb95651b23c4f00b7d937c32e5a941a",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609305578879262
+            },
+            {
+              "phase": "tools.settled",
+              "operation_id": "8bb95651b23c4f00b7d937c32e5a941a",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609305590824143
+            },
+            {
+              "phase": "history.loaded",
+              "operation_id": "8bb95651b23c4f00b7d937c32e5a941a",
+              "counts": {
+                "messages": 1
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609305595791554
+            },
+            {
+              "phase": "preparation.begin",
+              "operation_id": "8bb95651b23c4f00b7d937c32e5a941a",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609305595856536
+            },
+            {
+              "phase": "materials.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609305595892167
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "akasha",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609305596119154
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "compaction",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609305616648960
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "job-notices",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609305616745823
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "job-notices",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609305616815155
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "markdown_memory",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609305616838945
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "default_prompt",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609305628099467
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "default_prompt",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609305628408936
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "shell-environment",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609305628441207
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "shell-environment",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609305628742875
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "skills",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609305628771106
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "working-directory",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609305628889469
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "working-directory",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609305633336326
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "compaction",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609305633597454
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "markdown_memory",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609305645815733
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "skills",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609305680843753
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "akasha",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609306611289642
+            },
+            {
+              "phase": "materials.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609306630952934
+            },
+            {
+              "phase": "preparation.end",
+              "operation_id": "8bb95651b23c4f00b7d937c32e5a941a",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609306631076337
+            },
+            {
+              "phase": "context.build.begin",
+              "operation_id": "8bb95651b23c4f00b7d937c32e5a941a",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609306631158300
+            },
+            {
+              "phase": "context.build.end",
+              "operation_id": "8bb95651b23c4f00b7d937c32e5a941a",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609306632810857
+            },
+            {
+              "phase": "context.reduce.begin",
+              "operation_id": "8bb95651b23c4f00b7d937c32e5a941a",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609306632963381
+            },
+            {
+              "phase": "context.reduce.end",
+              "operation_id": "8bb95651b23c4f00b7d937c32e5a941a",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609306638407367
+            },
+            {
+              "phase": "request.claimed",
+              "operation_id": "8bb95651b23c4f00b7d937c32e5a941a",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609306638580992
+            },
+            {
+              "phase": "model.begin",
+              "operation_id": "8bb95651b23c4f00b7d937c32e5a941a",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609306638639073
+            },
+            {
+              "phase": "model.end",
+              "operation_id": "8bb95651b23c4f00b7d937c32e5a941a",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609316286181729
+            },
+            {
+              "phase": "output.decoded",
+              "operation_id": "8bb95651b23c4f00b7d937c32e5a941a",
+              "counts": {
+                "tool_calls": 0
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609316298027797
+            },
+            {
+              "phase": "output.committed",
+              "operation_id": "8bb95651b23c4f00b7d937c32e5a941a",
+              "counts": {
+                "seq": 1,
+                "tool_calls": 0
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609316307665772
+            },
+            {
+              "phase": "telegram.delivery.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609316427277086
+            },
+            {
+              "phase": "telegram.delivery.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317421999640
+            }
+          ]
+        },
+        {
+          "case": "natural-followup",
+          "passed": true,
+          "native_total_ms": 4535.594621673226,
+          "model_calls": 1,
+          "tool_results": 0,
+          "native_driver_ms": 3373.1677811592817,
+          "native_reply_driver_ms": 3373.1677811592817,
+          "native_summary_driver_ms": 0,
+          "native_first_visible_content_ms": 3607.4646897614,
+          "request_sha256": "c4c39a33d59fb1a230b28655ff36f30b70b2b101c9e8ec25ee929b32eec7eec2",
+          "request_bytes": 32397,
+          "request_profile": {
+            "content_chars_by_role": {
+              "system": 8376,
+              "user": 1125,
+              "assistant": 46
+            },
+            "reasoning_chars": 22,
+            "tool_schema_chars": 8535,
+            "tool_schema_count": 15
+          },
+          "same_payload_replayed": false,
+          "direct": null,
+          "native_attempts": [
+            {
+              "purpose": "reply",
+              "usage": {
+                "input_tokens": 7839,
+                "cache_write_input_tokens": null,
+                "cached_input_tokens": 7168,
+                "output_tokens": 18,
+                "reasoning_output_tokens": 0,
+                "request_count": 1,
+                "covered_request_count": 1,
+                "coverage": "exact"
+              },
+              "thinking_chars": 0,
+              "duration_ms": 3373.1677811592817,
+              "begin_ms": 556.37620203197,
+              "request_policy": {
+                "max_tokens": 4096,
+                "reasoning_effort": "low"
+              },
+              "first_raw_content_at_ms": 3607.4321288615465,
+              "first_content_at_ms": 3607.4646897614
+            }
+          ],
+          "prompt_forbids_tools": false,
+          "drafts": 0,
+          "final_delivered": true,
+          "first_draft_ack_ms": null,
+          "draft_network_ms": [],
+          "timings": [
+            {
+              "phase": "telegram.update.received",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317443167534
+            },
+            {
+              "phase": "input.received",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317450486973
+            },
+            {
+              "phase": "input.attributes.read.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317455686801
+            },
+            {
+              "phase": "input.attributes.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317458504982
+            },
+            {
+              "phase": "input.content.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317458600665
+            },
+            {
+              "phase": "input.committed",
+              "operation_id": "",
+              "counts": {
+                "seq": 2
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317476951458
+            },
+            {
+              "phase": "reply.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317531748822
+            },
+            {
+              "phase": "reply.selection.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317536421656
+            },
+            {
+              "phase": "tools.menu.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317541564812
+            },
+            {
+              "phase": "tools.menu.end",
+              "operation_id": "",
+              "counts": {
+                "tools": 28
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317652326904
+            },
+            {
+              "phase": "react.begin",
+              "operation_id": "ee19b1b7fd0a4e688cb9b3aece22b930",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317652500309
+            },
+            {
+              "phase": "tools.settled",
+              "operation_id": "ee19b1b7fd0a4e688cb9b3aece22b930",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317654965219
+            },
+            {
+              "phase": "history.loaded",
+              "operation_id": "ee19b1b7fd0a4e688cb9b3aece22b930",
+              "counts": {
+                "messages": 3
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317657056959
+            },
+            {
+              "phase": "preparation.begin",
+              "operation_id": "ee19b1b7fd0a4e688cb9b3aece22b930",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317657098050
+            },
+            {
+              "phase": "materials.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317657117791
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "akasha",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317657263005
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "compaction",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317667153627
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "job-notices",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317667243830
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "job-notices",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317667306262
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "markdown_memory",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317667329072
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "default_prompt",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317672440748
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "default_prompt",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317672664015
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "shell-environment",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317672692615
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "shell-environment",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317672810099
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "skills",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317672835820
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "working-directory",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317672947413
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "working-directory",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317675579908
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "compaction",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317675829245
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "markdown_memory",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317677732609
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "skills",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317679997164
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "akasha",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317971072652
+            },
+            {
+              "phase": "materials.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317978641728
+            },
+            {
+              "phase": "preparation.end",
+              "operation_id": "ee19b1b7fd0a4e688cb9b3aece22b930",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317978754311
+            },
+            {
+              "phase": "context.build.begin",
+              "operation_id": "ee19b1b7fd0a4e688cb9b3aece22b930",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317978831153
+            },
+            {
+              "phase": "context.build.end",
+              "operation_id": "ee19b1b7fd0a4e688cb9b3aece22b930",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317983913529
+            },
+            {
+              "phase": "context.reduce.begin",
+              "operation_id": "ee19b1b7fd0a4e688cb9b3aece22b930",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317984010881
+            },
+            {
+              "phase": "context.reduce.end",
+              "operation_id": "ee19b1b7fd0a4e688cb9b3aece22b930",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317986575025
+            },
+            {
+              "phase": "request.claimed",
+              "operation_id": "ee19b1b7fd0a4e688cb9b3aece22b930",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317986641466
+            },
+            {
+              "phase": "model.begin",
+              "operation_id": "ee19b1b7fd0a4e688cb9b3aece22b930",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609317986663697
+            },
+            {
+              "phase": "model.end",
+              "operation_id": "ee19b1b7fd0a4e688cb9b3aece22b930",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609321381550500
+            },
+            {
+              "phase": "output.decoded",
+              "operation_id": "ee19b1b7fd0a4e688cb9b3aece22b930",
+              "counts": {
+                "tool_calls": 0
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609321391810293
+            },
+            {
+              "phase": "output.committed",
+              "operation_id": "ee19b1b7fd0a4e688cb9b3aece22b930",
+              "counts": {
+                "seq": 3,
+                "tool_calls": 0
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609321399733138
+            },
+            {
+              "phase": "telegram.delivery.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609321490302844
+            },
+            {
+              "phase": "telegram.delivery.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609321968066320
+            }
+          ]
+        },
+        {
+          "case": "model-identity",
+          "passed": true,
+          "native_total_ms": 3705.0251346081495,
+          "model_calls": 1,
+          "tool_results": 0,
+          "native_driver_ms": 2616.918435320258,
+          "native_reply_driver_ms": 2616.918435320258,
+          "native_summary_driver_ms": 0,
+          "native_first_visible_content_ms": 2863.4730242192745,
+          "request_sha256": "7f8e872cac9644ccc47a36b87033a8328084a6aa91380d35f41b2f1361f50c23",
+          "request_bytes": 32756,
+          "request_profile": {
+            "content_chars_by_role": {
+              "system": 8376,
+              "user": 1321,
+              "assistant": 98
+            },
+            "reasoning_chars": 22,
+            "tool_schema_chars": 8535,
+            "tool_schema_count": 15
+          },
+          "same_payload_replayed": false,
+          "direct": null,
+          "native_attempts": [
+            {
+              "purpose": "reply",
+              "usage": {
+                "input_tokens": 7909,
+                "cache_write_input_tokens": null,
+                "cached_input_tokens": 7168,
+                "output_tokens": 16,
+                "reasoning_output_tokens": 0,
+                "request_count": 1,
+                "covered_request_count": 1,
+                "coverage": "exact"
+              },
+              "thinking_chars": 0,
+              "duration_ms": 2616.918435320258,
+              "begin_ms": 488.4290434420109,
+              "request_policy": {
+                "max_tokens": 4096,
+                "reasoning_effort": "low"
+              },
+              "first_raw_content_at_ms": 2863.4148724377155,
+              "first_content_at_ms": 2863.4730242192745
+            }
+          ],
+          "bound_model_named": true,
+          "drafts": 0,
+          "final_delivered": true,
+          "first_draft_ack_ms": null,
+          "draft_network_ms": [],
+          "timings": [
+            {
+              "phase": "telegram.update.received",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609321984375846
+            },
+            {
+              "phase": "input.received",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609321991483069
+            },
+            {
+              "phase": "input.attributes.read.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322001273518
+            },
+            {
+              "phase": "input.attributes.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322003845352
+            },
+            {
+              "phase": "input.content.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322003892623
+            },
+            {
+              "phase": "input.committed",
+              "operation_id": "",
+              "counts": {
+                "seq": 4
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322021836225
+            },
+            {
+              "phase": "reply.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322069188587
+            },
+            {
+              "phase": "reply.selection.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322074723785
+            },
+            {
+              "phase": "tools.menu.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322079589564
+            },
+            {
+              "phase": "tools.menu.end",
+              "operation_id": "",
+              "counts": {
+                "tools": 28
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322188225914
+            },
+            {
+              "phase": "react.begin",
+              "operation_id": "26068298ad02488bb5cb95a73ce8590a",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322188348858
+            },
+            {
+              "phase": "tools.settled",
+              "operation_id": "26068298ad02488bb5cb95a73ce8590a",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322190774447
+            },
+            {
+              "phase": "history.loaded",
+              "operation_id": "26068298ad02488bb5cb95a73ce8590a",
+              "counts": {
+                "messages": 5
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322193047652
+            },
+            {
+              "phase": "preparation.begin",
+              "operation_id": "26068298ad02488bb5cb95a73ce8590a",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322193080843
+            },
+            {
+              "phase": "materials.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322193101794
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "akasha",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322193231757
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "compaction",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322202726208
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "job-notices",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322202813211
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "job-notices",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322202870703
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "markdown_memory",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322202892183
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "default_prompt",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322207763962
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "default_prompt",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322208020360
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "shell-environment",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322208050410
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "shell-environment",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322208172324
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "skills",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322208200065
+            },
+            {
+              "phase": "materials.owner.begin",
+              "operation_id": "working-directory",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322208305048
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "working-directory",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322210921802
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "compaction",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322211156079
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "skills",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322214905246
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "markdown_memory",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322215127862
+            },
+            {
+              "phase": "materials.owner.end",
+              "operation_id": "akasha",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322444208281
+            },
+            {
+              "phase": "materials.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322452330383
+            },
+            {
+              "phase": "preparation.end",
+              "operation_id": "26068298ad02488bb5cb95a73ce8590a",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322452432656
+            },
+            {
+              "phase": "context.build.begin",
+              "operation_id": "26068298ad02488bb5cb95a73ce8590a",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322452503878
+            },
+            {
+              "phase": "context.build.end",
+              "operation_id": "26068298ad02488bb5cb95a73ce8590a",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322456820481
+            },
+            {
+              "phase": "context.reduce.begin",
+              "operation_id": "26068298ad02488bb5cb95a73ce8590a",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322456960145
+            },
+            {
+              "phase": "context.reduce.end",
+              "operation_id": "26068298ad02488bb5cb95a73ce8590a",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322459498268
+            },
+            {
+              "phase": "request.claimed",
+              "operation_id": "26068298ad02488bb5cb95a73ce8590a",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322459639732
+            },
+            {
+              "phase": "model.begin",
+              "operation_id": "26068298ad02488bb5cb95a73ce8590a",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609322459687653
+            },
+            {
+              "phase": "model.end",
+              "operation_id": "26068298ad02488bb5cb95a73ce8590a",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609325097827974
+            },
+            {
+              "phase": "output.decoded",
+              "operation_id": "26068298ad02488bb5cb95a73ce8590a",
+              "counts": {
+                "tool_calls": 0
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609325109624090
+            },
+            {
+              "phase": "output.committed",
+              "operation_id": "26068298ad02488bb5cb95a73ce8590a",
+              "counts": {
+                "seq": 5,
+                "tool_calls": 0
+              },
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609325117781823
+            },
+            {
+              "phase": "telegram.delivery.begin",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609325216942123
+            },
+            {
+              "phase": "telegram.delivery.end",
+              "operation_id": "",
+              "counts": {},
+              "measurement_unit": "monotonic_ns",
+              "measurement_value": 16609325679212278
+            }
+          ]
+        }
+      ],
+      "memory_document_sha256": {
+        "MEMORY.md": "e420920ea13508d6a573fa07f4a928e2545c7c4dcdced2b44fb878cd9c12f90d",
+        "SELF.md": "1375e38f4b8a7b590507b804522bd77f6145ebea571b1d28c7b4a4391cbd8941",
+        "VEDA.md": "6a5556141d41f4f077ef45fb4c1a3a651865c0c34d7e435123d49cb6e0810757",
+        "topics/legacy-history.md": "96e379e085e2d2ec7574ac8b805d31476f009bdc182659932409d074c771788e",
+        "topics/legacy-memory.md": "ee31bb6ae309bb40f4c934ab3c8f1c07e1cdb4d920bd48dfda014475e360690e",
+        "topics/legacy-pending.md": "329846c8bf7096820d2ce865d4f2ea008f4a6d9a9205346b6ecf626a68bca309",
+        "topics/legacy-recent_context.md": "0b448517da6cf9e8a2aa5af779a16feb9d52e78f90caedc24d5c8a34040a9ca1",
+        "topics/legacy-self.md": "09b2690db337c32da3eff0a280c7e0c7c8b7fa57fa2865e313695e5965ea996c"
+      },
+      "memory_document_scope": "Markdown snapshots only; no production graph, credentials, sessions or polling copied.",
+      "telegram_scope": "Synthetic Update enters actual adapter/Core ingress. Real bot draft and final send APIs, actual native delivery receipt. No getUpdates, user-device or network-to-poller latency claim. Chat IDs and token URLs excluded.",
+      "shutdown_completed": true,
+      "passed": true
+    },
+    "memory_functional": {
+      "cases": [
+        {
+          "name": "live_channel_learning",
+          "passed": true
+        },
+        {
+          "name": "service_socket_and_concurrent_idempotency",
+          "passed": true
+        },
+        {
+          "name": "dated_source_filter_over_socket",
+          "passed": true
+        },
+        {
+          "name": "bounded_excerpts_preserve_original_ranges",
+          "passed": true
+        },
+        {
+          "name": "agent_expands_receipt_bound_source_without_retrieval",
+          "passed": true
+        },
+        {
+          "name": "agent_tool_update_and_constraint_answer",
+          "passed": true
+        },
+        {
+          "name": "incoming_event_recovers_project_decisions_and_delivers",
+          "passed": true
+        },
+        {
+          "name": "agent_follows_excerpt_to_long_original_and_recovers_signature",
+          "passed": true
+        },
+        {
+          "name": "personal_history_source_navigation_sdk_and_agent",
+          "passed": true
+        },
+        {
+          "name": "personal_event_uses_deep_history_and_confirms_one_delivery",
+          "passed": true
+        },
+        {
+          "name": "explicit_forgetting_changes_new_recall_preserves_raw_fact",
+          "passed": true
+        },
+        {
+          "name": "explicit_remembering_restores_addressed_experience",
+          "passed": true
+        },
+        {
+          "name": "restart_replays_evidence_without_relearning",
+          "passed": true
+        }
+      ],
+      "metrics": {
+        "remote_chat_calls": 34,
+        "local_embedding_ledger_calls": 0,
+        "embedding_metering": "native model_calls records chat only; vectors verified separately",
+        "remote_states": {
+          "success": 34
+        },
+        "remote_endpoints": [
+          "https://api.stepfun.com/step_plan/v1"
+        ],
+        "input_tokens": 358451,
+        "output_tokens": 5386
+      },
+      "implementation": {
+        "kirakira_agent/runtime.py": "1e9e0dc2e980c54bffa568dced9ecd5b9a23bf15d90c581c2cafb77515651958",
+        "kirakira_agent/setup.py": "000e5c4c0727363627ecbc1fa58a450abffb31538305749d00d856e34c5897e3",
+        "kirakira_agent/environment.py": "d7a2c67bb5c6efb2ef2d2c8ef011c958e012a25e87a19fb7e1cbf3bc31b88c05",
+        "kirakira_agent/client.py": "c60a6613d6d9f507560101c4310e29c8d4bc53914d1398dc5f7c46924b3a8403",
+        "eval/models.py": "7eb7bc7d24fd9b6927ff61ebe26273d55df900cebea4979ce1e36e184c5971ee",
+        "plugins/akasha/contract.py": "c6d7d0c7f0969cef4426ea295c58e7045d784471aee66e039be22b9c9d766167",
+        "plugins/akasha/plugin.py": "67f6ef2c90b78e687662d7f8e47118c99c290149cf2b5de43f6c07b0a05aafc2",
+        "plugins/akasha/query.py": "031b25033f2126da436a4229bf238a814b5bad5f5cad75cd99c71940feb78554",
+        "plugins/akasha/recalls.py": "9f8a404c33fcfe5a5211109fffaf651b501945aaaf72f44c4e31d2bb890c41ac",
+        "plugins/akasha/recall_tool.py": "a1a38c3b47a92c761c010a78335c2f5e179b5df6becb5e0b0ae89225ee353f3c",
+        "plugins/akasha/runtime.py": "ded8b5eb501497adbb03d57870263657b9c6d93ed7888ea05089cd685d487284",
+        "plugins/akasha/excerpts.py": "9a408c9017de5722d68265c7012268bc4801c516137c8cd17b010fdbad19da7d",
+        "plugins/akasha/source_tool.py": "5cd6ba14202ac9a99e36c83e9deccc0c7872998cd67226fd856450a4439cbc41",
+        "plugins/akasha/source_search.py": "87753df2c606ed7a62341630f87f7e130af15a86a90681fbd8fca692ea418843",
+        "plugins/followups/__init__.py": "2f43daa4738a0b465626801fbefd89cd2dff70e5a26f1cf63afa84d7a571472b",
+        "plugins/followups/contract.py": "48ff8dc12ae08b171e086494b880c7bcfc49964f85cbac5495f9e20fa7e1fdd7",
+        "plugins/followups/dashboard.py": "5bdd51774087739ddc6f371023d36a493ab47d0f886139fe4a85ba2045a4f05b",
+        "plugins/followups/feeds.py": "a7da435624fef92a3581a2f0b2cac3a37f5d24a2e88dde6518b62c598299efcf",
+        "plugins/followups/mail_settings.py": "6008e854ee51a4b55af8305d5e3d0b71a6fdaf9b8699a02d47c0703a11dd70f6",
+        "plugins/followups/mailbox.py": "47b30034995e3ca92b25cd44069a4f7a0aeeb90c8347c160c3037198369ea934",
+        "plugins/followups/plugin.py": "89081d40cf08ef012670a49592e40cca8577ae5f674df8504f0483c2baecde28",
+        "plugins/followups/service.py": "6814a70a78e1514cbbb5dc525f8e3baa9351eef83ed96d24d37845068743a7b4",
+        "plugins/followups/tools.py": "a791a534d1544d5c1d94aaf78828e6662c1b195b3c040a1a437efdf42e20fe55",
+        "plugins/followups/webpages.py": "4a29a3d73924fdc0ca31a3f574c91e9ef70d6812f96d4c2b88e9a7e446d03d82",
+        "plugins/drift/__init__.py": "8905bcb66bd1258847589e4b4b0a4eac1f72ea044c09d3b394e98a85d265fa2e",
+        "plugins/drift/contract.py": "2b73654b779b267ec20822193408287a4abeb3426b238d08a04fa5ff2a35e278",
+        "plugins/drift/dashboard.py": "3f793998f1b35c5342298421eb446d79b7d2bf5f7d7baa9fba161c2f562c225e",
+        "plugins/drift/plugin.py": "51aa47ffbb56d487b4fdc572ba1b4df4027b6d38ef695ce0064bd8db0b7e59de",
+        "plugins/drift/producer.py": "281bc2eeb72cd2ad615ca4c868d22aae98de59248cd113b66a86d7920865cfae",
+        "plugins/drift/store.py": "256c225436b0c875f16e3f867b3ff8449cd374198811a5eba7c4114679181d6e",
+        "plugins/prompt/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "plugins/prompt/completion.py": "22df7c364b49c61d44cb71f11530faa213af8c6474cba9d045546608bdc3e1b1",
+        "plugins/prompt/dashboard.py": "32dc7b3cbdb8963d0b90f77cf28d1b18dae6ed400160cfd44d2fb66ddee9c309",
+        "plugins/prompt/persona.py": "979da6581d60524a7b4681dd36e5bb0c3e0d748b5ee31ab5c0980629a0fbb716",
+        "plugins/prompt/personality.py": "a99bfd88e77f79cc7640dc4ed469ee3ed536cb3edb5c834d060103e1f2b76fc9",
+        "plugins/prompt/plugin.py": "3280aa9ed0dafa54301923b27d8d28b2fa3a7a8818a4ef010d5ce2d8a1bb90d2",
+        "plugins/prompt/text.py": "93d2e087d6e9a6524c4464d7f25852bb7b8f88e35ce5f497fc02219a2d27464f",
+        "plugins/markdown_memory/store.py": "774012fb4ea35c4941e805e377fa57ab787997294e03b6fa7d2736df727f4e16",
+        "plugins/prompt/VEDA.md": "f387d558f7cd1ffbf217ea3ff685354af9caee59fc27ac2fa67efb8cee190db4",
+        "plugins/prompt/web_module.js": "3b6bd60494365a50d76fc6320b06ce9953a0247854fbd1bfe8f4f17d3112bf69",
+        "frontend/plugins/prompt/src/index.tsx": "32b66e799d718e573035b5a7af5b8d405425f4b97830086deb00e77469fde76b",
+        "plugins/drift/web_module.js": "87dc03aa145f6e4967498178d7c58f5327767935e6140de0301d8f091b808030",
+        "plugins/drift/web_module.css": "203990074b89d27235fd85b124e8d22b9956b9dd4c2685403ae7fa2fbab37994",
+        "frontend/plugins/drift/src/index.tsx": "739ca8ba40c8b858652efe44bfd2cb94f11ed6ceedd1168e572f3ff0ff5bb3ee",
+        "plugins/eventmail/store.py": "654f6b4c3984e625d7aab3f2b30ed4c9c7f588ce85f0502f9f6e73b0e1c2764f",
+        "plugins/wake/api.py": "c0ee0e1edf5ce0b85fdc45edd887d3c7ff598235dc7e96fb01459d11a3f29a73",
+        "plugins/wake/messages.py": "4429fa781ddbb0b956c36423658507f7769d7181299c629724609a421ff985a2",
+        "plugins/wake/runtime.py": "aefaf7cdce408d0872b91019a93f554d7bc9394ec18811b569b086cf4f8a1e04",
+        "plugins/wake/program.py": "53a89048c03a4eeca761a03035f32750e083f99685ea21860650649a6f70b2ab",
+        "eval/followups.py": "713dfb1bd00d774a8bafb403fd8f7fe80e0aaf889f186efa6b97e8329284420c",
+        "eval/mail_followups.py": "aded8879d90a2bd5291ac16cb31a31d721e6dc82588235824712659e38b12afb",
+        "eval/fixtures/mailbox.py": "ec3f108c4caf2d1108440d526da0b87b1466e07860e2fe19db9deea91796f7fc",
+        "eval/runtime_settings.py": "c5c85f54158bd265e15d19b48cc50fd938d0a878b49fa6d19694c502fc9b8acb",
+        "eval/idle_reflection.py": "4120504207b889bdcd0e4012c0f2b85d42f23355661a229ac9955be6e55f1758",
+        "eval/personality.py": "eec5f440d38cbaff720357e087355d3c3e75972ff411b5d6a383c3156e2eee8f",
+        "eval/prompt_cache.py": "fe19586d98d72e8e1e7db052e12ea114d4970d542471080874a953db066213e0",
+        "third_party/UPSTREAM.json": "b4cc52684579dd7b240b309b451f07c591cef63262e362d6a08cbf855cee5693",
+        "third_party/patches/akasha-empty-rebuild.patch": "acc310c996d2590d54fe89f1147072e0c2fabb909ad17d779c48cd65c95e4230",
+        "third_party/patches/cache-usage-coverage.patch": "8aa98fee2ab5f89a1f6be07322510981987e3525c3161d71435f940abbfe1e4f",
+        "third_party/patches/distribution-branding.patch": "86d3a0284c78324cf2a32cb2ded27d97646e05a22011108d3bedd44c61131df0",
+        "third_party/patches/followup-investigation.patch": "53ea17898a225fdc7d9bb41d124908a227ea1e8c8775f16b5ed1ab01754f1eb7",
+        "third_party/patches/idle-reflection.patch": "11a2ed5bfde2629b933f1e6454a6ec8596542011cf0155668fda07126ce3433a",
+        "third_party/patches/memory-query-api.patch": "ae31cf4aeb361b85f1c27b962b0420105e45897f0f020bad5d7680e457f985d3",
+        "third_party/patches/stage-web-assets.patch": "f23c035cf5897c61ee4dcfade30bafa8dd71c32ebdcf3c21743e31c9800abcc4",
+        "third_party/patches/telegram-latency.patch": "4077f67d80a8d143d4937ff72d409acce5c575fbd3414b0bb4983312a5b5ebef",
+        "third_party/patches/tool-io-bounds.patch": "3ec842bccd7d2b13dee684ff50fd6800fe7b5c641f6cd5c0f8bff0b1e89b9bf9",
+        "third_party/patches/zsh-snapshot-aliases.patch": "a2d4a1cd3635d62edd6ca11a8b2e7ace6b68d0dbec908feeb4bf4a17e1354f55",
+        "eval/memory_runtime.py": "d1dee690cf2b21f6ff831065ae5ddb7513623798a6f733750b7d5accaaeeb42a",
+        "plugins/wake/request.py": "6ee38fd14f0659b61a2037cccd9bfb41cf94510ba41a94494518d3ecf94d5b9f",
+        "core/net/http.py": "ba8705f1273c3dc49ebaa377876c38511ca72727108524f170c0b6a38091f750"
+      }
+    },
+    "native_functional": {
+      "cases": [
+        {
+          "name": "native_reply",
+          "passed": true,
+          "duration_s": 3.199
+        },
+        {
+          "name": "bound_file_roundtrip",
+          "passed": true,
+          "duration_s": 6.71
+        },
+        {
+          "name": "managed_process_mcp",
+          "passed": true,
+          "duration_s": 3.802
+        },
+        {
+          "name": "native_shell",
+          "passed": true,
+          "duration_s": 4.892
+        },
+        {
+          "name": "tool_error_repair",
+          "passed": true,
+          "duration_s": 9.638
+        },
+        {
+          "name": "native_subagent",
+          "passed": true,
+          "duration_s": 10.046
+        },
+        {
+          "name": "driver_local_reload",
+          "passed": true,
+          "duration_s": 3.025
+        },
+        {
+          "name": "task_bound_steer_withdraw",
+          "passed": true,
+          "duration_s": 8.521
+        },
+        {
+          "name": "source_pause_resume_no_effect_replay",
+          "passed": true,
+          "duration_s": 12.507
+        },
+        {
+          "name": "new_input_revokes_old_source_task",
+          "passed": true,
+          "duration_s": 10.595
+        },
+        {
+          "name": "immutable_attachment_projection",
+          "passed": true,
+          "duration_s": 2.071
+        },
+        {
+          "name": "scheduler_native_source_delivery",
+          "passed": true,
+          "duration_s": 14.332
+        },
+        {
+          "name": "restart_reuses_native_history",
+          "passed": true,
+          "duration_s": 5.815
+        }
+      ],
+      "summary": {
+        "passed": 13,
+        "total": 13,
+        "python": "3.14.6",
+        "recorded_business_model_calls": 30,
+        "model_states": {
+          "success": 30
+        },
+        "driver_ids": [
+          "openai-compatible"
+        ],
+        "endpoints": [
+          "https://api.stepfun.com/step_plan/v1"
+        ],
+        "input_tokens": 238552,
+        "output_tokens": 2171,
+        "coverage": "native Models business-call ledger; connection/model setup probes are additional calls"
+      },
+      "implementation": {
+        "kirakira_agent/runtime.py": "1e9e0dc2e980c54bffa568dced9ecd5b9a23bf15d90c581c2cafb77515651958",
+        "kirakira_agent/setup.py": "000e5c4c0727363627ecbc1fa58a450abffb31538305749d00d856e34c5897e3",
+        "kirakira_agent/environment.py": "d7a2c67bb5c6efb2ef2d2c8ef011c958e012a25e87a19fb7e1cbf3bc31b88c05",
+        "kirakira_agent/client.py": "c60a6613d6d9f507560101c4310e29c8d4bc53914d1398dc5f7c46924b3a8403",
+        "eval/models.py": "7eb7bc7d24fd9b6927ff61ebe26273d55df900cebea4979ce1e36e184c5971ee",
+        "plugins/akasha/contract.py": "c6d7d0c7f0969cef4426ea295c58e7045d784471aee66e039be22b9c9d766167",
+        "plugins/akasha/plugin.py": "67f6ef2c90b78e687662d7f8e47118c99c290149cf2b5de43f6c07b0a05aafc2",
+        "plugins/akasha/query.py": "031b25033f2126da436a4229bf238a814b5bad5f5cad75cd99c71940feb78554",
+        "plugins/akasha/recalls.py": "9f8a404c33fcfe5a5211109fffaf651b501945aaaf72f44c4e31d2bb890c41ac",
+        "plugins/akasha/recall_tool.py": "a1a38c3b47a92c761c010a78335c2f5e179b5df6becb5e0b0ae89225ee353f3c",
+        "plugins/akasha/runtime.py": "ded8b5eb501497adbb03d57870263657b9c6d93ed7888ea05089cd685d487284",
+        "plugins/akasha/excerpts.py": "9a408c9017de5722d68265c7012268bc4801c516137c8cd17b010fdbad19da7d",
+        "plugins/akasha/source_tool.py": "5cd6ba14202ac9a99e36c83e9deccc0c7872998cd67226fd856450a4439cbc41",
+        "plugins/akasha/source_search.py": "87753df2c606ed7a62341630f87f7e130af15a86a90681fbd8fca692ea418843",
+        "plugins/followups/__init__.py": "2f43daa4738a0b465626801fbefd89cd2dff70e5a26f1cf63afa84d7a571472b",
+        "plugins/followups/contract.py": "48ff8dc12ae08b171e086494b880c7bcfc49964f85cbac5495f9e20fa7e1fdd7",
+        "plugins/followups/dashboard.py": "5bdd51774087739ddc6f371023d36a493ab47d0f886139fe4a85ba2045a4f05b",
+        "plugins/followups/feeds.py": "a7da435624fef92a3581a2f0b2cac3a37f5d24a2e88dde6518b62c598299efcf",
+        "plugins/followups/mail_settings.py": "6008e854ee51a4b55af8305d5e3d0b71a6fdaf9b8699a02d47c0703a11dd70f6",
+        "plugins/followups/mailbox.py": "47b30034995e3ca92b25cd44069a4f7a0aeeb90c8347c160c3037198369ea934",
+        "plugins/followups/plugin.py": "89081d40cf08ef012670a49592e40cca8577ae5f674df8504f0483c2baecde28",
+        "plugins/followups/service.py": "6814a70a78e1514cbbb5dc525f8e3baa9351eef83ed96d24d37845068743a7b4",
+        "plugins/followups/tools.py": "a791a534d1544d5c1d94aaf78828e6662c1b195b3c040a1a437efdf42e20fe55",
+        "plugins/followups/webpages.py": "4a29a3d73924fdc0ca31a3f574c91e9ef70d6812f96d4c2b88e9a7e446d03d82",
+        "plugins/drift/__init__.py": "8905bcb66bd1258847589e4b4b0a4eac1f72ea044c09d3b394e98a85d265fa2e",
+        "plugins/drift/contract.py": "2b73654b779b267ec20822193408287a4abeb3426b238d08a04fa5ff2a35e278",
+        "plugins/drift/dashboard.py": "3f793998f1b35c5342298421eb446d79b7d2bf5f7d7baa9fba161c2f562c225e",
+        "plugins/drift/plugin.py": "51aa47ffbb56d487b4fdc572ba1b4df4027b6d38ef695ce0064bd8db0b7e59de",
+        "plugins/drift/producer.py": "281bc2eeb72cd2ad615ca4c868d22aae98de59248cd113b66a86d7920865cfae",
+        "plugins/drift/store.py": "256c225436b0c875f16e3f867b3ff8449cd374198811a5eba7c4114679181d6e",
+        "plugins/prompt/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "plugins/prompt/completion.py": "22df7c364b49c61d44cb71f11530faa213af8c6474cba9d045546608bdc3e1b1",
+        "plugins/prompt/dashboard.py": "32dc7b3cbdb8963d0b90f77cf28d1b18dae6ed400160cfd44d2fb66ddee9c309",
+        "plugins/prompt/persona.py": "979da6581d60524a7b4681dd36e5bb0c3e0d748b5ee31ab5c0980629a0fbb716",
+        "plugins/prompt/personality.py": "a99bfd88e77f79cc7640dc4ed469ee3ed536cb3edb5c834d060103e1f2b76fc9",
+        "plugins/prompt/plugin.py": "3280aa9ed0dafa54301923b27d8d28b2fa3a7a8818a4ef010d5ce2d8a1bb90d2",
+        "plugins/prompt/text.py": "93d2e087d6e9a6524c4464d7f25852bb7b8f88e35ce5f497fc02219a2d27464f",
+        "plugins/markdown_memory/store.py": "774012fb4ea35c4941e805e377fa57ab787997294e03b6fa7d2736df727f4e16",
+        "plugins/prompt/VEDA.md": "f387d558f7cd1ffbf217ea3ff685354af9caee59fc27ac2fa67efb8cee190db4",
+        "plugins/prompt/web_module.js": "3b6bd60494365a50d76fc6320b06ce9953a0247854fbd1bfe8f4f17d3112bf69",
+        "frontend/plugins/prompt/src/index.tsx": "32b66e799d718e573035b5a7af5b8d405425f4b97830086deb00e77469fde76b",
+        "plugins/drift/web_module.js": "87dc03aa145f6e4967498178d7c58f5327767935e6140de0301d8f091b808030",
+        "plugins/drift/web_module.css": "203990074b89d27235fd85b124e8d22b9956b9dd4c2685403ae7fa2fbab37994",
+        "frontend/plugins/drift/src/index.tsx": "739ca8ba40c8b858652efe44bfd2cb94f11ed6ceedd1168e572f3ff0ff5bb3ee",
+        "plugins/eventmail/store.py": "654f6b4c3984e625d7aab3f2b30ed4c9c7f588ce85f0502f9f6e73b0e1c2764f",
+        "plugins/wake/api.py": "c0ee0e1edf5ce0b85fdc45edd887d3c7ff598235dc7e96fb01459d11a3f29a73",
+        "plugins/wake/messages.py": "4429fa781ddbb0b956c36423658507f7769d7181299c629724609a421ff985a2",
+        "plugins/wake/runtime.py": "aefaf7cdce408d0872b91019a93f554d7bc9394ec18811b569b086cf4f8a1e04",
+        "plugins/wake/program.py": "53a89048c03a4eeca761a03035f32750e083f99685ea21860650649a6f70b2ab",
+        "eval/followups.py": "713dfb1bd00d774a8bafb403fd8f7fe80e0aaf889f186efa6b97e8329284420c",
+        "eval/mail_followups.py": "aded8879d90a2bd5291ac16cb31a31d721e6dc82588235824712659e38b12afb",
+        "eval/fixtures/mailbox.py": "ec3f108c4caf2d1108440d526da0b87b1466e07860e2fe19db9deea91796f7fc",
+        "eval/runtime_settings.py": "c5c85f54158bd265e15d19b48cc50fd938d0a878b49fa6d19694c502fc9b8acb",
+        "eval/idle_reflection.py": "4120504207b889bdcd0e4012c0f2b85d42f23355661a229ac9955be6e55f1758",
+        "eval/personality.py": "eec5f440d38cbaff720357e087355d3c3e75972ff411b5d6a383c3156e2eee8f",
+        "eval/prompt_cache.py": "fe19586d98d72e8e1e7db052e12ea114d4970d542471080874a953db066213e0",
+        "third_party/UPSTREAM.json": "16e1bfa99a3bb95feb8e0aea6b10ec586ed6c3e063074af95c558df1b7c9b6cf",
+        "third_party/patches/akasha-empty-rebuild.patch": "acc310c996d2590d54fe89f1147072e0c2fabb909ad17d779c48cd65c95e4230",
+        "third_party/patches/cache-usage-coverage.patch": "8aa98fee2ab5f89a1f6be07322510981987e3525c3161d71435f940abbfe1e4f",
+        "third_party/patches/distribution-branding.patch": "679effd6bd0b72a27bfe64bf950e6a06b7f3589ed352f78c6321d5d740946295",
+        "third_party/patches/followup-investigation.patch": "53ea17898a225fdc7d9bb41d124908a227ea1e8c8775f16b5ed1ab01754f1eb7",
+        "third_party/patches/idle-reflection.patch": "11a2ed5bfde2629b933f1e6454a6ec8596542011cf0155668fda07126ce3433a",
+        "third_party/patches/memory-query-api.patch": "ae31cf4aeb361b85f1c27b962b0420105e45897f0f020bad5d7680e457f985d3",
+        "third_party/patches/stage-web-assets.patch": "f23c035cf5897c61ee4dcfade30bafa8dd71c32ebdcf3c21743e31c9800abcc4",
+        "third_party/patches/telegram-latency.patch": "eb5cf92d541a0512fa4fefb4093060a4d69bef34a46926a1e9f71775b02b6fc7",
+        "third_party/patches/tool-io-bounds.patch": "e6988d6661a545a065ba70311d92dab501e4afa16fe6461c842b3295e898eba3",
+        "third_party/patches/zsh-snapshot-aliases.patch": "a2d4a1cd3635d62edd6ca11a8b2e7ace6b68d0dbec908feeb4bf4a17e1354f55"
+      }
+    },
+    "deployment": {
+      "immutable_history_unchanged": true,
+      "history": {
+        "messages": 206,
+        "sha256": "a970723e16ce84732918b1b84a3e89d7b2d80673407c6b8210c69fbd1e043b82"
+      },
+      "profile_count": 8,
+      "profiles_unchanged": true,
+      "configuration_count": 8,
+      "configurations_unchanged": true,
+      "proactive_enabled_unchanged": true,
+      "notification_destination_unchanged": true
+    },
+    "production_ready": {
+      "new_boot": true,
+      "loaded_sources_match": {
+        "context": true,
+        "models": true,
+        "akasha": true,
+        "ledger": true,
+        "conversation": true,
+        "openai-compatible": true,
+        "telegram_channel": true
+      },
+      "health": 200,
+      "gateway_read_only_check": true
+    },
+    "regression": {
+      "passed": 144,
+      "failed": 0,
+      "duration_s": 42.26
+    },
+    "limitations": [
+      "Four provider samples per rendering variant; no production P95 or paired end-to-end speedup claim.",
+      "Production request projection uses a read-only history snapshot and separate native Markdown/tools snapshot.",
+      "No new user Telegram input has yet arrived after deployment; verification is currently controlled Telegram API delivery only."
+    ],
+    "regression_after_topic_material": {
+      "passed": 145,
+      "failed": 0,
+      "duration_s": 64.92,
+      "topic_source_description_followup": "2/2 targeted material/personality tests passed after clarifying current document vs historical source priority; CI checks the full final source."
+    },
+    "topic_material_real_model": {
+      "scope": "Two real native conversation turns, same session and summary generation, synthetic topic file updated between turns. Explicit fixture surface_min_score=0.01; no production configuration or history changed. Actual outgoing model messages observed in RAM only. Explicit tool results and historical answers remain canonical replay facts, even if they contain the old document. Checks only that automatic topic reminders are not persisted into replay.",
+      "cases": [
+        {
+          "name": "topic-1",
+          "passed": true,
+          "new_topic_present": true,
+          "previous_source_text_in_request": false,
+          "answer_correct": true,
+          "saved_automatic_topic_reminders": 0,
+          "explicit_tool_results": 0,
+          "current_topic_occurrences": 1,
+          "usage": {
+            "input_tokens": 7800,
+            "cache_write_input_tokens": null,
+            "cached_input_tokens": 0,
+            "output_tokens": 76,
+            "reasoning_output_tokens": 0,
+            "request_count": 1,
+            "covered_request_count": 1,
+            "coverage": "exact"
+          },
+          "model_calls": 1,
+          "document_unchanged": true
+        },
+        {
+          "name": "topic-2",
+          "passed": true,
+          "new_topic_present": true,
+          "previous_source_text_in_request": true,
+          "answer_correct": true,
+          "saved_automatic_topic_reminders": 0,
+          "explicit_tool_results": 0,
+          "current_topic_occurrences": 1,
+          "usage": {
+            "input_tokens": 7940,
+            "cache_write_input_tokens": null,
+            "cached_input_tokens": 6912,
+            "output_tokens": 3,
+            "reasoning_output_tokens": 0,
+            "request_count": 1,
+            "covered_request_count": 1,
+            "coverage": "exact"
+          },
+          "model_calls": 2,
+          "document_unchanged": true
+        }
+      ],
+      "passed": true,
+      "implementation": {
+        "plugins/markdown_memory/plugin.py": "f69a35047122f65c7b39277e58b42ae3f677029da92531e919f7d5c173542a0a",
+        "plugins/context/plugin.py": "a22766a785c5600a321df5d90bb481ad6e3eca85dbe71ae08c697845085a57ce",
+        "plugins/context/materials.py": "c4472e74d6535ea6fa2424b87e53e56ec67f4aae8c6d19cdedcdba2014d736c5",
+        "plugins/models/projection.py": "fccda7044d4d2dfb8b78931c3b6d0bf510eb5aae99ac4f4c71debe68378e2e0e",
+        "plugins/openai_compatible/driver.py": "49552bb4aa9251c36f040ebd334ad83403aa44a89bea86dbd66704d6eedb1b20",
+        "core/net/http.py": "7cbe556537d31ddc5e5bfdd87f24c25befed1608b8736838c7649d38f44ab7cf"
+      }
+    },
+    "topic_material_stale_source_failure": {
+      "scope": "Two real native conversation turns, same session and summary generation, synthetic topic file updated between turns. Explicit fixture surface_min_score=0.01; no production configuration or history changed. Actual outgoing model messages observed in RAM only. Explicit tool results and historical answers remain canonical replay facts, even if they contain the old document. Checks only that automatic topic reminders are not persisted into replay.",
+      "cases": [
+        {
+          "name": "topic-1",
+          "passed": true,
+          "new_topic_present": true,
+          "previous_source_text_in_request": false,
+          "answer_correct": true,
+          "saved_automatic_topic_reminders": 0,
+          "explicit_tool_results": 1,
+          "current_topic_occurrences": 3,
+          "usage": {
+            "input_tokens": 7973,
+            "cache_write_input_tokens": null,
+            "cached_input_tokens": 7424,
+            "output_tokens": 3,
+            "reasoning_output_tokens": 0,
+            "request_count": 1,
+            "covered_request_count": 1,
+            "coverage": "exact"
+          },
+          "model_calls": 2,
+          "document_unchanged": true
+        },
+        {
+          "name": "topic-2",
+          "passed": false,
+          "new_topic_present": true,
+          "previous_source_text_in_request": true,
+          "answer_correct": false,
+          "saved_automatic_topic_reminders": 0,
+          "explicit_tool_results": 1,
+          "current_topic_occurrences": 1,
+          "usage": {
+            "input_tokens": 8040,
+            "cache_write_input_tokens": null,
+            "cached_input_tokens": 0,
+            "output_tokens": 127,
+            "reasoning_output_tokens": 0,
+            "request_count": 1,
+            "covered_request_count": 1,
+            "coverage": "exact"
+          },
+          "model_calls": 3,
+          "document_unchanged": true
+        }
+      ],
+      "passed": false
+    },
+    "topic_material_observer_development": {
+      "record": {
+        "scope": "Two real native conversation turns, same session and summary generation, synthetic topic file updated between turns. Explicit fixture surface_min_score=0.01; no production configuration or history changed. Actual outgoing model messages observed in RAM only.",
+        "cases": [
+          {
+            "name": "topic-1",
+            "passed": true,
+            "new_topic_present": true,
+            "previous_topic_replayed": false,
+            "current_topic_occurrences": 3,
+            "usage": {
+              "input_tokens": 7946,
+              "cache_write_input_tokens": null,
+              "cached_input_tokens": 7680,
+              "output_tokens": 3,
+              "reasoning_output_tokens": 0,
+              "request_count": 1,
+              "covered_request_count": 1,
+              "coverage": "exact"
+            },
+            "model_calls": 2,
+            "document_unchanged": true
+          },
+          {
+            "name": "topic-2",
+            "passed": false,
+            "new_topic_present": true,
+            "previous_topic_replayed": true,
+            "current_topic_occurrences": 2,
+            "usage": {
+              "input_tokens": 8166,
+              "cache_write_input_tokens": null,
+              "cached_input_tokens": 7680,
+              "output_tokens": 3,
+              "reasoning_output_tokens": 0,
+              "request_count": 1,
+              "covered_request_count": 1,
+              "coverage": "exact"
+            },
+            "model_calls": 4,
+            "document_unchanged": true
+          }
+        ],
+        "passed": false
+      },
+      "reason": "The first observer rejected any old source marker in the request. Explicit tool results are canonical facts and must remain, so the observer was narrowed to saved automatic reminders. The subsequent real stale-answer failure is recorded separately."
+    },
+    "production_ready_after_topics": {
+      "new_boot": true,
+      "loaded_sources_match": {
+        "context": true,
+        "models": true,
+        "akasha": true,
+        "markdown_memory": true,
+        "ledger": true,
+        "conversation": true,
+        "openai-compatible": true,
+        "telegram_channel": true
+      },
+      "health": 200,
+      "gateway_read_only_check": true
+    },
+    "deployment_after_topics": {
+      "immutable_history_unchanged": true,
+      "history": {
+        "messages": 206,
+        "sha256": "a970723e16ce84732918b1b84a3e89d7b2d80673407c6b8210c69fbd1e043b82"
+      },
+      "profiles_unchanged": true,
+      "configurations_unchanged": true,
+      "proactive_enabled_unchanged": true,
+      "notification_destination_unchanged": true
+    }
   }
 }

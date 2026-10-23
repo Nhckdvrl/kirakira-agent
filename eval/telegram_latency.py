@@ -204,7 +204,9 @@ async def evaluate(args):
         report["memory_document_scope"] = "Markdown snapshots only; no production graph, credentials, sessions or polling copied."
     for name in ("eval/telegram_latency.py", "plugins/reply_program/program.py", "plugins/telegram_sender/sender.py",
                  "plugins/compaction/plugin.py", "plugins/compaction/message_summary.py", "plugins/openai_compatible/driver.py",
-                 "plugins/telegram_channel/drafts.py", "plugins/context/materials.py"):
+                 "plugins/openai_compatible/plugin.py", "core/net/http.py", "plugins/ledger/log.py",
+                 "plugins/conversation/plugin.py", "plugins/models/projection.py", "plugins/context/api.py",
+                 "plugins/akasha/runtime.py", "plugins/telegram_channel/drafts.py", "plugins/context/materials.py"):
         report["implementation"][name] = hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
     if telegram:
         from agent.plugin_composition.config_input import save_config, save_credential

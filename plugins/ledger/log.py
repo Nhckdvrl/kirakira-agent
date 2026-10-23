@@ -566,7 +566,20 @@ class MessageLog:
         """原子接纳固定属性；同 ID 重试不能修改已有会话的事实。"""
         if not isinstance(session_id, str) or not session_id:
             raise ValueError("Session ID 不能为空")
+        self._check_async_operation()
         payload = encode_attributes(attributes)
+        # Admitted attributes are immutable. Existing sessions need no writer
+        # transaction, nor another pass through create-once owner initializers.
+        # A miss still enters the original atomic INSERT/conflict transaction.
+        with self._read(snapshot=False):
+            row = self._connection.execute(
+                "SELECT attributes FROM sessions WHERE key=?", (session_id,),
+            ).fetchone()
+        if row is not None:
+            current = decode_attributes(row["attributes"])
+            if current != attributes:
+                raise MessageConflict("同一 Session 的固定属性不能改变")
+            return current
         def create() -> SessionAttributes:
             stamp = datetime.now(UTC).isoformat()
             inserted = self._connection.execute(

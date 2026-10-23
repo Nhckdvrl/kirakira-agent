@@ -31,6 +31,64 @@ from plugins.turn_projection.plugin import TurnProjection
 
 
 @pytest.mark.asyncio
+async def test_automatic_recall_bounds_live_context_and_retires_only_verified_legacy_text(tmp_path):
+    import hashlib
+    from datetime import UTC, datetime
+    from html import escape
+    import numpy as np
+    from plugins.akasha.contract import ContextSource, MemorySourceQuery
+    from plugins.akasha.query import MemoryQueries
+    from plugins.akasha.recalls import context_identity, query_memory, record_materials, render_materials
+    from plugins.models.contract import LLMResponse
+    from plugins.models.projection import check_facts, response_facts
+
+    async with memory_fixture(tmp_path) as (memory, consumer, learning, bindings, log, embeddings, _, _):
+        original = "Background filler. " * 400 + "needleproject budget BUDGET=760."
+        for number in range(3):
+            append_pair(log, embeddings, learning, number, user_text=original if number == 0 else None)
+        await memory.consume()
+        records = RecallRecords(log.owner("akasha"))
+        inputs = log.writer("conversation", author="user", source="conversation", body_types=(Input,), content={"text": check_text})
+        old = inputs.append("legacy-query", Input((ContentPart("text", "needleproject budget"),)))
+        identity = context_identity("conversation", "conversation", old.message_id)
+        recall = query_memory(consumer.cycle, consumer.state, learning_binding="fixed-learning",
+            text="needleproject budget", dense=np.array([1., 0., 0.]), stamp=datetime.now(UTC),
+            source=ContextSource(session_id="conversation", source="conversation", through_seq=old.seq), limit=3)
+        whole = render_materials(identity, recall, learning, log.catalog(), max_chars=12000)
+        recall = record_materials(recall, whole, max_chars=12000)
+        records.save(identity, recall)
+        legacy_text = whole["reminders"][0]["text"]
+        reminder = "PRESERVE_UNRELATED_CONTEXT\n" + escape(legacy_text, quote=False) + "\nPRESERVE_TAIL"
+        facts = response_facts(LLMResponse("noted", call_record_id="fixture-call"), (),
+                               reminder=reminder, reminder_input_id=old.message_id)
+        log.writer("conversation", author="assistant", source="conversation", body_types=(Output,),
+            content={"text": check_text, "model.facts": check_facts}).append("legacy-answer",
+                Output((ContentPart("text", "noted"), facts), "complete"))
+        inputs.append("current-query", Input((ContentPart("text", "needleproject budget"),)))
+        snapshot = log.reader("conversation").snapshot()
+        graph_before = logical_state_sha256(consumer.path)
+        first = await memory.prepare(snapshot, "conversation")
+        assert first == await memory.prepare(snapshot, "conversation")
+        live = [item for item in first["reminders"] if item.get("replay") is False]
+        assert live and sum(len(item["text"]) for item in live) <= 2400
+        assert "BUDGET=760" in str(live)
+        assert any("retrieval_ref" in item["text"] for item in first["reminders"] if item.get("replay", True))
+        patches = first["reminder_patches"]
+        assert len(patches) == 1 and patches[0]["sha256"] == hashlib.sha256(reminder.encode()).hexdigest()
+        p = patches[0]
+        revised = reminder[:p["start"]] + p["text"] + reminder[p["end"]:]
+        assert legacy_text not in revised and identity in revised
+        assert "PRESERVE_UNRELATED_CONTEXT" in revised and "PRESERVE_TAIL" in revised
+        assert log.reader("conversation").snapshot() == snapshot and logical_state_sha256(consumer.path) == graph_before
+        assert records.read(identity) == recall
+        queries = MemoryQueries(capture=None, open_recall=None, catalog=log.catalog(), records=lambda: records,
+                                check_scope=lambda _: "fixture-scope")
+        restored = await queries.source(MemorySourceQuery(session_id="conversation", retrieval_ref=identity,
+            message_id="user-0", offset=len(original) - 80, length=80))
+        assert "BUDGET=760" in restored.text
+
+
+@pytest.mark.asyncio
 async def test_program_memory_query_preserves_graph_budget_and_retry_identity(tmp_path: Path) -> None:
     """A public read uses actual sources, a dated window and one durable receipt."""
     from types import SimpleNamespace

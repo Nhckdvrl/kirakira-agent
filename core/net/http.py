@@ -91,6 +91,60 @@ class HttpClient:
             await self._client.aclose()
 
 
+class _HttpClientLease(HttpClient):
+    """A request scope can expire without closing its provider's transport."""
+
+    def __init__(self, owner: HttpClient) -> None:
+        self._owner = owner
+        self._closed = False
+
+    def client(self) -> httpx.AsyncClient:
+        if self._closed:
+            raise RuntimeError("HTTP 连接已关闭")
+        return self._owner.client()
+
+    async def aclose(self) -> None:
+        self._closed = True
+
+
+class HttpClientPool:
+    """Bounded, lazy clients owned by one plugin, with short-lived leases.
+
+    Keys must include endpoint/configuration and authentication identity. Clients
+    never hold bearer tokens; callers read credentials afresh for every request.
+    Beyond the cache bound, connections retain their ordinary scoped lifecycle.
+    """
+
+    def __init__(self, *, capacity: int = 32) -> None:
+        if capacity < 1:
+            raise ValueError("HTTP pool capacity must be positive")
+        self._capacity = capacity
+        self._clients: dict[object, HttpClient] = {}
+        self._closed = False
+
+    def lease(self, key: object, create: Callable[[], httpx.AsyncClient]) -> HttpClient:
+        if self._closed:
+            raise RuntimeError("HTTP 连接池已关闭")
+        owner = self._clients.get(key)
+        if owner is None:
+            if len(self._clients) >= self._capacity:
+                return HttpClient(create)
+            owner = self._clients[key] = HttpClient(create)
+        return _HttpClientLease(owner)
+
+    async def aclose(self) -> None:
+        self._closed = True
+        clients, self._clients = tuple(self._clients.values()), {}
+        errors: list[BaseException] = []
+        for owner in reversed(clients):
+            try:
+                await owner.aclose()
+            except BaseException as error:
+                errors.append(error)
+        if errors:
+            raise BaseExceptionGroup("HTTP pool cleanup failed", errors)
+
+
 class StreamProgress:
     """只累计等待上游的时间，由协议消费者确认有效进展。"""
 

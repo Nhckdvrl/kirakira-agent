@@ -1,4 +1,4 @@
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Callable, Mapping
 from contextlib import ExitStack
 from functools import partial
 from typing import cast
@@ -37,7 +37,6 @@ from plugins.conversation.contract import (
     CHECK_ORIGIN as CHECK_ORIGIN,
     CONVERSATION_COMPLETE_V2 as CONVERSATION_COMPLETE,
     CONVERSATION_STEER,
-    ConversationCompleteV2 as ConversationComplete,
     input_part_key,
 )
 from plugins.sources.contract import (
@@ -45,7 +44,6 @@ from plugins.sources.contract import (
     SOURCE_SESSION_V4 as SOURCE_SESSION,
     SOURCES_V5 as SOURCES,
     CompletionProgram,
-    SessionFactoryV4 as SessionFactory,
     SourceChangedV3 as SourceChanged,
     GuardedSourceSession as SourceSession,
 )
@@ -125,6 +123,7 @@ async def apply(ctx: Context) -> None:
                 return reader.attributes if catalog.exists(session_id) else SessionAttributes()
 
         attributes = SessionAttributes.scoped(dimensions) if dimensions else await run_file_io(initial_attributes)
+        log_timing("input.attributes.read.end", session_id=session_id, request_id=message_id)
         _ = await ctx.require(SESSION_ADMISSION).ensure_async(ctx, session_id, attributes)
         log_timing("input.attributes.end", session_id=session_id, request_id=message_id)
         # 2. 来源只核验已发布附件，不接管传输 lease 或派生另一份元数据。

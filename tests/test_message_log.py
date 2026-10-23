@@ -115,15 +115,30 @@ def test_failed_binding_write_is_not_cached_and_reopened_data_remains_authoritat
     with pytest.raises(RuntimeError, match="已关闭"):
         reopened.save_binding("retried", {"revision": 2})
 
-def test_session_scope_is_fixed_at_admission_and_absent_for_old_sessions(log, tmp_path):
+@pytest.mark.asyncio
+async def test_session_scope_is_fixed_at_admission_and_absent_for_old_sessions(log, tmp_path, monkeypatch):
+    import asyncio
     _ = writer(log).append("m1", Input(()))
     scoped = SessionAttributes.scoped({"project": "p_1"})
-    assert log.ensure_session("web:a", scoped) == scoped
-    assert log.ensure_session("web:a", scoped) == scoped
-    with pytest.raises(MessageConflict):
-        _ = log.ensure_session("web:a", SessionAttributes.scoped({"project": "p_2"}))
-    with pytest.raises(MessageConflict):
-        _ = log.ensure_session("s", scoped)
+    initialized = []
+    initializers = ((log.owner("fixture"), lambda sid, attrs, tx: initialized.append((sid, attrs))),)
+    admitted = await asyncio.gather(*(log.ensure_session_async("web:a", scoped, initializers=initializers)
+                                     for _ in range(2)))
+    assert admitted == [scoped, scoped] and initialized == [("web:a", scoped)]
+
+    def reject_write(_):
+        raise AssertionError("existing immutable attributes must not open a writer transaction")
+
+    with monkeypatch.context() as patched:
+        patched.setattr(log, "_write", reject_write)
+        assert log.ensure_session("web:a", scoped) == scoped
+        assert await log.ensure_session_async("web:a", scoped, initializers=initializers) == scoped
+        with pytest.raises(MessageConflict):
+            _ = log.ensure_session("web:a", SessionAttributes.scoped({"project": "p_2"}))
+        with pytest.raises(MessageConflict):
+            _ = log.ensure_session("s", scoped)
+        with log.reader("web:a").read_snapshot(), pytest.raises(RuntimeError, match="active storage transaction"):
+            _ = log.ensure_session("web:a", scoped)
     with closing(sqlite3.connect(tmp_path / "sessions.db")) as raw:
         rows = dict(raw.execute("SELECT key, attributes FROM sessions").fetchall())
     assert rows["s"] == '{"learning": "eligible", "visibility": "listed"}'

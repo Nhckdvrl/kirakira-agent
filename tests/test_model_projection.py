@@ -15,6 +15,50 @@ from plugins.models.contract import (
 from plugins.models.projection import MessageProjection
 
 
+def test_historical_reminder_projection_preserves_raw_facts_and_tool_protocol():
+    import hashlib
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+    from plugins.ledger.contract import CallRef, ContentPart, Input, Message, Output, ToolCall, ToolResult
+    from plugins.models.contract import ModelContinuation, ToolCall as ModelToolCall
+    from plugins.models.projection import response_facts
+
+    original = "PRESERVE_THIS\nLARGE_AUTO_RECALL\nPRESERVE_THAT"
+    opaque = ModelContinuation("fixture", {"cursor": "fixture-cursor"})
+    response = LLMResponse("answer", (ModelToolCall("call-1", "tool", {}),), thinking="INTERNAL_REASONING",
+                           call_record_id="record", continuation=opaque)
+    facts = response_facts(response, (1,), reminder=original, reminder_input_id="old-input")
+    def message(identity, seq, body):
+        return Message(identity, "session", seq, datetime.now(UTC), "fixture", "conversation", body)
+    rows = (
+        message("old-input", 0, Input((ContentPart("text", "old user request"),))),
+        message("caller", 1, Output((ContentPart("text", "answer"), ToolCall("tool-binding", {}), facts), "continue")),
+        message("result", 2, ToolResult(CallRef("caller", 1), "success", (ContentPart("text", "TOOL_EVIDENCE"),))),
+        message("completed", 3, Output((ContentPart("text", "completed answer"),), "complete")),
+        message("new-input", 4, Input((ContentPart("text", "new user request"),))),
+    )
+    projection = MessageProjection(SimpleNamespace(descriptor=SimpleNamespace(binding_id="fixture")),
+        source="conversation", render_content=lambda part: ({"type": "text", "text": part.value},) if part.kind == "text" else (),
+        tool_name=lambda _: "tool", read_call=lambda _: {"state": "success", "binding": {"binding_id": "fixture"}},
+        check_summary=lambda _: ContentReferences())
+    baseline = projection.render(rows, after_seq=-1)
+    start = original.index("LARGE_AUTO_RECALL")
+    patch = {"message_id": "caller", "sha256": hashlib.sha256(original.encode()).hexdigest(),
+             "start": start, "end": start + len("LARGE_AUTO_RECALL"), "text": "receipt:exact-source"}
+    changed = projection.render(rows, after_seq=-1, reminder_patches=(patch,))
+    assert changed.content_transformed and changed.continuation is None
+    assert "LARGE_AUTO_RECALL" not in str(changed.messages)
+    assert "PRESERVE_THIS" in str(changed.messages) and "PRESERVE_THAT" in str(changed.messages)
+    assert next(row for row in changed.messages if row["role"] == "assistant")["reasoning_content"] == "INTERNAL_REASONING"
+    assert next(row for row in changed.messages if row["role"] == "tool")["tool_call_id"] == "call-1"
+    assert facts.value["reminder"] == original and rows[-1].body.parts[0].value == "new user request"
+    assert projection.render(rows, after_seq=-1).messages == baseline.messages  # Cached view can restore originals.
+    with pytest.raises(ValueError, match="校验失败"):
+        projection.render(rows, after_seq=-1, reminder_patches=({**patch, "sha256": "0" * 64},))
+    with pytest.raises(ValueError, match="校验失败"):
+        projection.render(rows, after_seq=-1, reminder_patches=(patch, patch))
+
+
 @pytest.mark.parametrize("thinking_format", ["none", "deepseek"])
 def test_internal_request_keeps_effort_unless_connection_can_disable_reasoning(thinking_format):
     from types import SimpleNamespace
