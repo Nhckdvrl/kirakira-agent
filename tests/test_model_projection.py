@@ -15,6 +15,27 @@ from plugins.models.contract import (
 from plugins.models.projection import MessageProjection
 
 
+@pytest.mark.parametrize("thinking_format", ["none", "deepseek"])
+def test_internal_request_keeps_effort_unless_connection_can_disable_reasoning(thinking_format):
+    from types import SimpleNamespace
+    from plugins.openai_compatible.driver import _chat_body
+
+    # No model-name/provider-name dispatch: the connection's negotiated protocol
+    # decides whether an actual off switch exists.
+    descriptor = SimpleNamespace(model="another-vendor-model", reasoning_effort="low")
+    connection = SimpleNamespace(thinking_format=thinking_format)
+    request = ModelRequest(({"role": "user", "content": "summarize"},),
+                           max_output_tokens=1024, disable_reasoning=True)
+    body = _chat_body(descriptor, connection, request)
+    assert body["max_tokens"] == 1024
+    if thinking_format == "none":
+        assert body["reasoning_effort"] == "low"
+        assert "thinking" not in body
+    else:
+        assert body["thinking"] == {"type": "disabled"}
+        assert "reasoning_effort" not in body
+
+
 @pytest.mark.asyncio
 async def test_streamed_tool_identity_is_stable_while_arguments_accumulate():
     from plugins.openai_compatible.driver import _consume_stream, _merge_tool_deltas

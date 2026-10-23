@@ -95,7 +95,7 @@ async def until(predicate):
 @pytest.mark.asyncio
 async def test_telegram_drafts_coalesce_without_backpressuring_generation_or_leaking_reasoning():
     status, bot = Status(), Bot(blocked=True)
-    drafts = ReplyDrafts(SimpleNamespace(open_scope=status.scope), lambda: bot, interval=0.01)
+    drafts = ReplyDrafts(SimpleNamespace(open_scope=status.scope), lambda: bot, interval=0.01, min_chars=1)
     drafts.watch(1)
     try:
         status.emit("output", "first")
@@ -112,11 +112,29 @@ async def test_telegram_drafts_coalesce_without_backpressuring_generation_or_lea
         await drafts.close()
     assert status.scopes == 0
 
+    status, bot = Status(), Bot(blocked=True)
+    drafts = ReplyDrafts(SimpleNamespace(open_scope=status.scope), lambda: bot, interval=0)
+    drafts.watch(1)
+    try:
+        status.emit("short", "在呢。")
+        await until(lambda: status.scopes == 1)
+        await asyncio.sleep(0)
+        async with drafts.delivering(1, "short"):
+            await bot.send_message(chat_id=1, text="在呢。")
+        assert not bot.entered.is_set() and [kind for kind, _ in bot.calls] == ["final"]
+        status.emit("long", "长回答的公开正文。" * 16)
+        await asyncio.wait_for(bot.entered.wait(), 2)
+        bot.release.set()
+        await until(lambda: len(bot.calls) == 2)
+    finally:
+        await drafts.close()
+    assert status.scopes == 0
+
 
 @pytest.mark.asyncio
 async def test_telegram_final_delivery_drains_earlier_draft_and_suppresses_only_that_output():
     status, bot = Status(), Bot(blocked=True)
-    drafts = ReplyDrafts(SimpleNamespace(open_scope=status.scope), lambda: bot, interval=0)
+    drafts = ReplyDrafts(SimpleNamespace(open_scope=status.scope), lambda: bot, interval=0, min_chars=1)
     drafts.watch(1)
 
     async def final():
@@ -155,7 +173,7 @@ async def test_telegram_preview_failure_never_prevents_real_adapter_final_delive
     adapter._started = True
     adapter._app = SimpleNamespace(bot=bot)
     adapter._drafts.watch(1)
-    status.emit("output", "partial")
+    status.emit("output", "partial" * 16)
     await until(lambda: not adapter._drafts.tasks)
     receipt = await adapter.deliver(ProviderDeliveryRequest(
         "binding", "delivery", "1", "complete", session_message_id="output"))
@@ -167,7 +185,7 @@ async def test_telegram_preview_failure_never_prevents_real_adapter_final_delive
 @pytest.mark.asyncio
 async def test_telegram_drafts_cancel_inflight_io_and_skip_groups():
     status, bot = Status(), Bot(blocked=True)
-    drafts = ReplyDrafts(SimpleNamespace(open_scope=status.scope), lambda: bot)
+    drafts = ReplyDrafts(SimpleNamespace(open_scope=status.scope), lambda: bot, min_chars=1)
     drafts.watch(-100)
     assert not drafts.tasks
     drafts.watch(1)
@@ -181,7 +199,7 @@ async def test_telegram_drafts_cancel_inflight_io_and_skip_groups():
 @pytest.mark.asyncio
 async def test_telegram_drafts_reopen_admission_while_old_scope_is_draining():
     status, bot = Status(), Bot(blocked=True)
-    drafts = ReplyDrafts(SimpleNamespace(open_scope=status.scope), lambda: bot, interval=0)
+    drafts = ReplyDrafts(SimpleNamespace(open_scope=status.scope), lambda: bot, interval=0, min_chars=1)
     drafts.watch(1)
     status.emit("old", "old preview")
     await asyncio.wait_for(bot.entered.wait(), 2)
@@ -199,7 +217,7 @@ async def test_telegram_drafts_reopen_admission_while_old_scope_is_draining():
 @pytest.mark.asyncio
 async def test_durable_telegram_sender_drains_preview_for_same_bot_only():
     status, bot = Status(), Bot(blocked=True)
-    drafts = ReplyDrafts(SimpleNamespace(open_scope=status.scope), lambda: bot, interval=0)
+    drafts = ReplyDrafts(SimpleNamespace(open_scope=status.scope), lambda: bot, interval=0, min_chars=1)
     registry = DraftDeliveries()
     remove = registry.register(hashlib.sha256(b"fixture-token").hexdigest(), drafts)
     def unexpected_reader(_):
@@ -254,7 +272,7 @@ async def test_telegram_subscription_is_cancelled_by_real_fiber_before_scope_dra
             async with ctx.runtime_scope():
                 yield RequestContext("fixture", tmp_path, tmp_path, False, _borrow=ctx.borrow)
 
-        drafts = ReplyDrafts(SimpleNamespace(open_scope=scope), lambda: bot, supervised=True)
+        drafts = ReplyDrafts(SimpleNamespace(open_scope=scope), lambda: bot, min_chars=1, supervised=True)
 
         async def follow(child):
             drafts.resume()

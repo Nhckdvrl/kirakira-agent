@@ -1,8 +1,11 @@
-"""候选 Message 摘要入口；正式 manifest 在完整迁移验收后切换。"""
+"""原生上下文压缩：后台整理旧前缀，硬容量不足时由前台缩减。"""
 from __future__ import annotations
 
 from importlib import import_module
-from collections.abc import Callable, Mapping, Sequence
+import asyncio
+from contextlib import aclosing
+from dataclasses import dataclass
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 import logging
 import hashlib
 import json
@@ -18,19 +21,19 @@ from agent.plugin_composition import (
     Context,
 )
 from plugins.models.contract import (
-    CHAT_MODELS, BoundChatModel, ContextModel, ModelError, ModelRequest,
+    CHAT_MODELS, BoundChatModel, BoundModelDescriptor, ContextModel, ModelError, ModelRequest,
     ContextLengthError,
     ModelTimeoutError,
     RateLimitError,
     TransportError,
 )
-from plugins.context.contract import CONTEXT, MATERIALS_V4, OUTPUT_RESERVE_TOKENS, MaterialData, ReductionStatus, output_reserve
+from plugins.context.contract import CONTEXT, MATERIALS_V4, MaterialData, ReductionStatus, output_reserve
 from plugins.ledger.contract import BINDINGS
 from plugins.ledger.contract import MESSAGE_CATALOG, OWNER_STATE
-from plugins.ledger.contract import Input, Message
+from plugins.ledger.contract import Control, Input, Message, MessageConflict, Output
 
 from .records import ManualResetRecord, StoredSummary, SummaryLookup, SummaryRecord, SummaryRecords
-from .message_summary import SummaryError, clip_summary, closed_groups, recoverable, source_text, summarize, summary_groups, window_starts
+from .message_summary import MAX_OUTPUT_TOKENS, SummaryError, clip_summary, closed_groups, recoverable, source_text, summarize, summary_groups, window_starts
 from plugins.compaction.contract import COMPACTION_READER, COMPACTION_SUMMARIES
 from plugins.turn_projection.contract import TURN_PROJECTION, TurnProjection
 from agent.plugin_composition.plugin_config import PLUGIN_CONFIG
@@ -62,6 +65,45 @@ class StartNew(BaseModel):
     session_id: str = Field(min_length=1)
     request_id: str = Field(min_length=1, max_length=128)
     expected_head: int = Field(ge=0)
+
+
+@dataclass(frozen=True)
+class _FrozenProjection:
+    """Only projected data crosses into maintenance; the worker owns its model."""
+
+    model: BoundChatModel
+    tail: ModelRequest
+    cutoff: int
+
+    @property
+    def context_window(self) -> int | None:
+        return self.model.descriptor.capabilities.context_window
+
+    @property
+    def max_tool_schemas(self) -> int | None:
+        return self.model.max_tool_schemas
+
+    def estimate(self, request: ModelRequest) -> int:
+        return self.model.estimate_context_tokens(request.messages, request.tools)
+
+    def render(self, messages: Sequence[Message], *, after_seq: int,
+               summary_reference: str | None = None, **kwargs: object) -> ModelRequest:
+        if after_seq != self.cutoff or summary_reference is None:
+            raise ValueError("后台摘要只能使用已冻结的完整尾部投影")
+        return self.tail
+
+
+@dataclass
+class _Maintenance:
+    source: str
+    boundary_seq: int
+    parent: str | None
+    finish: Callable[[BoundChatModel, ContextModel], Awaitable[MaterialData]]
+    descriptor: BoundModelDescriptor
+    tail: ModelRequest
+    cutoff: int
+    result: asyncio.Future[MaterialData | None]
+    running: bool = False
 
 
 class _CompactionReader:
@@ -97,6 +139,59 @@ async def apply(ctx: Context) -> None:
     # 状态查询在线程执行；启动时取得窄读取口，不在线程中重新申请 owner 写权限。
     read_record: Callable[[str], StoredSummary | None] | None = None
     read_current: Callable[[str], StoredSummary | None] | None = None
+    maintenance: dict[str, _Maintenance] = {}
+    worker: asyncio.Task[None] | None = None
+
+    async def maintain() -> None:
+        catalog = ctx.require(MESSAGE_CATALOG)
+        async with aclosing(catalog.follow(wake_on=(Output, Control))) as updates:
+            async for heads in updates:
+                for session_id in heads:
+                    job = maintenance.get(session_id)
+                    if job is None or job.running:
+                        continue
+                    async with ctx.runtime_scope():
+                        reader = catalog.reader(session_id)
+                        rows = await run_file_io(lambda: reader.snapshot(after_seq=job.boundary_seq))
+                        ending = next((row for row in rows if row.source == job.source and (
+                            isinstance(row.body, Control) or isinstance(row.body, Output)
+                            and row.body.finish != "continue")), None)
+                        if ending is None:
+                            continue
+                        value = None
+                        try:
+                            state = records()
+                            current = await run_file_io(lambda: state.head(session_id))
+                            if isinstance(ending.body, Control) or (None if current is None else current.reference) != job.parent:
+                                continue
+                            if maintenance.get(session_id) is not job:
+                                continue
+                            job.running = True
+                            descriptor = job.descriptor
+                            async with ctx.require(CHAT_MODELS).independent_execution(
+                                model_id=descriptor.model_id, reasoning_effort=descriptor.reasoning_effort,
+                            ) as execution:
+                                model = execution.chat("agent")
+                                if (model.descriptor.model_revision, model.descriptor.capability_digest) != (
+                                    descriptor.model_revision, descriptor.capability_digest,
+                                ):
+                                    continue
+                                # Model execution binds the provider's caller;
+                                # publication must return to the summary owner.
+                                async with ctx.runtime_scope():
+                                    value = await job.finish(model, _FrozenProjection(model, job.tail, job.cutoff))
+                        except MessageConflict:
+                            # A foreground compaction or explicit /new won the CAS.
+                            logger.info("后台摘要的父记录已更新，丢弃旧候选: session=%s", session_id)
+                        except (RuntimeError, TimeoutError, SummaryError) as error:
+                            if not recoverable(error) and ModelError.read(error) is None:
+                                raise
+                            logger.warning("后台摘要未发布，原始记录保留: session=%s error=%s", session_id, type(error).__name__)
+                        finally:
+                            if not job.result.done():
+                                job.result.set_result(value)
+                            if maintenance.get(session_id) is job:
+                                del maintenance[session_id]
 
     def read(reference: str) -> StoredSummary | None:
         if read_record is None:
@@ -109,13 +204,22 @@ async def apply(ctx: Context) -> None:
         return read_current(session_id)
 
     async def start(_event: object) -> None:
-        nonlocal read_current, read_record
+        nonlocal read_current, read_record, worker
         state = records()
         read_record = state.read
         read_current = state.head
+        worker = await ctx.spawn(maintain(), name="context-maintenance")
 
     async def stop(_event: object) -> None:
-        nonlocal read_current, read_record
+        nonlocal read_current, read_record, worker
+        if worker is not None:
+            worker.cancel()
+            await asyncio.gather(worker, return_exceptions=True)
+        worker = None
+        for job in maintenance.values():
+            if not job.result.done():
+                job.result.set_result(None)
+        maintenance.clear()
         read_record = None
         read_current = None
 
@@ -216,7 +320,7 @@ async def apply(ctx: Context) -> None:
     async def compact(snapshot: tuple[Message, ...], materials: MaterialData, request: ModelRequest,
                       model: BoundChatModel, projection: ContextModel, *, source: str, force: bool,
                       on_status: ReductionStatus | None = None,
-                      summary_limit: int | None = None) -> MaterialData | None:
+                      summary_limit: int | None = None, defer: bool = False) -> MaterialData | None:
         """按已结算工具批次选旧前缀，再原子发布一份真实摘要。"""
         # 1. 容量与近期保留均按当前已固定的业务模型判断。
         reminder = context.reminder_content(materials)
@@ -234,7 +338,7 @@ async def apply(ctx: Context) -> None:
         )
         window = projection.context_window
         before = projection.estimate(request)
-        if window is None or not snapshot or (not force and before < int(window * 0.74)):
+        if window is None or not snapshot or (not force and before < int(window * (0.60 if defer else 0.74))):
             return None
         state = records()
         parent = await run_file_io(lambda: state.head(snapshot[0].session_id))
@@ -255,6 +359,8 @@ async def apply(ctx: Context) -> None:
             snapshot if summary_limit is None else snapshot[:summary_limit],
             turns, settled_prefixes=context.settled_prefixes, after=start,
         )
+        if defer and not groups:
+            return None
         # 没有新的已结算批次时，0 表示只重写父摘要本身。
         sizes = range(len(groups), 0, -1) if groups else range(0 if parent is not None else -1, -1, -1)
         selected: int | None = None
@@ -313,73 +419,106 @@ async def apply(ctx: Context) -> None:
         count = start + sum(len(group) for group in groups[:selected])
         added = snapshot[start:count]
 
-        def measure(text: str, calls: tuple[str, ...],
-                    summarized: tuple[tuple[Message, ...], ...]) -> tuple[SummaryRecord, MaterialData, int]:
-            summary_ids = tuple(message.message_id for group in summarized for message in group)
-            kept = set(summary_ids)
-            record = SummaryRecord(
-                reference=uuid4().hex, session_id=snapshot[0].session_id,
-                generation=1 if parent is None else parent.generation + 1,
-                parent=None if parent is None else parent.reference,
-                source_message_ids=tuple(message.message_id for message in snapshot[origin:count]),
-                summary_message_ids=summary_ids,
-                omitted_message_ids=tuple(message.message_id for message in added if message.message_id not in kept),
-                content=text, model_call_ids=calls, trigger="context_overflow" if force else "soft_limit",
-                context_window=window, max_output_tokens=request.max_output_tokens,
-                keep_recent_tokens=config.keep_recent_tokens, tokens_before=before, tokens_after=0,
+        async def finish(model: BoundChatModel, projection: ContextModel,
+                         reporter: ReductionStatus | None = None) -> MaterialData:
+            def measure(text: str, calls: tuple[str, ...],
+                        summarized: tuple[tuple[Message, ...], ...]) -> tuple[SummaryRecord, MaterialData, int]:
+                summary_ids = tuple(message.message_id for group in summarized for message in group)
+                kept = set(summary_ids)
+                record = SummaryRecord(
+                    reference=uuid4().hex, session_id=snapshot[0].session_id,
+                    generation=1 if parent is None else parent.generation + 1,
+                    parent=None if parent is None else parent.reference,
+                    source_message_ids=tuple(message.message_id for message in snapshot[origin:count]),
+                    summary_message_ids=summary_ids,
+                    omitted_message_ids=tuple(message.message_id for message in added if message.message_id not in kept),
+                    content=text, model_call_ids=calls, trigger="context_overflow" if force else "soft_limit",
+                    context_window=window, max_output_tokens=request.max_output_tokens,
+                    keep_recent_tokens=config.keep_recent_tokens, tokens_before=before, tokens_after=0,
+                )
+                summary = material(record)
+                after_request, _ = context.build_attempt(
+                    snapshot, materials={**materials, "summary": summary}, model=projection,
+                    tools=request.tools, max_output_tokens=request.max_output_tokens,
+                    current_reminder_input_id=reminder_input_id,
+                )
+                return record, summary, projection.estimate(after_request)
+
+            def fits(after: int) -> bool:
+                return after < before and after + reserve <= window
+
+            async def generate(groups: tuple[tuple[Message, ...], ...], previous: str,
+                               limit: int) -> tuple[str, tuple[str, ...], tuple[tuple[Message, ...], ...]]:
+                # 嵌套 execution 复用调用者已经固定的角色，不重读模型配置；
+                # 只包住模型调用，摘要 binding 必须回到 compaction 自己的调用方。
+                async with ctx.require(CHAT_MODELS).execution() as execution:
+                    async def report_fallback(text: str) -> None:
+                        if reporter is not None:
+                            await reporter(text, True)
+
+                    return await summarize(groups, previous=previous, limit=limit, model=model,
+                                           fallback=execution.chat("default"), on_fallback=report_fallback)
+
+            limit = max(1, min(room, MAX_OUTPUT_TOKENS))
+            text, calls, summarized = await generate(inputs, "" if parent is None else parent.content, limit)
+            record, summary, after = measure(text, calls, summarized)
+            if not fits(after):
+                try:
+                    shorter, more, _ = await generate((), text, max(1, limit // 2))
+                except (RuntimeError, TimeoutError, SummaryError) as failure:
+                    if not recoverable(failure):
+                        raise
+                    logger.warning("摘要缩写失败，改为按比例截断已有摘要: %s", failure)
+                else:
+                    text, calls = shorter, calls + more
+                    record, summary, after = measure(text, calls, summarized)
+            # 已有合法摘要时本地按比例截断各节正文，直到放得下；只剩标题仍放不下才是真正的容量边界。
+            for ratio in (0.5, 0.25, 0.0):
+                if fits(after):
+                    break
+                record, summary, after = measure(clip_summary(text, ratio), calls, summarized)
+            if after >= before:
+                raise SummaryError("摘要没有降低本次完整请求容量")
+            if after + reserve > window:
+                raise SummaryError(f"摘要只保留标题后输入仍约 {after:,} tokens，当前输入与进行中的工具调用本身超出容量")
+            record = record.model_copy(update={"tokens_after": after})
+            # 3. binding 可以先固定，但读者只有在摘要事务成功后才取得此引用。
+            reader = ctx.require(MESSAGE_CATALOG).reader(record.session_id)
+            _ = await records().publish(
+                record, reader, parent=parent, summary_range=context.summary_range,
             )
-            summary = material(record)
-            after_request, _ = context.build_attempt(
-                snapshot, materials={**materials, "summary": summary}, model=projection,
-                tools=request.tools, max_output_tokens=request.max_output_tokens,
-                current_reminder_input_id=reminder_input_id,
-            )
-            return record, summary, projection.estimate(after_request)
+            return summary
 
-        def fits(after: int) -> bool:
-            return after < before and after + reserve <= window
+        if not defer:
+            return await finish(model, projection, on_status)
 
-        async def generate(groups: tuple[tuple[Message, ...], ...], previous: str,
-                           limit: int) -> tuple[str, tuple[str, ...], tuple[tuple[Message, ...], ...]]:
-            # 嵌套 execution 复用调用者已经固定的角色，不重读模型配置；
-            # 只包住模型调用，摘要 binding 必须回到 compaction 自己的调用方。
-            async with ctx.require(CHAT_MODELS).execution() as execution:
-                async def report_fallback(text: str) -> None:
-                    if on_status is not None:
-                        await on_status(text, True)
-
-                return await summarize(groups, previous=previous, limit=limit, model=model,
-                                       fallback=execution.chat("default"), on_fallback=report_fallback)
-
-        limit = max(1, min(room, OUTPUT_RESERVE_TOKENS))
-        text, calls, summarized = await generate(inputs, "" if parent is None else parent.content, limit)
-        record, summary, after = measure(text, calls, summarized)
-        if not fits(after):
-            try:
-                shorter, more, _ = await generate((), text, max(1, limit // 2))
-            except (RuntimeError, TimeoutError, SummaryError) as failure:
-                if not recoverable(failure):
-                    raise
-                logger.warning("摘要缩写失败，改为按比例截断已有摘要: %s", failure)
-            else:
-                text, calls = shorter, calls + more
-                record, summary, after = measure(text, calls, summarized)
-        # 已有合法摘要时本地按比例截断各节正文，直到放得下；只剩标题仍放不下才是真正的容量边界。
-        for ratio in (0.5, 0.25, 0.0):
-            if fits(after):
-                break
-            record, summary, after = measure(clip_summary(text, ratio), calls, summarized)
-        if after >= before:
-            raise SummaryError("摘要没有降低本次完整请求容量")
-        if after + reserve > window:
-            raise SummaryError(f"摘要只保留标题后输入仍约 {after:,} tokens，当前输入与进行中的工具调用本身超出容量")
-        record = record.model_copy(update={"tokens_after": after})
-        # 3. binding 可以先固定，但读者只有在摘要事务成功后才取得此引用。
-        reader = ctx.require(MESSAGE_CATALOG).reader(record.session_id)
-        _ = await state.publish(
-            record, reader, parent=parent, summary_range=context.summary_range,
-        )
-        return summary
+        # Freeze only the native rendered tail. No caller model, material view,
+        # tool menu, or borrowed execution survives into the owned worker.
+        from types import SimpleNamespace
+        tails: list[ModelRequest] = []
+        def capture(*args, **kwargs):
+            tail = projection.render(*args, **kwargs)
+            tails.append(tail)
+            return tail
+        captured = SimpleNamespace(render=capture, estimate=projection.estimate,
+            context_window=projection.context_window, max_tool_schemas=projection.max_tool_schemas)
+        _ = context.build_attempt(snapshot, materials={**materials, "summary": {
+            "reference": "compaction-plan", "content": "待生成摘要",
+            "source_message_ids": tuple(message.message_id for message in snapshot[origin:count]),
+        }}, model=captured, tools=request.tools, max_output_tokens=request.max_output_tokens,
+            current_reminder_input_id=reminder_input_id)
+        if len(tails) != 1 or tails[0].continuation is not None:
+            raise SummaryError("后台摘要无法取得独立的原生尾部投影")
+        session_id = snapshot[0].session_id
+        if session_id not in maintenance and len(maintenance) >= 64:
+            return None  # A bounded opportunistic queue; foreground remains authoritative.
+        previous = maintenance.pop(session_id, None)
+        if previous is not None and not previous.result.done():
+            previous.result.set_result(None)
+        maintenance[session_id] = _Maintenance(source, snapshot[-1].seq,
+            None if parent is None else parent.reference, finish, model.descriptor,
+            tails[0], snapshot[count - 1].seq, asyncio.get_running_loop().create_future())
+        return None
 
     async def reduce(snapshot: tuple[Message, ...], materials: MaterialData, request: ModelRequest,
                      model: BoundChatModel, projection: ContextModel, *, source: str, force: bool,
@@ -388,11 +527,39 @@ async def apply(ctx: Context) -> None:
         """软水位失败可继续；硬容量或 provider 明确拒绝必须保留失败原因。"""
         window = projection.context_window
         before = projection.estimate(request)
-        if window is None or not snapshot or (not force and before < int(window * 0.74)):
+        if window is None or not snapshot or (not force and before < int(window * 0.60)):
             return None
+        session_id = snapshot[0].session_id
+        must_reduce = force or before + output_reserve(request.max_output_tokens, window) > window
+        job = maintenance.get(session_id)
+        if job is not None:
+            if not must_reduce:
+                return None
+            if job.running:
+                # Join the one real maintenance call; never send a duplicate.
+                await asyncio.shield(job.result)
+            else:
+                # A queued job waits for this reply to finish. It cannot be
+                # joined while this very reply needs space to proceed.
+                maintenance.pop(session_id, None)
+                if not job.result.done():
+                    job.result.set_result(None)
+        state = records()
+        latest = await run_file_io(lambda: state.head(session_id))
+        latest_material = None if latest is None else material(latest)
+        if latest_material != materials.get("summary"):
+            if latest_material is None:
+                raise SummaryError("已有摘要 head 不应消失")
+            materials = {**materials, "summary": latest_material}
+            request, rejection = context.build_attempt(snapshot, materials=materials, model=projection,
+                tools=request.tools, max_output_tokens=request.max_output_tokens)
+            if rejection is None:
+                return latest_material
+            before = projection.estimate(request)
+            must_reduce = True
         budget = (f"模型 {model.descriptor.model_id}；窗口 {window:,}；输入估算 {before:,}；"
                   f"输出预留 {output_reserve(request.max_output_tokens, window):,}；原文目标 {config.keep_recent_tokens:,} tokens")
-        if on_status is not None:
+        if must_reduce and on_status is not None:
             await on_status("正在压缩上下文：" + budget, False)
         notices: list[str] = []
         async def report(text: str, retain: bool) -> None:
@@ -403,10 +570,14 @@ async def apply(ctx: Context) -> None:
 
         try:
             return await compact(snapshot, materials, request, model, projection,
-                                 source=source, force=force, on_status=report, summary_limit=summary_limit)
+                                 source=source, force=force, on_status=report if must_reduce else None,
+                                 summary_limit=summary_limit, defer=not must_reduce)
         except (RuntimeError, TimeoutError, SummaryError) as error:
             if not (ModelError.matches(error, ContextLengthError, ModelTimeoutError, RateLimitError, TransportError) or isinstance(error, SummaryError)):
                 raise
+            if not must_reduce:
+                logger.info("后台摘要暂不安排，前台请求仍满足容量: session=%s error=%s", session_id, type(error).__name__)
+                return None
             detail = f"上下文压缩失败：{type(error).__name__}: {error}。{budget}。"
             if force or before + output_reserve(request.max_output_tokens, window) > window:
                 raise SummaryError("\n".join((*notices, detail + "本次请求被阻断，未继续业务生成。"))) from error

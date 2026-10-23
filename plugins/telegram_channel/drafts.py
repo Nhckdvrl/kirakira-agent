@@ -51,9 +51,10 @@ class ReplyDrafts:
     the adapter's ordinary final delivery retains all durable receipt semantics.
     """
 
-    def __init__(self, context, bot, *, interval=1.0, timeout=2.0, supervised=False):
+    def __init__(self, context, bot, *, interval=1.0, timeout=2.0, min_chars=64, supervised=False):
         self.context, self.bot = context, bot
         self.interval, self.timeout = interval, timeout
+        self.min_chars = min_chars
         self.tasks = {}
         self.locks = {}
         self.chats = set()
@@ -170,7 +171,10 @@ class ReplyDrafts:
                             preview = item.preview
                             text = draft_text(preview.text)
                             current = (preview.message_id, text)
-                            if not text or current == previous:
+                            # A short answer should use its single durable send;
+                            # an almost simultaneous draft adds another network
+                            # request that final delivery must drain.
+                            if len(text) < self.min_chars or not text or current == previous:
                                 continue
                             identity = int.from_bytes(hashlib.sha256(item.handle.encode()).digest()[:8], "big") & ((1 << 63) - 1)
                             log_timing("telegram.draft.begin", session_id=session, request_id=preview.message_id)

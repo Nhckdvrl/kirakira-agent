@@ -617,13 +617,13 @@ def _chat_body(
     if request.tools:
         body["tools"] = request.tools
         body["tool_choice"] = request.tool_choice
-    if descriptor.reasoning_effort and not request.disable_reasoning:
+    # A generic connection has no negotiated reasoning-off switch. Retain its
+    # configured effort instead of silently falling back to the server default.
+    disable_thinking = request.disable_reasoning and connection.thinking_format == "deepseek"
+    if descriptor.reasoning_effort and not disable_thinking:
         body["reasoning_effort"] = descriptor.reasoning_effort
-    if request.disable_reasoning:
-        for key in ("enable_thinking", "thinking", "reasoning_effort"):
-            body.pop(key, None)
-        if connection.thinking_format == "deepseek":
-            body["thinking"] = {"type": "disabled"}
+    if disable_thinking:
+        body["thinking"] = {"type": "disabled"}
     return body
 
 

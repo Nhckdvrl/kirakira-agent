@@ -898,6 +898,26 @@
                  max_bytes=4 * 1024 * 1024,
              )
      except TimeoutError as error:
+@@ -616,13 +617,13 @@
+     if request.tools:
+         body["tools"] = request.tools
+         body["tool_choice"] = request.tool_choice
+-    if descriptor.reasoning_effort and not request.disable_reasoning:
++    # A generic connection has no negotiated reasoning-off switch. Retain its
++    # configured effort instead of silently falling back to the server default.
++    disable_thinking = request.disable_reasoning and connection.thinking_format == "deepseek"
++    if descriptor.reasoning_effort and not disable_thinking:
+         body["reasoning_effort"] = descriptor.reasoning_effort
+-    if request.disable_reasoning:
+-        for key in ("enable_thinking", "thinking", "reasoning_effort"):
+-            body.pop(key, None)
+-        if connection.thinking_format == "deepseek":
+-            body["thinking"] = {"type": "disabled"}
++    if disable_thinking:
++        body["thinking"] = {"type": "disabled"}
+     return body
+ 
+ 
 @@ -1134,16 +1135,22 @@
              raise TransportError("stream tool call index must be non-negative").exception()
          slot = calls.setdefault(index, {"id": "", "name": "", "arguments": ""})

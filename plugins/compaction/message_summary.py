@@ -37,8 +37,14 @@ PROMPT = """更新当前长任务的上下文压缩摘要。
 
 保留路径、符号、命令、错误、数值、外部效果和验证结果。
 仍在运行的执行必须保留 execution_id、命令和当前状态。
-省略重复探索、无用日志和 provider 协议细节。只输出摘要正文。
+优先保留当前目标、未完成工作、明确约束及继续执行所必需的事实。
+已解决的问题只留结论；闲聊只记有持续价值的信息，不能扩写成任务。
+每条事实只写一次，空节写“无”，省略重复探索、无用日志和 provider 协议细节。只输出摘要正文。
 """
+
+# The limit covers the entire generation, including reasoning on providers that
+# cannot disable it. A summary must never inherit an unlimited server default.
+MAX_OUTPUT_TOKENS = 4096
 
 
 class SummaryError(ValueError):
@@ -176,7 +182,11 @@ def summary_groups(groups: tuple[tuple[Message, ...], ...],
 
 def _request(model: BoundChatModel, summary: str, groups: Sequence[tuple[Message, ...]],
              limit: int, excerpt: int) -> ModelRequest:
-    text = PROMPT + f"摘要正文不超过约 {limit:,} tokens。\n"
+    budget = max(1, min(limit, MAX_OUTPUT_TOKENS))
+    maximum = model.descriptor.capabilities.max_output_tokens
+    if maximum is not None and maximum > 0:
+        budget = min(budget, maximum)
+    text = PROMPT + f"摘要正文不超过约 {max(1, budget // 2):,} tokens；信息少时应更短。\n"
     text += "\n[Previous summary]\n" + summary + "\n[Source messages]\n"
     text += source_text(tuple(message for group in groups for message in group), excerpt=excerpt)
     rows = ({"role": "user", "content": text},)
@@ -186,8 +196,7 @@ def _request(model: BoundChatModel, summary: str, groups: Sequence[tuple[Message
     estimated = model.estimate_context_tokens(rows)
     if estimated > int(window * 0.74):
         raise SummaryError("单个摘要请求超出模型软水位")
-    # 复用 provider 默认输出长度，不以旧摘要上限截断长任务资料。
-    return ModelRequest(rows, max_output_tokens=0, disable_reasoning=True)
+    return ModelRequest(rows, max_output_tokens=budget, disable_reasoning=True)
 
 
 def _fits(model: BoundChatModel, summary: str, groups: Sequence[tuple[Message, ...]],
@@ -235,6 +244,8 @@ async def _summarize(model: BoundChatModel, groups: tuple[tuple[Message, ...], .
     response = await model.complete(_request(model, summary, selected, limit, excerpt))
 
     # 只接纳成功调用的真实正文；格式错误不会用空摘要掩盖。
+    if response.finish_reason == "length":
+        raise SummaryError("摘要生成达到输出上限，未发布不完整摘要")
     text = (response.content or "").strip()
     headings = tuple(line.strip() for line in text.splitlines() if line.lstrip().startswith("#"))
     if response.tool_calls or headings != HEADINGS:

@@ -179,6 +179,12 @@ uv run --frozen --no-sync python -m eval.telegram_latency \
 将隔离工作区放在生产同类文件系统上，才能观察相应磁盘开销。报告只记录各角色正文、推理字段与工具 schema
 的字符数和实际用量；字符数不是 token 数。默认模式仍保留原同字节重放诊断。
 
+`--case context-maintenance --no-direct-replay` 在软水位放入含更正日期、负责人、数据限制和未完成工作的
+合成历史，核对先回答、后整理，以及原文和开放工作不被压缩覆盖。报告的 `native_total_ms` 截至回复或
+投递确认，`native_summary_driver_ms` 与 `maintenance_wait_after_reply_ms` 另计后台整理；
+`model_calls` 包含随后完成的摘要调用。`--case context-compaction` 则直接超过硬容量，检查必须等待压缩时
+仍能恢复这些事实；两种场景不能互相替代。
+
 报告分开记录原始 SSE 正文、公开正文回调、草稿 API 确认、最终回执和各材料阶段；推理字段不算正文。每次结束后顺序重放相同原生请求字节，只存摘要和大小，不保存正文或密钥。先后次序可能预热供应商缓存，因此不能据此计算产品 A/B 加速比。默认头部跟踪支持通用兼容驱动及既有订阅驱动，不依赖具体模型名。
 
 结果、慢样本与开发失败见 [Telegram 实测](../docs/operations/evaluations/2026-10-22-telegram-latency.md)。

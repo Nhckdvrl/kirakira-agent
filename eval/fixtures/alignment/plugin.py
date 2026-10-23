@@ -1,6 +1,7 @@
 """Controlled historical inputs through real admission and writer capabilities."""
 
 from pydantic import BaseModel, Field
+from typing import Literal
 
 from plugins.content.contract import CONTENT
 from plugins.gateway.contract import RpcMethod
@@ -21,6 +22,7 @@ inject = (CONTENT, MESSAGE_WRITERS, SESSION_ADMISSION)
 
 class Seed(BaseModel):
     session_id: str
+    visibility: Literal["listed", "internal"] = "listed"
     records: list[dict] = Field(default_factory=list, max_length=8)
 
 
@@ -28,7 +30,7 @@ async def apply(ctx):
     @ctx.entrypoint
     async def seed(params):
         await ctx.require(SESSION_ADMISSION).ensure_async(
-            ctx, params.session_id, SessionAttributes(learning="excluded")
+            ctx, params.session_id, SessionAttributes(learning="excluded", visibility=params.visibility)
         )
         for index, record in enumerate(params.records):
             body = (

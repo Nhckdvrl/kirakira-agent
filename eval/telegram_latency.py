@@ -31,6 +31,7 @@ from kirakira_agent.client import AsyncClient
 from kirakira_agent.runtime import ROOT, initialize_workspace, rpc, runtime
 from kirakira_agent.setup import configure_embedding
 from plugins.channels.contract import CHANNELS
+from plugins.compaction.contract import COMPACTION_SUMMARIES
 from plugins.delivery.contract import DELIVERY_READ
 from plugins.ledger.contract import MESSAGE_CATALOG, Control, Output, ToolResult
 
@@ -106,6 +107,7 @@ class Capture:
             data = original_encode(bound, body, request)
             if (row := self.active.get()) is not None:
                 row["body"] = data
+                row["purpose"] = "summary" if "[Source messages]" in str(request.messages) else "reply"
             return data
 
         async def complete(bound, request):
@@ -201,6 +203,7 @@ async def evaluate(args):
         report["memory_document_sha256"] = profile_digests
         report["memory_document_scope"] = "Markdown snapshots only; no production graph, credentials, sessions or polling copied."
     for name in ("eval/telegram_latency.py", "plugins/reply_program/program.py", "plugins/telegram_sender/sender.py",
+                 "plugins/compaction/plugin.py", "plugins/compaction/message_summary.py", "plugins/openai_compatible/driver.py",
                  "plugins/telegram_channel/drafts.py", "plugins/context/materials.py"):
         report["implementation"][name] = hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
     if telegram:
@@ -268,14 +271,23 @@ async def evaluate(args):
                              ("long-stream", "直接用约400个汉字解释为什么人们喜欢星空。不要调用工具。")]
                     selected = getattr(args, "case_names", None)
                     if selected:
-                        available = dict(cases + [("natural-greeting", "你好"),
-                                                  ("natural-followup", "在吗")])
+                        available = dict(cases + [("natural-greeting", "你好"), ("natural-followup", "在吗")])
+                        available.update({label: "根据前面的项目记录，回答项目代号、当前截止日期、负责人、演示数据限制，以及仍未完成的工作。用一行简答，不调用工具。"
+                                          for label in ("context-compaction", "context-maintenance")})
                         cases = [(label, available[label]) for label in dict.fromkeys(selected)]
                     for label, prompt in cases:
                         if not telegram:
                             session = "programmatic:latency-" + uuid4().hex
                             await client.request("programmatic/session/admit", {"session_id": session, "persist_memory": False})
+                        if label in {"context-compaction", "context-maintenance"}:
+                            await rpc(core, "evaluation/seed", {"session_id": session,
+                                "visibility": "listed" if telegram else "internal", "records": [
+                                {"kind": "input", "text": "项目记录：代号 KIRA-C27，截止日期由2026-11-03更正为2026-11-06，负责人许澄。演示必须用匿名样本。仍未完成：重启后核对投递回执。"},
+                                {"kind": "output", "text": "重复检查已完成，无新增事实。" * (7000 if label == "context-compaction" else 3000)},
+                                {"kind": "output", "text": "OPEN_COMPACTION_WORK", "source": "job:evaluation", "finish": "continue"},
+                            ]})
                         reader = catalog.reader(session)
+                        original = reader.snapshot() if label in {"context-compaction", "context-maintenance"} else ()
                         head, call_start, timing_start = reader.head(), len(capture.calls), len(timings.rows)
                         draft_start = len(draft_rows) if telegram else 0
                         identity = "probe-" + uuid4().hex
@@ -298,10 +310,17 @@ async def evaluate(args):
                             await client.request("programmatic/message/send", {"session_id": session, "message_id": identity, "text": prompt})
                             answer = await terminal(reader, head, source="programmatic")
                         total = (time.monotonic() - start) * 1000
+                        maintenance_wait = None
+                        if label == "context-maintenance":
+                            begin_wait = time.monotonic()
+                            async with asyncio.timeout(120):
+                                while context.require(COMPACTION_SUMMARIES).head(session) is None:
+                                    await asyncio.sleep(0.05)
+                            maintenance_wait = (time.monotonic() - begin_wait) * 1000
                         calls = capture.calls[call_start:]
                         if not calls:
                             raise RuntimeError("native wire capture was not attached")
-                        body = calls[-1]["body"]
+                        body = next(c["body"] for c in reversed(calls) if c["purpose"] == "reply")
                         wire = json.loads(body)
                         role_chars = {}
                         for message in wire["messages"]:
@@ -313,6 +332,8 @@ async def evaluate(args):
                         row = {"case": label, "passed": True, "native_total_ms": total,
                                "model_calls": len(calls), "tool_results": sum(isinstance(m.body, ToolResult) for m in rows),
                                "native_driver_ms": sum(c["duration_ms"] for c in calls),
+                               "native_reply_driver_ms": sum(c["duration_ms"] for c in calls if c["purpose"] == "reply"),
+                               "native_summary_driver_ms": sum(c["duration_ms"] for c in calls if c["purpose"] == "summary"),
                                "native_first_visible_content_ms": None if first is None else (first - start) * 1000,
                                "request_sha256": hashlib.sha256(body).hexdigest(), "request_bytes": len(body),
                                "request_profile": {"content_chars_by_role": role_chars,
@@ -322,7 +343,10 @@ async def evaluate(args):
                                "same_payload_replayed": not getattr(args, "no_direct_replay", False),
                                "direct": None if getattr(args, "no_direct_replay", False) else await replay(direct_client, body)}
                         row["native_attempts"] = [{k: v for k, v in c.items() if k in (
-                            "duration_ms", "legacy_think_tag_seen", "thinking_chars", "usage")}
+                            "purpose", "duration_ms", "legacy_think_tag_seen", "thinking_chars", "usage")}
+                            | {"begin_ms": (c["begin"] - start) * 1000}
+                            | {"request_policy": {k: json.loads(c["body"])[k] for k in
+                                ("max_tokens", "reasoning_effort", "thinking") if k in json.loads(c["body"])}}
                             | {k + "_ms": (c[k] - start) * 1000 for k in (
                                 "first_raw_content_at", "legacy_close_at", "first_content_at") if c.get(k) is not None}
                             for c in calls]
@@ -332,6 +356,26 @@ async def evaluate(args):
                         if label in {"natural-greeting", "natural-followup"}:
                             row["passed"] = bool(text(answer).strip()) and row["tool_results"] == 0
                             row["prompt_forbids_tools"] = False
+                        if label in {"context-compaction", "context-maintenance"}:
+                            summary = context.require(COMPACTION_SUMMARIES).head(session)
+                            facts = ("KIRA-C27", "2026-11-06", "许澄", "匿名", "投递回执")
+                            checks = {
+                                "summary_created": summary is not None,
+                                "answer_retains_facts": all(fact in text(answer) for fact in facts),
+                                "raw_history_unchanged": reader.snapshot()[:len(original)] == original,
+                                "open_work_not_compacted": summary is not None and not any(
+                                    identity.endswith(":seed:2") for identity in summary.source_message_ids),
+                            }
+                            row["compaction"] = {**checks, "facts_checked": len(facts),
+                                "tokens_before": None if summary is None else summary.tokens_before,
+                                "tokens_after": None if summary is None else summary.tokens_after}
+                            if label == "context-maintenance":
+                                reply_end = max(c["begin"] + c["duration_ms"] / 1000 for c in calls if c["purpose"] == "reply")
+                                row["compaction"].update(maintenance_wait_after_reply_ms=maintenance_wait,
+                                    measurement_scope="native_total_ms stops at reply/delivery; model_calls and native_driver_ms also include subsequent maintenance",
+                                    summary_started_after_reply_model=all(c["begin"] >= reply_end for c in calls if c["purpose"] == "summary"))
+                                checks["summary_started_after_reply_model"] = row["compaction"]["summary_started_after_reply_model"]
+                            row["passed"] = all(checks.values()) and row["tool_results"] == 0
                         if telegram:
                             drafts = draft_rows[draft_start:]
                             row.update(drafts=len(drafts), final_delivered=True,
@@ -359,7 +403,7 @@ def main():
     parser.add_argument("--telegram-chat-file", type=Path)
     parser.add_argument("--expected-bot")
     parser.add_argument("--case", dest="case_names", action="append", choices=(
-        "natural-greeting", "natural-followup", "short-cold", "short-warm", "model-identity", "long-stream"))
+        "natural-greeting", "natural-followup", "context-compaction", "context-maintenance", "short-cold", "short-warm", "model-identity", "long-stream"))
     parser.add_argument("--no-direct-replay", action="store_true",
                         help="Measure only native turns without an intervening duplicate provider request")
     parser.add_argument("--memory-documents", type=Path,

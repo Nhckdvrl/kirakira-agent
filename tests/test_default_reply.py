@@ -8,7 +8,6 @@ from tests.fixtures.plugin_workspace import initialize_plugin_workspace
 from agent.plugin_composition.config_input import save_config
 from plugins.channels.contract import CHANNEL_INPUT_V2 as CHANNEL_INPUT, ChannelInboundMessage
 from agent.plugins.manager import PluginManager
-from plugins.ledger.log import MessageLog
 from plugins.ledger.contract import Input, Output, ToolResult
 
 @asynccontextmanager
@@ -128,6 +127,8 @@ async def apply(ctx):
     )
     model = _BoundChat(descriptor, Driver(), store)
     class Models:
+        def independent_execution(self, **options):
+            return self.execution(**options)
         @asynccontextmanager
         async def execution(self, *, model_id=None, reasoning_effort=None):
             # 与正式 models 一致：执行期间调用方切换为提供者自己的 Context。

@@ -15,6 +15,104 @@ from tests.support.material_models import material_models
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("release", [True, False])
+async def test_slow_context_maintenance_does_not_block_replies_and_drains_on_shutdown(tmp_path, release):
+    from datetime import UTC, datetime
+    from agent.plugin_composition import ServiceKey
+    from plugins.channels.contract import CHANNEL_INPUT_V2, ChannelInboundMessage
+    from plugins.compaction.contract import COMPACTION_SUMMARIES
+    from plugins.ledger.contract import ContentPart, ContentReferences, Input, Output
+    from tests.test_default_reply import application
+
+    def gated_summary(sources):
+        path = sources / "test_provider/plugin.py"
+        code = path.read_text().replace("calls = []", "calls = []\n    entered, ready = __import__('asyncio').Event(), __import__('asyncio').Event()")
+        code = code.replace('from plugins.compaction.message_summary import HEADINGS',
+            'entered.set()\n                await ready.wait()\n                from plugins.compaction.message_summary import HEADINGS')
+        code = code.replace('await ctx.provide(ServiceKey("fixture.calls"), calls)',
+            'await ctx.provide(ServiceKey("fixture.calls"), calls)\n    await ctx.provide(ServiceKey("fixture.summary_gate"), (entered, ready))')
+        path.write_text(code)
+
+    async with application(tmp_path, replying=True, compaction=True, extra_sources=gated_summary) as (log, host):
+        root = host.live_root.context
+        sid = "test:maintenance"
+        writer = log.writer(sid, author="user", source="history", body_types=(Input, Output),
+                            content={"text": lambda part: ContentReferences()})
+        writer.append("history-input", Input((ContentPart("text", "保留当前工作。"),)))
+        writer.append("history-output", Output((ContentPart("text", "settled history " * 1500),), "complete"))
+        writer.expire()
+        original = log.reader(sid).snapshot()
+        entered, ready = root.require(ServiceKey("fixture.summary_gate"))
+        calls = root.require(ServiceKey("fixture.calls"))
+        accept = root.require(CHANNEL_INPUT_V2)
+
+        async def send(identity, text):
+            accepted = await accept(sid, identity, ChannelInboundMessage(
+                "test", "user", "maintenance", text, datetime.now(UTC), {}))
+            async with asyncio.timeout(5):
+                async for _ in log.catalog().follow():
+                    if any(row.seq > accepted.seq and isinstance(row.body, Output)
+                           and row.body.finish == "complete" for row in log.reader(sid).snapshot()):
+                        return
+
+        await send("first", "继续。")
+        await asyncio.wait_for(entered.wait(), 5)
+        assert root.require(COMPACTION_SUMMARIES).head(sid) is None
+        await send("second", "在吗？")  # Completes while the summary call is held.
+        assert not ready.is_set()
+        if release:
+            # A hard-capacity request joins the existing call instead of
+            # generating a second summary or waiting for its own completion.
+            third = asyncio.create_task(send("third", "当前输入 " * 1800))
+            await asyncio.sleep(0.05)
+            assert not third.done()
+            ready.set()
+            await third
+            summary = root.require(COMPACTION_SUMMARIES).head(sid)
+            assert summary is not None and summary.version == 2
+            assert summary.source_message_ids == tuple(row.message_id for row in original)
+            assert len(summary.model_call_ids) == 1
+        assert sum("[Source messages]" in str(call.messages) for call in calls) == 1
+        assert log.reader(sid).snapshot()[:len(original)] == original
+    # The False branch exits with a blocked model call: real shutdown must
+    # cancel and drain the worker, not retain a borrowed caller scope.
+
+
+@pytest.mark.asyncio
+async def test_compaction_has_a_real_generation_budget_and_rejects_truncated_facts(tmp_path, monkeypatch):
+    from dataclasses import replace
+    from plugins.compaction.message_summary import HEADINGS, SummaryError, _request, _summarize
+    from plugins.models.contract import LLMResponse
+    from tests.support.material_models import _FixtureChat
+
+    async with material_models(tmp_path) as models:
+        async with models.chat_models.execution() as execution:
+            model = execution.chat("default")
+            # Both a tighter available room and a model's declared output limit
+            # must make it into the actual request, never a zero/unlimited cap.
+            assert _request(model, "", (), 512, 200).max_output_tokens == 512
+            assert _request(model, "", (), 16_384, 200).max_output_tokens == 1024
+            requests = []
+
+            async def truncated(_self, request):
+                requests.append(request)
+                return LLMResponse("\n".join(HEADINGS), finish_reason="length")
+
+            monkeypatch.setattr(_FixtureChat, "complete", truncated)
+            with pytest.raises(SummaryError, match="输出上限"):
+                await _summarize(model, (), "用户明确要求保留路径和未完成任务。", 16_384)
+            assert len(requests) == 1 and requests[0].max_output_tokens == 1024
+
+            async def complete(_self, request):
+                return replace(await truncated(_self, request), finish_reason="stop")
+
+            monkeypatch.setattr(_FixtureChat, "complete", complete)
+            text, calls, groups = await _summarize(model, (), "", 512)
+            assert text == "\n".join(HEADINGS) and len(calls) == 1 and groups == ()
+            assert requests[-1].max_output_tokens == 512
+
+
+@pytest.mark.asyncio
 async def test_explicit_new_context_retains_history_and_does_not_replay_old_prompt(tmp_path):
     from types import SimpleNamespace
     from datetime import UTC, datetime
