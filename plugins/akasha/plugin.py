@@ -15,7 +15,7 @@ from typing import Literal, Self, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from agent.plugin_composition import RUNTIME_STARTED, RUNTIME_STOPPING, Context, ServiceKey
+from agent.plugin_composition import RUNTIME_STARTED, RUNTIME_STOPPING, Context
 from plugins.akasha.contract import EMBEDDING_MEMORY_PLUGIN
 from plugins.models.contract import EMBEDDINGS
 from plugins.ui.contract import (
@@ -43,7 +43,7 @@ from plugins.models.contract import (
     SavedEmbedding,
 )
 from plugins.ui.contract import UI
-from plugins.ledger.contract import Message
+from plugins.ledger.contract import Message, MessageCatalog
 from plugins.context.contract import (
     MATERIALS_V4 as MATERIALS,
 )
@@ -55,7 +55,7 @@ from ._boundaries import (
     ContentCapability,
     ToolCatalog,
 )
-from .application.consumer import MessageConsumer
+from .application.consumer import MessageConsumer, run_memory_job
 from .application.rebuild import manifest_json, rebuild_from_catalog
 from .application.snapshot import read_memory
 from .config import AkashaConfig, resolve_memory_path
@@ -91,6 +91,18 @@ desc = "从消息学习并提供普通 Context 材料与记忆工具"
 workspace_roots = ("memory",)
 
 MaterialData = Mapping[str, object]
+
+
+async def _write_graphs(
+    catalog: MessageCatalog, policies: ScopePolicies, heads: Mapping[str, int] | None = None,
+) -> tuple[str, ...]:
+    """Discover immutable Session routes off the host loop, reusing notified heads."""
+    def discover() -> tuple[str, ...]:
+        fixed = catalog.snapshot_heads() if heads is None else heads
+        routed = {policies.route(session_id).write for session_id in fixed}
+        return (DEFAULT_GRAPH, *sorted(key for key in routed if key is not None and key != DEFAULT_GRAPH))
+
+    return await run_memory_job(discover)
 
 
 function_inject = (TURN_PROJECTION, CONTENT, MATERIALS, TOOLS, EMBEDDINGS,
@@ -250,12 +262,6 @@ async def run(ctx: Context, interest: Interest) -> None:
     def member(key: str) -> Callable[[str], bool]:
         return lambda session_id: policies.route(session_id).write == key
 
-    def write_graphs() -> tuple[str, ...]:
-        """default 图总在；独立图只在有成员 Session 后才建立。"""
-        heads = ctx.require(MESSAGE_CATALOG).snapshot_heads()
-        routed = {policies.route(session_id).write for session_id in heads}
-        return (DEFAULT_GRAPH, *sorted(key for key in routed if key is not None and key != DEFAULT_GRAPH))
-
     def records() -> RecallRecords:
         return RecallRecords(record_state)
 
@@ -395,7 +401,7 @@ async def run(ctx: Context, interest: Interest) -> None:
         }
 
     async def prepare(snapshot: tuple[Message, ...], source: str) -> MaterialData:
-        key = policies.route(snapshot[0].session_id).read if snapshot else DEFAULT_GRAPH
+        key = (await run_memory_job(partial(policies.route, snapshot[0].session_id))).read if snapshot else DEFAULT_GRAPH
         # An explicit policy denial precedes graph startup, embeddings, and receipts.
         if key is None:
             return {}
@@ -583,8 +589,9 @@ async def run(ctx: Context, interest: Interest) -> None:
         starting_rules[key] = rule
         try:
             try:
+                path = await run_memory_job(partial(ensure_graph_directory, memory_path, key))
                 consumer = await MessageConsumer.load(
-                    ensure_graph_directory(memory_path, key), catalog=ctx.require(MESSAGE_CATALOG),
+                    path, catalog=ctx.require(MESSAGE_CATALOG),
                     embeddings=ctx.require(MESSAGE_EMBEDDINGS), bindings=ctx.require(BINDINGS),
                     config=settings.memory_config(), cutover=key == DEFAULT_GRAPH,
                     restore_embeddings=restore_embeddings,
@@ -636,8 +643,8 @@ async def run(ctx: Context, interest: Interest) -> None:
                     await close_memory()
                     memory_rule = None
                     reports: list[str] = []
-                    for key in write_graphs():
-                        path = ensure_graph_directory(memory_path, key)
+                    for key in await _write_graphs(ctx.require(MESSAGE_CATALOG), policies):
+                        path = await run_memory_job(partial(ensure_graph_directory, memory_path, key))
                         backup_root = rebuild_backup_root if key == DEFAULT_GRAPH else (
                             rebuild_backup_root / "graphs" / path.parent.name
                         )
@@ -712,7 +719,12 @@ async def run(ctx: Context, interest: Interest) -> None:
                 await changed.wait()
                 changed.clear()
                 async with ctx.runtime_scope(), graph_access(key):
+                    started = key in memories
                     if not await start_memory(key):
+                        continue
+                    if not started:
+                        # 首次启动已追赶自己的真实前缀。初始化期间的新通知仍留在
+                        # changed 中，下一轮再追赶，不能在这里清除或重复扫描。
                         continue
                     try:
                         _ = await memories[key].consume()
@@ -724,10 +736,11 @@ async def run(ctx: Context, interest: Interest) -> None:
                         health.degrade(str(error))
 
         async with asyncio.TaskGroup() as group:
-            async for _heads in ctx.require(MESSAGE_CATALOG).follow():
+            async for heads in ctx.require(MESSAGE_CATALOG).follow():
                 async with ctx.runtime_scope():
                     await run_pending_rebuild()
-                    for key in write_graphs():
+                    # follow 已给出真实目录快照；这里只发现图，消费者另取本轮固定前缀。
+                    for key in await _write_graphs(ctx.require(MESSAGE_CATALOG), policies, heads):
                         changed = pending.get(key)
                         if changed is None:
                             changed = pending[key] = asyncio.Event()

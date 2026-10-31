@@ -50,6 +50,7 @@
 | runtime_diagnostics | 运行组件 | 是 |
 | runtime_inspection | 运行组件 | 是 |
 | scheduler | 运行组件 | 是 |
+| session_reference | 发行扩展 | 是 |
 | session_title | 运行组件 | 可选 |
 | shell | 运行组件 | 是 |
 | shell-ui | 运行组件 | 可选 |

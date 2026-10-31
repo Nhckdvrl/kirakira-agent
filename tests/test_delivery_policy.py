@@ -132,7 +132,7 @@ async def test_real_input_reply_and_archived_delivery_are_independent_consumers(
 
 
 @pytest.mark.asyncio
-async def test_slow_destination_does_not_delay_next_fast_receipt(tmp_path):
+async def test_slow_destination_does_not_delay_next_fast_receipt(tmp_path, monkeypatch):
     """O: real durable selections advance independently, with per-sink order."""
     from contextlib import asynccontextmanager
 
@@ -141,13 +141,17 @@ async def test_slow_destination_does_not_delay_next_fast_receipt(tmp_path):
     from plugins.delivery.api import Receipt
     from plugins.delivery.execution import Deliveries
     from plugins.delivery_policy.follow import follow
+    from plugins.delivery_policy.plugin import DeliveryFinalOutput
     from plugins.ledger.log import MessageLog
+    from tests.test_akasha_execution import WorkerGate, loop_turn
     from tests.test_message_log import writer
+    import threading
+    from types import SimpleNamespace
 
     log = MessageLog(tmp_path / "sessions.db")
     root = CompositionRoot("delivery-isolation")
     tasks = Tasks()
-    entered, release, fast = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    entered, release, fast, slow = (asyncio.Event() for _ in range(4))
     sent = {"slow": [], "fast": []}
 
     class Sender:
@@ -169,17 +173,73 @@ async def test_slow_destination_does_not_delay_next_fast_receipt(tmp_path):
 
     records = DeliveryRecords(log.owner("delivery"), "policy")
     delivery = Deliveries(records, log.catalog(), tasks, open_sender, task_key="delivery")
+    loop_thread = threading.get_ident()
+    final_gate = None
+
+    class CheckedDelivery:
+        """只校验已获授权的纯读离开 loop；发送与 Task 权限仍用原服务。"""
+        def __getattr__(self, name):
+            operation = getattr(delivery, name)
+            if name not in {"cursor", "selection", "pending", "receipt"}:
+                return operation
+            def read(*args, **kwargs):
+                assert threading.get_ident() != loop_thread, f"delivery {name} blocked the loop"
+                if final_gate is not None and name == "selection":
+                    with log._read_admission:
+                        final_gate.stop()
+                return operation(*args, **kwargs)
+            return read
+
+    checked = CheckedDelivery()
+    def current_delivery():
+        assert threading.get_ident() == loop_thread, "delivery authority must be obtained on the loop"
+        return checked
     sinks = tuple({"name": name, "binding_id": name, "address": name} for name in sent)
     for name in sent:
         log.save_binding(name, {"name": name})
     outputs = writer(log, author="assistant", bodies=(Output,))
-    outputs.append("first", Output((), "complete"))
+    first = outputs.append("first", Output((), "complete"))
+    def select(reader, message):
+        assert threading.get_ident() == loop_thread, "selection authority must stay on the loop"
+        assert message.message_id != "first", "prepared recovery must keep its original selection"
+        return sinks
     def settled(message_id, sink):
         if sink == "fast" and message_id == "second":
             fast.set()
-    job = asyncio.create_task(follow(root.context, log.catalog(), lambda: delivery,
-                                    lambda reader, message: sinks, settled=settled))
+        if sink == "slow" and message_id == "second":
+            slow.set()
+
+    gate = WorkerGate()
+    original_read = type(log.reader("s")).read
+    stopped = False
+    def read(reader, **options):
+        nonlocal stopped
+        if options.get("limit") == 100:
+            assert threading.get_ident() != loop_thread, "delivery backlog blocked the loop"
+            if not stopped:
+                stopped = True
+                with log._read_admission:
+                    gate.stop()
+        return original_read(reader, **options)
+    monkeypatch.setattr(type(log.reader("s")), "read", read)
+    job = asyncio.create_task(follow(root.context, log.catalog(), current_delivery,
+                                    select, settled=settled))
     try:
+        # 真实目录读取持锁时，取消不能提前释放 owner，也不能冻结其他 loop 工作。
+        await gate.wait(job)
+        await loop_turn()
+        job.cancel()
+        await loop_turn()
+        job.cancel()
+        await loop_turn()
+        assert not job.done() and sent == {"slow": [], "fast": []}
+        gate.release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await job
+        assert records.selection("first") is None and records.cursor("s") == -1
+        prepared = await delivery.prepare_async(log.reader("s"), first, sinks, passive=True)
+        job = asyncio.create_task(follow(root.context, log.catalog(), current_delivery,
+                                        select, settled=settled))
         await asyncio.wait_for(entered.wait(), 2)
         outputs.append("second", Output((), "complete"))
         await asyncio.wait_for(fast.wait(), 2)
@@ -189,7 +249,33 @@ async def test_slow_destination_does_not_delay_next_fast_receipt(tmp_path):
         release.set()
         # Joining the original effect also observes its durable settlement.
         await delivery.send("first", "slow")
+        await asyncio.wait_for(slow.wait(), 2)
+        assert sent["slow"] == ["first", "second"] and sent["fast"] == ["first", "second"]
+        assert records.selection("first") == prepared
+
+        # FinalOutput 的纯回执轮询同样可排空；取消不改变任何真实投递回执。
+        final_gate = WorkerGate()
+        waiter = DeliveryFinalOutput(root.context, current_delivery)
+        waiting = asyncio.create_task(waiter.wait(log.reader("s"), SimpleNamespace(ending_message_id="second")))
+        try:
+            await final_gate.wait(waiting)
+            await loop_turn()
+            waiting.cancel()
+            await loop_turn()
+            waiting.cancel()
+            await loop_turn()
+            assert not waiting.done()
+            final_gate.release.set()
+            with pytest.raises(asyncio.CancelledError):
+                await waiting
+        finally:
+            final_gate.release.set()
+            await asyncio.gather(waiting, return_exceptions=True)
+            final_gate = None
+        await waiter.wait(log.reader("s"), SimpleNamespace(ending_message_id="second"))
+        assert sent == {"slow": ["first", "second"], "fast": ["first", "second"]}
     finally:
+        gate.release.set()
         release.set()
         job.cancel()
         await asyncio.gather(job, return_exceptions=True)

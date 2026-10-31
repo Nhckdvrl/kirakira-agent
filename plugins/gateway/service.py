@@ -14,7 +14,7 @@ from uuid import uuid4
 from .protocol.errors import JsonRpcError, UNAUTHORIZED
 from .protocol.models import InitializeParams, MessageSendParams
 from .contract import RpcMethod
-from plugins.channels.contract import ChannelInboundMessage, JsonValue
+from plugins.channels.contract import ChannelInboundMessage, JsonValue, read_input_parts
 from plugins.ui.contract import (
     MessageDisplayReader,
     follow_messages,
@@ -101,9 +101,9 @@ class ControlService:
 
     async def read_messages(self, session_id: str, after_seq: int, through_seq: int | None,
                       limit: int) -> dict[str, object]:
-        page = self.messages.reader(session_id).read_page(
+        page = await self.messages.reader(session_id).read_async(lambda reader: reader.read_page(
             after_seq=after_seq, through_seq=through_seq, limit=limit,
-        )
+        ))
         return {"version": 2, "session_id": session_id, "items": await read_message_rows(page, reader=self._message_display),
                 "after_seq": after_seq, "through_seq": page.through_seq,
                 "next_after_seq": page.messages[-1].seq if page.messages else after_seq,
@@ -116,10 +116,10 @@ class ControlService:
             raise RuntimeError("控制服务已关闭")
         if not request.session_id.startswith("akashic:") or not request.session_id[8:]:
             raise ValueError("控制端输入需要 Kirakira Session")
-        if not request.text.strip() and not request.attachment_ids and request.retry_of is None:
-            raise ValueError("text 与 attachment_ids 不能同时为空")
+        if not request.text.strip() and not request.attachment_ids and not request.parts and request.retry_of is None:
+            raise ValueError("text、attachment_ids 与 parts 不能同时为空")
         if request.retry_of is not None and (
-            request.text or request.attachment_ids or request.reply_to_message_id is not None
+            request.text or request.attachment_ids or request.parts or request.reply_to_message_id is not None
             or request.model_id is not None or request.reasoning_effort is not None
         ):
             raise ValueError("重试只引用原 Input，不能同时修改正文或模型")
@@ -130,6 +130,7 @@ class ControlService:
             metadata["retry_of_client_message_id"] = request.retry_of
         if request.reply_to_message_id is not None:
             metadata["reply_to_message_id"] = request.reply_to_message_id
+        parts = list(request.parts)
         # 模型选择与 Web 一样作为 model.selection 片段，由声明它的 owner 校验；没装模型插件时该请求被拒收。
         if request.model_id is not None:
             selection: dict[str, JsonValue] = {
@@ -137,7 +138,10 @@ class ControlService:
                 "reasoning_effort": (request.reasoning_effort or "").strip() or None,
             }
             part: dict[str, JsonValue] = {"kind": "model.selection", "value": selection}
-            metadata["input_parts"] = (part,)
+            parts.append(part)
+        if parts:
+            metadata["input_parts"] = tuple(
+                {"kind": kind, "value": cast(JsonValue, value)} for kind, value in read_input_parts(parts))
         refs = self._attachments(tuple(request.attachment_ids)) if request.attachment_ids else ()
         incoming = ChannelInboundMessage(
             channel="akashic", sender="control", chat_id=request.session_id[8:],

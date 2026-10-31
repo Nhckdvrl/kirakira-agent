@@ -7,6 +7,12 @@ The original copyright notice and license are preserved in [UPSTREAM-LICENSE](UP
 and generated assets. The base architecture and plugin implementations are upstream
 work. Local presentation changes do not change that attribution.
 
+Selected subsequent conversation-reference, WebSocket lifecycle, memory lookup and
+Wake read-path changes were reviewed at `8b0f0afa0167ffd58b90d9337014bfa9c9c21a1c`.
+Supplemental file digests and selected commits are recorded in `UPSTREAM.json`;
+the runtime baseline remains pinned separately. Original-message windows and SDK
+input-part support extend the imported conversation-reference implementation.
+
 The episodic memory plugin includes the Akasha v2 engine. Its own source provenance
 is retained in [memory provenance](../plugins/akasha/UPSTREAM.json).
 Kirakira's additions include session-scoped memory queries, dated and bounded

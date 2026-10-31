@@ -11,9 +11,12 @@ import hashlib
 import json
 import logging
 import os
+import re
 import shutil
 import sys
 import time
+import threading
+from collections import Counter, deque
 from contextlib import ExitStack
 from contextvars import ContextVar
 from dataclasses import asdict, replace
@@ -25,6 +28,7 @@ from uuid import uuid4
 
 import httpx
 
+from core.common.file_io import run_file_io
 from eval.models import EvaluationModel, provider_slot, source_identity
 from eval.native_runtime import text
 from kirakira_agent.client import AsyncClient
@@ -125,6 +129,11 @@ class Capture:
                 row["usage"] = None if response.usage is None else asdict(response.usage)
                 row["thinking_chars"] = len(response.thinking or "")
                 return response
+            except Exception as error:
+                row.update(failed=True, error_type=type(error).__name__)
+                if status := re.search(r"HTTP (\d{3})", str(error)):
+                    row["http_status"] = int(status[1])
+                raise
             finally:
                 row["duration_ms"] = (time.monotonic() - row["begin"]) * 1000
                 self.calls.append(row)
@@ -134,9 +143,107 @@ class Capture:
         stack.enter_context(patch.object(cls, "complete", complete))
 
 
+class FileIoCapture:
+    """Separate bounded-worker admission from physical work, without arguments."""
+
+    def __init__(self):
+        self.rows = []
+        self.samples = deque(maxlen=20000)
+        self.worker_samples = deque(maxlen=20000)
+        self.workers = {}
+
+    def install(self, stack):
+        from core.common.file_io import run_file_io
+
+        loop_thread = threading.get_ident()
+        stopped = threading.Event()
+
+        def sample():
+            while not stopped.wait(0.02):
+                current = sys._current_frames()
+                targets = [(loop_thread, None), *tuple(self.workers.items())]
+                for identity, operation in targets:
+                    frame = current.get(identity)
+                    frames = []
+                    try:
+                        while frame is not None and len(frames) < 9:
+                            frames.append(f"{Path(frame.f_code.co_filename).name}:{frame.f_lineno}:{frame.f_code.co_name}")
+                            frame = frame.f_back
+                        if operation is None:
+                            self.samples.append((time.monotonic(), tuple(frames)))
+                        else:
+                            self.worker_samples.append((id(operation), tuple(frames)))
+                    finally:
+                        del frame
+                del current
+
+        sampler = threading.Thread(target=sample, name="latency-stack-sampler", daemon=True)
+        sampler.start()
+
+        def stop():
+            stopped.set()
+            sampler.join(timeout=2)
+
+        stack.callback(stop)
+
+        async def observed(function):
+            row = {"begin": time.monotonic(), "operation": getattr(function, "__qualname__", type(function).__name__)}
+
+            def work():
+                row["worker_begin"] = time.monotonic()
+                identity = threading.get_ident()
+                self.workers[identity] = row
+                try:
+                    return function()
+                finally:
+                    row["worker_end"] = time.monotonic()
+                    self.workers.pop(identity, None)
+
+            try:
+                return await run_file_io(work)
+            finally:
+                row["duration_ms"] = (time.monotonic() - row["begin"]) * 1000
+                if "worker_begin" in row:
+                    row["queue_ms"] = (row["worker_begin"] - row["begin"]) * 1000
+                    row["work_ms"] = (row["worker_end"] - row["worker_begin"]) * 1000
+                self.rows.append(row)
+
+        for module in tuple(sys.modules.values()):
+            if getattr(module, "run_file_io", None) is run_file_io:
+                stack.enter_context(patch.object(module, "run_file_io", observed))
+
+    def summary(self, start):
+        rows = [item for item in self.rows if item["begin"] >= start]
+        worker_stacks = {}
+        for identity, frames in tuple(self.worker_samples):
+            worker_stacks.setdefault(identity, Counter())[frames] += 1
+        return {"scope": "All observed file-worker operations started during this turn, including concurrent background work. Queue includes executor scheduling; work may include locks, CPU and filesystem wait.",
+                "operations": len(rows), "slowest": [
+                    {key: value for key, value in item.items() if key in {"operation", "duration_ms", "queue_ms", "work_ms"}}
+                    | {"worker_stacks": [{"frames": frames, "samples": count} for frames, count in
+                        worker_stacks.get(id(item), Counter()).most_common(3)]}
+                    for item in sorted(rows, key=lambda item: item["duration_ms"], reverse=True)[:20]],
+                "main_thread_stacks": [{"frames": frames, "samples": count} for frames, count in
+                    Counter(frames for stamp, frames in tuple(self.samples) if stamp >= start).most_common(8)]}
+
+
 async def replay(client, body):
     start, first, count, usage = time.monotonic(), None, 0, None
-    async with client.stream("POST", "chat/completions", content=body) as response:
+    network = []
+
+    async def trace(event, _info):
+        # Trace metadata can contain authorization headers: only record event
+        # names and relative times, never the supplied connection/request data.
+        network.append({"event": event, "at_ms": (time.monotonic() - start) * 1000})
+
+    async with client.stream("POST", "chat/completions", content=body,
+                             extensions={"trace": trace}) as response:
+        if response.is_error:
+            # A failed replay is a provider observation, not a failed native
+            # reply. Preserve it without exporting the provider's raw body.
+            return {"first_content_ms": None, "duration_ms": (time.monotonic() - start) * 1000,
+                    "content_chars": 0, "usage": None, "network_events": network,
+                    "http_status": response.status_code, "passed": False}
         response.raise_for_status()
         async for line in response.aiter_lines():
             if not line.startswith("data:") or line[5:].strip() == "[DONE]":
@@ -150,13 +257,14 @@ async def replay(client, body):
                     first = (time.monotonic() - start) * 1000
                 count += len(content)
     return {"first_content_ms": first, "duration_ms": (time.monotonic() - start) * 1000,
-            "content_chars": count, "usage": usage}
+            "content_chars": count, "usage": usage, "network_events": network,
+            "http_status": response.status_code, "passed": True}
 
 
 async def terminal(reader, after, source="conversation"):
     async with asyncio.timeout(120):
         async for _ in reader.follow_heads():
-            for message in reader.snapshot(after_seq=after):
+            for message in await reader.read_async(lambda current: current.snapshot(after_seq=after)):
                 if message.source != source:
                     continue
                 if isinstance(message.body, Control):
@@ -222,7 +330,7 @@ async def evaluate(args):
             set_plugin_choice(args.workspace, name, enabled=True)
         report["telegram_scope"] = "Synthetic Update enters actual adapter/Core ingress. Real bot draft and final send APIs, actual native delivery receipt. No getUpdates, user-device or network-to-poller latency claim. Chat IDs and token URLs excluded."
 
-    capture, timings = Capture(), Timings()
+    capture, timings, file_io = Capture(), Timings(), FileIoCapture()
     logger = logging.getLogger("akashic.timing")
     logger.addHandler(timings)
     logger.setLevel(logging.INFO)
@@ -231,6 +339,7 @@ async def evaluate(args):
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
 
+    active_case = None
     try:
         with ExitStack() as stack:
             if telegram:
@@ -242,6 +351,8 @@ async def evaluate(args):
                 context = core.plugin_manager.live_root.context
                 catalog = context.require(MESSAGE_CATALOG)
                 capture.install(stack)
+                if getattr(args, "file_io_trace", False):
+                    file_io.install(stack)
                 if telegram:
                     channels = context.require(CHANNELS)
                     bindings = [b for b in channels._bindings.values() if b.channel_name == "telegram" and b.started]
@@ -289,11 +400,13 @@ async def evaluate(args):
                                 {"kind": "output", "text": "OPEN_COMPACTION_WORK", "source": "job:evaluation", "finish": "continue"},
                             ]})
                         reader = catalog.reader(session)
-                        original = reader.snapshot() if label in {"context-compaction", "context-maintenance"} else ()
-                        head, call_start, timing_start = reader.head(), len(capture.calls), len(timings.rows)
+                        original = await reader.read_async(lambda current: current.snapshot()) if label in {"context-compaction", "context-maintenance"} else ()
+                        head, call_start, timing_start = await reader.head_async(), len(capture.calls), len(timings.rows)
                         draft_start = len(draft_rows) if telegram else 0
                         identity = "probe-" + uuid4().hex
                         start = time.monotonic()
+                        active_case = {"case": label, "start": start, "session": session,
+                                       "call_start": call_start, "timing_start": timing_start}
                         if telegram:
                             message = SimpleNamespace(message_id=identity, text=prompt, caption=None, photo=(),
                                 document=None, reply_to_message=None, date=datetime.now(UTC))
@@ -303,7 +416,7 @@ async def evaluate(args):
                             answer = await terminal(reader, head)
                             delivery = context.require(DELIVERY_READ)
                             async with asyncio.timeout(30):
-                                while not (status := delivery.status(answer.message_id, "telegram")) or not status.get("receipt"):
+                                while not (status := await run_file_io(lambda: delivery.status(answer.message_id, "telegram"))) or not status.get("receipt"):
                                     await asyncio.sleep(0.01)
                             receipt = status["receipt"]
                             if receipt.get("status") != "delivered":
@@ -315,8 +428,9 @@ async def evaluate(args):
                         maintenance_wait = None
                         if label == "context-maintenance":
                             begin_wait = time.monotonic()
+                            summaries = context.require(COMPACTION_SUMMARIES)
                             async with asyncio.timeout(120):
-                                while context.require(COMPACTION_SUMMARIES).head(session) is None:
+                                while await run_file_io(lambda: summaries.head(session)) is None:
                                     await asyncio.sleep(0.05)
                             maintenance_wait = (time.monotonic() - begin_wait) * 1000
                         calls = capture.calls[call_start:]
@@ -329,7 +443,7 @@ async def evaluate(args):
                             role = message["role"]
                             role_chars[role] = role_chars.get(role, 0) + len(json.dumps(
                                 message.get("content"), ensure_ascii=False))
-                        rows = reader.snapshot(after_seq=head)
+                        rows = await reader.read_async(lambda current: current.snapshot(after_seq=head))
                         first = next((c["first_content_at"] for c in calls if c["first_content_at"] is not None), None)
                         row = {"case": label, "passed": True, "native_total_ms": total,
                                "model_calls": len(calls), "tool_results": sum(isinstance(m.body, ToolResult) for m in rows),
@@ -359,12 +473,13 @@ async def evaluate(args):
                             row["passed"] = bool(text(answer).strip()) and row["tool_results"] == 0
                             row["prompt_forbids_tools"] = False
                         if label in {"context-compaction", "context-maintenance"}:
-                            summary = context.require(COMPACTION_SUMMARIES).head(session)
+                            summaries = context.require(COMPACTION_SUMMARIES)
+                            summary = await run_file_io(lambda: summaries.head(session))
                             facts = ("KIRA-C27", "2026-11-06", "许澄", "匿名", "投递回执")
                             checks = {
                                 "summary_created": summary is not None,
                                 "answer_retains_facts": all(fact in text(answer) for fact in facts),
-                                "raw_history_unchanged": reader.snapshot()[:len(original)] == original,
+                                "raw_history_unchanged": (await reader.read_async(lambda current: current.snapshot()))[:len(original)] == original,
                                 "open_work_not_compacted": summary is not None and not any(
                                     identity.endswith(":seed:2") for identity in summary.source_message_ids),
                             }
@@ -386,11 +501,30 @@ async def evaluate(args):
                         row["timings"] = [{k: v for k, v in r.items() if k in (
                             "phase", "operation_id", "measurement_unit", "measurement_value", "counts")}
                             for r in timings.rows[timing_start:] if r.get("session_id") == session]
+                        if getattr(args, "file_io_trace", False):
+                            row["file_io"] = file_io.summary(start)
                         report["cases"].append(row)
+                        active_case = None
                         save()
                         print(json.dumps({k: row[k] for k in ("case", "passed", "native_total_ms", "tool_results")}), flush=True)
         report["shutdown_completed"] = True
         report["passed"] = len(report["cases"]) == len(cases) and all(row["passed"] for row in report["cases"])
+    except Exception as error:
+        report.update(passed=False, failure_type=type(error).__name__)
+        if active_case is not None:
+            calls = capture.calls[active_case["call_start"]:]
+            row = {"case": active_case["case"], "passed": False, "failure_type": type(error).__name__,
+                   "native_total_ms": (time.monotonic() - active_case["start"]) * 1000,
+                   "native_driver_ms": sum(call["duration_ms"] for call in calls),
+                   "native_attempts": [{key: value for key, value in call.items() if key in {
+                       "duration_ms", "purpose", "failed", "error_type", "http_status"}} for call in calls],
+                   "timings": [{key: value for key, value in entry.items() if key in {
+                       "phase", "operation_id", "measurement_unit", "measurement_value", "counts"}}
+                       for entry in timings.rows[active_case["timing_start"]:] if entry.get("session_id") == active_case["session"]]}
+            if getattr(args, "file_io_trace", False):
+                row["file_io"] = file_io.summary(active_case["start"])
+            report["cases"].append(row)
+        raise
     finally:
         logger.removeHandler(timings)
         save()
@@ -410,6 +544,8 @@ def main():
                         help="Measure only native turns without an intervening duplicate provider request")
     parser.add_argument("--memory-documents", type=Path,
                         help="Read-only Markdown snapshots copied into the isolated workspace")
+    parser.add_argument("--file-io-trace", action="store_true",
+                        help="Observe worker queue and work time; no operation arguments or message bodies")
     args = parser.parse_args()
     raise SystemExit(0 if asyncio.run(evaluate(args)) else 1)
 

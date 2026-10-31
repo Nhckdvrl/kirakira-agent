@@ -20,6 +20,7 @@
 - [工程工作流](engineering/development-workflow.md)：实现、验证、交付与目录维护。
 - [维护脚本](../scripts/README.md)：源码校验、迁移、场景验证和清理命令。
 - [评测复现](../eval/README.md)：环境、模型条件、真实链路与公开记忆实验。
+- [本地体验与会话接续实测](operations/evaluations/2026-10-31-runtime-experience.md)：SDK、CLI、网页、Telegram、NFS 与模型等待的分段测量，及长原文与新决定的真实读取。
 - [聊天交办与持续行动实测](operations/evaluations/2026-10-23-personal-assistant.md)：普通助理工作、跨会话条件、改规则、投递和恢复；保留失败与耗时。
 - [伙伴与个性实测](operations/evaluations/2026-10-22-companion-personality.md)：单维度表达控制、示例与事实、日常话题接续及原文定位；功能与风格效果分开。
 - [记忆场景亮点](operations/evaluations/2026-10-22-memory-scenarios.md)：从线索继续查原文、历史参与行动、出处复核；最终答案、开销和失败。

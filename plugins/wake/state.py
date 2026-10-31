@@ -77,6 +77,7 @@ class WakeState:
 
     def __init__(self, path: Path) -> None:
         self.path = path
+        self._initialized = False
 
     def read_only(self) -> WakeStateReader:
         """Return the narrow row reader used by non-owning observers."""
@@ -84,7 +85,8 @@ class WakeState:
 
     def initialize(self) -> None:
         """Create and validate the singleton admission ledger."""
-
+        if self._initialized:
+            return
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with closing(sqlite3.connect(self.path)) as connection, connection:
             connection.execute("PRAGMA journal_mode = WAL")
@@ -114,6 +116,7 @@ class WakeState:
             )
             if connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
                 raise RuntimeError("Wake state SQLite integrity check failed")
+        self._initialized = True
 
     @staticmethod
     def _validate_tables(

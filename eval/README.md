@@ -95,6 +95,7 @@ uv run --frozen --no-sync python -m eval.personality \
 | `prompt_cache` | 稳定/变化前缀的受控机制实验；原生邮件调查的实际请求摘要、缓存用量和功能结果；缓存字段未知与零值分开 |
 | `idle_reflection` | 空闲规划、跨会话约束、原文依据、原生研究/投递、目标完成后跳过、预算、暂停及交接回执丢失恢复 |
 | `tool_runtime` | 文件与网页读取边界、同输入组件测量，以及分页、编辑、目录、并行、Web 恢复、PTY 和大输出的真实 Agent 验收 |
+| `runtime_experience` | 本地服务分段耗时、SDK/CLI、真实网页切换与引用交互、原生存储比较、跨会话长原文和后来更正 |
 
 `memory_runtime` 的事件提醒验收固定不含参考答案的近期关注条件；历史决定由其他真实渠道会话学习。除了提醒内容，还检查 Alert 归档的原事件身份、参考对话范围和实际成功的记忆读取回执，避免把此前确认回复已经说出的答案误算为本轮检索能力。
 
@@ -157,6 +158,62 @@ uv run --frozen --no-sync python -m eval.mail_followups \
 
 记忆向量资产先通过 `configure-memory --download` 显式准备，参见[配置指南](../docs/handbook/memory-proactive.md)。生产运行不临时下载。中文功能场景与英文公开基准使用各自固定的向量空间，不混库。
 
+## 本地使用与延迟
+
+`service` 默认只读健康、会话目录与 UI 资源；`--exercise` 才会发送四条 SDK 和两条 CLI 合成消息。
+这些会话排除记忆学习，不在真实用户的聊天中伪造输入。报告区分接纳、首次可见正文、完成、模型回执及可选 journal 阶段；
+模型的 first token 可能是推理，并不等于用户看到正文。进程 CPU 是整个 worker 在测量窗口的增量，后台活动可能参与其中。
+每条 SDK/CLI 结果的 `failure_http_statuses` 只提取该合成轮次持久 `Control` 失败中的 HTTP 状态号码，
+不发布错误原因正文；CLI 的 exit 1 可以与实际模型服务拒绝对应。这个字段不覆盖成功之前的全部内部重试。
+
+```sh
+uv run --frozen --no-sync python -m eval.runtime_experience service \
+  --workspace /local-disk/workspace --exercise --output /local-disk/eval/service.json
+
+uv run --frozen --no-sync python -m eval.runtime_experience storage \
+  --nfs-directory /nfs/private-scratch --local-directory /local-disk/private-scratch \
+  --samples 24 --output /local-disk/eval/storage.json
+
+uv run --frozen --no-sync python -m eval.runtime_experience mechanism \
+  --nfs-directory /nfs/short-eval --local-directory /local-disk/short-eval \
+  --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json \
+  --memory-documents /private/path/memory-snapshot \
+  --output /local-disk/eval/io-mechanism.json
+
+uv run --frozen --no-sync python -m eval.runtime_experience references \
+  --workspace /local-disk/eval/ref-new \
+  --model-config /private/path/model.json --key-file /private/path/model.key \
+  --output /local-disk/eval/references.json
+
+node node_modules/vite/bin/vite.js build --config frontend/chat/vite.harness.config.ts \
+  --outDir /local-disk/eval/chat-assets
+uv run --frozen --no-sync python -m playwright install chromium
+uv run --frozen --no-sync python -m eval.runtime_experience browser \
+  --workspace /local-disk/eval/web-new --assets /local-disk/eval/chat-assets \
+  --latency-ms 80 --output /local-disk/eval/browser.json
+```
+
+`storage` 只创建、测量并删除自己的临时目录，不写生产库。它同时测 FULL/DELETE 小事务、原生 Ledger 的 WAL/NORMAL 写入、缓存读取及文件 fsync，
+前两种策略的数字不能混用。目录标签不检测实际文件系统，应另用系统挂载信息核对；这也不是冷缓存或吞吐基准。
+正式工作区不应迁入可清理的临时目录。
+
+`mechanism` 在两种目录下各建一个短路径的临时工作区，顺序运行冷、暖两个请求，结束后清理自己的目录。
+它把确定性 HTTP 模型绑定在 loopback，经正式 Models driver 和原生插件图运行，并复用 `telegram_latency` 的阶段与 I/O 诊断；
+没有外部聊天 API 或真实凭据。需要预先准备本地向量资产，可选的 `--memory-documents` 只读复制 Markdown 快照，
+不复制正式消息或图数据库。夹具固定输出和一输入、一输出 token 均为合成值，只能定位调度与存储机制，不能当作语言、记忆质量或费用结果。
+父目录必须足够短以容纳 Linux Unix socket；`stat` 可用时报告实际文件系统类型。原生子报告可能含 Markdown 文件名，公开前仍需白名单脱敏。
+
+`references` 用真实模型与相同 SDK 输入片段，核对长消息后文、原会话的新决定与原始前缀不变；记录坐标字节、窗口、实际工具与模型用量，不发布回答或推理正文。
+`browser` 无需配置模型即可用 Chromium 验证真实原生后端上的切换、拖入引用、去重、草稿隔离、移除和自引用拒绝。
+`--comparison-assets` 可指定另一份编译好的界面，后端和合成会话保持相同；网络参数是 Chromium 模拟设置，不是实测 RTT。
+可用 `--browser-executable` 选择已有 Chromium。网页测试工作区必须是新目录，Linux Unix socket 路径不能过长。
+
+Telegram 的真实发送与相同请求重放仍使用下面的 `telegram_latency`。重放的 `network_events` 只记连接阶段名称和时间，不记录请求头、密钥或正文；
+失败的重放保留 HTTP 状态，不能算作一次成功的直接模型请求。模型配置阶段的拒绝会退出非零，不能把空报告当作通过。
+
+当前实例与硬件观察见[使用体验报告](../docs/operations/evaluations/2026-10-31-runtime-experience.md)。
+
+
 ## Telegram 链路延迟
 
 纯 Runtime 测量不发送 Telegram 消息；使用与实际运行相同的文件系统，保留冷启动与后续请求的差异：
@@ -178,6 +235,12 @@ uv run --frozen --no-sync python -m eval.telegram_latency \
 加入 `--case natural-followup --no-direct-replay` 可连续检查“你好”和“在吗”，两轮之间不额外重放模型请求。
 将隔离工作区放在生产同类文件系统上，才能观察相应磁盘开销。报告只记录各角色正文、推理字段与工具 schema
 的字符数和实际用量；字符数不是 token 数。默认模式仍保留原同字节重放诊断。
+
+需要调查文件系统与事件循环时，增加 `--file-io-trace`。它记录有界文件 worker 的等待、物理工作和整个 `await` 的墙钟时间，
+并每 20 ms 采样主线程栈；不记录操作参数、正文或文件路径。`work_ms` 可能包含锁、CPU 与文件系统等待，
+`duration_ms` 超过 `queue_ms + work_ms` 的部分也可能是事件循环恢复延迟，不能直接称为磁盘时间。
+主线程采样计数用于定位阻塞调用，不是精确函数计时。比较存储时使用新隔离目录和相同模型、资产及快照，
+保留首次与后续请求；不要为了获得更快数字把正式工作区移到临时目录。
 
 `--case context-maintenance --no-direct-replay` 在软水位放入含更正日期、负责人、数据限制和未完成工作的
 合成历史，核对先回答、后整理，以及原文和开放工作不被压缩覆盖。报告的 `native_total_ms` 截至回复或

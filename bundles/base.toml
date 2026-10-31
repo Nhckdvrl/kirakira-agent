@@ -159,6 +159,9 @@ plugin = "message_push@release"
 [rows."programmatic"]
 plugin = "programmatic@release"
 
+[rows."session_reference"]
+plugin = "session_reference@release"
+
 [rows."onboarding"]
 plugin = "onboarding@release"
 

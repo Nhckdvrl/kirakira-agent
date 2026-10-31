@@ -210,6 +210,10 @@ class Runtime:
         )
         names = (*WAKE_TOOLS[owner], *(ref.name for ref in view.refs
                  if ref.name in allowed and ref.name not in WAKE_TOOLS[owner]))
+        message_catalog, delivery_history = ctx.require(MESSAGE_CATALOG), ctx.require(DELIVERY_READ)
+        history = await run_file_io(lambda: recent_context(
+            message_catalog, delivery_history, target=context_session,
+            now=now, items=captured_items if owner == "content" else ()))
         return Request(
             flow_id=flow_id,
             owner=owner,
@@ -230,9 +234,7 @@ class Runtime:
             alert_ref=None if alert is None else cast(dict[str, str], dict(alert)),
             model_id=model.model_id, reasoning_effort=model.reasoning_effort,
             rules=read_archived_rules(ctx.data_root) or "",
-            history=recent_context(ctx.require(MESSAGE_CATALOG), ctx.require(DELIVERY_READ),
-                                   target=context_session, now=now,
-                                   items=captured_items if owner == "content" else ()),
+            history=history,
             events=tuple(dict(item) for item in (await ctx.require(EVENTMAIL_WAKE).active_context(now))))
 
     async def follow(self) -> None:

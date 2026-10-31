@@ -3,6 +3,7 @@ import argparse
 import asyncio
 import json
 import os
+import re
 import shutil
 import sqlite3
 import sys
@@ -20,6 +21,7 @@ from kirakira_agent.runtime import (
 from plugins.ledger.contract import (
     MESSAGE_CATALOG,
     ContentPart,
+    Control,
     Input,
     Output,
     ToolCall,
@@ -138,9 +140,15 @@ async def evaluate(workspace, key_file, output, *, model_config=None):
             reader = catalog.reader(session)
             async def wait():
                 async for _ in reader.follow_heads():
-                    match = next((row for row in reader.snapshot() if predicate(row)), None)
+                    rows = await reader.read_async(lambda current: current.snapshot())
+                    match = next((row for row in rows if predicate(row)), None)
                     if match is not None:
                         return match
+                    if failure := next((row for row in reversed(rows)
+                                        if isinstance(row.body, Control) and row.body.action == "failure"), None):
+                        status = re.search(r"HTTP\s*([1-5]\d{2})", failure.body.reason or "")
+                        suffix = " (HTTP " + status[1] + ")" if status else ""
+                        raise RuntimeError("native failure before awaited fact" + suffix)
             return await asyncio.wait_for(wait(), 90)
 
         async def steering():

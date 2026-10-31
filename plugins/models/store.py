@@ -234,6 +234,8 @@ class ModelsStore:
         self._host_lock_file: object | None = None
         # descriptor 冻结且整个绑定周期不变；binding JSON 只随 descriptor 变化。
         self._binding_cache: dict[BoundModelDescriptor, str] = {}
+        # 同一连接的外部提交版本与完整 meta 行共同标识不可变注册表快照。
+        self._snapshot_cache: tuple[object, tuple[object, ...], StoredSnapshot] | None = None
 
     @property
     def host_epoch(self) -> int | None:
@@ -293,6 +295,8 @@ class ModelsStore:
                             "WHERE singleton = 1"
                         )
                     connection.commit()
+                # 同进程收养宿主租约的 schema 升级可能不递增 host_epoch。
+                self._snapshot_cache = None
                 self._host_epoch = int(
                     connection.execute(
                         "SELECT host_epoch FROM model_registry_meta WHERE singleton = 1"
@@ -309,55 +313,69 @@ class ModelsStore:
 
         if not self.path.is_file():
             return None
-        with self._connect(read_only=True) as connection:
-            connection.execute("BEGIN")
-            _require_base_schema(connection)
-            meta_columns = _columns(connection, "model_registry_meta")
-            connection_columns = _columns(connection, "model_connections")
-            model_columns = _columns(connection, "model_definitions")
-            embedding_columns = _columns(connection, "embedding_models")
-            default_column = (
-                ", default_embedding_model_id"
-                if "default_embedding_model_id" in meta_columns
-                else ""
-            )
-            meta = connection.execute(
-                f"SELECT revision{default_column} FROM model_registry_meta "
-                "WHERE singleton = 1"
-            ).fetchone()
-            if meta is None:
-                raise RuntimeError("model registry is missing revision metadata")
-            config_column = (
-                "driver_config_json"
-                if "driver_config_json" in connection_columns
-                else "'{}'"
-            )
-            connection_rows = connection.execute(
-                "SELECT id, name, provider, catalog_provider_id, base_url, auth_id, "
-                f"{config_column}, enabled FROM model_connections ORDER BY created_at, id"
-            ).fetchall()
-            chat_rows = connection.execute(
-                _SELECT_CHAT_MODELS.format(
-                    capabilities_json=(
-                        "capabilities_json"
-                        if "capabilities_json" in model_columns
-                        else "NULL"
-                    )
+        with self._replay_connection() as (connection, marker):
+            cached = self._snapshot_cache
+            # data_version 只能在同一连接比较；writer 忙时的独立 RO 使用一次性 marker。
+            # 外部提交必须重新验 schema，普通本连接的调用结算则无需重扫注册表。
+            if cached is None or cached[0] != marker:
+                _require_base_schema(connection)
+            meta_row = tuple(connection.execute(
+                "SELECT * FROM model_registry_meta WHERE singleton = 1"
+            ).fetchone() or ())
+            if cached is not None and cached[0] == marker and cached[1] == meta_row:
+                return cached[2]
+            snapshot = self._read_snapshot(connection)
+            self._snapshot_cache = (marker, meta_row, snapshot)
+            return snapshot
+
+    def _read_snapshot(self, connection: sqlite3.Connection) -> StoredSnapshot:
+        """在调用方的读事务内解码全部角色绑定及完整注册表。"""
+        meta_columns = _columns(connection, "model_registry_meta")
+        connection_columns = _columns(connection, "model_connections")
+        model_columns = _columns(connection, "model_definitions")
+        embedding_columns = _columns(connection, "embedding_models")
+        default_column = (
+            ", default_embedding_model_id"
+            if "default_embedding_model_id" in meta_columns
+            else ""
+        )
+        meta = connection.execute(
+            f"SELECT revision{default_column} FROM model_registry_meta "
+            "WHERE singleton = 1"
+        ).fetchone()
+        if meta is None:
+            raise RuntimeError("model registry is missing revision metadata")
+        config_column = (
+            "driver_config_json"
+            if "driver_config_json" in connection_columns
+            else "'{}'"
+        )
+        connection_rows = connection.execute(
+            "SELECT id, name, provider, catalog_provider_id, base_url, auth_id, "
+            f"{config_column}, enabled FROM model_connections ORDER BY created_at, id"
+        ).fetchall()
+        chat_rows = connection.execute(
+            _SELECT_CHAT_MODELS.format(
+                capabilities_json=(
+                    "capabilities_json"
+                    if "capabilities_json" in model_columns
+                    else "NULL"
                 )
-            ).fetchall()
-            embedding_rows = connection.execute(
-                _SELECT_EMBEDDING_MODELS.format(
-                    capabilities_json=(
-                        "capabilities_json"
-                        if "capabilities_json" in embedding_columns
-                        else "NULL"
-                    )
+            )
+        ).fetchall()
+        embedding_rows = connection.execute(
+            _SELECT_EMBEDDING_MODELS.format(
+                capabilities_json=(
+                    "capabilities_json"
+                    if "capabilities_json" in embedding_columns
+                    else "NULL"
                 )
-            ).fetchall()
-            role_rows = connection.execute(
-                "SELECT role, model_id, reasoning_effort "
-                "FROM model_role_bindings ORDER BY role"
-            ).fetchall()
+            )
+        ).fetchall()
+        role_rows = connection.execute(
+            "SELECT role, model_id, reasoning_effort "
+            "FROM model_role_bindings ORDER BY role"
+        ).fetchall()
 
         connections = {
             item.connection_id: item
@@ -1266,6 +1284,7 @@ class ModelsStore:
             if self._write_connection is not None:
                 self._write_connection.close()
                 self._write_connection = None
+            self._snapshot_cache = None
         descriptor = self._host_lock_file
         self._host_lock_file = None
         if descriptor is None:

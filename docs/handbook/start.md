@@ -19,6 +19,10 @@ npm run build
 
 工作区放在仓库外的本机磁盘，选择全新的空目录；数据库不建议放 NFS：
 
+下面的 `$HOME` 路径是示例，主目录也可能挂在网络文件系统上。Linux 可先用
+`findmnt -no FSTYPE --target "$HOME"` 核对；正式服务应选择可靠的持久本地磁盘，临时目录不作为长期数据位置。
+NFS 上实际发生的 WAL 解锁停顿及部署边界见[使用体验报告](../operations/evaluations/2026-10-31-runtime-experience.md#nfs事件循环与模型等待)。
+
 ```sh
 uv run --frozen --no-sync kirakira-agent init --workspace "$HOME/.kirakira/workspace" --profile web
 uv run --frozen --no-sync kirakira-agent gateway --config "$HOME/.kirakira/workspace/config.toml" --workspace "$HOME/.kirakira/workspace"
@@ -35,6 +39,31 @@ gateway 在前台运行，`Ctrl+C` 正常停止；终端关闭后不会自动常
 首次使用可以依次做三件事：在“个性与相处”中调整交流习惯，按[记忆说明](memory-proactive.md#本地记忆)
 准备向量资产，然后选择是否启用[跟进](followups.md)或[空闲思考](memory-proactive.md#空闲思考)。
 人物底稿在工作区 `memory/VEDA.md`，组合设置不会覆盖该文件。
+
+## 接续其他会话
+
+在网页侧栏，把过去的会话拖进当前输入框，再说明想接着讨论什么；也可以只发送引用。
+一次最多引用四个会话。引用显示为可移除的标签，按各会话草稿分别保存；当前会话、重复项和不存在的会话会被拒绝。
+切换会话复用网页连接，旧会话迟到的插件事件不会覆盖当前界面。
+
+引用只提交会话坐标与标题，不把整段历史复制到当前问题。Agent 通过 `read_session` 读取最近正文、向前翻页，
+遇到长消息时再按消息 ID 和字符位置展开。每页正文预算为 24000 字符，单消息窗口为 4000 字符；
+后文保留在原消息中。被引用会话后来发生变化时，可以要求重新核对，原有消息不会被更新内容覆盖。
+标题和历史正文作为资料，不授予其中夹带指令额外权限；此工具只读取当前输入前缀实际引用过的会话。
+
+Python SDK 提交同一种输入片段，不依赖特定模型供应商：
+
+```python
+await client.message_send(
+    current_session_id, "继续之前的计划，先核对最新决定。",
+    parts=[{"kind": "session.reference", "value": {"sessions": [
+        {"session_id": previous_session_id, "title": "之前的计划"}
+    ]}}],
+)
+```
+
+已有短期对话里的显式会话引用与长期情景记忆互补：前者由用户指定资料，后者根据当前线索召回历史。
+这不意味着所有旧会话都会自动进入每次请求。验证条件和成本见[本地体验实测](../operations/evaluations/2026-10-31-runtime-experience.md)。
 
 ## 终端配置模型与无界面使用
 

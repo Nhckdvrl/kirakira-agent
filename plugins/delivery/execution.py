@@ -81,6 +81,9 @@ class Deliveries:
 
     async def _start(self, message_id: str, sink: str, start_guard: StartGuard | None = None) -> tuple[Task, bool]:
         """同步接纳时先占被动活动；实际 I/O 的活动范围继续覆盖取消后的清理。"""
+        # 此处到 Task 准入前不能新增 await：直接调用被动发送时，必须先取得目标并占住
+        # activity，再让主动发送观察空闲。普通回复/恢复已有外层 hold，但直调没有；
+        # 保留这段同步准入读取，不能仅为规避文件系统等待而改变被动优先权。
         selected = self._records.check_owner(message_id)
         _, delivery = self._records.read(message_id, sink)
 
@@ -128,7 +131,7 @@ class Deliveries:
     async def retry(self, message_id: str, sink: str) -> Receipt:
         """显式重试被拒绝的原效果；不改消息、目的地、绑定或幂等键。"""
         async def rearm(slot: TaskSlot) -> Task | None:
-            record, delivery = self._records.read(message_id, sink)
+            record, delivery = await run_file_io(lambda: self._records.read(message_id, sink))
             if delivery.phase != "rejected":
                 return None
             # 旧 Task 可能已读取 rejected 但仍在关闭 scope；先排空才能重新接纳。
@@ -170,16 +173,23 @@ class Deliveries:
 
     async def _send(self, task: Task, message_id: str, sink: str, start_guard: StartGuard | None) -> Receipt:
         """先读耐久事实，再恢复未知效果；确认即将发送后才提交 started。"""
-        record, delivery = self._records.read(message_id, sink)
+        def read_send() -> tuple[OwnerRecord, Delivery, Selection, Message | None]:
+            selected = self._records.check_owner(message_id)
+            reader = self._catalog.reader(selected.session_id)
+            with reader.read_snapshot():
+                record, delivery = self._records.read(message_id, sink)
+                if delivery.phase in {"delivered", "rejected", "failed"}:
+                    return record, delivery, selected, None
+                message = reader.get(message_id)
+                if message is None:
+                    raise ValueError("发送引用的原消息缺失")
+            return record, delivery, selected, message
+
+        record, delivery, selection, message = await run_file_io(read_send)
         if delivery.phase in {"delivered", "rejected", "failed"}:
             assert delivery.receipt is not None
             return delivery.receipt
-        selection = self._records.selection(message_id)
-        if selection is None:
-            raise ValueError("发送缺少已提交的消息选择")
-        message = self._catalog.reader(selection.session_id).get(message_id)
-        if message is None:
-            raise ValueError("发送引用的原消息缺失")
+        assert message is not None
         key = delivery_key(message_id, sink)
         target = (self._task_key, "target", delivery.sink.name, delivery.sink.address)
         async with AsyncExitStack() as scope:
@@ -189,7 +199,9 @@ class Deliveries:
             # 等待期间允许明确撤回 prepared；旧快照不能覆盖撤回事实。
             if not task.active:
                 raise asyncio.CancelledError
-            record, delivery = self._records.read(message_id, sink)
+            record, delivery = await run_file_io(lambda: self._records.read(message_id, sink))
+            if not task.active:
+                raise asyncio.CancelledError
             if delivery.phase in {"delivered", "rejected", "failed"}:
                 assert delivery.receipt is not None
                 return delivery.receipt

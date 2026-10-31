@@ -274,7 +274,7 @@ class _Follower:
                 if self._catalog_closed or self._sources_closed:
                     break
                 if self._latest_heads is not None:
-                    self._dispatch_changes(self._latest_heads)
+                    await self._dispatch_changes(self._latest_heads)
             for task in (catalog_task, source_task, *self._drive_tasks):
                 if not task.done():
                     task.cancel()
@@ -305,7 +305,7 @@ class _Follower:
     def _current_source(self, name: str) -> Source | None:
         return next((item for item in self._sources.entries() if item.name == name), None)
 
-    def _dispatch_changes(self, heads: dict[str, int]) -> None:
+    async def _dispatch_changes(self, heads: dict[str, int]) -> None:
         current_sources = {source.name: source for source in self._sources.entries()}
         source_names = set(self._previous_sources) | set(current_sources)
         changed_source_names = {
@@ -316,6 +316,39 @@ class _Follower:
             name for name in changed_source_names if name in current_sources
         }
 
+        changed_sessions = {
+            session_id for session_id, head in heads.items()
+            if self._previous_heads.get(session_id) != head
+        }
+        # 2. One scan handles changed sessions and genuine identity changes.
+        session_ids = tuple(
+            heads
+            if current_identity_changes
+            else (session_id for session_id in heads if session_id in changed_sessions)
+        )
+
+        def read_source_heads(reader: MessageReader) -> dict[str, int]:
+            present = reader.source_names()
+            return {name: reader.head(source=name) for name in current_sources if name in present}
+
+        # 目录 SQL 可能等待物理文件锁；worker 只读事实，不触碰 wake 或 TaskGroup。
+        observed: dict[tuple[str, str], int] = {}
+        if current_sources:
+            for session_id in session_ids:
+                # 同一 Session 的来源与 heads 来自同一 worker 内的只读快照。
+                source_heads = await self._catalog.reader(session_id).read_async(read_source_heads)
+                observed.update(((session_id, name), head) for name, head in source_heads.items())
+        if self._catalog_closed or self._sources_closed:
+            return
+        actual_sources = {source.name: source for source in self._sources.entries()}
+        if (actual_sources.keys() != current_sources.keys()
+                or any(actual_sources[name] is not source for name, source in current_sources.items())):
+            # I/O 期间的注册变更不能启动旧 owner，也不能消耗本轮 heads。
+            self._wake_event.set()
+            return
+        self._previous_heads = dict(heads)
+        self._previous_sources = current_sources
+
         # 1. A revoked source only updates an existing local handoff; its
         # exact Source owner still stops the in-flight Task via the scope monitor.
         for (_session_id, source_name), wake in tuple(self._active.items()):
@@ -323,32 +356,17 @@ class _Follower:
                 wake.source = current_sources.get(source_name)
                 wake.changed = True
 
-        changed_sessions = {
-            session_id for session_id, head in heads.items()
-            if self._previous_heads.get(session_id) != head
-        }
-        self._previous_heads = dict(heads)
-        self._previous_sources = current_sources
-
-        # 2. One scan handles changed sessions and genuine identity changes.
-        session_ids = (
-            heads
-            if current_identity_changes
-            else (session_id for session_id in heads if session_id in changed_sessions)
-        )
         for session_id in session_ids:
-            reader = self._catalog.reader(session_id)
-            present = reader.source_names()
             session_changed = session_id in changed_sessions
             for source in current_sources.values():
                 source_name = source.name
-                if source_name not in present:
+                key = (session_id, source_name)
+                if key not in observed:
                     continue
                 identity_changed = source_name in current_identity_changes
                 if not session_changed and not identity_changed:
                     continue
-                source_head = reader.head(source=source_name)
-                key = (session_id, source_name)
+                source_head = observed[key]
                 if identity_changed or self._observed_source_heads.get(key) != source_head:
                     self._observed_source_heads[key] = source_head
                     self._schedule(session_id, source)
@@ -400,8 +418,13 @@ class _Follower:
         current_drive = asyncio.current_task()
         if current_drive is None:
             raise RuntimeError("回复 follower 必须运行在 asyncio Task 中")
+        admission_boundary = await self._catalog.reader(session_id).head_async(source=source.name)
+        registered = self._current_source(source.name)
+        if registered is not source:
+            wake.source = registered
+            wake.changed = registered is not None
+            return registered is not None
         state = _Iteration(drive_task=current_drive)
-        admission_boundary = self._catalog.reader(session_id).head(source=source.name)
         restart_after_cleanup = False
         try:
             await self._start(state, session_id, source)

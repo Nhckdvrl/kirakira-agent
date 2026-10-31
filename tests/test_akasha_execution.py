@@ -30,6 +30,43 @@ from plugins.ledger.log import MessageLog, SessionAttributes
 from plugins.turn_projection.plugin import TurnProjection
 
 
+def test_legacy_recall_lookup_pages_only_random_keys_and_filters_before_decode(tmp_path):
+    from datetime import UTC, datetime
+    from plugins.akasha.contract import ContextSource, Recall
+    from plugins.akasha.recalls import RecallRecordsRead
+
+    log = MessageLog(tmp_path / "sessions.db")
+    try:
+        owner = log.owner("akasha")
+        recall = Recall(learning_binding="fixture", graph_version=0, timestamp=datetime.now(UTC),
+            source=ContextSource(session_id="target", source="conversation", through_seq=5),
+            limit=1, hits=(), active_basin_count=0, pushes=0, residual_l1=0)
+
+        def seed(tx):
+            # Unrelated receipts need not even share the current Recall schema.
+            for number in range(1001):
+                tx.save("recall:" + f"{number:032x}", {"source": {"kind": "context", "session_id": "other"}}, expected_version=None)
+            for identity in ("d" * 32, "e" * 32):
+                tx.save("recall:" + identity, recall.model_dump(mode="json"), expected_version=None)
+            for identity in ("context:stable", "tool:stable"):
+                tx.save("recall:" + identity, {"current_namespace": True}, expected_version=None)
+        owner.transact(seed)
+        scans = []
+
+        class BoundedRead:
+            def scan(self, **kwargs):
+                scans.append(kwargs)
+                return owner.scan(**kwargs)
+
+        records = RecallRecordsRead(BoundedRead())
+        assert [key for key, _ in records.legacy_context("target", "conversation", first_seq=4, through_seq=6)] == ["e" * 32, "d" * 32]
+        assert len(scans) == 3 and all(row["limit"] == 1000 for row in scans)
+        assert records.legacy_context("target", "conversation", first_seq=6, through_seq=7) == ()
+        assert records.legacy_context("target", "job", first_seq=4, through_seq=6) == ()
+    finally:
+        log.close()
+
+
 @pytest.mark.asyncio
 async def test_automatic_recall_bounds_live_context_and_retires_only_verified_legacy_text(tmp_path):
     import hashlib
@@ -366,6 +403,236 @@ def append_pair(log: MessageLog, embeddings: MessageEmbeddings, learning: Learni
         message = log.writer("conversation", author=author, source="conversation",
             body_types=(kind,), content={"text": check_text}).append(f"{author}-{number}", body)
         embeddings.bind(learning.text).save(message, model="fixed", embedding=[1.0, 0.0, 0.0])
+
+
+@pytest.mark.asyncio
+async def test_graph_discovery_reuses_notified_heads_and_cutover_io_drains(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """图发现不重扫目录；首次启用的固定 cutover 在可排空 worker 读取。"""
+    from plugins.akasha.plugin import _write_graphs
+    from plugins.akasha.scopes import DEFAULT_GRAPH, ScopePolicies, graph_key
+
+    async with memory_fixture(tmp_path) as (_, _, learning, bindings, log, embeddings, _, _):
+        append_pair(log, embeddings, learning, 0)
+        catalog = log.catalog()
+        policies = ScopePolicies(log.owner("scope-policy"), catalog)
+        policies.set("project", "private", "isolated")
+        policies.set("project", "disabled", "off")
+        log.ensure_session("isolated", SessionAttributes(scope=(("project", "private"),)))
+        log.ensure_session("disabled", SessionAttributes(scope=(("project", "disabled"),)))
+        log.ensure_session("excluded", SessionAttributes(learning="excluded"))
+        heads = catalog.snapshot_heads()
+        original = catalog.snapshot_heads
+        gate = WorkerGate()
+        route = policies.route
+
+        def routed(session):
+            if session == "conversation":
+                gate.stop()
+            return route(session)
+
+        monkeypatch.setattr(policies, "route", routed)
+        monkeypatch.setattr(catalog, "snapshot_heads", lambda: pytest.fail("notified heads must not be rescanned"))
+        discovery = asyncio.create_task(_write_graphs(catalog, policies, heads))
+        try:
+            await gate.wait(discovery)
+            await loop_turn()
+            assert not discovery.done()
+            gate.release.set()
+            assert await discovery == (DEFAULT_GRAPH, graph_key((("project", "private"),)))
+        finally:
+            gate.release.set()
+            await asyncio.gather(discovery, return_exceptions=True)
+
+        gate = WorkerGate()
+        def snapshot():
+            result = original()
+            gate.stop()
+            return result
+
+        monkeypatch.setattr(catalog, "snapshot_heads", snapshot)
+        path = tmp_path / "cutover.db"
+        load = asyncio.create_task(MessageConsumer.load(path, catalog=catalog, embeddings=embeddings,
+            bindings=bindings, config=MemoryConfig()))
+        try:
+            await gate.wait(load)
+            load.cancel()
+            await loop_turn()
+            load.cancel()
+            await loop_turn()
+            assert not load.done() and not path.exists()
+            gate.release.set()
+            with pytest.raises(asyncio.CancelledError):
+                await load
+            assert not path.exists()
+            restored = await MessageConsumer.load(path, catalog=catalog, embeddings=embeddings,
+                bindings=bindings, config=MemoryConfig())
+            try:
+                assert dict(restored.state.cutover_heads) == dict(heads)
+                assert restored.state.applied == ()
+            finally:
+                restored.close()
+        finally:
+            gate.release.set()
+            await asyncio.gather(load, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_consumption_snapshot_and_membership_are_nonblocking_fixed_and_cancellable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """同一固定前缀过滤成员；后到的消息不偷跑，取消目录读取不前进学习。"""
+    from plugins.akasha.scopes import DEFAULT_GRAPH, ScopePolicies
+
+    async with memory_fixture(tmp_path) as (memory, consumer, learning, _, log, embeddings, _, _):
+        append_pair(log, embeddings, learning, 0)
+        catalog = memory._catalog
+        policies = ScopePolicies(log.owner("scope-policy"), catalog)
+        log.ensure_session("excluded", SessionAttributes(learning="excluded"))
+        for author, kind, body in (
+            ("user", Input, Input((ContentPart("text", "do not learn this excluded history"),))),
+            ("assistant", Output, Output((ContentPart("text", "excluded response"),), "complete")),
+        ):
+            message = log.writer("excluded", author=author, source="conversation",
+                body_types=(kind,), content={"text": check_text}).append(f"excluded-{author}", body)
+            embeddings.bind(learning.text).save(message, model="fixed", embedding=[1.0, 0.0, 0.0])
+        original = catalog.snapshot_heads
+        gate = WorkerGate()
+        admitted = []
+
+        def snapshot():
+            result = original()
+            gate.stop()
+            return result
+
+        def member(session):
+            assert threading.get_ident() != gate.loop_thread, "scope route blocked the event loop"
+            admitted.append(session)
+            return policies.route(session).write == DEFAULT_GRAPH
+
+        memory._member = member
+        monkeypatch.setattr(catalog, "snapshot_heads", snapshot)
+        first = asyncio.create_task(memory.consume())
+        try:
+            await gate.wait(first)
+            append_pair(log, embeddings, learning, 1)
+            await loop_turn()
+            assert not first.done() and not consumer.state.applied
+            gate.release.set()
+            assert await first == 1
+            assert [entry.ending[1] for entry in consumer.state.applied] == ["assistant-0"]
+            assert await memory.consume() == 1
+            assert [entry.ending[1] for entry in consumer.state.applied] == ["assistant-0", "assistant-1"]
+        finally:
+            gate.release.set()
+            await asyncio.gather(first, return_exceptions=True)
+
+        gate = WorkerGate()
+        append_pair(log, embeddings, learning, 2)
+        before = logical_state_sha256(consumer.path)
+        current = asyncio.create_task(memory.consume())
+        try:
+            await gate.wait(current)
+            current.cancel()
+            await loop_turn()
+            current.cancel()
+            await loop_turn()
+            assert not current.done() and logical_state_sha256(consumer.path) == before
+            gate.release.set()
+            with pytest.raises(asyncio.CancelledError):
+                await current
+            assert logical_state_sha256(consumer.path) == before
+            assert await memory.consume() == 1
+            assert [entry.ending[1] for entry in consumer.state.applied] == ["assistant-0", "assistant-1", "assistant-2"]
+            assert await memory.consume() == 0
+            assert set(admitted) == {"conversation", "excluded"}
+        finally:
+            gate.release.set()
+            await asyncio.gather(current, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_graph_initialization_consumes_once_and_keeps_arriving_notifications(tmp_path: Path) -> None:
+    """首次追赶后不空扫；初始化中收到的下一前缀仍由真实 follower 学习。"""
+    from agent.plugin_composition import ServiceKey
+    from plugins.akasha.scopes import ScopePolicies, graph_key, graph_path
+    from plugins.context.contract import MATERIALS_V4
+    from tests.test_akasha_graphs import add_memory
+    from tests.test_default_reply import application
+
+    def sources(directory):
+        add_memory(directory)
+        # 只在夹具的真实学习完成边界暂停；不替换日志、学习算法或 follower。
+        with (directory / "akasha/plugin.py").open("a") as stream:
+            stream.write('''
+
+_fixture_run = run
+async def run(ctx, interest):
+    from agent.plugin_composition import ServiceKey
+    from .scopes import graph_key
+    entered, release = asyncio.Event(), asyncio.Event()
+    notified, completed = asyncio.Event(), asyncio.Event()
+    calls = []
+    target = graph_path(ctx.workspace_root("memory") / "akasha.db", graph_key((("project", "late"),)))
+    original_consume, original_discover = MessageMemory.consume, _write_graphs
+    async def consume(memory):
+        tracked = memory._consumer.path == target
+        if tracked:
+            calls.append(len(calls) + 1)
+        result = await original_consume(memory)
+        if tracked and len(calls) == 1:
+            entered.set()
+            await release.wait()
+        elif tracked and len(calls) == 2:
+            completed.set()
+        return result
+    async def discover(catalog, policies, heads=None):
+        result = await original_discover(catalog, policies, heads)
+        if heads is not None and heads.get("late") == 3:
+            notified.set()
+        return result
+    globals()["_write_graphs"] = discover
+    MessageMemory.consume = consume
+    def close():
+        globals()["_write_graphs"] = original_discover
+        MessageMemory.consume = original_consume
+    await ctx.effect(lambda: close)
+    await ctx.provide(ServiceKey("fixture.memory-initialization"), (entered, release, notified, completed, calls))
+    await _fixture_run(ctx, interest)
+''')
+
+    async with application(tmp_path, replying=False, extra_sources=sources) as (log, host):
+        policies = ScopePolicies(log.owner("plugin:akasha:scope-policy"), log.catalog())
+        policies.set("project", "late", "isolated")
+        log.ensure_session("late", SessionAttributes.scoped({"project": "late"}))
+
+        def append(number):
+            for author, kind, body in (
+                ("user", Input, Input((ContentPart("text", f"fact {number}"),))),
+                ("assistant", Output, Output((ContentPart("text", f"answer {number}"),), "complete")),
+            ):
+                log.writer("late", author=author, source="conversation", body_types=(kind,),
+                    content={"text": check_text}).append(f"late-{author}-{number}", body)
+
+        root = host.live_root
+        assert root is not None
+        entered, release, notified, completed, calls = root.context.require(ServiceKey("fixture.memory-initialization"))
+        append(0)
+        try:
+            await asyncio.wait_for(entered.wait(), 5)
+            assert calls == [1]
+            append(1)
+            await asyncio.wait_for(notified.wait(), 5)
+            release.set()
+            await asyncio.wait_for(completed.wait(), 5)
+            # completed 在真实 consume 返回前置位；旧逻辑随后会同步进入第三次空扫。
+            assert calls == [1, 2]
+            async with root.context.open_service(MATERIALS_V4) as service, service.bind() as materials:
+                await materials.prepare(log.reader("late").snapshot(), "conversation")
+            path = graph_path(tmp_path / "workspace/memory/akasha.db", graph_key((("project", "late"),)))
+            state = load_consumption(path)
+            assert state is not None
+            assert [entry.ending[1] for entry in state.applied] == ["late-assistant-0", "late-assistant-1"]
+            assert calls == [1, 2]
+        finally:
+            release.set()
 
 
 @pytest.mark.asyncio

@@ -20,21 +20,7 @@ from .tools import SCHEMAS, Screen, Share, Alert, Skip
 def recent_context(catalog: MessageCatalog, history: DeliveryHistory, *, target: str | None,
                    now: datetime, items: Sequence[Mapping[str, object]] = ()) -> str:
     """冻结目标最近对话与跨会话真实送达通知，正文作为低信任历史材料。"""
-    passive: list[dict[str, object]] = []
-    if target is not None:
-        messages = catalog.reader(target).snapshot()
-        for message in reversed(messages):
-            if (message.recorded_at > now
-                    or message.source not in {"conversation", "legacy-unattributed"}
-                    or not isinstance(message.body, (Input, Output))):
-                continue
-            text = "\n".join(cast(str, part.value) for part in message.body.parts
-                             if isinstance(part, ContentPart) and part.kind == "text")
-            if text:
-                passive.append({"message_id": message.message_id, "role": "user" if isinstance(message.body, Input) else "assistant",
-                                "time": message.recorded_at.isoformat(), "text": text})
-            if len(passive) == 20:
-                break
+    passive = [] if target is None else _recent_conversation(catalog.reader(target), now)
     delivered = history.recent(since=now - timedelta(days=7), until=now, limit=30,
                               excluded_sources=frozenset({"conversation"}), visibility="listed")
     scope = catalog.attributes(target).scope if target is not None and catalog.exists(target) else ()
@@ -77,6 +63,31 @@ def recent_context(catalog: MessageCatalog, history: DeliveryHistory, *, target:
     return json.dumps({"followup_rule_changes": _preview(rules, 3000),
                        "recent_conversation": list(reversed(_preview(passive, 3000))),
                        "delivered_messages": list(reversed(_preview(list(reversed(proactive)), 3000)))}, ensure_ascii=False)
+
+
+def _recent_conversation(reader: MessageReader, now: datetime) -> list[dict[str, object]]:
+    """只向前翻到足够的近期对话；忽略未来消息和无正文的工具过程。"""
+    rows: list[dict[str, object]] = []
+    try:
+        page = reader.read_tail(limit=50)
+    except KeyError:
+        return rows
+    while True:
+        for message in reversed(page.messages):
+            if (message.recorded_at > now or message.source not in {"conversation", "legacy-unattributed"}
+                    or not isinstance(message.body, (Input, Output))):
+                continue
+            text = "\n".join(str(part.value) for part in message.body.parts
+                             if isinstance(part, ContentPart) and part.kind == "text")
+            if text:
+                rows.append({"message_id": message.message_id,
+                             "role": "user" if isinstance(message.body, Input) else "assistant",
+                             "time": message.recorded_at.isoformat(), "text": text})
+            if len(rows) == 20:
+                return rows
+        if not page.has_more:
+            return rows
+        page = reader.read_tail(before_seq=page.messages[0].seq, through_seq=page.through_seq, limit=50)
 
 
 def _preview(rows: Sequence[Mapping[str, object]], budget: int) -> list[dict[str, object]]:

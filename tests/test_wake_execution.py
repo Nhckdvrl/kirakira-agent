@@ -14,6 +14,40 @@ from plugins.wake.api import DriftWakeServices
 from plugins.wake.state import WakeState
 
 
+def test_recent_context_pages_from_tail_and_state_checks_schema_once(tmp_path, monkeypatch):
+    import sqlite3
+    from types import SimpleNamespace
+    from datetime import timedelta
+    from plugins.ledger.log import MessageLog
+    from plugins.ledger.contract import ContentPart, ContentReferences, Input, Output
+    from plugins.wake.messages import _recent_conversation
+
+    log=MessageLog(tmp_path/'messages.db')
+    try:
+        writer=log.writer('chat',author='user',source='conversation',body_types=(Input,Output),
+                          content={'text':lambda _:ContentReferences()})
+        for number in range(200):writer.append(str(number),Input((ContentPart('text',f'message {number}'),)))
+        for number in range(80):writer.append('empty-'+str(number),Output((),'complete'))
+        reader=log.reader('chat');pages=[]
+        def read_tail(**kwargs):
+            page=reader.read_tail(**kwargs);pages.append(len(page.messages));return page
+        rows=_recent_conversation(SimpleNamespace(read_tail=read_tail),datetime.now(UTC)+timedelta(seconds=1))
+        assert [row['message_id'] for row in rows]==[str(n) for n in range(199,179,-1)]
+        assert sum(pages)==100  # Eighty empty outputs, then the twenty actual messages.
+        assert not _recent_conversation(log.reader('missing'),datetime.now(UTC))
+    finally:log.close()
+
+    connect=sqlite3.connect;checks=[]
+    def traced(*args,**kwargs):
+        connection=connect(*args,**kwargs)
+        connection.set_trace_callback(lambda sql: checks.append(sql) if 'integrity_check' in sql else None)
+        return connection
+    monkeypatch.setattr(sqlite3,'connect',traced)
+    state=WakeState(tmp_path/'wake-once.db')
+    for _ in range(4):state.initialize()
+    assert len(checks)==1
+
+
 def test_alert_can_retrieve_memory_without_gaining_investigation_or_write_tools():
     from pydantic import ValidationError
 

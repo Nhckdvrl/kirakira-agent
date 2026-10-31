@@ -801,6 +801,14 @@ class MessageLog:
                 self._heads = dict(heads)
         return heads
 
+    async def committed_heads_async(self, load: Callable[[], Mapping[str, int]]) -> Mapping[str, int]:
+        """热水位不进入 I/O 队列；首次恢复目录在 worker 中读取并排空。"""
+        with self._listener_lock:
+            if self._heads is not None:
+                return dict(self._heads)
+        self._check_async_operation()
+        return await run_file_io(lambda: self.committed_heads(load))
+
     def flush_notify(self) -> None:
         """交付异步提交欠下的唤醒；不同提交的消息类型在同一锁内合并。"""
         with self._listener_lock:
@@ -1187,7 +1195,7 @@ class MessageCatalog:
                 # 这段全会话水位查询在 worker 内排水，不阻塞事件循环上的其他订阅者。
                 heads = (await self.snapshot_heads_async(prefix=prefix, visibility=visibility)
                          if polled or prefix or visibility is not None
-                         else self._log.committed_heads(self.snapshot_heads))
+                         else await self._log.committed_heads_async(self.snapshot_heads))
                 if heads != previous:
                     previous = heads
                     yield heads

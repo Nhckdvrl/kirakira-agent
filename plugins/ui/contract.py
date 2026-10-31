@@ -384,7 +384,7 @@ async def follow_messages(
         async for message in follower:
             if message.seq <= after_seq:
                 continue
-            page = reader.read_page(after_seq=after_seq, limit=50)
+            page = await reader.read_async(lambda current: current.read_page(after_seq=after_seq, limit=50))
             while page.messages:
                 next_seq = page.messages[-1].seq
                 yield {"version": 2, "session_id": reader.session_id,
@@ -395,7 +395,10 @@ async def follow_messages(
                 if not page.has_more:
                     break
                 # 2. 当前批次固定 head；随后到达的事实由外层 follow 继续追赶。
-                page = reader.read_page(after_seq=after_seq, through_seq=page.through_seq, limit=50)
+                through_seq = page.through_seq
+                page = await reader.read_async(lambda current: current.read_page(
+                    after_seq=after_seq, through_seq=through_seq, limit=50,
+                ))
 
 
 def _message_row(

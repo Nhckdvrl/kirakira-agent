@@ -1,0 +1,1081 @@
+--- a/bundles/base.toml
++++ b/bundles/base.toml
+@@ -159,6 +159,9 @@
+ [rows."programmatic"]
+ plugin = "programmatic@release"
+ 
++[rows."session_reference"]
++plugin = "session_reference@release"
++
+ [rows."onboarding"]
+ plugin = "onboarding@release"
+ 
+--- a/frontend/chat/src/chat-message.ts
++++ b/frontend/chat/src/chat-message.ts
+@@ -46,6 +46,8 @@
+   /** 本地发送中的消息：sending 等待服务端确认，retrying 正在换连接重发；确认后移除。 */
+   delivery?: "sending" | "retrying";
+   controlTurnId?: string;
++  /** 本地乐观消息带着的会话引用摘要；服务端时间线回来后以 part 为准。 */
++  references?: readonly { sessionId: string; title: string }[];
+   reply?: {
+     messageId: string;
+     role: ChatRole;
+--- a/frontend/chat/src/components/ai-elements/prompt-input.tsx
++++ b/frontend/chat/src/components/ai-elements/prompt-input.tsx
+@@ -23,6 +23,7 @@
+   HTMLAttributes,
+   KeyboardEventHandler,
+   ReactNode,
++  Ref,
+ } from "react";
+ import {
+   Children,
+@@ -83,6 +84,8 @@
+     message: PromptInputMessage,
+     event: FormEvent<HTMLFormElement>
+   ) => void | Promise<void | string | undefined>;
++  /** 表单根节点；宿主用它挂会话引用的拖放接收区。 */
++  ref?: Ref<HTMLFormElement>;
+ };
+ 
+ /** 管理当前表单的附件，发送成功后才释放对应的 Blob URL。 */
+@@ -95,6 +98,7 @@
+   onRejectFiles,
+   onSubmit,
+   children,
++  ref,
+   ...props
+ }: PromptInputProps) => {
+   // 1. 当前表单拥有附件；提交中只隐藏本次发送持有的文件。
+@@ -303,7 +307,11 @@
+       <form
+         className={cn("w-full", className)}
+         onSubmit={handleSubmit}
+-        ref={formRef}
++        ref={(node) => {
++          formRef.current = node;
++          if (typeof ref === "function") ref(node);
++          else if (ref) ref.current = node;
++        }}
+         {...props}
+       >
+         <InputGroup className="overflow-hidden">{children}</InputGroup>
+--- a/frontend/chat/src/conversation-navigation.tsx
++++ b/frontend/chat/src/conversation-navigation.tsx
+@@ -4,6 +4,7 @@
+ import { SessionStatusMark, type SessionStatus } from "./session-status-mark";
+ import { MarqueeText } from "./marquee-text";
+ import { NavigationRowMenu, type NavigationRowAction } from "./navigation-row-menu";
++import { SESSION_DRAG_TYPE } from "./composer-references";
+ 
+ export interface ConversationDestination {
+   id: string;
+@@ -359,14 +360,20 @@
+       data-row-primary=""
+       disabled={session.unavailable}
+       title={session.preview ? `${session.title} · ${session.preview}` : session.title}
+-      draggable={drag !== undefined}
+-      onDragStart={drag === undefined ? undefined : (event) => {
+-        if (dragHandlers?.start(session.id) === false) {
+-          event.preventDefault();
+-          return;
++      draggable={!session.unavailable}
++      onDragStart={(event) => {
++        // 一次拖拽可以有两个消费者：侧栏内部排序（text/plain）与输入框引用（自定义 MIME）。
++        // 两个都写上，谁接住就用谁——落在行上是排序，落在输入卡上是引用。
++        event.dataTransfer.setData(SESSION_DRAG_TYPE,
++          JSON.stringify({ sessionId: session.id, title: session.title }));
++        event.dataTransfer.effectAllowed = drag === undefined ? "copy" : "copyMove";
++        if (drag !== undefined) {
++          if (dragHandlers?.start(session.id) === false) {
++            event.preventDefault();
++            return;
++          }
++          event.dataTransfer.setData("text/plain", session.id);
+         }
+-        event.dataTransfer.setData("text/plain", session.id);
+-        event.dataTransfer.effectAllowed = "move";
+       }}
+       onDragEnd={drag === undefined ? undefined : () => dragHandlers?.end()}
+       onDragOver={drag === undefined ? undefined : (event) => {
+--- a/frontend/chat/src/desktop-composer.tsx
++++ b/frontend/chat/src/desktop-composer.tsx
+@@ -14,7 +14,9 @@
+ import { ComposerReply } from "./message-actions";
+ import { isGeneratingChatStatus, type ChatStatus } from "./web-chat-status";
+ import { useComposerSuggest } from "./composer-suggest";
+-import { setComposerBusy } from "./composer-contributions";
++import { ComposerReferences, useReferenceDrop } from "./composer-references-ui";
++import { adoptReferences, composerReferences, notifyReferencesSent, referenceParts, useComposerReferences } from "./composer-references";
++import { setComposerBusy, type ComposerInputPart } from "./composer-contributions";
+ import { PluginUiSlot } from "./plugin-ui-runtime";
+ import { CHAT_LAYERS, chatLayerOpen, inChat, keyForChat } from "./chat-host";
+ import { chatPortalRoot } from "./chat-layout";
+@@ -59,7 +61,7 @@
+   stopPending: boolean;
+   replyTarget: TimelineReply | null;
+   onCancelReply: () => void;
+-  onSend: (text: string, files: ComposerFile[]) => Promise<string | undefined>;
++  onSend: (text: string, files: ComposerFile[], parts?: readonly ComposerInputPart[]) => Promise<string | undefined>;
+   /** 生成中发出的纯文字：不打断本轮，下一步交给模型。 */
+   /** 返回 false 表示服务端此刻不接纳插话（回合已结束或是后台回调），改走普通发送。 */
+   onSteer: (text: string) => Promise<boolean>;
+@@ -91,6 +93,8 @@
+   }, []);
+   const setInput = useCallback((text: string) => setDraft(draftKey, text), [draftKey, setDraft]);
+   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
++  // 输入卡根节点：会话引用拖到这里就算投放。挂在整个卡片上比只挂输入框更好点中。
++  const cardRef = useRef<HTMLFormElement | null>(null);
+   useEffect(() => {
+     if (autoFocus && chatReady) textareaRef.current?.focus();
+   }, [autoFocus, chatReady, draftKey]);
+@@ -155,19 +159,27 @@
+   const generating = isGeneratingChatStatus(status);
+   // 布局阶段先写入，工具位插件在随后的失效回调里读到的就是新状态。
+   useLayoutEffect(() => { setComposerBusy(generating); }, [generating]);
+-  // 生成中只有纯文字能插进本轮；附件与引用要等本轮结束。
+-  const steerable = generating && !hasAttachments && !replyTarget;
++  // 生成中只有纯文字能插进本轮；附件、回复引用与会话引用都要等本轮结束。
++  const references = useComposerReferences(draftKey);
++  const referenceDragActive = useReferenceDrop(cardRef, draftKey, chatReady);
++  const steerable = generating && !hasAttachments && !replyTarget && references.length === 0;
+   const submit = useCallback(async (text: string, files: ComposerFile[]) => {
+     if (!canSend) throw new Error(sendProblem || "聊天服务暂不可用，请稍后重试。");
+     const wasExpanded = expanded;
+     setInput("");
+     setExpanded(false);
++    // 会话引用随这条消息一起提交：引用是坐标，正文由模型用 read_session 去读。
++    const sentReferences = composerReferences(draftKey);
++    const parts = referenceParts(sentReferences);
+     try {
+       if (steerable && !files.length && await onSteer(text)) return undefined;
+-      const sessionId = await onSend(text, files);
++      const sessionId = await onSend(text, files, parts);
++      // 引用属于这条已发出的消息；失败时保留，用户还能改一改再发。
++      if (parts.length > 0) notifyReferencesSent(draftKey, sentReferences);
+       // 首次接纳只是给同一编辑位置确定会话身份，后写的草稿随它保留。
+       if (sessionId && draftKey.startsWith("new:")) {
+         const next = drafts.current.get(draftKey) || "";
++        adoptReferences(draftKey, sessionId);
+         setDraft(sessionId, next);
+         setDraft(draftKey, "");
+         return sessionId;
+@@ -249,7 +261,7 @@
+     setNotice(null);
+     submit(text, []).catch((error: unknown) => setNotice({ text: error instanceof Error ? error.message : "插话没有送达", ms: 3200 }));
+   };
+-  const shellExpanded = expanded || hasAttachments || Boolean(replyTarget);
++  const shellExpanded = expanded || hasAttachments || Boolean(replyTarget) || references.length > 0;
+   // 窄屏阅读时输入卡只保留一行。用户点进卡片才展开（程序 autofocus 不算）；
+   // 焦点离开整张卡（含它弹出的模型菜单）才收回。
+   const [engaged, setEngaged] = useState(false);
+@@ -265,7 +277,8 @@
+     {draftStorageError ? <p role="status">浏览器无法保存本页草稿。刷新前请复制已输入的文字。</p> : null}
+     {mention.menu ? <div className="composer-suggest-anchor">{mention.menu}</div> : null}
+     <PromptInput
+-      className={`composer ${shellExpanded ? "is-expanded" : "is-compact"} ${input.trim() || replyTarget ? "has-text" : "empty"}${resting ? " is-resting" : ""}${fileDragActive ? " is-drop-target" : ""}`}
++      ref={cardRef}
++      className={`composer ${shellExpanded ? "is-expanded" : "is-compact"} ${input.trim() || replyTarget ? "has-text" : "empty"}${resting ? " is-resting" : ""}${fileDragActive ? " is-drop-target" : ""}${referenceDragActive ? " is-reference-target" : ""}`}
+       multiple
+       attachmentKey={draftKey}
+       maxFileSize={MAX_ATTACHMENT_MB * 1024 * 1024}
+@@ -294,6 +307,7 @@
+       onBlur={onComposerBlur}
+     >
+       <WindowFileDrop enabled={chatReady} onActiveChange={setFileDragActive} />
++      <ComposerReferences draftKey={draftKey} />
+       {replyTarget ? <ComposerReply author={replyTarget.author} preview={replyTarget.preview} onCancel={onCancelReply} /> : null}
+       {notice ? <p className="composer-queue-refused" role="status" title={notice.title}>{notice.text}</p> : null}
+       {fileDragActive ? <ComposerDropScrim /> : null}
+@@ -324,7 +338,8 @@
+         </PromptInputTools>
+         <PromptInputTools className="composer__trail">
+           <ComposerAttachmentButton />
+-          <ComposerSubmit input={input} status={status} stopPending={stopPending} steerable={steerable} onStop={onStop} disabled={!canSend} />
++          <ComposerSubmit input={input} status={status} stopPending={stopPending} steerable={steerable}
++            hasReferences={references.length > 0} onStop={onStop} disabled={!canSend} />
+         </PromptInputTools>
+       </PromptInputFooter>
+     </PromptInput>
+@@ -541,8 +556,9 @@
+ }
+ 
+ // 生成中输入框有文字时按钮是插话，空着才是停止（Esc 始终停止）。
+-function ComposerSubmit({ input, status, stopPending, steerable, onStop, disabled }: {
+-  input: string; status: ChatStatus; stopPending: boolean; steerable: boolean; onStop: () => void; disabled: boolean;
++function ComposerSubmit({ input, status, stopPending, steerable, hasReferences, onStop, disabled }: {
++  input: string; status: ChatStatus; stopPending: boolean; steerable: boolean; hasReferences: boolean;
++  onStop: () => void; disabled: boolean;
+ }) {
+   const attachments = usePromptInputAttachments();
+   const generating = isGeneratingChatStatus(status);
+@@ -562,6 +578,6 @@
+       event.preventDefault();
+       if (!stopping) onStop();
+     } : undefined}
+-    disabled={!stopMode && (stopPending || disabled || (!input.trim() && attachments.files.length === 0))}
++    disabled={!stopMode && (stopPending || disabled || (!input.trim() && attachments.files.length === 0 && !hasReferences))}
+   />;
+ }
+--- a/frontend/chat/src/message-timeline.ts
++++ b/frontend/chat/src/message-timeline.ts
+@@ -9,8 +9,11 @@
+   sha256: string;
+ }
+ 
++export type TimelineSessionReference = { session_id: string; title: string };
++
+ export type TimelinePart =
+   | { kind: "text" | "artifact_ref" | "reply_ref"; value: string }
++  | { kind: "session.reference"; value: { sessions: TimelineSessionReference[] } }
+   | { kind: "tool_call"; binding_id: string; name: string; owner?: string; arguments: Record<string, unknown> }
+   | { kind: "context.notice"; value: { text: string } }
+   | { kind: "history.provenance" | "history.transcript" | "history.record" | "history.turn_input"; archive: unknown }
+@@ -251,6 +254,14 @@
+   switch (part.kind) {
+     case "text": return typeof part.value === "string";
+     case "artifact_ref": case "reply_ref": return nonempty(part.value);
++    case "session.reference": {
++      const value = object(part.value);
++      const sessions = value?.sessions;
++      return Array.isArray(sessions) && sessions.length > 0 && sessions.every((item) => {
++        const row = object(item);
++        return row !== null && nonempty(row.session_id) && typeof row.title === "string";
++      });
++    }
+     case "tool_call": return nonempty(part.binding_id) && nonempty(part.name) && object(part.arguments) !== null
+       && (part.owner === undefined || nonempty(part.owner));
+     case "context.notice": return nonempty(object(part.value)?.text);
+--- a/frontend/chat/src/message-view.css
++++ b/frontend/chat/src/message-view.css
+@@ -2360,3 +2360,86 @@
+ .selection-quote.is-below { translate: -50% 0; }
+ .selection-quote:focus-visible { outline: 2px solid var(--ak-rule-focus); outline-offset: 2px; }
+ @keyframes selection-quote-in { from { opacity: 0; } }
++
++/* 会话引用条：一行 chip，与回复引用同一套间距语言，但可以并排多个。 */
++.composer-references {
++  display: flex;
++  flex-wrap: wrap;
++  gap: 6px;
++  padding: 6px 10px 0;
++}
++
++.composer-reference {
++  display: inline-flex;
++  max-width: 100%;
++  min-width: 0;
++  align-items: center;
++  gap: 6px;
++  padding: 3px 4px 3px 8px;
++  border-radius: 8px;
++  color: var(--ak-color-on-action-container);
++  background: color-mix(in oklab, var(--ak-color-action-container) 42%, var(--md-sys-color-surface-container-high));
++  font-size: var(--md-sys-typescale-label-medium-size);
++}
++
++.composer-reference > svg {
++  flex: none;
++  color: var(--ak-color-action-primary);
++}
++
++.composer-reference__title {
++  overflow: hidden;
++  min-width: 0;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++}
++
++.composer-reference > button {
++  display: inline-flex;
++  width: 22px;
++  height: 22px;
++  flex: none;
++  align-items: center;
++  justify-content: center;
++  border: 0;
++  border-radius: 6px;
++  color: inherit;
++  background: transparent;
++  cursor: pointer;
++}
++
++.composer-reference > button:hover {
++  background: color-mix(in oklab, currentColor 12%, transparent);
++}
++
++.composer-reference__notice {
++  padding: 4px 12px 0;
++  color: var(--md-sys-color-on-surface-variant);
++  font-size: var(--md-sys-typescale-body-small-size);
++}
++
++/* 拖会话进来时整张卡片描边；文件拖放用的是另一层遮罩，两者互不覆盖。 */
++.composer.is-reference-target {
++  outline: 2px solid var(--ak-color-action-primary);
++  outline-offset: 2px;
++}
++
++/* 消息气泡里的会话引用行：只说明「这条消息引用了谁」，不展开正文。 */
++.message-session-reference {
++  display: inline-flex;
++  max-width: 100%;
++  align-items: center;
++  gap: 6px;
++  margin: 2px 0;
++  padding: 3px 10px;
++  border-radius: 8px;
++  color: var(--md-sys-color-on-surface-variant);
++  background: var(--md-sys-color-surface-container-high);
++  font-size: var(--md-sys-typescale-label-medium-size);
++}
++
++.message-session-reference > span {
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++}
+--- a/frontend/chat/src/message-view.tsx
++++ b/frontend/chat/src/message-view.tsx
+@@ -20,7 +20,7 @@
+   DialogContent,
+   DialogTitle,
+ } from "@/components/ui/dialog";
+-import { Brain, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Download, ExternalLink, Gauge, Wrench, X, ZoomIn, ZoomOut } from "lucide-react";
++import { Brain, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Download, ExternalLink, Gauge, MessagesSquare, Wrench, X, ZoomIn, ZoomOut } from "lucide-react";
+ import { useStickToBottomContext } from "use-stick-to-bottom";
+ import { MarqueeText } from "./marquee-text";
+ import {
+@@ -232,9 +232,17 @@
+       : null;
+   if (message.role === "user") {
+     // 附件在气泡上方、气泡外（Desktop 同款）：气泡只包文字，只发附件时不留一个空气泡。
++    // 会话引用同理：只发引用时也要有一行说明，否则等待服务端确认期间是空气泡。
++    const references = message.references?.length
++      ? <div className="message-session-reference" aria-label="引用了会话">
++          <MessagesSquare size={15} aria-hidden="true" />
++          <span>引用 {message.references.length} 个会话：{message.references.map((item) => item.title || item.sessionId).join("、")}</span>
++        </div>
++      : null;
+     return (
+       <Message from="user" className="message-row user-row">
+         {attachments}
++        {references}
+         {leadingContent || message.content ? <MessageContent className="user-bubble">
+           {leadingContent}
+           {message.content ? (
+@@ -823,6 +831,13 @@
+         preview={source ? timelineReply(source).preview : ""} unavailable={!source} canLoad={canLoadReferences}
+         onNavigate={() => onNavigate(part.value)} />;
+     }
++    case "session.reference": {
++      const sessions = part.value.sessions;
++      return <div className="message-session-reference" aria-label="引用了会话">
++        <MessagesSquare size={15} aria-hidden="true" />
++        <span>引用 {sessions.length} 个会话：{sessions.map((item) => item.title || item.session_id).join("、")}</span>
++      </div>;
++    }
+     case "tool_call": return <details className="timeline-details timeline-tool-call">
+       <summary>工具调用 · {part.name}</summary>
+       <pre tabIndex={0}>{JSON.stringify(part.arguments, null, 2)}</pre>
+--- a/frontend/chat/src/plugin-ui-runtime.tsx
++++ b/frontend/chat/src/plugin-ui-runtime.tsx
+@@ -422,12 +422,14 @@
+ }
+ 
+ /** WebSocket 上的插件推送帧；不是该帧时返回 false，交给其他解析器。 */
+-export function receivePluginUiEvent(value: unknown): boolean {
++export function receivePluginUiEvent(value: unknown, activeSessionId: string): boolean {
+   if (typeof value !== "object" || value === null || (value as { type?: unknown }).type !== "plugin_ui.event") return false;
+   const frame = value as Record<string, unknown>;
+   const state = frame.value;
+   if (typeof frame.plugin_id !== "string" || typeof frame.plugin_revision !== "string" || typeof frame.session_id !== "string"
+     || (state !== null && (typeof state !== "object" || Array.isArray(state)))) throw new Error("插件推送帧无效");
++  // 已换会话时，旧订阅在途的帧不能重新填回被清空的状态。
++  if (frame.session_id !== activeSessionId) return true;
+   const key = pushKey(frame.plugin_id, frame.plugin_revision, frame.session_id);
+   // null 表示流已结束，直接忘掉这个键，长连接跨会话不会越攒越多。
+   if (state === null) pushed.delete(key);
+@@ -444,6 +446,16 @@
+   const keys = [...pushed.keys()];
+   pushed.clear();
+   keys.forEach((key) => deliverPush(key, null));
++}
++
++/** 连接保留、只换跟随的会话切换：旧会话的推送状态即刻失效，回到它时由新跟随的基线帧重建。 */
++export function invalidatePluginUiSession(sessionId: string) {
++  const keys = [...pushed.keys()]
++    .filter((key) => (JSON.parse(key) as [string, string, string])[2] === sessionId);
++  for (const key of keys) {
++    pushed.delete(key);
++    deliverPush(key, null);
++  }
+ }
+ 
+ function subscribePush(pluginId: string, revision: string, sessionId: string | undefined, callback: (value: Record<string, unknown> | null) => void): () => void {
+--- a/frontend/chat/src/use-desktop-chat-controller.ts
++++ b/frontend/chat/src/use-desktop-chat-controller.ts
+@@ -3,7 +3,7 @@
+ import { createUuid, createUuidV7 } from "./browser-uuid.ts";
+ import type { ChatMessage } from "./chat-message";
+ import type { ComposerFile } from "./desktop-composer";
+-import { loadWebPluginCatalog, receivePluginUiEvent, resetPluginUiEvents, usePluginUiCatalogVersion } from "./plugin-ui-runtime";
++import { invalidatePluginUiSession, loadWebPluginCatalog, receivePluginUiEvent, resetPluginUiEvents, usePluginUiCatalogVersion } from "./plugin-ui-runtime";
+ import { groupKey, useNavigationGroupSections, type GroupRef, type NavigationGroupsState } from "./navigation-groups";
+ import { useNavigationPins } from "./use-navigation-pins";
+ import { readSessionActivityFrame, useSessionActivity, type SessionHead } from "./use-session-activity";
+@@ -33,7 +33,7 @@
+ import type { DesktopSidebarSession } from "./desktop-sidebar";
+ import { useSteers, type SteerResult } from "./use-steers";
+ import { webTurnTrace } from "./web-turn-trace";
+-import { composerContributions, notifyComposerSent, useComposerContributions } from "./composer-contributions";
++import { composerContributions, notifyComposerSent, useComposerContributions, type ComposerInputPart } from "./composer-contributions";
+ 
+ /** 回访会话时先展示的尾页快照；只做展示缓存，事实仍以服务端分页与实时帧为准。 */
+ interface SessionTail {
+@@ -99,13 +99,15 @@
+ // 服务端明确拒绝的发送不重试，直接把原因交给用户。
+ class SendRejected extends Error {}
+ 
+-function followSession(socket: WebSocket | null, sessionId: string, afterSeq: number): void {
+-  if (!sessionId || socket?.readyState !== WebSocket.OPEN) return;
++function sendSessionFollow(socket: WebSocket | null, sessionId: string, afterSeq: number): string | null {
++  if (!sessionId || socket?.readyState !== WebSocket.OPEN) return null;
++  const requestId = createUuid();
+   socket.send(JSON.stringify({
+     type: "session.follow", version: 2, after_seq: afterSeq,
+-    request_id: createUuid(),
++    request_id: requestId,
+     session_id: sessionId,
+   }));
++  return requestId;
+ }
+ 
+ /** 切换会话只清理一次性路由参数，保留嵌入模式和其他页面选项。 */
+@@ -268,6 +270,11 @@
+   const replyTargetsRef = useRef(new Map<string, TimelineReply>());
+   const [copiedMessageId, setCopiedMessageId] = useState("");
+   const socketRef = useRef<WebSocket | null>(null);
++  const followRequestRef = useRef<{ requestId: string; sessionId: string; confirmed: boolean } | null>(null);
++  const followSession = useCallback((socket: WebSocket | null, sessionId: string, afterSeq: number) => {
++    const requestId = sendSessionFollow(socket, sessionId, afterSeq);
++    if (requestId !== null) followRequestRef.current = { requestId, sessionId, confirmed: false };
++  }, []);
+   const connectionTaskRef = useRef<AbortController | null>(null);
+   const connectRef = useRef<(() => WebSocket) | null>(null);
+   const messageElementsRef = useRef(new Map<string, HTMLDivElement>());
+@@ -428,7 +435,7 @@
+         setHistoryLoading(false);
+       }
+     }
+-  }, [readSessionTail, setFollowAfter, setMessages, setStatusLive, setTimelineMessages, streamStore]);
++  }, [followSession, readSessionTail, setFollowAfter, setMessages, setStatusLive, setTimelineMessages, streamStore]);
+ 
+   const loadOlderMessages = useCallback(async () => {
+     const sessionId = activeSessionRef.current;
+@@ -505,6 +512,7 @@
+   const closeConnection = useCallback(() => {
+     // React 可立即重新挂载；先撤销旧连接，不能等异步 finalizer 才清引用。
+     socketRef.current = null;
++    followRequestRef.current = null;
+     resetPluginUiEvents();
+     connectionTaskRef.current?.abort();
+     connectionTaskRef.current = null;
+@@ -563,12 +571,19 @@
+                     receiveSessionActivity(activity);
+                     return;
+                   }
+-                  if (receivePluginUiEvent(value)) return;
++                  if (receivePluginUiEvent(value, followRequestRef.current?.confirmed ? activeSessionRef.current : "")) return;
+                   const frame = readMessageLogFrame(value);
+                   if (frame) {
+                     if (frame.session_id !== activeSessionRef.current) return;
++                    const follow = followRequestRef.current;
+                     if (frame.type === "session.following") {
++                      if (!follow || frame.request_id !== follow.requestId) return;
++                      follow.confirmed = true;
+                       setTimelineRefresh((revision) => revision + 1);
++                    } else if (!follow?.confirmed || follow.sessionId !== frame.session_id) {
++                      // A→B→A 时旧 A 的在途帧仍有同一个 session_id。只有最新跟随确认后
++                      // 才接收正文；服务端确认前已排空旧订阅，快照之后的增量会重新补齐。
++                      return;
+                     } else if (frame.type === "messages.appended") {
+                       if (frame.after_seq !== followAfterRef.current) throw new Error("实时消息游标不连续，请重新连接");
+                       const merged = mergeTimelineMessages(timelineRef.current, frame.items);
+@@ -671,7 +686,7 @@
+     // 兜底:finally/catch 内部一旦抛错(如组件已卸载后的 setState 边界),不外泄成 unhandled rejection。
+     void run().catch((error) => console.error("[chat-ui] connection loop escaped", error));
+     return first;
+-  }, [cacheSessionTail, closeConnection, disconnectSessionActivity, loadMessagesSafely, scheduleSessionsRefresh,
++  }, [cacheSessionTail, closeConnection, disconnectSessionActivity, followSession, loadMessagesSafely, scheduleSessionsRefresh,
+     receiveSessionActivity, reportError, setFollowAfter, setMessages, setReplyAvailable, setStatusLive, setTimelineMessages]);
+ 
+   // 手机从后台回来或网络切换后，旧连接常常已经半开；立刻探测一次，不等下一轮心跳。
+@@ -808,7 +823,7 @@
+     followSession(socketRef.current, sessionId, -1);
+     // 发送前只准备路由；上传失败时编辑器仍留在原草稿位置。
+     return sessionId;
+-  }, [loadMessages, setFollowAfter]);
++  }, [followSession, loadMessages, setFollowAfter]);
+ 
+   // 等服务端对 requestId 的确认；超时返回 false 交给调用方换连接重发，服务端拒绝时抛 SendRejected。
+   const waitForAccepted = useCallback((requestId: string, signal: AbortSignal) => new Promise<boolean>((resolve, reject) => {
+@@ -843,9 +858,9 @@
+     }
+   }, [closeConnection, connect, waitForAccepted]);
+ 
+-  const sendMessage = useCallback(async (text: string, files: ComposerFile[]) => {
++  const sendMessage = useCallback(async (text: string, files: ComposerFile[], extraParts?: readonly ComposerInputPart[]) => {
+     const cleanText = text.trim();
+-    if (!cleanText && files.length === 0) return;
++    if (!cleanText && files.length === 0 && !extraParts?.length) return;
+     if (!canSend) throw new Error(sendProblem || "聊天服务暂不可用，请稍后重试。");
+     if (sendRequestRef.current) throw new Error("消息正在发送，请稍等。");
+     setError("");
+@@ -865,6 +880,18 @@
+         mediaType: file.mediaType || "application/octet-stream", url: file.url || "", sizeBytes: file.sizeBytes,
+       })),
+       blocks: [], createdAt: new Date().toISOString(), canonical: false, delivery: "sending",
++      // 只发引用时没有正文也没有附件；把引用摘要带上，本地先显示「引用 N 个会话」，
++      // 否则等待服务端确认期间会是一个空气泡（重试时尤其久）。
++      references: (extraParts ?? [])
++        .filter((part) => part.kind === "session.reference")
++        .flatMap((part) => {
++          const sessions = (part.value as { sessions?: { session_id?: unknown; title?: unknown }[] } | null)?.sessions;
++          return Array.isArray(sessions)
++            ? sessions.flatMap((row) => typeof row?.session_id === "string" && row.session_id
++              ? [{ sessionId: row.session_id, title: typeof row.title === "string" ? row.title : "" }]
++              : [])
++            : [];
++        }),
+     }]);
+     try {
+       const sessionId = await ensureSession();
+@@ -890,7 +917,8 @@
+       const scope = sessionScopesRef.current.get(sessionId);
+       if (scope) payload.session_dimensions = scope;
+       const { parts } = composerContributions();
+-      if (parts.length) payload.parts = parts;
++      const allParts = [...parts, ...(extraParts ?? [])];
++      if (allParts.length) payload.parts = allParts;
+       const markDelivery = (delivery: ChatMessage["delivery"]) => setMessages((current) => current.map((item) => item.id === clientMessageId ? { ...item, delivery } : item));
+       await deliverMessage(clientMessageId, payload, controller.signal, () => markDelivery("retrying"));
+       controller.signal.throwIfAborted();
+@@ -1035,7 +1063,13 @@
+     setSurface("chat");
+     clearChatRoute();
+     // 空白页只订阅目录，没有旧正文跟随；首次进入会话可以复用已有连接。
+-    if (activeSessionRef.current) closeConnection();
++    // 连接健康时会话间切换也只换跟随：服务端收到新 session.follow 会先排空上一会话的订阅
++    // （web_chat._follow_session），整链重连会把目录刷新、插件基线与活动订阅全部重取一遍。
++    if (activeSessionRef.current) {
++      if (socketRef.current?.readyState === WebSocket.OPEN) invalidatePluginUiSession(activeSessionRef.current);
++      else closeConnection();
++    }
++    followRequestRef.current = null;
+     activeSessionRef.current = sessionId;
+     sendRequestRef.current?.abort();
+     stopRequestRef.current?.abort();
+@@ -1069,7 +1103,7 @@
+       });
+     // 新鲜快照跳过了分页拉取，仍需恢复 WebSocket 增量跟随。
+     if (cachedFresh) followSession(socketRef.current ?? connectRef.current?.() ?? null, sessionId, cached.throughSeq);
+-  }, [closeConnection, loadMessages, reportError, reportHistoryError, setFollowAfter, setMessages, setTimelineMessages, setReplyAvailable, setStatusLive, surface, sessions, navigationPins.sessions]);
++  }, [closeConnection, followSession, loadMessages, reportError, reportHistoryError, setFollowAfter, setMessages, setTimelineMessages, setReplyAvailable, setStatusLive, surface, sessions, navigationPins.sessions]);
+ 
+   useEffect(() => {
+     if (!chatReady || !requestedSessionId) return;
+--- a/plugins/akasha/application/consumer.py
++++ b/plugins/akasha/application/consumer.py
+@@ -122,13 +122,17 @@
+ 
+         # 1. 第一次启用固定已有日志上界，重启前也必须把空图与起点一起发布。
+         #    独立图的成员从接纳起就固定路由到它，不设上界而从头学习。
+-        if not path.exists():
++        def read_state() -> tuple[bool, Consumption | None]:
++            if path.exists():
++                return True, load_consumption(path)
+             heads = catalog.snapshot_heads().items() if cutover else ()
+-            state = Consumption(cutover_heads=tuple(sorted(heads)))
+-            return await cls.create(path, turns=[], state=state, config=config)
+-        state = await run_memory_job(partial(load_consumption, path))
++            return False, Consumption(cutover_heads=tuple(sorted(heads)))
++
++        exists, state = await run_memory_job(read_state)
+         if state is None:
+             raise MemoryRebuildRequiredError("学习图缺少当前消费出处，需要显式重建")
++        if not exists:
++            return await cls.create(path, turns=[], state=state, config=config)
+         # 2. 按原算法验证出处，缺失向量由明确的模型端口补算；不调用学习 commit。
+         turns: list[Turn] = []
+         space: str | None = None
+@@ -221,7 +225,7 @@
+         member 选出路由到本图的 Session；每张图只消费自己的成员。
+         """
+         from plugins.ledger.contract import Input, Output
+-        from ..projection import Sample, applied_source
++        from ..projection import applied_source
+ 
+         from ..learning import AKASHA_LEARNING, LearningConfig
+ 
+@@ -229,13 +233,16 @@
+         async with bindings.open(learning_binding, AKASHA_LEARNING) as (learning, metadata):
+             rule = LearningConfig.model_validate(dict(metadata))
+             # 图空间从原出处恢复；切换模型不能把新向量接到旧图中。
+-            await run_memory_job(partial(
+-                self.check_embedding_space, rule.embedding_model, rule.dimension, bindings,
+-            ))
+-            heads = {
+-                session: head for session, head in catalog.snapshot_heads().items()
+-                if member is None or member(session)
+-            }
++            def snapshot_heads() -> dict[str, int]:
++                self.check_embedding_space(rule.embedding_model, rule.dimension, bindings)
++                # 成员路由也会读取 Session 与策略；整个固定前缀在后台取得。
++                # 不跨连接缓存 heads，后续到达的消息由下一轮通知消费。
++                return {
++                    session: head for session, head in catalog.snapshot_heads().items()
++                    if member is None or member(session)
++                }
++
++            heads = await run_memory_job(snapshot_heads)
+             cutover = dict(self.state.cutover_heads)
+             applied = {entry.ending[1] for entry in self.state.applied}
+             skipped = {item.ending[1] for item in self.state.skipped}
+--- a/plugins/akashic_clients/web_chat.py
++++ b/plugins/akashic_clients/web_chat.py
+@@ -1099,8 +1099,15 @@
+         except ValueError as error:
+             await self._send_error(websocket, request_id, str(error))
+             return session_key
+-        if not text.strip() and not media and retry_of is None:
+-            await self._send_error(websocket, request_id, "text 和 media 不能同时为空")
++        parts: tuple[tuple[str, object], ...] = ()
++        if "parts" in payload:
++            try:
++                parts = read_input_parts(payload["parts"])
++            except InputPartRejected as error:
++                await self._send_error(websocket, request_id, str(error))
++                return session_key
++        if not text.strip() and not media and not parts and retry_of is None:
++            await self._send_error(websocket, request_id, "text、media 和 parts 不能同时为空")
+             return session_key
+         reply_to_message_id = payload.get("reply_to_message_id")
+         metadata: dict[str, object] = {"client_request_id": request_id}
+@@ -1121,14 +1128,8 @@
+         elif media:
+             await self._send_error(websocket, request_id, "Web artifact store 尚未绑定")
+             return session_key
+-        if "parts" in payload:
+-            try:
+-                parts = read_input_parts(payload["parts"])
+-            except InputPartRejected as error:
+-                await self._send_error(websocket, request_id, str(error))
+-                return session_key
+-            if parts:
+-                metadata["input_parts"] = [{"kind": kind, "value": value} for kind, value in parts]
++        if parts:
++            metadata["input_parts"] = [{"kind": kind, "value": value} for kind, value in parts]
+         if reply_to_message_id is not None:
+             if not isinstance(reply_to_message_id, str) or not reply_to_message_id.strip():
+                 await self._send_error(
+--- a/plugins/delivery/execution.py
++++ b/plugins/delivery/execution.py
+@@ -81,6 +81,9 @@
+ 
+     async def _start(self, message_id: str, sink: str, start_guard: StartGuard | None = None) -> tuple[Task, bool]:
+         """同步接纳时先占被动活动；实际 I/O 的活动范围继续覆盖取消后的清理。"""
++        # 此处到 Task 准入前不能新增 await：直接调用被动发送时，必须先取得目标并占住
++        # activity，再让主动发送观察空闲。普通回复/恢复已有外层 hold，但直调没有；
++        # 保留这段同步准入读取，不能仅为规避文件系统等待而改变被动优先权。
+         selected = self._records.check_owner(message_id)
+         _, delivery = self._records.read(message_id, sink)
+ 
+@@ -128,7 +131,7 @@
+     async def retry(self, message_id: str, sink: str) -> Receipt:
+         """显式重试被拒绝的原效果；不改消息、目的地、绑定或幂等键。"""
+         async def rearm(slot: TaskSlot) -> Task | None:
+-            record, delivery = self._records.read(message_id, sink)
++            record, delivery = await run_file_io(lambda: self._records.read(message_id, sink))
+             if delivery.phase != "rejected":
+                 return None
+             # 旧 Task 可能已读取 rejected 但仍在关闭 scope；先排空才能重新接纳。
+@@ -170,16 +173,23 @@
+ 
+     async def _send(self, task: Task, message_id: str, sink: str, start_guard: StartGuard | None) -> Receipt:
+         """先读耐久事实，再恢复未知效果；确认即将发送后才提交 started。"""
+-        record, delivery = self._records.read(message_id, sink)
++        def read_send() -> tuple[OwnerRecord, Delivery, Selection, Message | None]:
++            selected = self._records.check_owner(message_id)
++            reader = self._catalog.reader(selected.session_id)
++            with reader.read_snapshot():
++                record, delivery = self._records.read(message_id, sink)
++                if delivery.phase in {"delivered", "rejected", "failed"}:
++                    return record, delivery, selected, None
++                message = reader.get(message_id)
++                if message is None:
++                    raise ValueError("发送引用的原消息缺失")
++            return record, delivery, selected, message
++
++        record, delivery, selection, message = await run_file_io(read_send)
+         if delivery.phase in {"delivered", "rejected", "failed"}:
+             assert delivery.receipt is not None
+             return delivery.receipt
+-        selection = self._records.selection(message_id)
+-        if selection is None:
+-            raise ValueError("发送缺少已提交的消息选择")
+-        message = self._catalog.reader(selection.session_id).get(message_id)
+-        if message is None:
+-            raise ValueError("发送引用的原消息缺失")
++        assert message is not None
+         key = delivery_key(message_id, sink)
+         target = (self._task_key, "target", delivery.sink.name, delivery.sink.address)
+         async with AsyncExitStack() as scope:
+@@ -189,7 +199,9 @@
+             # 等待期间允许明确撤回 prepared；旧快照不能覆盖撤回事实。
+             if not task.active:
+                 raise asyncio.CancelledError
+-            record, delivery = self._records.read(message_id, sink)
++            record, delivery = await run_file_io(lambda: self._records.read(message_id, sink))
++            if not task.active:
++                raise asyncio.CancelledError
+             if delivery.phase in {"delivered", "rejected", "failed"}:
+                 assert delivery.receipt is not None
+                 return delivery.receipt
+--- a/plugins/gateway/protocol/models.py
++++ b/plugins/gateway/protocol/models.py
+@@ -45,6 +45,7 @@
+     message_id: str = Field(min_length=1, max_length=256)
+     text: str = Field(default="", max_length=1_048_576)
+     attachment_ids: list[str] = Field(default_factory=list, max_length=64)
++    parts: list[dict[str, object]] = Field(default_factory=list, max_length=8)
+     reply_to_message_id: str | None = Field(default=None, min_length=1, max_length=256)
+     model_id: str | None = Field(default=None, max_length=256)
+     reasoning_effort: str | None = Field(default=None, max_length=128)
+--- a/plugins/gateway/schema/app-server-v2.json
++++ b/plugins/gateway/schema/app-server-v2.json
+@@ -144,6 +144,15 @@
+           "default": null,
+           "title": "Model Id"
+         },
++        "parts": {
++          "items": {
++            "additionalProperties": true,
++            "type": "object"
++          },
++          "maxItems": 8,
++          "title": "Parts",
++          "type": "array"
++        },
+         "reasoning_effort": {
+           "anyOf": [
+             {
+--- a/plugins/models/store.py
++++ b/plugins/models/store.py
+@@ -234,6 +234,8 @@
+         self._host_lock_file: object | None = None
+         # descriptor 冻结且整个绑定周期不变；binding JSON 只随 descriptor 变化。
+         self._binding_cache: dict[BoundModelDescriptor, str] = {}
++        # 同一连接的外部提交版本与完整 meta 行共同标识不可变注册表快照。
++        self._snapshot_cache: tuple[object, tuple[object, ...], StoredSnapshot] | None = None
+ 
+     @property
+     def host_epoch(self) -> int | None:
+@@ -293,6 +295,8 @@
+                             "WHERE singleton = 1"
+                         )
+                     connection.commit()
++                # 同进程收养宿主租约的 schema 升级可能不递增 host_epoch。
++                self._snapshot_cache = None
+                 self._host_epoch = int(
+                     connection.execute(
+                         "SELECT host_epoch FROM model_registry_meta WHERE singleton = 1"
+@@ -309,55 +313,69 @@
+ 
+         if not self.path.is_file():
+             return None
+-        with self._connect(read_only=True) as connection:
+-            connection.execute("BEGIN")
+-            _require_base_schema(connection)
+-            meta_columns = _columns(connection, "model_registry_meta")
+-            connection_columns = _columns(connection, "model_connections")
+-            model_columns = _columns(connection, "model_definitions")
+-            embedding_columns = _columns(connection, "embedding_models")
+-            default_column = (
+-                ", default_embedding_model_id"
+-                if "default_embedding_model_id" in meta_columns
+-                else ""
++        with self._replay_connection() as (connection, marker):
++            cached = self._snapshot_cache
++            # data_version 只能在同一连接比较；writer 忙时的独立 RO 使用一次性 marker。
++            # 外部提交必须重新验 schema，普通本连接的调用结算则无需重扫注册表。
++            if cached is None or cached[0] != marker:
++                _require_base_schema(connection)
++            meta_row = tuple(connection.execute(
++                "SELECT * FROM model_registry_meta WHERE singleton = 1"
++            ).fetchone() or ())
++            if cached is not None and cached[0] == marker and cached[1] == meta_row:
++                return cached[2]
++            snapshot = self._read_snapshot(connection)
++            self._snapshot_cache = (marker, meta_row, snapshot)
++            return snapshot
++
++    def _read_snapshot(self, connection: sqlite3.Connection) -> StoredSnapshot:
++        """在调用方的读事务内解码全部角色绑定及完整注册表。"""
++        meta_columns = _columns(connection, "model_registry_meta")
++        connection_columns = _columns(connection, "model_connections")
++        model_columns = _columns(connection, "model_definitions")
++        embedding_columns = _columns(connection, "embedding_models")
++        default_column = (
++            ", default_embedding_model_id"
++            if "default_embedding_model_id" in meta_columns
++            else ""
++        )
++        meta = connection.execute(
++            f"SELECT revision{default_column} FROM model_registry_meta "
++            "WHERE singleton = 1"
++        ).fetchone()
++        if meta is None:
++            raise RuntimeError("model registry is missing revision metadata")
++        config_column = (
++            "driver_config_json"
++            if "driver_config_json" in connection_columns
++            else "'{}'"
++        )
++        connection_rows = connection.execute(
++            "SELECT id, name, provider, catalog_provider_id, base_url, auth_id, "
++            f"{config_column}, enabled FROM model_connections ORDER BY created_at, id"
++        ).fetchall()
++        chat_rows = connection.execute(
++            _SELECT_CHAT_MODELS.format(
++                capabilities_json=(
++                    "capabilities_json"
++                    if "capabilities_json" in model_columns
++                    else "NULL"
++                )
+             )
+-            meta = connection.execute(
+-                f"SELECT revision{default_column} FROM model_registry_meta "
+-                "WHERE singleton = 1"
+-            ).fetchone()
+-            if meta is None:
+-                raise RuntimeError("model registry is missing revision metadata")
+-            config_column = (
+-                "driver_config_json"
+-                if "driver_config_json" in connection_columns
+-                else "'{}'"
++        ).fetchall()
++        embedding_rows = connection.execute(
++            _SELECT_EMBEDDING_MODELS.format(
++                capabilities_json=(
++                    "capabilities_json"
++                    if "capabilities_json" in embedding_columns
++                    else "NULL"
++                )
+             )
+-            connection_rows = connection.execute(
+-                "SELECT id, name, provider, catalog_provider_id, base_url, auth_id, "
+-                f"{config_column}, enabled FROM model_connections ORDER BY created_at, id"
+-            ).fetchall()
+-            chat_rows = connection.execute(
+-                _SELECT_CHAT_MODELS.format(
+-                    capabilities_json=(
+-                        "capabilities_json"
+-                        if "capabilities_json" in model_columns
+-                        else "NULL"
+-                    )
+-                )
+-            ).fetchall()
+-            embedding_rows = connection.execute(
+-                _SELECT_EMBEDDING_MODELS.format(
+-                    capabilities_json=(
+-                        "capabilities_json"
+-                        if "capabilities_json" in embedding_columns
+-                        else "NULL"
+-                    )
+-                )
+-            ).fetchall()
+-            role_rows = connection.execute(
+-                "SELECT role, model_id, reasoning_effort "
+-                "FROM model_role_bindings ORDER BY role"
+-            ).fetchall()
++        ).fetchall()
++        role_rows = connection.execute(
++            "SELECT role, model_id, reasoning_effort "
++            "FROM model_role_bindings ORDER BY role"
++        ).fetchall()
+ 
+         connections = {
+             item.connection_id: item
+@@ -1266,6 +1284,7 @@
+             if self._write_connection is not None:
+                 self._write_connection.close()
+                 self._write_connection = None
++            self._snapshot_cache = None
+         descriptor = self._host_lock_file
+         self._host_lock_file = None
+         if descriptor is None:
+--- a/plugins/reply/follow.py
++++ b/plugins/reply/follow.py
+@@ -274,7 +274,7 @@
+                 if self._catalog_closed or self._sources_closed:
+                     break
+                 if self._latest_heads is not None:
+-                    self._dispatch_changes(self._latest_heads)
++                    await self._dispatch_changes(self._latest_heads)
+             for task in (catalog_task, source_task, *self._drive_tasks):
+                 if not task.done():
+                     task.cancel()
+@@ -305,7 +305,7 @@
+     def _current_source(self, name: str) -> Source | None:
+         return next((item for item in self._sources.entries() if item.name == name), None)
+ 
+-    def _dispatch_changes(self, heads: dict[str, int]) -> None:
++    async def _dispatch_changes(self, heads: dict[str, int]) -> None:
+         current_sources = {source.name: source for source in self._sources.entries()}
+         source_names = set(self._previous_sources) | set(current_sources)
+         changed_source_names = {
+@@ -316,6 +316,39 @@
+             name for name in changed_source_names if name in current_sources
+         }
+ 
++        changed_sessions = {
++            session_id for session_id, head in heads.items()
++            if self._previous_heads.get(session_id) != head
++        }
++        # 2. One scan handles changed sessions and genuine identity changes.
++        session_ids = tuple(
++            heads
++            if current_identity_changes
++            else (session_id for session_id in heads if session_id in changed_sessions)
++        )
++
++        def read_source_heads(reader: MessageReader) -> dict[str, int]:
++            present = reader.source_names()
++            return {name: reader.head(source=name) for name in current_sources if name in present}
++
++        # 目录 SQL 可能等待物理文件锁；worker 只读事实，不触碰 wake 或 TaskGroup。
++        observed: dict[tuple[str, str], int] = {}
++        if current_sources:
++            for session_id in session_ids:
++                # 同一 Session 的来源与 heads 来自同一 worker 内的只读快照。
++                source_heads = await self._catalog.reader(session_id).read_async(read_source_heads)
++                observed.update(((session_id, name), head) for name, head in source_heads.items())
++        if self._catalog_closed or self._sources_closed:
++            return
++        actual_sources = {source.name: source for source in self._sources.entries()}
++        if (actual_sources.keys() != current_sources.keys()
++                or any(actual_sources[name] is not source for name, source in current_sources.items())):
++            # I/O 期间的注册变更不能启动旧 owner，也不能消耗本轮 heads。
++            self._wake_event.set()
++            return
++        self._previous_heads = dict(heads)
++        self._previous_sources = current_sources
++
+         # 1. A revoked source only updates an existing local handoff; its
+         # exact Source owner still stops the in-flight Task via the scope monitor.
+         for (_session_id, source_name), wake in tuple(self._active.items()):
+@@ -323,32 +356,17 @@
+                 wake.source = current_sources.get(source_name)
+                 wake.changed = True
+ 
+-        changed_sessions = {
+-            session_id for session_id, head in heads.items()
+-            if self._previous_heads.get(session_id) != head
+-        }
+-        self._previous_heads = dict(heads)
+-        self._previous_sources = current_sources
+-
+-        # 2. One scan handles changed sessions and genuine identity changes.
+-        session_ids = (
+-            heads
+-            if current_identity_changes
+-            else (session_id for session_id in heads if session_id in changed_sessions)
+-        )
+         for session_id in session_ids:
+-            reader = self._catalog.reader(session_id)
+-            present = reader.source_names()
+             session_changed = session_id in changed_sessions
+             for source in current_sources.values():
+                 source_name = source.name
+-                if source_name not in present:
++                key = (session_id, source_name)
++                if key not in observed:
+                     continue
+                 identity_changed = source_name in current_identity_changes
+                 if not session_changed and not identity_changed:
+                     continue
+-                source_head = reader.head(source=source_name)
+-                key = (session_id, source_name)
++                source_head = observed[key]
+                 if identity_changed or self._observed_source_heads.get(key) != source_head:
+                     self._observed_source_heads[key] = source_head
+                     self._schedule(session_id, source)
+@@ -400,8 +418,13 @@
+         current_drive = asyncio.current_task()
+         if current_drive is None:
+             raise RuntimeError("回复 follower 必须运行在 asyncio Task 中")
++        admission_boundary = await self._catalog.reader(session_id).head_async(source=source.name)
++        registered = self._current_source(source.name)
++        if registered is not source:
++            wake.source = registered
++            wake.changed = registered is not None
++            return registered is not None
+         state = _Iteration(drive_task=current_drive)
+-        admission_boundary = self._catalog.reader(session_id).head(source=source.name)
+         restart_after_cleanup = False
+         try:
+             await self._start(state, session_id, source)
+--- a/plugins/ui/contract.py
++++ b/plugins/ui/contract.py
+@@ -384,7 +384,7 @@
+         async for message in follower:
+             if message.seq <= after_seq:
+                 continue
+-            page = reader.read_page(after_seq=after_seq, limit=50)
++            page = await reader.read_async(lambda current: current.read_page(after_seq=after_seq, limit=50))
+             while page.messages:
+                 next_seq = page.messages[-1].seq
+                 yield {"version": 2, "session_id": reader.session_id,
+@@ -395,7 +395,10 @@
+                 if not page.has_more:
+                     break
+                 # 2. 当前批次固定 head；随后到达的事实由外层 follow 继续追赶。
+-                page = reader.read_page(after_seq=after_seq, through_seq=page.through_seq, limit=50)
++                through_seq = page.through_seq
++                page = await reader.read_async(lambda current: current.read_page(
++                    after_seq=after_seq, through_seq=through_seq, limit=50,
++                ))
+ 
+ 
+ def _message_row(
+--- a/sdk/python/src/akashic_sdk/client.py
++++ b/sdk/python/src/akashic_sdk/client.py
+@@ -288,11 +288,12 @@
+ 
+     async def message_send(self, session_id: str, text: str = "", *, message_id: str,
+                            attachment_ids: list[str] | None = None,
++                           parts: list[dict[str, object]] | None = None,
+                            reply_to_message_id: str | None = None, model_id: str | None = None,
+                            reasoning_effort: str | None = None, retry_of: str | None = None) -> dict[str, Any]:
+         return cast(dict[str, Any], await self.request("message/send", {
+             "session_id": session_id, "message_id": message_id, "text": text,
+-            "attachment_ids": attachment_ids or [], "reply_to_message_id": reply_to_message_id,
++            "attachment_ids": attachment_ids or [], "parts": parts or [], "reply_to_message_id": reply_to_message_id,
+             "model_id": model_id, "reasoning_effort": reasoning_effort, "retry_of": retry_of,
+         }))
+ 
+@@ -389,10 +390,11 @@
+ 
+     def message_send(self, session_id: str, text: str = "", *, message_id: str,
+                      attachment_ids: list[str] | None = None,
++                     parts: list[dict[str, object]] | None = None,
+                      reply_to_message_id: str | None = None, model_id: str | None = None,
+                      reasoning_effort: str | None = None, retry_of: str | None = None) -> dict[str, Any]:
+         return self._runner.run(self._async.message_send(
+-            session_id, text, message_id=message_id, attachment_ids=attachment_ids,
++            session_id, text, message_id=message_id, attachment_ids=attachment_ids, parts=parts,
+             reply_to_message_id=reply_to_message_id, model_id=model_id,
+             reasoning_effort=reasoning_effort, retry_of=retry_of,
+         ))

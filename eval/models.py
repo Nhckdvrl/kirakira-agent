@@ -37,6 +37,15 @@ def source_identity():
     names.extend(["plugins/eventmail/store.py", "plugins/wake/api.py", "plugins/wake/messages.py",
                   "plugins/wake/runtime.py", "plugins/wake/program.py", "eval/followups.py"])
     names.extend(name for name in ("eval/mail_followups.py", "eval/fixtures/mailbox.py", "eval/runtime_settings.py", "eval/idle_reflection.py", "eval/personality.py", "eval/prompt_cache.py") if (ROOT / name).is_file())
+    names.extend(name for name in ("eval/runtime_experience.py", "eval/telegram_latency.py", "eval/native_runtime.py",
+                                  "plugins/session_reference/plugin.py", "plugins/reply/follow.py",
+                                  "plugins/delivery_policy/follow.py", "plugins/delivery_policy/plugin.py",
+                                  "plugins/delivery/execution.py", "plugins/ui/contract.py",
+                                  "plugins/gateway/service.py", "plugins/gateway/protocol/models.py",
+                                  "plugins/models/store.py", "plugins/akasha/application/consumer.py",
+                                  "plugins/akasha/plugin.py", "plugins/akasha/scopes.py",
+                                  "plugins/ledger/log.py", "core/common/file_io.py",
+                                  "sdk/python/src/akashic_sdk/client.py") if (ROOT / name).is_file())
     if (ROOT / "third_party/UPSTREAM.json").is_file():
         names.append("third_party/UPSTREAM.json")
     names.extend(str(path.relative_to(ROOT)) for path in sorted((ROOT / "third_party/patches").glob("*.patch")))

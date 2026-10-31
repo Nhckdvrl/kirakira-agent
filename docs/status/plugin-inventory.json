@@ -372,6 +372,14 @@
       "pinned_files": 15
     },
     {
+      "id": "session_reference",
+      "directory": "plugins/session_reference",
+      "api_version": 3,
+      "upstream": false,
+      "headless_selected": true,
+      "pinned_files": 0
+    },
+    {
       "id": "session_title",
       "directory": "plugins/session_title",
       "api_version": 3,

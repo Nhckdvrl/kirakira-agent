@@ -181,6 +181,32 @@ def test_migration_refuses_loss_or_live_workspace(tmp_path, failure):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("opt_out", [False, True])
+async def test_workspace_upgrade_adds_conversation_references_and_preserves_opt_out(tmp_path, opt_out):
+    from agent.plugins.bundles import set_plugin_choice
+    from agent.plugins.selection import PluginSelection
+    from kirakira_agent.runtime import initialize_workspace, runtime
+    from kirakira_agent.setup import upgrade_workspace
+
+    workspace = tmp_path / "workspace"
+    initialize_workspace(workspace)
+    async with runtime(workspace):
+        pass
+    selection = PluginSelection(workspace)
+    previous = selection.read()
+    components = tuple(ref for ref in selection.components(previous)
+                       if selection.read_input(ref)["plugin_id"] != "session_reference")
+    selection.commit(components, expected_ref=previous)
+    set_plugin_choice(workspace, "session_reference", enabled=False if opt_out else None)
+    before = (workspace / "sessions.db").read_bytes()
+    upgrade_workspace(workspace)
+    current = selection.read()
+    installed = {selection.read_input(ref)["plugin_id"] for ref in selection.components(current)}
+    assert ("session_reference" in installed) is not opt_out
+    assert (workspace / "sessions.db").read_bytes() == before
+
+
+@pytest.mark.asyncio
 async def test_legacy_runtime_is_rejected_before_resource_or_database_changes(tmp_path):
     from kirakira_agent.runtime import runtime
     old = tmp_path / "old"

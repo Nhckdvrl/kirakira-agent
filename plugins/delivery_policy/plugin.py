@@ -15,6 +15,7 @@ from agent.plugin_composition import (
     RUNTIME_STOPPING,
     Context,
 )
+from core.common.file_io import run_file_io
 from plugins.ledger.contract import BINDINGS
 from plugins.ledger.contract import MESSAGE_CATALOG, MessageReader
 from agent.plugin_composition.tasks import ExternalRootPermit, RestartRejectedError
@@ -127,14 +128,14 @@ class DeliveryFinalOutput:
         async with asyncio.timeout(self._timeout_s):
             # ReplyCompletion 在 run_reply 的资源 cleanup 之后才创建首次选路；
             # 日志 follower 可能先看到 complete Output，先等待 Delivery owner 的真实 selection。
-            selection = delivery.selection(ending)
+            selection = await run_file_io(lambda: delivery.selection(ending))
             while selection is None:
                 await asyncio.sleep(0.01)
-                selection = delivery.selection(ending)
+                selection = await run_file_io(lambda: delivery.selection(ending))
             if not selection.sinks:
                 raise RestartRejectedError("最终 Output 没有 delivery provider")
             while True:
-                receipts = tuple(delivery.receipt(ending, sink) for sink in selection.sinks)
+                receipts = await run_file_io(lambda: tuple(delivery.receipt(ending, sink) for sink in selection.sinks))
                 if any(receipt is not None and receipt.status in {"failed", "rejected"} for receipt in receipts):
                     raise RestartRejectedError("最终 Output delivery 未确认")
                 if len(receipts) == len(selection.sinks) and all(
@@ -183,25 +184,36 @@ async def apply(ctx: Context) -> None:
             _ = hold.__exit__(None, None, None)
         recovery.clear()
 
-    def prepare(_event: object) -> None:
+    async def prepare(_event: object) -> None:
         """正式接纳开放前占住原被动效果，直到 follower 实际恢复一次发送或查询。"""
         nonlocal delivery
         delivery = ctx.require(DELIVERY_GUARDED_START).open(ctx)
-        for message_id, sink in delivery.pending():
-            selection = delivery.selection(message_id)
-            assert selection is not None
-            if selection.passive and (message_id, sink) not in recovery:
-                target = delivery.destination(message_id, sink)
-                hold = delivery.activity(target.name, target.address)
+        selected_delivery = delivery
+        def pending_targets():
+            targets = []
+            for message_id, sink in selected_delivery.pending():
+                selection = selected_delivery.selection(message_id)
+                assert selection is not None
+                if selection.passive:
+                    targets.append((message_id, sink, selected_delivery.destination(message_id, sink)))
+            return tuple(targets)
+        for message_id, sink, target in await run_file_io(pending_targets):
+            if (message_id, sink) not in recovery:
+                hold = selected_delivery.activity(target.name, target.address)
                 _ = hold.__enter__()
                 recovery[message_id, sink] = hold
 
     _ = await ctx.effect(lambda: close_recovery, label="pending-delivery")
 
-    def select(reader: MessageReader, message: Message) -> tuple[Mapping[str, object], ...] | None:
-        if message.source not in config.sources or reader.attributes.visibility == "internal":
+    async def select(reader: MessageReader, message: Message) -> tuple[Mapping[str, object], ...] | None:
+        if message.source not in config.sources:
             return None
-        route = origin(reader, message, config.sources, check_origin=origin_check)
+        def read_origin(view: MessageReader):
+            return (view.attributes.visibility != "internal",
+                    origin(view, message, config.sources, check_origin=origin_check))
+        eligible, route = await reader.read_async(read_origin)
+        if not eligible:
+            return None
         if route is None:
             return ()
         name, address = route
@@ -223,21 +235,28 @@ async def apply(ctx: Context) -> None:
             child_permit: Callable[[], ExternalRootPermit] | None = None,
         ) -> AsyncGenerator[None]:
             """完成后固定选路并独立启动发送，新 Input 不取得旧发送的取消权。"""
-            head = reader.head()
+            def read_activity(view: MessageReader):
+                head = view.head()
+                route = (input_origin(view, source, through_seq=head, check_origin=origin_check)
+                         if source in config.sources and view.attributes.visibility != "internal" else None)
+                return head, route
+            head, route = await reader.read_async(read_activity)
             delivery = current_delivery()
-            with self.activity(reader, source):
+            with nullcontext() if route is None else delivery.activity(*route):
                 try:
                     yield
                 finally:
-                    for message in reader.snapshot(after_seq=head):
-                        if message.source != source or origin(
-                            reader, message, config.sources, check_origin=origin_check,
-                        ) is None:
-                            continue
+                    def read_completed(view: MessageReader):
+                        return tuple((message, delivery.selection(message.message_id) is not None)
+                                     for message in view.snapshot(after_seq=head)
+                                     if message.source == source and origin(
+                                         view, message, config.sources, check_origin=origin_check) is not None)
+                    completed = await reader.read_async(read_completed)
+                    for message, known in completed:
                         try:
-                            if delivery.selection(message.message_id) is None:
+                            if not known:
                                 async with ctx.runtime_scope():
-                                    sinks = select(reader, message)
+                                    sinks = await select(reader, message)
                             else:
                                 sinks = ()
                             assert sinks is not None

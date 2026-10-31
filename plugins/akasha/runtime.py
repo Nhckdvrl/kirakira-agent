@@ -207,13 +207,16 @@ async def prepare_materials(
         recall = await run_memory_job(lambda: records.read(identity))
         if recall is None:
             # 升级前的随机身份仍是实际查询证据；复用同一用户输入后的首次记录。
-            saved = await run_memory_job(records.list)
+            saved = await run_memory_job(lambda: records.legacy_context(
+                session_id, source, first_seq=inputs[-1].seq, through_seq=snapshot[-1].seq))
             previous = next(((key, item) for key, item in reversed(saved)
                 if isinstance(item.source, ContextSource)
                 and item.source.session_id == session_id and item.source.source == source
                 and inputs[-1].seq <= item.source.through_seq <= snapshot[-1].seq), None)
             if previous is not None:
                 identity, recall = previous
+            else:
+                recall = await run_memory_job(lambda: records.read(identity))
         if recall is not None:
             # 已保存查询用它当时的固定 binding 重渲染；正文仍只从原 Message 读取。
             async with bindings.open(recall.learning_binding, AKASHA_LEARNING) as (original, _):

@@ -325,17 +325,29 @@
  
 --- a/plugins/wake/messages.py
 +++ b/plugins/wake/messages.py
-@@ -18,7 +18,7 @@
+@@ -18,32 +18,76 @@
  
  
  def recent_context(catalog: MessageCatalog, history: DeliveryHistory, *, target: str | None,
 -                   now: datetime) -> str:
 +                   now: datetime, items: Sequence[Mapping[str, object]] = ()) -> str:
      """冻结目标最近对话与跨会话真实送达通知，正文作为低信任历史材料。"""
-     passive: list[dict[str, object]] = []
-     if target is not None:
-@@ -37,12 +37,45 @@
-                 break
+-    passive: list[dict[str, object]] = []
+-    if target is not None:
+-        messages = catalog.reader(target).snapshot()
+-        for message in reversed(messages):
+-            if (message.recorded_at > now
+-                    or message.source not in {"conversation", "legacy-unattributed"}
+-                    or not isinstance(message.body, (Input, Output))):
+-                continue
+-            text = "\n".join(cast(str, part.value) for part in message.body.parts
+-                             if isinstance(part, ContentPart) and part.kind == "text")
+-            if text:
+-                passive.append({"message_id": message.message_id, "role": "user" if isinstance(message.body, Input) else "assistant",
+-                                "time": message.recorded_at.isoformat(), "text": text})
+-            if len(passive) == 20:
+-                break
++    passive = [] if target is None else _recent_conversation(catalog.reader(target), now)
      delivered = history.recent(since=now - timedelta(days=7), until=now, limit=30,
                                excluded_sources=frozenset({"conversation"}), visibility="listed")
 +    scope = catalog.attributes(target).scope if target is not None and catalog.exists(target) else ()
@@ -380,9 +392,35 @@
 +    return json.dumps({"followup_rule_changes": _preview(rules, 3000),
 +                       "recent_conversation": list(reversed(_preview(passive, 3000))),
                         "delivered_messages": list(reversed(_preview(list(reversed(proactive)), 3000)))}, ensure_ascii=False)
++
++
++def _recent_conversation(reader: MessageReader, now: datetime) -> list[dict[str, object]]:
++    """只向前翻到足够的近期对话；忽略未来消息和无正文的工具过程。"""
++    rows: list[dict[str, object]] = []
++    try:
++        page = reader.read_tail(limit=50)
++    except KeyError:
++        return rows
++    while True:
++        for message in reversed(page.messages):
++            if (message.recorded_at > now or message.source not in {"conversation", "legacy-unattributed"}
++                    or not isinstance(message.body, (Input, Output))):
++                continue
++            text = "\n".join(str(part.value) for part in message.body.parts
++                             if isinstance(part, ContentPart) and part.kind == "text")
++            if text:
++                rows.append({"message_id": message.message_id,
++                             "role": "user" if isinstance(message.body, Input) else "assistant",
++                             "time": message.recorded_at.isoformat(), "text": text})
++            if len(rows) == 20:
++                return rows
++        if not page.has_more:
++            return rows
++        page = reader.read_tail(before_seq=page.messages[0].seq, through_seq=page.through_seq, limit=50)
  
  
-@@ -65,6 +98,7 @@
+ def _preview(rows: Sequence[Mapping[str, object]], budget: int) -> list[dict[str, object]]:
+@@ -65,6 +109,7 @@
      if part.kind == "wake.request":
          request = Request.model_validate_json(json.dumps(json_value(part.value)))
          value: dict[str, object] = {"time": request.now.astimezone(ZoneInfo(request.timezone)).isoformat(),
@@ -390,7 +428,7 @@
                   "proactive_rules": request.rules, "history": request.history, "context_events": request.events}
          return ({"type": "text", "text": json.dumps(value, ensure_ascii=False)},)
      if part.kind == "wake.phase":
-@@ -72,12 +106,45 @@
+@@ -72,12 +117,45 @@
      return fallback(part)
  
  
@@ -594,7 +632,7 @@
  from .state import WakeState, WakeStateReader
  
  
-@@ -175,10 +176,34 @@
+@@ -175,22 +176,52 @@
              "address": target.recipient,
              "binding_id": ctx.require(DELIVERY_SENDERS).bind(target.channel, bindings),
          }
@@ -631,7 +669,16 @@
          view: ToolView = catalog.view(
              *ctx.require(WAKE_TOOLS_VIEW).refs,
              *(ref for ref in ctx.require(ALL_TOOLS)().refs if ref.name in allowed),
-@@ -191,6 +216,8 @@
+         )
+         names = (*WAKE_TOOLS[owner], *(ref.name for ref in view.refs
+                  if ref.name in allowed and ref.name not in WAKE_TOOLS[owner]))
++        message_catalog, delivery_history = ctx.require(MESSAGE_CATALOG), ctx.require(DELIVERY_READ)
++        history = await run_file_io(lambda: recent_context(
++            message_catalog, delivery_history, target=context_session,
++            now=now, items=captured_items if owner == "content" else ()))
+         return Request(
+             flow_id=flow_id,
+             owner=owner,
              now=now,
              timezone=self.config.timezone,
              target=target,
@@ -640,7 +687,7 @@
              sink=sink,
              program_binding=bindings.bind(WAKE_PROGRAM, {}),
              tools={
-@@ -198,13 +225,14 @@
+@@ -198,13 +229,12 @@
                  for name in names
              },
              snapshot_seq=admission.pool.snapshot_seq,
@@ -650,10 +697,9 @@
              alert_ref=None if alert is None else cast(dict[str, str], dict(alert)),
              model_id=model.model_id, reasoning_effort=model.reasoning_effort,
              rules=read_archived_rules(ctx.data_root) or "",
-             history=recent_context(ctx.require(MESSAGE_CATALOG), ctx.require(DELIVERY_READ),
+-            history=recent_context(ctx.require(MESSAGE_CATALOG), ctx.require(DELIVERY_READ),
 -                                   target=target.session_id, now=now),
-+                                   target=context_session, now=now,
-+                                   items=captured_items if owner == "content" else ()),
++            history=history,
              events=tuple(dict(item) for item in (await ctx.require(EVENTMAIL_WAKE).active_context(now))))
  
      async def follow(self) -> None:
@@ -763,7 +809,33 @@
  
  _SCHEMA_VERSION = 9
  _ADMISSION_TABLE_SQL = """
-@@ -244,6 +244,7 @@
+@@ -77,6 +77,7 @@
+ 
+     def __init__(self, path: Path) -> None:
+         self.path = path
++        self._initialized = False
+ 
+     def read_only(self) -> WakeStateReader:
+         """Return the narrow row reader used by non-owning observers."""
+@@ -84,7 +85,8 @@
+ 
+     def initialize(self) -> None:
+         """Create and validate the singleton admission ledger."""
+-
++        if self._initialized:
++            return
+         self.path.parent.mkdir(parents=True, exist_ok=True)
+         with closing(sqlite3.connect(self.path)) as connection, connection:
+             connection.execute("PRAGMA journal_mode = WAL")
+@@ -114,6 +116,7 @@
+             )
+             if connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                 raise RuntimeError("Wake state SQLite integrity check failed")
++        self._initialized = True
+ 
+     @staticmethod
+     def _validate_tables(
+@@ -244,6 +247,7 @@
              and item.get("due") is True
          }
          scores = self._scores(due_identities)
@@ -771,7 +843,7 @@
          result: list[Mapping[str, object]] = []
          for item in items:
              if not (
-@@ -261,6 +262,7 @@
+@@ -261,6 +265,7 @@
              enriched = dict(cast(Mapping[str, object], payload))
              enriched["_wake_initial_score"] = score.initial_score
              enriched["_wake_semantic_interest"] = score.semantic_interest
@@ -779,7 +851,7 @@
              result.append({**dict(item), "payload": enriched})
          return tuple(result)
  
-@@ -309,6 +311,8 @@
+@@ -309,6 +314,8 @@
          )[:limit]
          expired: list[Mapping[str, object]] = []
          for item in eligible:

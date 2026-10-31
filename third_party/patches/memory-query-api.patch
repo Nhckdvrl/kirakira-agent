@@ -220,6 +220,33 @@
 +.akasha-plugin-ui-recall-group{--akasha-plugin-ui-rule: color-mix(in oklch, var(--ak-color-text-primary) 12%, transparent);--akasha-plugin-ui-rule-strong: color-mix(in oklch, var(--ak-color-text-primary) 20%, transparent);--akasha-plugin-ui-accent: var(--ak-color-action-primary);--akasha-plugin-ui-accent-soft: color-mix(in oklch, var(--ak-color-action-primary) 11%, var(--ak-color-bg-surface));--akasha-plugin-ui-precise: var(--ak-color-action-primary);--akasha-plugin-ui-precise-container: color-mix(in oklch, var(--ak-color-action-primary) 22%, var(--ak-color-bg-surface));--akasha-plugin-ui-precise-on-container: var(--ak-color-on-action-container);--akasha-plugin-ui-completion: var(--ak-color-status-trace);--akasha-plugin-ui-completion-container: color-mix( in oklch, var(--ak-color-status-trace) 22%, var(--ak-color-bg-surface) );--akasha-plugin-ui-completion-on-container: color-mix( in oklch, var(--ak-color-status-trace) 64%, var(--ak-color-text-primary) );--akasha-plugin-ui-radius: var(--m-shape-medium, 12px);--akasha-plugin-ui-radius-sm: var(--m-shape-small, 8px);--akasha-plugin-ui-ease: cubic-bezier(.2, 0, 0, 1);--akasha-plugin-ui-t: .16s;--akasha-plugin-ui-shadow: 0 1px 2px color-mix(in oklch, oklch(0 0 0) 12%, transparent), 0 2px 6px color-mix(in oklch, oklch(0 0 0) 6%, transparent);color:var(--ak-color-text-primary);font-synthesis:none}.akasha-plugin-ui-recall-group{display:grid;min-width:0;gap:0;margin:0 0 8px}.akasha-plugin-ui-recall{--akasha-plugin-ui-lane: var(--akasha-plugin-ui-precise);overflow:visible;border:0;border-radius:0;background:transparent}.akasha-plugin-ui-recall--completion{--akasha-plugin-ui-lane: var(--akasha-plugin-ui-completion)}.akasha-plugin-ui-recall summary{display:grid;min-height:24px;grid-template-columns:13px minmax(0,1fr) auto;align-items:center;column-gap:6px;padding:0;color:var(--ak-color-text-secondary);background:transparent;cursor:pointer;font-size:.75rem;font-weight:500;line-height:1.4;list-style:none;user-select:none;transition-property:color,background-color;transition-duration:var(--akasha-plugin-ui-t);transition-timing-function:var(--akasha-plugin-ui-ease)}.akasha-plugin-ui-recall summary>span:first-of-type{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.akasha-plugin-ui-recall summary:before{content:"";width:2px;height:9px;justify-self:center;align-self:center;border-radius:1px;background:color-mix(in oklch,var(--ak-color-text-secondary) 38%,transparent)}.akasha-plugin-ui-recall summary::-webkit-details-marker{display:none}.akasha-plugin-ui-recall summary:hover,.akasha-plugin-ui-recall summary:active{color:var(--ak-color-text-primary);background:transparent}.akasha-plugin-ui-recall summary:focus-visible{outline:2px solid var(--akasha-plugin-ui-lane);outline-offset:-2px;border-radius:4px}.akasha-plugin-ui-recall[open] summary{position:sticky;top:0;z-index:2;background:var(--ak-color-bg-canvas);box-shadow:inset 0 -1px color-mix(in oklch,var(--ak-color-text-primary) 7%,transparent)}.akasha-plugin-ui-recall summary b{display:inline-flex;min-width:0;min-height:0;align-items:center;justify-content:center;gap:5px;padding:0;border-radius:0;color:var(--ak-color-text-secondary);background:none;font-size:.75rem;font-variant-numeric:tabular-nums;font-weight:400}.akasha-plugin-ui-recall summary b:after{display:inline-block;color:var(--ak-color-text-secondary);content:"\2304";font-size:.75rem;font-weight:400;transition:rotate .15s var(--akasha-plugin-ui-ease)}.akasha-plugin-ui-recall[open] summary b:after{rotate:180deg}.akasha-plugin-ui-memories{margin:0 0 4px;padding:0 0 0 19px;border-top:0;background:none;list-style:none;counter-reset:akasha-mem}.akasha-plugin-ui-memories li{display:grid;grid-template-columns:16px minmax(0,1fr);column-gap:6px;padding:3px 0;border-bottom:0}.akasha-plugin-ui-memories li:before{counter-increment:akasha-mem;content:counter(akasha-mem) ".";padding-top:1px;color:color-mix(in oklch,var(--ak-color-text-secondary) 58%,transparent);font-size:.6875rem;font-variant-numeric:tabular-nums;line-height:1.5;text-align:end}.akasha-plugin-ui-memories li>*{grid-column:2;min-width:0}.akasha-plugin-ui-memories li:last-child{border-bottom:0}.akasha-plugin-ui-memories p{margin:0;color:var(--ak-color-text-secondary);font-size:.75rem;line-height:1.5;overflow-wrap:anywhere;text-wrap:pretty}.akasha-plugin-ui-memories li>div>p:first-of-type{color:color-mix(in oklch,var(--ak-color-text-primary) 82%,transparent)}.akasha-plugin-ui-memories p+p{position:relative;margin-top:1px;padding-left:11px;color:color-mix(in oklch,var(--ak-color-text-secondary) 64%,transparent);font-size:.71875rem;line-height:1.45}.akasha-plugin-ui-memories p+p:before{content:"";position:absolute;left:0;top:.68em;width:6px;height:1px;background:color-mix(in oklch,var(--ak-color-text-secondary) 36%,transparent)}.akasha-plugin-ui-memories .akasha-plugin-ui-assistant{margin-top:1px;color:color-mix(in oklch,var(--ak-color-text-secondary) 80%,transparent);font-size:.71875rem;line-height:1.45}.akasha-plugin-ui-memories li>span{color:color-mix(in oklch,var(--ak-color-text-secondary) 80%,transparent);font-size:.6875rem;font-variant-numeric:tabular-nums;line-height:1.35}.akasha-plugin-ui-empty,.akasha-plugin-ui-loading,.akasha-plugin-ui-error{margin:0;padding:14px 4px 16px;color:var(--ak-color-text-secondary);font-size:.875rem;line-height:1.5;text-wrap:pretty}.akasha-plugin-ui-recall .akasha-plugin-ui-empty{display:block;padding:4px 0;border-top:0}.akasha-plugin-ui-recall .akasha-plugin-ui-empty:before{content:none}.akasha-plugin-ui-error{color:var(--ak-color-status-error)}.akasha-plugin-ui-back{width:fit-content;min-height:44px;padding:0 14px;border:0;border-radius:var(--akasha-plugin-ui-radius-sm);color:var(--ak-color-text-primary);background:var(--ak-color-bg-surface);box-shadow:0 0 0 1px var(--akasha-plugin-ui-rule);cursor:pointer;font:inherit;font-size:.875rem;font-weight:600;user-select:none;transition-property:background-color,scale,box-shadow;transition-duration:.15s;transition-timing-function:var(--akasha-plugin-ui-ease)}.akasha-plugin-ui-back:hover{background:var(--akasha-plugin-ui-accent-soft);box-shadow:0 0 0 1px var(--akasha-plugin-ui-rule-strong)}.akasha-plugin-ui-back:active{scale:.96}.akasha-plugin-ui-back:focus-visible{outline:2px solid var(--akasha-plugin-ui-accent);outline-offset:2px}.akasha-plugin-ui-metrics{display:grid;margin:14px 0 0;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;border-top:1px solid var(--akasha-plugin-ui-rule)}.akasha-plugin-ui-metrics>div{padding:12px 10px 0 0;border-bottom:1px solid var(--akasha-plugin-ui-rule)}.akasha-plugin-ui-metrics>div:nth-child(odd){padding-right:12px;border-right:1px solid var(--akasha-plugin-ui-rule)}.akasha-plugin-ui-metrics>div:nth-child(2n){padding-left:12px;padding-right:0}.akasha-plugin-ui-metrics>div:nth-last-child(-n+2){border-bottom:0;padding-bottom:0}.akasha-plugin-ui-metrics>div:nth-child(n+3){padding-top:12px}.akasha-plugin-ui-metrics dt{color:var(--ak-color-text-secondary);font-size:.75rem;font-weight:500;letter-spacing:.01em;line-height:1.3}.akasha-plugin-ui-metrics dd{margin:4px 0 0;color:var(--ak-color-text-primary);font-size:1.125rem;font-variant-numeric:tabular-nums;font-weight:600;line-height:1.15;letter-spacing:-.02em}.akasha-plugin-ui-detail-lanes{display:grid;gap:10px}.akasha-plugin-ui-convergence{margin:0;color:var(--ak-color-text-secondary);font-size:.75rem;font-variant-numeric:tabular-nums;line-height:1.4;text-align:center}@media(min-width:420px){.akasha-plugin-ui-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}.akasha-plugin-ui-metrics>div,.akasha-plugin-ui-metrics>div:nth-child(odd),.akasha-plugin-ui-metrics>div:nth-child(2n),.akasha-plugin-ui-metrics>div:nth-child(n+3),.akasha-plugin-ui-metrics>div:nth-last-child(-n+2){padding:12px 8px 0;border-right:1px solid var(--akasha-plugin-ui-rule);border-bottom:0}.akasha-plugin-ui-metrics>div:first-child{padding-left:0}.akasha-plugin-ui-metrics>div:last-child{border-right:0;padding-right:0}}@media(prefers-reduced-motion:reduce){.akasha-plugin-ui-recall summary,.akasha-plugin-ui-back{transition-duration:0ms}.akasha-plugin-ui-recall summary b:after{transition-duration:0ms}}.akasha-plugin-ui-evidence{display:block;margin-block-end:4px;color:var(--ak-color-text-secondary);font-size:.6875rem}.akasha-plugin-ui-query-status{margin-block:8px;color:var(--ak-color-text-secondary);font-size:.8125rem}.akasha-plugin-ui-query-status button{min-height:44px;padding-inline:12px;border:0;border-radius:var(--akasha-plugin-ui-radius-sm);background:transparent;color:var(--akasha-plugin-ui-accent);font:inherit;cursor:pointer}.akasha-plugin-ui-query-status button:focus-visible{outline:2px solid var(--akasha-plugin-ui-accent);outline-offset:2px}.akasha-scope-badge{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-radius:999px;padding-inline:6px;color:var(--chat-muted);background:var(--chat-chip);font-size:.6875rem;line-height:1.6}
 --- a/plugins/akasha/plugin.py
 +++ b/plugins/akasha/plugin.py
+@@ -15,7 +15,7 @@
+ 
+ from pydantic import BaseModel, ConfigDict, Field, model_validator
+ 
+-from agent.plugin_composition import RUNTIME_STARTED, RUNTIME_STOPPING, Context, ServiceKey
++from agent.plugin_composition import RUNTIME_STARTED, RUNTIME_STOPPING, Context
+ from plugins.akasha.contract import EMBEDDING_MEMORY_PLUGIN
+ from plugins.models.contract import EMBEDDINGS
+ from plugins.ui.contract import (
+@@ -43,7 +43,7 @@
+     SavedEmbedding,
+ )
+ from plugins.ui.contract import UI
+-from plugins.ledger.contract import Message
++from plugins.ledger.contract import Message, MessageCatalog
+ from plugins.context.contract import (
+     MATERIALS_V4 as MATERIALS,
+ )
+@@ -55,7 +55,7 @@
+     ContentCapability,
+     ToolCatalog,
+ )
+-from .application.consumer import MessageConsumer
++from .application.consumer import MessageConsumer, run_memory_job
+ from .application.rebuild import manifest_json, rebuild_from_catalog
+ from .application.snapshot import read_memory
+ from .config import AkashaConfig, resolve_memory_path
 @@ -67,6 +67,13 @@
  from .recall_tool import RecallArguments, RecallTool, check_recall
  from .recalls import RecallRecords, RecallRecordsRead
@@ -234,7 +261,7 @@
  from .runtime import MessageMemory, prepare_materials
  from .tools import FeedbackArguments, FeedbackTool, check_feedback
  from .scopes import DEFAULT_GRAPH, LEARN_POLICIES, LearnPolicy, MemoryDisabled, PolicyLocked, ScopePolicies, ensure_graph_directory, graph_path
-@@ -79,7 +86,7 @@
+@@ -79,11 +86,23 @@
  
  api_version = 3
  name = "akasha"
@@ -243,7 +270,23 @@
  desc = "从消息学习并提供普通 Context 材料与记忆工具"
  workspace_roots = ("memory",)
  
-@@ -176,10 +183,10 @@
+ MaterialData = Mapping[str, object]
++
++
++async def _write_graphs(
++    catalog: MessageCatalog, policies: ScopePolicies, heads: Mapping[str, int] | None = None,
++) -> tuple[str, ...]:
++    """Discover immutable Session routes off the host loop, reusing notified heads."""
++    def discover() -> tuple[str, ...]:
++        fixed = catalog.snapshot_heads() if heads is None else heads
++        routed = {policies.route(session_id).write for session_id in fixed}
++        return (DEFAULT_GRAPH, *sorted(key for key in routed if key is not None and key != DEFAULT_GRAPH))
++
++    return await run_memory_job(discover)
+ 
+ 
+ function_inject = (TURN_PROJECTION, CONTENT, MATERIALS, TOOLS, EMBEDDINGS,
+@@ -176,10 +195,10 @@
      _ = await ctx.provide(AKASHA_LEARNING, learning)
      _ = await content.register(ctx, {
          "name": "akasha",
@@ -256,7 +299,29 @@
          _ = await ctx.provide(part_display_key(kind), hidden_part)
      # 同一 Root 只允许一个 embedding 记忆系统；一个 Akasha 实例管理全部图。
      _ = await ctx.provide(EMBEDDING_MEMORY_PLUGIN, object())
-@@ -511,6 +518,47 @@
+@@ -242,12 +261,6 @@
+ 
+     def member(key: str) -> Callable[[str], bool]:
+         return lambda session_id: policies.route(session_id).write == key
+-
+-    def write_graphs() -> tuple[str, ...]:
+-        """default 图总在；独立图只在有成员 Session 后才建立。"""
+-        heads = ctx.require(MESSAGE_CATALOG).snapshot_heads()
+-        routed = {policies.route(session_id).write for session_id in heads}
+-        return (DEFAULT_GRAPH, *sorted(key for key in routed if key is not None and key != DEFAULT_GRAPH))
+ 
+     def records() -> RecallRecords:
+         return RecallRecords(record_state)
+@@ -388,7 +401,7 @@
+         }
+ 
+     async def prepare(snapshot: tuple[Message, ...], source: str) -> MaterialData:
+-        key = policies.route(snapshot[0].session_id).read if snapshot else DEFAULT_GRAPH
++        key = (await run_memory_job(partial(policies.route, snapshot[0].session_id))).read if snapshot else DEFAULT_GRAPH
+         # An explicit policy denial precedes graph startup, embeddings, and receipts.
+         if key is None:
+             return {}
+@@ -511,6 +524,47 @@
          idempotent=True,
          parallel=True,
      )
@@ -304,6 +369,55 @@
      # 只读账本按声明的 workspace root 解析学习图；不暴露 writer 或任意路径。
  
  
+@@ -535,8 +589,9 @@
+         starting_rules[key] = rule
+         try:
+             try:
++                path = await run_memory_job(partial(ensure_graph_directory, memory_path, key))
+                 consumer = await MessageConsumer.load(
+-                    ensure_graph_directory(memory_path, key), catalog=ctx.require(MESSAGE_CATALOG),
++                    path, catalog=ctx.require(MESSAGE_CATALOG),
+                     embeddings=ctx.require(MESSAGE_EMBEDDINGS), bindings=ctx.require(BINDINGS),
+                     config=settings.memory_config(), cutover=key == DEFAULT_GRAPH,
+                     restore_embeddings=restore_embeddings,
+@@ -588,8 +643,8 @@
+                     await close_memory()
+                     memory_rule = None
+                     reports: list[str] = []
+-                    for key in write_graphs():
+-                        path = ensure_graph_directory(memory_path, key)
++                    for key in await _write_graphs(ctx.require(MESSAGE_CATALOG), policies):
++                        path = await run_memory_job(partial(ensure_graph_directory, memory_path, key))
+                         backup_root = rebuild_backup_root if key == DEFAULT_GRAPH else (
+                             rebuild_backup_root / "graphs" / path.parent.name
+                         )
+@@ -664,7 +719,12 @@
+                 await changed.wait()
+                 changed.clear()
+                 async with ctx.runtime_scope(), graph_access(key):
++                    started = key in memories
+                     if not await start_memory(key):
++                        continue
++                    if not started:
++                        # 首次启动已追赶自己的真实前缀。初始化期间的新通知仍留在
++                        # changed 中，下一轮再追赶，不能在这里清除或重复扫描。
+                         continue
+                     try:
+                         _ = await memories[key].consume()
+@@ -676,10 +736,11 @@
+                         health.degrade(str(error))
+ 
+         async with asyncio.TaskGroup() as group:
+-            async for _heads in ctx.require(MESSAGE_CATALOG).follow():
++            async for heads in ctx.require(MESSAGE_CATALOG).follow():
+                 async with ctx.runtime_scope():
+                     await run_pending_rebuild()
+-                    for key in write_graphs():
++                    # follow 已给出真实目录快照；这里只发现图，消费者另取本轮固定前缀。
++                    for key in await _write_graphs(ctx.require(MESSAGE_CATALOG), policies, heads):
+                         changed = pending.get(key)
+                         if changed is None:
+                             changed = pending[key] = asyncio.Event()
 --- a/plugins/akasha/recall_tool.py
 +++ b/plugins/akasha/recall_tool.py
 @@ -9,7 +9,7 @@
@@ -452,7 +566,7 @@
      @staticmethod
 --- a/plugins/akasha/recalls.py
 +++ b/plugins/akasha/recalls.py
-@@ -8,7 +8,7 @@
+@@ -8,14 +8,13 @@
  from typing import TYPE_CHECKING, Literal, cast
  from collections.abc import Mapping
  
@@ -461,7 +575,43 @@
  
  from .application.cycle import MemoryCycle, RetrievalTicket
  from .domain.model import Turn
-@@ -92,6 +92,7 @@
+ from .infrastructure.consumption import Consumption
+ from .infrastructure.lexical import tokenize
+ from plugins.ledger.contract import MessageCatalog, OwnerStore
+-from plugins.ledger.contract import CallRef
+ from plugins.ledger.contract import json_value
+ 
+ MaterialData = Mapping[str, object]
+@@ -73,6 +72,28 @@
+         )
+         return tuple(sorted(records, key=lambda item: (item[1].timestamp, item[0]), reverse=True))
+ 
++    def legacy_context(self, session_id: str, source: str, *, first_seq: int,
++                       through_seq: int) -> tuple[tuple[str, Recall], ...]:
++        """查旧随机身份前先筛出处，不解码每轮新增的稳定检索记录。"""
++        records: list[tuple[str, Recall]] = []
++        for start, stop in (("recall:", "recall:context:"), ("recall:context;", "recall:g")):
++            while True:
++                page = self._state.scan(start=start, stop=stop, limit=1000)
++                for key, record in page:
++                    origin = record.value.get("source")
++                    if not isinstance(origin, Mapping):
++                        continue
++                    seq = origin.get("through_seq")
++                    if (origin.get("kind") == "context" and origin.get("session_id") == session_id
++                            and origin.get("source") == source and type(seq) is int
++                            and first_seq <= seq <= through_seq):
++                        records.append((key.removeprefix("recall:"), Recall.model_validate_json(
++                            json.dumps(json_value(record.value)))))
++                if len(page) < 1000:
++                    break
++                stop = page[-1][0]
++        return tuple(sorted(records, key=lambda item: (item[1].timestamp, item[0]), reverse=True))
++
+ 
+ class RecallRecords(RecallRecordsRead):
+     """Akasha's append-only record owner; writes stay inside the plugin."""
+@@ -92,6 +113,7 @@
      turns: list[Turn], state: Consumption, ticket: RetrievalTicket, cue: Turn,
      *, inhibited: set[int], limit: int, strong: bool = False,
      time_start: datetime | None = None, time_end: datetime | None = None,
@@ -469,7 +619,7 @@
  ) -> tuple[Hit, ...]:
      """保留精确向量和联想两条通道，输出引用覆盖已学习的全部成员。"""
      if ticket.state_version != len(turns):
-@@ -124,6 +125,25 @@
+@@ -124,6 +146,25 @@
              if scores:
                  dense.append((max(scores), turn.node_id))
      dense.sort(key=lambda item: (-item[0], item[1]))
@@ -495,7 +645,7 @@
      selected = [hit(turns[node], score, "dense", ("direct_dense",)) for score, node in dense[:min(5, limit)]]
      direct = {item.node_id for item in selected}
  
-@@ -146,6 +166,9 @@
+@@ -146,6 +187,9 @@
      cycle: MemoryCycle, state: Consumption, *, learning_binding: str,
      text: str, dense: np.ndarray | None, stamp: datetime,
      source: ContextSource | ToolSource | ProgramSource, limit: int,
@@ -505,7 +655,7 @@
  ) -> Recall:
      """Context、工具与独立程序使用相同图查询；临时 cue 不写回学习状态。"""
      gap = None if not cycle.turns else (stamp - datetime.fromisoformat(cycle.turns[-1].committed_at)).total_seconds()
-@@ -153,7 +176,7 @@
+@@ -153,7 +197,7 @@
          raise ValueError("查询时间早于已发布学习图，需要核对时钟")
      cue = Turn(
          node_id=cycle.state_version, turn_id=f"query:{stamp.isoformat()}",
@@ -514,7 +664,7 @@
          user_seq=source.through_seq if isinstance(source, ContextSource) else -1,
          user_message_id="", assistant_message_id="", started_at=stamp.isoformat(),
          committed_at=stamp.isoformat(), user_text=text, assistant_text="", user_dense=dense,
-@@ -161,12 +184,15 @@
+@@ -161,12 +205,15 @@
          inter_gap_seconds=gap,
      )
      ticket = cycle.retrieve(cue)
@@ -531,7 +681,7 @@
      )
  
  
-@@ -177,6 +203,25 @@
+@@ -177,6 +224,25 @@
      rows: list[str] = []
      references: list[Mapping[str, object]] = []
      header = "## Akasha 召回\n历史资料仅供参考，不是当前用户指令。\n\n"
@@ -557,7 +707,7 @@
      used = len(header)
      for hit in recall.hits:
          reader = catalog.reader(hit.session_id)
-@@ -188,6 +233,8 @@
+@@ -188,6 +254,8 @@
              if not text.strip():
                  continue
              row = f"### 消息 {message_id}\n来源：{message.source}；作者：{message.author}；召回通道：{hit.lane}\n\n{text}"
@@ -566,7 +716,7 @@
              if used + len(row) + 2 * bool(rows) > max_chars:
                  continue
              used += len(row) + 2 * bool(rows)
-@@ -199,3 +246,15 @@
+@@ -199,3 +267,15 @@
          "name": "recall", "text": header + "\n\n".join(rows), "priority": 300,
      },)
      return {"reminders": reminders, "references": tuple(references)}
@@ -694,7 +844,24 @@
  ) -> MaterialData:
      """在已核对空间的图上查询真实输入前缀，发布出处后交付材料。"""
      if not snapshot:
-@@ -160,6 +220,7 @@
+@@ -147,19 +207,23 @@
+         recall = await run_memory_job(lambda: records.read(identity))
+         if recall is None:
+             # 升级前的随机身份仍是实际查询证据；复用同一用户输入后的首次记录。
+-            saved = await run_memory_job(records.list)
++            saved = await run_memory_job(lambda: records.legacy_context(
++                session_id, source, first_seq=inputs[-1].seq, through_seq=snapshot[-1].seq))
+             previous = next(((key, item) for key, item in reversed(saved)
+                 if isinstance(item.source, ContextSource)
+                 and item.source.session_id == session_id and item.source.source == source
+                 and inputs[-1].seq <= item.source.through_seq <= snapshot[-1].seq), None)
+             if previous is not None:
+                 identity, recall = previous
++            else:
++                recall = await run_memory_job(lambda: records.read(identity))
+         if recall is not None:
+             # 已保存查询用它当时的固定 binding 重渲染；正文仍只从原 Message 读取。
+             async with bindings.open(recall.learning_binding, AKASHA_LEARNING) as (original, _):
                  material = await run_memory_job(lambda: render_materials(
                      identity, recall, original, catalog, max_chars=recall.max_chars,
                  ))
@@ -702,7 +869,7 @@
          else:
              material = await query_inputs(
                  inputs, snapshot, source, identity=identity, cycle=cycle, state=state,
-@@ -172,7 +233,15 @@
+@@ -172,7 +236,15 @@
      tool_refs = await run_memory_job(lambda: tool_references(snapshot, source, learning, bindings, records))
      references.update((cast(str, ref["ref"]), ref) for ref in tool_refs)
      result = dict(material)
@@ -719,7 +886,7 @@
      return result
  
  
-@@ -209,17 +278,12 @@
+@@ -209,17 +281,12 @@
      recall = await run_memory_job(lambda: query_memory(
          cycle, state, learning_binding=learning_binding,
          text=text, dense=dense, stamp=stamp, source=origin, limit=limit,

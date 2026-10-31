@@ -288,11 +288,12 @@ class AsyncAkashic:
 
     async def message_send(self, session_id: str, text: str = "", *, message_id: str,
                            attachment_ids: list[str] | None = None,
+                           parts: list[dict[str, object]] | None = None,
                            reply_to_message_id: str | None = None, model_id: str | None = None,
                            reasoning_effort: str | None = None, retry_of: str | None = None) -> dict[str, Any]:
         return cast(dict[str, Any], await self.request("message/send", {
             "session_id": session_id, "message_id": message_id, "text": text,
-            "attachment_ids": attachment_ids or [], "reply_to_message_id": reply_to_message_id,
+            "attachment_ids": attachment_ids or [], "parts": parts or [], "reply_to_message_id": reply_to_message_id,
             "model_id": model_id, "reasoning_effort": reasoning_effort, "retry_of": retry_of,
         }))
 
@@ -389,10 +390,11 @@ class Akashic:
 
     def message_send(self, session_id: str, text: str = "", *, message_id: str,
                      attachment_ids: list[str] | None = None,
+                     parts: list[dict[str, object]] | None = None,
                      reply_to_message_id: str | None = None, model_id: str | None = None,
                      reasoning_effort: str | None = None, retry_of: str | None = None) -> dict[str, Any]:
         return self._runner.run(self._async.message_send(
-            session_id, text, message_id=message_id, attachment_ids=attachment_ids,
+            session_id, text, message_id=message_id, attachment_ids=attachment_ids, parts=parts,
             reply_to_message_id=reply_to_message_id, model_id=model_id,
             reasoning_effort=reasoning_effort, retry_of=retry_of,
         ))

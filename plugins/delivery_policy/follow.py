@@ -1,18 +1,21 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 
 from agent.plugin_composition import Context
+from core.common.file_io import run_file_io
 from plugins.ledger.contract import MessageCatalog, MessageReader
 from plugins.ledger.contract import Control, Message, Output
 
 from plugins.delivery.contract import GuardedDeliveries
 
 logger = logging.getLogger(__name__)
-Select = Callable[[MessageReader, Message], tuple[Mapping[str, object], ...] | None]
+SelectedSinks = tuple[Mapping[str, object], ...] | None
+Select = Callable[[MessageReader, Message], SelectedSinks | Awaitable[SelectedSinks]]
 
 
 @dataclass(slots=True)
@@ -63,14 +66,14 @@ async def follow(
             while True:
                 async with ctx.runtime_scope():
                     delivery = execution()
-                    through = delivery.cursor(session_id)
-                    messages = tuple(message for message in reader.read(after_seq=destination.position, limit=100)
-                                     if message.seq <= through)
+                    def read_backlog(view: MessageReader):
+                        through = delivery.cursor(session_id)
+                        return tuple((message, delivery.selection(message.message_id)) for message in view.read(
+                            after_seq=destination.position, through_seq=through, limit=100))
+                    messages = await reader.read_async(read_backlog)
                 if not messages:
                     break
-                for message in messages:
-                    async with ctx.runtime_scope():
-                        selected = execution().selection(message.message_id)
+                for message, selected in messages:
                     if selected is not None and selected.recovery_owner == destination.owner and sink in selected.sinks:
                         await send(message.message_id, sink)
                     destination.position = message.seq
@@ -95,18 +98,23 @@ async def follow(
                 while True:
                     async with ctx.runtime_scope():
                         delivery = execution()
-                        messages = reader.read(after_seq=delivery.cursor(session_id), limit=100)
-                    if not messages:
+                        def read_pending(view: MessageReader):
+                            return tuple((message, delivery.selection(message.message_id) is not None)
+                                         for message in view.read(after_seq=delivery.cursor(session_id), limit=100))
+                        pending = await reader.read_async(read_pending)
+                    if not pending:
                         break
                     async with ctx.runtime_scope():
                         delivery = execution()
                         # 整批选择一次事务提交；选路事实仍按消息逐条固定。
-                        batch = tuple(
-                            (message, select(reader, message) if delivery.selection(message.message_id) is None else ())
-                            for message in messages
-                        )
-                        selected_batch = await delivery.consume_batch_async(reader, batch, passive=True)
-                    for message, selected in zip(messages, selected_batch):
+                        batch: list[tuple[Message, SelectedSinks]] = []
+                        for message, known in pending:
+                            selected = () if known else select(reader, message)
+                            if inspect.isawaitable(selected):
+                                selected = await selected
+                            batch.append((message, selected))
+                        selected_batch = await delivery.consume_batch_async(reader, tuple(batch), passive=True)
+                    for (message, _), selected in zip(pending, selected_batch):
                         if selected is not None:
                             for sink in selected.sinks:
                                 wake_destination(session_id, sink, selected.recovery_owner, message.seq - 1)
@@ -127,17 +135,22 @@ async def follow(
             if first:
                 async with ctx.runtime_scope():
                     delivery = execution()
-                    for message_id, sink in delivery.pending():
-                        selection = delivery.selection(message_id)
-                        if selection is None:
-                            raise ValueError("待恢复发送缺少首次选择")
-                        reader = catalog.reader(selection.session_id)
-                        message = reader.get(message_id)
-                        if message is None:
-                            raise ValueError("待恢复发送的原消息缺失")
-                        destination = wake_destination(selection.session_id, sink, selection.recovery_owner,
-                                                       delivery.cursor(selection.session_id))
-                        destination.recovery.append((message.seq, message_id))
+                    def read_recovery():
+                        recovered = []
+                        for message_id, sink in delivery.pending():
+                            selection = delivery.selection(message_id)
+                            if selection is None:
+                                raise ValueError("待恢复发送缺少首次选择")
+                            message = catalog.reader(selection.session_id).get(message_id)
+                            if message is None:
+                                raise ValueError("待恢复发送的原消息缺失")
+                            recovered.append((message_id, sink, selection, message.seq,
+                                              delivery.cursor(selection.session_id)))
+                        return tuple(recovered)
+                    recovered = await run_file_io(read_recovery)
+                    for message_id, sink, selection, seq, cursor in recovered:
+                        destination = wake_destination(selection.session_id, sink, selection.recovery_owner, cursor)
+                        destination.recovery.append((seq, message_id))
                 first = False
             changed = {key for key, head in heads.items() if previous.get(key) != head}
             previous = dict(heads)

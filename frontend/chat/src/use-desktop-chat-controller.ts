@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction 
 import { createUuid, createUuidV7 } from "./browser-uuid.ts";
 import type { ChatMessage } from "./chat-message";
 import type { ComposerFile } from "./desktop-composer";
-import { loadWebPluginCatalog, receivePluginUiEvent, resetPluginUiEvents, usePluginUiCatalogVersion } from "./plugin-ui-runtime";
+import { invalidatePluginUiSession, loadWebPluginCatalog, receivePluginUiEvent, resetPluginUiEvents, usePluginUiCatalogVersion } from "./plugin-ui-runtime";
 import { groupKey, useNavigationGroupSections, type GroupRef, type NavigationGroupsState } from "./navigation-groups";
 import { useNavigationPins } from "./use-navigation-pins";
 import { readSessionActivityFrame, useSessionActivity, type SessionHead } from "./use-session-activity";
@@ -33,7 +33,7 @@ import { parseChatFrame, sendWhenOpen } from "./web-chat-transport";
 import type { DesktopSidebarSession } from "./desktop-sidebar";
 import { useSteers, type SteerResult } from "./use-steers";
 import { webTurnTrace } from "./web-turn-trace";
-import { composerContributions, notifyComposerSent, useComposerContributions } from "./composer-contributions";
+import { composerContributions, notifyComposerSent, useComposerContributions, type ComposerInputPart } from "./composer-contributions";
 
 /** 回访会话时先展示的尾页快照；只做展示缓存，事实仍以服务端分页与实时帧为准。 */
 interface SessionTail {
@@ -99,13 +99,15 @@ function createReconnectScheduler(maxDelayMs: number, signal: AbortSignal): { re
 // 服务端明确拒绝的发送不重试，直接把原因交给用户。
 class SendRejected extends Error {}
 
-function followSession(socket: WebSocket | null, sessionId: string, afterSeq: number): void {
-  if (!sessionId || socket?.readyState !== WebSocket.OPEN) return;
+function sendSessionFollow(socket: WebSocket | null, sessionId: string, afterSeq: number): string | null {
+  if (!sessionId || socket?.readyState !== WebSocket.OPEN) return null;
+  const requestId = createUuid();
   socket.send(JSON.stringify({
     type: "session.follow", version: 2, after_seq: afterSeq,
-    request_id: createUuid(),
+    request_id: requestId,
     session_id: sessionId,
   }));
+  return requestId;
 }
 
 /** 切换会话只清理一次性路由参数，保留嵌入模式和其他页面选项。 */
@@ -268,6 +270,11 @@ export function useDesktopChatController() {
   const replyTargetsRef = useRef(new Map<string, TimelineReply>());
   const [copiedMessageId, setCopiedMessageId] = useState("");
   const socketRef = useRef<WebSocket | null>(null);
+  const followRequestRef = useRef<{ requestId: string; sessionId: string; confirmed: boolean } | null>(null);
+  const followSession = useCallback((socket: WebSocket | null, sessionId: string, afterSeq: number) => {
+    const requestId = sendSessionFollow(socket, sessionId, afterSeq);
+    if (requestId !== null) followRequestRef.current = { requestId, sessionId, confirmed: false };
+  }, []);
   const connectionTaskRef = useRef<AbortController | null>(null);
   const connectRef = useRef<(() => WebSocket) | null>(null);
   const messageElementsRef = useRef(new Map<string, HTMLDivElement>());
@@ -428,7 +435,7 @@ export function useDesktopChatController() {
         setHistoryLoading(false);
       }
     }
-  }, [readSessionTail, setFollowAfter, setMessages, setStatusLive, setTimelineMessages, streamStore]);
+  }, [followSession, readSessionTail, setFollowAfter, setMessages, setStatusLive, setTimelineMessages, streamStore]);
 
   const loadOlderMessages = useCallback(async () => {
     const sessionId = activeSessionRef.current;
@@ -505,6 +512,7 @@ export function useDesktopChatController() {
   const closeConnection = useCallback(() => {
     // React 可立即重新挂载；先撤销旧连接，不能等异步 finalizer 才清引用。
     socketRef.current = null;
+    followRequestRef.current = null;
     resetPluginUiEvents();
     connectionTaskRef.current?.abort();
     connectionTaskRef.current = null;
@@ -563,12 +571,19 @@ export function useDesktopChatController() {
                     receiveSessionActivity(activity);
                     return;
                   }
-                  if (receivePluginUiEvent(value)) return;
+                  if (receivePluginUiEvent(value, followRequestRef.current?.confirmed ? activeSessionRef.current : "")) return;
                   const frame = readMessageLogFrame(value);
                   if (frame) {
                     if (frame.session_id !== activeSessionRef.current) return;
+                    const follow = followRequestRef.current;
                     if (frame.type === "session.following") {
+                      if (!follow || frame.request_id !== follow.requestId) return;
+                      follow.confirmed = true;
                       setTimelineRefresh((revision) => revision + 1);
+                    } else if (!follow?.confirmed || follow.sessionId !== frame.session_id) {
+                      // A→B→A 时旧 A 的在途帧仍有同一个 session_id。只有最新跟随确认后
+                      // 才接收正文；服务端确认前已排空旧订阅，快照之后的增量会重新补齐。
+                      return;
                     } else if (frame.type === "messages.appended") {
                       if (frame.after_seq !== followAfterRef.current) throw new Error("实时消息游标不连续，请重新连接");
                       const merged = mergeTimelineMessages(timelineRef.current, frame.items);
@@ -671,7 +686,7 @@ export function useDesktopChatController() {
     // 兜底:finally/catch 内部一旦抛错(如组件已卸载后的 setState 边界),不外泄成 unhandled rejection。
     void run().catch((error) => console.error("[chat-ui] connection loop escaped", error));
     return first;
-  }, [cacheSessionTail, closeConnection, disconnectSessionActivity, loadMessagesSafely, scheduleSessionsRefresh,
+  }, [cacheSessionTail, closeConnection, disconnectSessionActivity, followSession, loadMessagesSafely, scheduleSessionsRefresh,
     receiveSessionActivity, reportError, setFollowAfter, setMessages, setReplyAvailable, setStatusLive, setTimelineMessages]);
 
   // 手机从后台回来或网络切换后，旧连接常常已经半开；立刻探测一次，不等下一轮心跳。
@@ -808,7 +823,7 @@ export function useDesktopChatController() {
     followSession(socketRef.current, sessionId, -1);
     // 发送前只准备路由；上传失败时编辑器仍留在原草稿位置。
     return sessionId;
-  }, [loadMessages, setFollowAfter]);
+  }, [followSession, loadMessages, setFollowAfter]);
 
   // 等服务端对 requestId 的确认；超时返回 false 交给调用方换连接重发，服务端拒绝时抛 SendRejected。
   const waitForAccepted = useCallback((requestId: string, signal: AbortSignal) => new Promise<boolean>((resolve, reject) => {
@@ -843,9 +858,9 @@ export function useDesktopChatController() {
     }
   }, [closeConnection, connect, waitForAccepted]);
 
-  const sendMessage = useCallback(async (text: string, files: ComposerFile[]) => {
+  const sendMessage = useCallback(async (text: string, files: ComposerFile[], extraParts?: readonly ComposerInputPart[]) => {
     const cleanText = text.trim();
-    if (!cleanText && files.length === 0) return;
+    if (!cleanText && files.length === 0 && !extraParts?.length) return;
     if (!canSend) throw new Error(sendProblem || "聊天服务暂不可用，请稍后重试。");
     if (sendRequestRef.current) throw new Error("消息正在发送，请稍等。");
     setError("");
@@ -865,6 +880,18 @@ export function useDesktopChatController() {
         mediaType: file.mediaType || "application/octet-stream", url: file.url || "", sizeBytes: file.sizeBytes,
       })),
       blocks: [], createdAt: new Date().toISOString(), canonical: false, delivery: "sending",
+      // 只发引用时没有正文也没有附件；把引用摘要带上，本地先显示「引用 N 个会话」，
+      // 否则等待服务端确认期间会是一个空气泡（重试时尤其久）。
+      references: (extraParts ?? [])
+        .filter((part) => part.kind === "session.reference")
+        .flatMap((part) => {
+          const sessions = (part.value as { sessions?: { session_id?: unknown; title?: unknown }[] } | null)?.sessions;
+          return Array.isArray(sessions)
+            ? sessions.flatMap((row) => typeof row?.session_id === "string" && row.session_id
+              ? [{ sessionId: row.session_id, title: typeof row.title === "string" ? row.title : "" }]
+              : [])
+            : [];
+        }),
     }]);
     try {
       const sessionId = await ensureSession();
@@ -890,7 +917,8 @@ export function useDesktopChatController() {
       const scope = sessionScopesRef.current.get(sessionId);
       if (scope) payload.session_dimensions = scope;
       const { parts } = composerContributions();
-      if (parts.length) payload.parts = parts;
+      const allParts = [...parts, ...(extraParts ?? [])];
+      if (allParts.length) payload.parts = allParts;
       const markDelivery = (delivery: ChatMessage["delivery"]) => setMessages((current) => current.map((item) => item.id === clientMessageId ? { ...item, delivery } : item));
       await deliverMessage(clientMessageId, payload, controller.signal, () => markDelivery("retrying"));
       controller.signal.throwIfAborted();
@@ -1035,7 +1063,13 @@ export function useDesktopChatController() {
     setSurface("chat");
     clearChatRoute();
     // 空白页只订阅目录，没有旧正文跟随；首次进入会话可以复用已有连接。
-    if (activeSessionRef.current) closeConnection();
+    // 连接健康时会话间切换也只换跟随：服务端收到新 session.follow 会先排空上一会话的订阅
+    // （web_chat._follow_session），整链重连会把目录刷新、插件基线与活动订阅全部重取一遍。
+    if (activeSessionRef.current) {
+      if (socketRef.current?.readyState === WebSocket.OPEN) invalidatePluginUiSession(activeSessionRef.current);
+      else closeConnection();
+    }
+    followRequestRef.current = null;
     activeSessionRef.current = sessionId;
     sendRequestRef.current?.abort();
     stopRequestRef.current?.abort();
@@ -1069,7 +1103,7 @@ export function useDesktopChatController() {
       });
     // 新鲜快照跳过了分页拉取，仍需恢复 WebSocket 增量跟随。
     if (cachedFresh) followSession(socketRef.current ?? connectRef.current?.() ?? null, sessionId, cached.throughSeq);
-  }, [closeConnection, loadMessages, reportError, reportHistoryError, setFollowAfter, setMessages, setTimelineMessages, setReplyAvailable, setStatusLive, surface, sessions, navigationPins.sessions]);
+  }, [closeConnection, followSession, loadMessages, reportError, reportHistoryError, setFollowAfter, setMessages, setTimelineMessages, setReplyAvailable, setStatusLive, surface, sessions, navigationPins.sessions]);
 
   useEffect(() => {
     if (!chatReady || !requestedSessionId) return;

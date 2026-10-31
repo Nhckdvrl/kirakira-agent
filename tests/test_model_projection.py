@@ -195,3 +195,96 @@ def test_cache_usage_preserves_unknown_zero_and_partial_turns_across_restart(tmp
     with sqlite3.connect(tmp_path / "cache-usage.sqlite3") as connection:
         connection.execute("PRAGMA user_version = 1")
     assert checkpoint.load() == ({}, {})
+
+
+@pytest.fixture
+def registry_store(tmp_path):
+    from plugins.models.contract import CapabilitySources, ModelCapabilities
+    from plugins.models.settings import AddConnection, AddModel, SetDefaultModel
+    from plugins.models.store import MODEL_ROLES, ModelsStore
+
+    store = ModelsStore(tmp_path / "models.sqlite3", tmp_path / "backups")
+    try:
+        store.initialize()
+        revision = store.add_connection(AddConnection(
+            0, "fixture", "Fixture", "fixture", "http://127.0.0.1:1/v1", "fixture",
+            {"api_key": "synthetic-not-a-credential"}))
+        for number in range(2):
+            revision = store.add_model(AddModel(
+                revision, f"model-{number}", "fixture", "chat", f"fixture-{number}",
+                ModelCapabilities(context_window=32768, max_output_tokens=4096,
+                                  input_modalities=("text", "image")), CapabilitySources()))
+        for role in MODEL_ROLES:
+            revision = store.set_default(SetDefaultModel(revision, role, "model-0"))
+        yield store, revision
+    finally:
+        store.close()
+
+
+def test_registry_snapshot_reuses_catalog_and_observes_configuration_changes(registry_store):
+    import sqlite3
+    from contextlib import closing
+
+    from plugins.models.settings import SetDefaultModel, UpdateModel
+
+    store, revision = registry_store
+    initial = store.read_snapshot()
+    assert initial.role_bindings == {role: "model-0" for role in ("default", "fast", "agent", "vision")}
+    assert store.read_snapshot() is initial
+    descriptor = BoundModelDescriptor(
+        "binding", "plugin-snapshot", revision, "model-0", "fixture", "fixture", "1", "fixture",
+        "fixture-0", "default", None, initial.models["model-0"].capabilities,
+        initial.models["model-0"].capability_sources, "capability-digest")
+    call_id = store.start_call(descriptor, ModelRequest(({"role": "user", "content": "synthetic"},)))
+    store.finish_call(call_id, usage=None, failure=None, response=LLMResponse("synthetic response"))
+    assert store.read_call(call_id)["state"] == "success"
+    assert store.read_snapshot() is initial  # Call bookkeeping never rebuilds an unchanged catalog.
+
+    revision = store.set_default(SetDefaultModel(revision, "default", "model-1"))
+    selected = store.read_snapshot()
+    assert selected is not initial and selected.revision == revision
+    assert selected.role_bindings == {**initial.role_bindings, "default": "model-1"}
+    revision = store.update_model(UpdateModel(revision, "model-1", 65536, 8192, True))
+    configured = store.read_snapshot()
+    assert configured.revision == revision
+    assert configured.models["model-1"].capabilities.context_window == 65536
+    assert configured.models["model-1"].capabilities.max_output_tokens == 8192
+
+    # An external commit without a registry revision still invalidates the connection-local marker.
+    with closing(sqlite3.connect(store.path)) as external, external:
+        external.execute("UPDATE model_connections SET name='Externally updated' WHERE id='fixture'")
+    external_snapshot = store.read_snapshot()
+    assert external_snapshot.revision == revision
+    assert external_snapshot.connections["fixture"].name == "Externally updated"
+    assert configured.connections["fixture"].name == "Fixture"  # Previously bound snapshots stay immutable.
+    assert store.read_snapshot() is external_snapshot
+
+
+def test_registry_snapshot_busy_writer_uses_committed_reader_and_rechecks_schema(registry_store):
+    import sqlite3
+    from concurrent.futures import ThreadPoolExecutor
+    from contextlib import closing
+
+    store, revision = registry_store
+    initial = store.read_snapshot()
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        with store._connect() as writer:
+            writer.execute("BEGIN IMMEDIATE")
+            writer.execute("UPDATE model_role_bindings SET model_id='model-1' WHERE role='default'")
+            writer.execute("UPDATE model_registry_meta SET revision=revision+1 WHERE singleton=1")
+            committed = executor.submit(store.read_snapshot).result(timeout=3)
+            assert committed.revision == revision
+            assert committed.role_bindings == initial.role_bindings
+            writer.commit()
+    updated = store.read_snapshot()
+    assert updated.revision == revision + 1 and updated.role_bindings["default"] == "model-1"
+    assert updated.role_bindings["fast"] == "model-0"
+
+    epoch = store.host_epoch
+    store.initialize()  # Same-host initialization can perform additive upgrades without changing meta.
+    assert store.host_epoch == epoch
+    assert store.read_snapshot() == updated and store.read_snapshot() is not updated
+    with closing(sqlite3.connect(store.path)) as external, external:
+        external.execute("DROP TABLE model_definitions")
+    with pytest.raises(RuntimeError, match="schema is incomplete.*model_definitions"):
+        store.read_snapshot()

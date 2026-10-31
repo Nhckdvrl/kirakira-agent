@@ -144,6 +144,15 @@
           "default": null,
           "title": "Model Id"
         },
+        "parts": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "maxItems": 8,
+          "title": "Parts",
+          "type": "array"
+        },
         "reasoning_effort": {
           "anyOf": [
             {

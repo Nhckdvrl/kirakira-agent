@@ -9,6 +9,69 @@ from plugins.sources.session import SourceSession as Conversation
 from plugins.ledger.log import MessageLog, WriterExpired
 from plugins.ledger.contract import ContentPart, Control, Input, Output
 
+
+@pytest.mark.asyncio
+async def test_session_links_admit_coordinates_and_read_live_bounded_pages(tmp_path):
+    import json
+    import shutil
+    from pathlib import Path
+    from plugins.channels.contract import CHANNEL_INPUT_V2, InputPartRejected
+    from plugins.ledger.contract import CallRef, json_value
+    from plugins.gateway.service import ControlService
+    from plugins.gateway.protocol.models import MessageSendParams
+    from plugins.session_reference.plugin import ReadSession, MAX_PAGE_CHARS
+    from plugins.tools.contract import CallSource
+    from tests.test_default_reply import application
+
+    def sources(directory):
+        shutil.copytree(Path(__file__).parents[1] / 'plugins/session_reference', directory / 'session_reference')
+
+    async with application(tmp_path, replying=False, extra_sources=sources) as (log, host):
+        writer = log.writer('linked', author='user', source='conversation', body_types=(Input,),
+                            content={'text': lambda _: ContentReferences()})
+        for number in range(60):
+            writer.append('linked-'+str(number), Input((ContentPart('text', str(number)+':'+'evidence '*500),)))
+        accepted = host.live_root.context.require(CHANNEL_INPUT_V2)
+        control = ControlService(log.catalog(), tmp_path, accept=accepted, reply_status=lambda _:None,
+                                 attachments=lambda _:(), control_frames=None)
+        value = {'sessions': [{'session_id': 'linked', 'title': 'Reference title'}]}
+        async def send(identity, references):
+            receipt = await control.send_message(MessageSendParams(session_id='akashic:current', message_id=identity,
+                parts=[{'kind':'session.reference','value':references}]))
+            return log.reader('akashic:current').get(receipt['message_id'])
+        original = await send('link-input', value)
+        assert len(json.dumps(json_value(original.body.parts[-1].value))) < 200
+        source = CallSource(CallRef('call', 0), log.reader('akashic:current').snapshot())
+        tool = ReadSession(log.catalog())
+        assert isinstance(await tool.prepare({'session_id':'elsewhere'}, source), str)
+        assert isinstance(await tool.prepare({'session_id':'linked'}, source), dict)
+        found=[];before=None
+        while True:
+            args={'session_id':'linked','limit':50}
+            if before is not None:args['before_seq']=before
+            result=await tool.invoke('read',args)
+            page=json.loads(result.parts[0].value)
+            assert sum(len(row['text']) for row in page['messages']) <= MAX_PAGE_CHARS
+            found.extend(row['seq'] for row in page['messages'])
+            if not page['has_more']:break
+            assert page['next_before_seq'] is not None and page['next_before_seq'] != before
+            before=page['next_before_seq']
+        assert sorted(found)==list(range(60)) and len(set(found))==60
+        writer.append('new-decision', Input((ContentPart('text','Latest decision: budget 900.'),)))
+        updated=json.loads((await tool.invoke('live',{'session_id':'linked'})).parts[0].value)
+        assert updated['messages'][-1]['text']=='Latest decision: budget 900.'
+        expanded=json.loads((await tool.invoke('original',{
+            'session_id':'linked','message_id':'linked-59','offset':4000})).parts[0].value)
+        assert expanded['text']==('59:'+'evidence '*500)[4000:]
+        assert expanded['next_offset'] is None and expanded['source_chars']>4000
+        assert (await tool.invoke('foreign',{'session_id':'linked','message_id':'link-input'})).outcome=='error'
+        assert isinstance(await tool.prepare({'session_id':'linked','offset':1},source),str)
+        assert log.reader('akashic:current').snapshot()==(original,)
+        for refs in [{'sessions':[{'session_id':'akashic:current'}]}, {'sessions':[{'session_id':'missing'}]},
+                     {'sessions':[{'session_id':'linked'},{'session_id':'linked'}]}]:
+            with pytest.raises(InputPartRejected):await send('bad-reference',refs)
+        assert log.reader('akashic:current').snapshot()==(original,)
+
 @asynccontextmanager
 async def source(tmp_path, run, *, changed=None):
     log = MessageLog(tmp_path / "sessions.db")
@@ -46,12 +109,12 @@ async def test_interrupt_inputs_survive_and_old_output_cannot_commit(tmp_path):
             finally:
                 cancelled.set()
                 await drain.wait()
-        snapshot = reader.snapshot()
+        _ = reader.snapshot()
         return writer.append("answer", Output((ContentPart("text", "answer"),), "complete"),
                              expected_source_head=reader.head(source="conversation"))
     async with source(tmp_path, run) as (conversation, log, writer, program):
         first = await conversation.accept("u1", Input(()))
-        task = await conversation.start(program)
+        _ = await conversation.start(program)
         await entered.wait()
         await conversation.accept("u2", Input(()))
         await cancelled.wait()

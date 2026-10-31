@@ -45,6 +45,7 @@ class MessageSendParams(SessionIdParams):
     message_id: str = Field(min_length=1, max_length=256)
     text: str = Field(default="", max_length=1_048_576)
     attachment_ids: list[str] = Field(default_factory=list, max_length=64)
+    parts: list[dict[str, object]] = Field(default_factory=list, max_length=8)
     reply_to_message_id: str | None = Field(default=None, min_length=1, max_length=256)
     model_id: str | None = Field(default=None, max_length=256)
     reasoning_effort: str | None = Field(default=None, max_length=128)

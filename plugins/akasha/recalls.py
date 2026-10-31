@@ -15,7 +15,6 @@ from .domain.model import Turn
 from .infrastructure.consumption import Consumption
 from .infrastructure.lexical import tokenize
 from plugins.ledger.contract import MessageCatalog, OwnerStore
-from plugins.ledger.contract import CallRef
 from plugins.ledger.contract import json_value
 
 MaterialData = Mapping[str, object]
@@ -71,6 +70,28 @@ class RecallRecordsRead:
             (key.removeprefix("recall:"), Recall.model_validate_json(json.dumps(json_value(record.value))))
             for key, record in self._state.list() if key.startswith("recall:")
         )
+        return tuple(sorted(records, key=lambda item: (item[1].timestamp, item[0]), reverse=True))
+
+    def legacy_context(self, session_id: str, source: str, *, first_seq: int,
+                       through_seq: int) -> tuple[tuple[str, Recall], ...]:
+        """查旧随机身份前先筛出处，不解码每轮新增的稳定检索记录。"""
+        records: list[tuple[str, Recall]] = []
+        for start, stop in (("recall:", "recall:context:"), ("recall:context;", "recall:g")):
+            while True:
+                page = self._state.scan(start=start, stop=stop, limit=1000)
+                for key, record in page:
+                    origin = record.value.get("source")
+                    if not isinstance(origin, Mapping):
+                        continue
+                    seq = origin.get("through_seq")
+                    if (origin.get("kind") == "context" and origin.get("session_id") == session_id
+                            and origin.get("source") == source and type(seq) is int
+                            and first_seq <= seq <= through_seq):
+                        records.append((key.removeprefix("recall:"), Recall.model_validate_json(
+                            json.dumps(json_value(record.value)))))
+                if len(page) < 1000:
+                    break
+                stop = page[-1][0]
         return tuple(sorted(records, key=lambda item: (item[1].timestamp, item[0]), reverse=True))
 
 

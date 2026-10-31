@@ -174,6 +174,10 @@ def upgrade_workspace(workspace):
         "event-ingress",
         "followups",
     }
+    # New installs select conversation references by default; an explicit
+    # opt-out on an existing workspace must survive subsequent upgrades.
+    if plugin_choices(workspace).get("session_reference", True):
+        additions.add("session_reference")
     lock = WorkspaceInstanceLock(workspace)
     lock.acquire()
     try:
