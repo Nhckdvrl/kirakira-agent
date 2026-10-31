@@ -114,6 +114,21 @@ async def test_chat_followup_scope_atomic_receipts_and_original_rule_survive_rep
             "source_kind": "webpage",
             "url": "https://example.test/exhibit",
         }
+        # Historical mail access is opt-in, bounded, and cannot be attached to
+        # unrelated webpage/feed watches or silently accept bool/string limits.
+        for limit in (True, "12", -1, 51, 1):
+            assert isinstance(await create.prepare(
+                {**args, "mail_initial_limit": limit}, source("bad-history")), str)
+        mail_request = writer().append("mail-request", Input((ContentPart(
+            "text", "请回查 Junk 最近12封邮件，只在需要补材料时通知我。"),)))
+        mail_prepared = await create.prepare({
+            "name": "重要邮件", "purpose": "只在需要补材料时通知我",
+            "source_kind": "mailbox", "mailbox_id": "ma_" + "a" * 32,
+            "mail_folder": "Junk", "mail_initial_limit": 12,
+        }, source("mail-create", mail_request))
+        assert mail_prepared["spec"]["mail_initial_limit"] == 12
+        assert mail_prepared["spec"]["mail_folder"] == "Junk"
+        assert mail_prepared["spec"]["anchors"] == [mail_request.message_id]
         assert isinstance(
             await FollowupTool(service, "create").prepare(args, source("unconfigured")),
             str,

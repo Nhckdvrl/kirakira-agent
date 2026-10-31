@@ -143,6 +143,17 @@ uv run --frozen --no-sync python -m eval.prompt_cache --mode mail --attention-ca
 
 邮件实验用六个固定场景，每个场景的邮件相同，在另一个历史对话中分别放置应分享或应跳过的用户条件。每个条件另有移除该历史的观察组，共 24 次调查；通知收件位置独立于项目隔离。`--family-start` / `--family-end` 可拆分场景，`--functional-only` 只跑功能验收。无历史组本来就缺少个人条件，不能把它当作公平的其他记忆系统基线或现实通知准确率。首轮错误保留，功能断言与行动符合率分别报告。
 
+`--initial-review-only` 单独检查创建前已存在的邮件：以普通中文交办，按本轮原始输入对应的真实创建工具回执找到关注，核对文件夹、回查数量、原话规则与所属会话，不再额外调用 RPC 创建第二份关注。默认只监听新邮件，明确授权后从指定箱回查最近一封；Junk 中的补材料要求与 INBOX 中的普通推广分别作一次真实模型判断，核对日期、时区、来源 UID、重复 poll 和原生重启后的回执。通知后再用普通中文确认截止前一天的提醒，查真实调度回执、时间与重启状态；不等待未来触发来虚报投递成功。作用已提交而最后确认回复失败时，仍追踪并清理该关注，回复失败保留。两项判断与提醒登记分开计数，全部失败保留，不据此发布垃圾邮件分类准确率。
+
+只检查真实本地 TLS 协议与采集游标时，不需要模型、密钥或向量配置：
+
+```sh
+uv run --frozen --no-sync python -m eval.mail_followups --protocol-only \
+  --workspace /path/to/isolated-mail-eval --output /path/to/private/protocol.json
+```
+
+该模式验证实际 UID 有间隔时的最近 12 封窗口、计划先冻结、每批 10 封、回查中新到邮件随后追上、目录隔离、UID 身份变化、同内容去重与 `EXAMINE` / `BODY.PEEK`。JSON 游标往返不冒充 Runtime 重启；原生恢复由故障回归和真实模型验收另查。不访问私人邮箱，也不改变邮件状态。
+
 已有首轮出现地域条件误解时，可以在其原工作区执行一次独立干预；需要保留原报告与工作区。此操作会写入用户澄清规则并对原内容提交复查，不重算首轮分数：
 
 ```sh
@@ -185,6 +196,11 @@ uv run --frozen --no-sync python -m eval.runtime_experience references \
   --model-config /private/path/model.json --key-file /private/path/model.key \
   --output /local-disk/eval/references.json
 
+uv run --frozen --no-sync python -m eval.runtime_experience background \
+  --workspace /local-disk/eval/background-new \
+  --model-config /private/path/model.json --key-file /private/path/model.key \
+  --output /local-disk/eval/background.json
+
 node node_modules/vite/bin/vite.js build --config frontend/chat/vite.harness.config.ts \
   --outDir /local-disk/eval/chat-assets
 uv run --frozen --no-sync python -m playwright install chromium
@@ -204,6 +220,9 @@ uv run --frozen --no-sync python -m eval.runtime_experience browser \
 父目录必须足够短以容纳 Linux Unix socket；`stat` 可用时报告实际文件系统类型。原生子报告可能含 Markdown 文件名，公开前仍需白名单脱敏。
 
 `references` 用真实模型与相同 SDK 输入片段，核对长消息后文、原会话的新决定与原始前缀不变；记录坐标字节、窗口、实际工具与模型用量，不发布回答或推理正文。
+
+`background` 使用不点名工具的中文交办，资料由实际本地 HTTP 服务暂缓返回：核对持久接纳与公开确认、等待资料时继续正常聊天、实际原文结果、唯一完成通知与投递回执、自然语言查询原始结果，以及重启后再次查询。固定六项计划，配置失败或依赖失败后的未运行项也保留，CLI 返回非零。成功工具调用按实际 CallRef、任务身份和原始结果窗口核对；不能只看模型声称已使用工具。门控预算与隔离工作区的网页等待上限为 120 秒，不修改生产默认；报告实际等候及夹具超时。通知与任务结果分别检查日期、时间、时区、材料和核验码，使用本地会话送达确认，不代表 Telegram 或用户已读，也不是公开基准与群体任务成功率。
+
 `browser` 无需配置模型即可用 Chromium 验证真实原生后端上的切换、拖入引用、去重、草稿隔离、移除和自引用拒绝。
 `--comparison-assets` 可指定另一份编译好的界面，后端和合成会话保持相同；网络参数是 Chromium 模拟设置，不是实测 RTT。
 可用 `--browser-executable` 选择已有 Chromium。网页测试工作区必须是新目录，Linux Unix socket 路径不能过长。

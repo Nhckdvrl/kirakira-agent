@@ -26,8 +26,16 @@ class Prepared(BaseModel):
 
 class ManageInput(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    action: Literal["list", "cancel"]
+    action: Literal["list", "cancel", "stop", "status", "result"]
     job_id: str = ""
+    include_settled: bool = False
+    limit: int = Field(default=20, ge=1, le=100)
+    offset: int = Field(default=0, ge=0)
+    length: int = Field(default=2000, ge=1, le=6000)
+
+
+class PreparedManage(ManageInput):
+    parent_session_id: str = Field(min_length=1)
 
 
 class Spawn:
@@ -146,19 +154,27 @@ class Manage:
             args = ManageInput.model_validate(dict(arguments))
         except ValidationError as error:
             return str(error)
-        if args.action == "cancel" and not args.job_id:
-            return '取消子任务需要 job_id'
-        return args.model_dump()
+        if args.action != "list" and not args.job_id:
+            return '查询或取消子任务需要 job_id'
+        if source is None:
+            return '子任务管理需要当前会话的实际工具调用'
+        caller = next((message for message in source.messages if message.message_id == source.call_ref.message_id), None)
+        if caller is None:
+            return '子任务管理缺少实际调用消息'
+        return {**args.model_dump(), "parent_session_id": caller.session_id}
 
     async def invoke(self, key: str, arguments: Mapping[str, object]) -> Result:
-        args = ManageInput.model_validate(json_value(arguments))
-        value: dict[str, object]
-        if args.action == "list":
-            jobs = self.jobs.jobs()
-            value = {"running_count": len(jobs), "jobs": jobs}
-        else:
-            cancelled = await self.jobs.cancel(args.job_id)
-            value = {"job_id": args.job_id, "status": "cancel_requested" if cancelled else "not_found"}
+        args = PreparedManage.model_validate(json_value(arguments))
+        try:
+            if args.action in {"cancel", "stop"}:
+                cancelled = await self.jobs.cancel(args.job_id, parent_session_id=args.parent_session_id)
+                value = {"job_id": args.job_id, "status": "cancel_requested" if cancelled else "not_found"}
+            else:
+                value = await self.jobs.inspect(args.parent_session_id,
+                    job_id=args.job_id if args.action != "list" else "", include_settled=args.include_settled,
+                    limit=args.limit, result=args.action == "result", offset=args.offset, length=args.length)
+        except (PermissionError, LookupError, ValueError) as error:
+            return Result("error", (ContentPart("text", str(error)),))
         return Result("success", (ContentPart("text", json.dumps(value, ensure_ascii=False)),))
 
     async def query(self, key: str) -> Result | None:

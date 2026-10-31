@@ -224,7 +224,26 @@ def _fetch(config, secret, spec, cursor, connection):
         epoch, upper = number("UIDVALIDITY"), number("UIDNEXT") - 1
         if epoch <= 0 or upper < 0:
             raise MailboxError("protocol_error", "邮箱 UID 身份或水位无效")
+
+        def search(lower, through):
+            if through <= lower:
+                return []
+            found = command(client.uid, "SEARCH", None, "UID", f"{lower + 1}:{through}")
+            raw = b" ".join(value for value in found if isinstance(value, bytes))
+            if len(raw) > 1_048_576:
+                raise MailboxError(
+                    "backlog_too_large", "邮箱待处理索引过大，请缩小文件夹范围"
+                )
+            return sorted({int(value) for value in raw.split()
+                           if value.isdigit() and lower < int(value) <= through})
+
         if not cursor.get("initialized"):
+            if spec.mail_initial_limit and not cursor.get("mail_initial_started"):
+                # Freeze actual identities before reading bodies. The service
+                # commits this plan before another collect can consume it.
+                selected = search(0, upper)[-spec.mail_initial_limit:]
+                return Batch((), {"uidvalidity": epoch, "last_uid": upper,
+                                  "initial_uids": selected}, 0, 0, len(selected))
             return Batch((), {"uidvalidity": epoch, "last_uid": upper}, 0, 0, 0)
         previous = cursor.get("mailbox", {})
         if previous.get("uidvalidity") != epoch:
@@ -235,21 +254,14 @@ def _fetch(config, secret, spec, cursor, connection):
         lower = int(previous["last_uid"])
         if upper < lower:
             raise MailboxError("uid_reversed", "邮箱 UID 水位倒退，已保留原基线")
-        if lower == upper:
+        initial = previous.get("initial_uids", [])
+        if (not isinstance(initial, list) or len(initial) > spec.mail_initial_limit
+            or any(type(uid) is not int or not 0 < uid <= lower for uid in initial)
+            or initial != sorted(set(initial))):
+            raise MailboxError("protocol_error", "邮箱历史回查计划无效，已保留原水位")
+        if lower == upper and not initial:
             return Batch((), previous, 0, 0, 0)
-        found = command(client.uid, "SEARCH", None, "UID", f"{lower + 1}:{upper}")
-        raw = b" ".join(value for value in found if isinstance(value, bytes))
-        if len(raw) > 1_048_576:
-            raise MailboxError(
-                "backlog_too_large", "邮箱待处理索引过大，请缩小文件夹范围"
-            )
-        uids = sorted(
-            {
-                int(value)
-                for value in raw.split()
-                if value.isdigit() and lower < int(value) <= upper
-            }
-        )
+        uids = initial or search(lower, upper)
         chosen, messages = uids[:BATCH_SIZE], []
         seen = list(previous.get("seen_messages", []))
         known, matched, duplicates = set(seen), 0, 0
@@ -309,14 +321,22 @@ def _fetch(config, secret, spec, cursor, connection):
                     messages.append(row)
                     known.add(digest)
                     seen.append(digest)
-        pending = max(0, len(uids) - len(chosen))
-        watermark = chosen[-1] if pending else upper
+        remaining = uids[len(chosen):]
+        pending = len(remaining)
+        if initial:
+            # New arrivals never enlarge or replace the authorized initial
+            # window. After its final batch, schedule a separate catch-up pass.
+            pending += len(search(lower, upper)) if not remaining else 0
+            watermark = lower
+        else:
+            watermark = chosen[-1] if pending else upper
         return Batch(
             entries(messages, config.account_id, spec.mail_folder),
             {
                 "uidvalidity": epoch,
                 "last_uid": watermark,
                 "seen_messages": seen[-4096:],
+                **({"initial_uids": remaining} if initial and remaining else {}),
             },
             len(chosen),
             matched,

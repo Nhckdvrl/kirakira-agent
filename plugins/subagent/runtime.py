@@ -18,7 +18,7 @@ from .inputs import CONTENT, CHECK_ORIGIN
 from .inputs import CONVERSATION_COMPLETE
 from .inputs import DELIVERY
 from .inputs import REPLY_PROGRAM
-from plugins.ledger.contract import MessageConflict, MessageReader, OwnerRecord, OwnerTransaction, SessionAttributes
+from plugins.ledger.contract import MessageCatalog, MessageConflict, MessageReader, OwnerRecord, OwnerStore, OwnerTransaction, SessionAttributes
 from plugins.ledger.contract import ContentPart, Control, Input, Message, Output
 from plugins.ledger.contract import json_value
 from plugins.sources.contract import (
@@ -48,11 +48,15 @@ class Subagents:
         self.result_chars = result_chars
 
     def read(self, key: str) -> tuple[OwnerRecord, Request, MessageReader] | None:
-        record = self.ctx.require(OWNER_STATE).open(self.ctx).read(key)
+        return self._read(self.ctx.require(OWNER_STATE).open(self.ctx), self.ctx.require(MESSAGE_CATALOG), key)
+
+    @staticmethod
+    def _read(state: OwnerStore, catalog: MessageCatalog, key: str) -> tuple[OwnerRecord, Request, MessageReader] | None:
+        record = state.read(key)
         if record is None:
             return None
         session_id, input_id, _ = _pointer(record)
-        reader = self.ctx.require(MESSAGE_CATALOG).reader(session_id)
+        reader = catalog.reader(session_id)
         message = reader.get(input_id)
         if message is None or not isinstance(message.body, Input):
             raise ValueError("子任务原输入缺失")
@@ -63,6 +67,82 @@ class Subagents:
         if (request.session_id, request.input_id) != (reader.session_id, message.message_id):
             raise ValueError("子任务请求与恢复指针不一致")
         return record, request, reader
+
+    async def inspect(self, parent_session_id: str, *, job_id: str = "", include_settled: bool = False,
+                      limit: int = 20, result: bool = False, offset: int = 0, length: int = 2000) -> dict[str, object]:
+        """只从同父会话的耐久事实读状态与原文；不启动任务、检索或模型调用。"""
+        if not parent_session_id or not 1 <= limit <= 100 or offset < 0 or not 1 <= length <= 6000:
+            raise ValueError("子任务查询范围无效")
+        state = self.ctx.require(OWNER_STATE).open(self.ctx)
+        catalog = self.ctx.require(MESSAGE_CATALOG)
+        delivery = self.ctx.require(DELIVERY).open(self.ctx)
+
+        def read() -> dict[str, object]:
+            rows = []
+            for key, record in state.list():
+                session_id, _, settled = _pointer(record)
+                if job_id and session_id != "subagent:" + job_id:
+                    continue
+                if not job_id and settled and not include_settled:
+                    continue
+                found = self._read(state, catalog, key)
+                assert found is not None
+                record, request, reader = found
+                if request.parent_session_id != parent_session_id:
+                    if job_id:
+                        raise PermissionError("子任务不属于当前会话")
+                    continue
+                admitted = reader.get(request.input_id)
+                assert admitted is not None
+                terminal = _terminal(reader, "subagent")
+                status = ("completed" if isinstance(terminal.body, Output) else
+                          "cancelled" if terminal.body.action == "pause" else "failed") if terminal else "pending"
+                notification: dict[str, object] = {"status": "not_requested"}
+                if request.background:
+                    parent = catalog.reader(parent_session_id)
+                    notice = _terminal(parent, request.session_id)
+                    notification = {"status": "pending", "stage": "waiting_for_result" if terminal is None else "waiting_for_notice"}
+                    if notice is not None and isinstance(notice.body, Output):
+                        notification.update(message=_message_ref(notice), stage="waiting_for_delivery")
+                        selection = delivery.selection(notice.message_id)
+                        if selection is not None and request.sink is not None and request.sink["name"] in selection.sinks:
+                            receipt = delivery.receipt(notice.message_id, request.sink["name"])
+                            if receipt is not None:
+                                notification.update(status=receipt.status, stage="settled", error=receipt.error)
+                item: dict[str, object] = {
+                    "job_id": request.job_id, "label": request.label[:200], "profile": request.profile,
+                    "background": request.background, "settled": settled, "work_status": status,
+                    "created_at": admitted.recorded_at.isoformat(), "request": _message_ref(admitted),
+                    "parent_call": {"session_id": parent_session_id, "message_id": request.parent_message_id,
+                                    "part_index": request.parent_part_index},
+                    "notification": notification,
+                }
+                if terminal is not None:
+                    item["outcome"] = _message_ref(terminal)
+                if result:
+                    if terminal is None:
+                        item["result"] = None
+                    else:
+                        text = ("\n".join(cast(str, part.value) for part in terminal.body.parts
+                                          if isinstance(part, ContentPart) and part.kind == "text")
+                                if isinstance(terminal.body, Output) else terminal.body.reason or "")
+                        if offset > len(text) or (offset == len(text) and offset != 0):
+                            raise ValueError("结果分页位置超出原文")
+                        end = min(len(text), offset + length)
+                        item["result"] = {"text": text[offset:end], "offset": offset, "end_offset": end,
+                                          "source_chars": len(text), "next_offset": end if end < len(text) else None,
+                                          "source": _message_ref(terminal)}
+                rows.append(item)
+                if job_id:
+                    return item
+            if job_id:
+                raise LookupError("当前会话没有这个子任务")
+            rows.sort(key=lambda item: (cast(str, item["created_at"]), cast(str, item["job_id"])), reverse=True)
+            return {"running_count": sum(item["work_status"] == "pending" for item in rows),
+                    "unsettled_count": sum(not item["settled"] for item in rows),
+                    "jobs": rows[:limit], "has_more": len(rows) > limit}
+
+        return await run_file_io(lambda: state.snapshot(read))
 
     async def accept(self, key: str, request: Request, text: str) -> None:
         """同一来源准入锁覆盖容量检查与持久提交，重放不再占额。"""
@@ -215,7 +295,7 @@ class Subagents:
         finally:
             writer.expire()
 
-    async def cancel(self, job_id: str) -> bool:
+    async def cancel(self, job_id: str, *, parent_session_id: str | None = None) -> bool:
         """取消意图先保存，再撤销新决策并等待原效果排空。"""
         for key, _ in self.ctx.require(OWNER_STATE).open(self.ctx).list():
             found = self.read(key)
@@ -223,6 +303,8 @@ class Subagents:
             record, request, reader = found
             if request.job_id != job_id:
                 continue
+            if parent_session_id is not None and request.parent_session_id != parent_session_id:
+                raise PermissionError("子任务不属于当前会话")
             stopped: Task | None = None
 
             async def cancel(slot: TaskSlot) -> bool:
@@ -396,6 +478,25 @@ class Subagents:
                 task.cancel()
             for task in tasks:
                 await drain(task)
+
+
+def _message_ref(message: Message) -> dict[str, object]:
+    """出处只引用原消息；正文窗口不复制到另一份持久记录。"""
+    return {"session_id": message.session_id, "message_id": message.message_id, "seq": message.seq,
+            "recorded_at": message.recorded_at.isoformat(),
+            "body_kind": "output" if isinstance(message.body, Output) else "control" if isinstance(message.body, Control) else "input",
+            **({"control_action": message.body.action} if isinstance(message.body, Control) else {})}
+
+
+def _terminal(reader: MessageReader, source: str) -> Message | None:
+    head = reader.head(source=source)
+    finished = reader.latest_finished_output_seq(source, after_seq=-1, through_seq=head)
+    control = reader.latest_control(source, through_seq=head)
+    if control is not None and control.body.action in {"pause", "failure", "abandon"} and (finished is None or control.seq > finished):
+        return control
+    if finished is None:
+        return None
+    return reader.read(after_seq=finished - 1, through_seq=finished, source=source, limit=1)[0]
 
 
 def _pointer(record: OwnerRecord) -> tuple[str, str, bool]:

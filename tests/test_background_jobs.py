@@ -165,6 +165,136 @@ def test_board_wake_only_takes_unclaimed_notices_within_budget():
     assert first not in board.pending("s")
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["pause", "abandon"])
+async def test_control_ending_keeps_job_notice_for_next_user_without_rewaking(tmp_path, action):
+    from types import SimpleNamespace
+    from plugins.jobs.plugin import Jobs, Config, CONVERSATION_COMPLETE, MESSAGE_CATALOG, REPLY_PROGRAM
+    from plugins.ledger.contract import Control
+    from plugins.ledger.log import MessageLog
+
+    log = MessageLog(tmp_path / "messages.db")
+    try:
+        log.writer("s", author="user", source="conversation", body_types=(Input,), content={}).append("user", Input(()))
+        calls = []
+        async def program(_task, _reader, source, _reminders, **_options):
+            calls.append(source)
+            return log.writer("s", author="agent", source=source, body_types=(Control,), content={}).append(
+                "stop-" + action, Control(action, 0, "用户停止" if action == "pause" else "步数耗尽"))
+        async def complete(_session, report):
+            return await report(None, log.reader("s"), lambda **_options: None)
+        services = {MESSAGE_CATALOG: log.catalog(), CONVERSATION_COMPLETE: complete, REPLY_PROGRAM: program}
+        jobs = Jobs(SimpleNamespace(require=services.__getitem__), Config())
+        notice = jobs._board.settle(_job("finished"), JobOutcome("completed", "exit_code=0"))
+        await jobs._wake(notice)
+        await asyncio.sleep(0)
+        assert calls == ["job:finished"]
+        assert jobs._board.claim("s", "conversation", "next-user") == (notice,)
+        assert log.reader("s").head() == 1
+    finally:
+        log.close()
+
+
+@pytest.mark.asyncio
+async def test_native_subagent_status_and_original_result_remain_scoped_after_restart(tmp_path):
+    from types import SimpleNamespace
+    from plugins.delivery.api import Receipt
+    from plugins.delivery.execution import Deliveries
+    from plugins.delivery.records import Delivery, DeliveryRecords
+    from plugins.ledger.contract import CallRef, ContentPart, ContentReferences, Control, SessionAttributes
+    from plugins.ledger.log import MessageLog
+    from plugins.subagent.inputs import DELIVERY
+    from plugins.subagent.request import Request, PROFILE_TOOLS, check_request
+    from plugins.subagent.runtime import Subagents, MESSAGE_CATALOG, OWNER_STATE
+    from plugins.subagent.tools import Manage
+    from plugins.tools.contract import CallSource
+
+    path = tmp_path / "messages.db"
+    log = MessageLog(path)
+    def service():
+        state, catalog = log.owner("subagent"), log.catalog()
+        records = DeliveryRecords(log.owner("delivery"), "subagent")
+        delivery = Deliveries(records, catalog, None, None, task_key="read-only-test")
+        services = {OWNER_STATE: SimpleNamespace(open=lambda _ctx: state), MESSAGE_CATALOG: catalog,
+                    DELIVERY: SimpleNamespace(open=lambda _ctx: delivery)}
+        return Subagents(SimpleNamespace(require=services.__getitem__)), state, records, delivery
+
+    def seed(number, parent, *, text=None, control=None, settled=False):
+        job_id = f"{number:032x}"
+        request = Request(job_id=job_id, label="资料研究", profile="research", background=True,
+            retry_count=0, parent_session_id=parent, parent_message_id="parent-call", parent_part_index=0,
+            origin={"channel": "test", "chat_id": parent, "sender": "user"},
+            sink={"name": "test", "binding_id": "sender", "address": parent},
+            program_binding="program", tools={name: name for name in PROFILE_TOOLS["research"]})
+        log.ensure_session(request.session_id, SessionAttributes(visibility="internal", learning="excluded"))
+        log.writer(request.session_id, author="subagent", source="subagent", body_types=(Input,),
+            content={"subagent.request": lambda part: check_request(part, check_origin=lambda _part: ContentReferences())}).append(
+                request.input_id, Input((ContentPart("subagent.request", request.model_dump(mode="json")),)))
+        state.transact(lambda tx: tx.save("job-" + job_id,
+            {"session_id": request.session_id, "input_id": request.input_id, "settled": settled}, expected_version=None))
+        if text is not None:
+            log.writer(request.session_id, author="subagent", source="subagent", body_types=(Output,),
+                content={"text": lambda _part: ContentReferences()}).append("answer-" + job_id,
+                    Output((ContentPart("text", text),), "complete"))
+        if control:
+            log.writer(request.session_id, author="subagent", source="subagent", body_types=(Control,), content={}).append(
+                "control-" + job_id, Control(control, 0, "原始取消原因"))
+        return request
+
+    try:
+        for binding in ("program", "sender", *PROFILE_TOOLS["research"]):
+            log.save_binding(binding, {"fixture": binding})
+        jobs, state, records, delivery = service()
+        pending = seed(1, "parent")
+        seed(2, "other", text="SECRET_OTHER", settled=True)
+        original = "原始结果🙂" * 1000
+        done = seed(3, "parent", text=original, settled=True)
+        cancelled = seed(4, "parent", control="pause", settled=True)
+        parent_notice = log.writer("parent", author="agent", source=done.session_id, body_types=(Output,),
+            content={"text": lambda _part: ContentReferences()}).append("notice", Output((ContentPart("text", "简短通知"),), "complete"))
+        await delivery.prepare_async(log.reader("parent"), parent_notice, (done.sink,))
+        record, prepared = records.read("notice", "test")
+        await records.save_async("notice", record, Delivery(sink=prepared.sink, phase="failed",
+            receipt=Receipt(status="failed", error="渠道暂不可用")))
+        log.writer("parent", author="agent", source="conversation", body_types=(Output,), content={}).append("manage-call", Output((), "continue"))
+        caller = log.reader("parent").get("manage-call")
+        manage = Manage(jobs)
+        source = CallSource(CallRef("manage-call", 0), (caller,))
+        async def invoke(arguments, *, caller_source=source):
+            prepared = await manage.prepare(arguments, caller_source)
+            assert isinstance(prepared, dict), prepared
+            response = await manage.invoke("query", prepared)
+            return response.outcome, str(response.parts[0].value)
+        outcome, payload = await invoke({"action": "list"})
+        assert outcome == "success" and [item["job_id"] for item in json.loads(payload)["jobs"]] == [pending.job_id]
+        outcome, payload = await invoke({"action": "list", "include_settled": True, "limit": 1})
+        assert outcome == "success" and len(json.loads(payload)["jobs"]) == 1 and json.loads(payload)["has_more"]
+        outcome, payload = await invoke({"action": "status", "job_id": done.job_id})
+        status = json.loads(payload)
+        assert status["work_status"] == "completed" and status["notification"]["status"] == "failed"
+        assert status["notification"]["message"]["message_id"] == parent_notice.message_id
+        outcome, payload = await invoke({"action": "result", "job_id": done.job_id, "offset": 5, "length": 17})
+        page = json.loads(payload)["result"]
+        assert page["text"] == original[5:22] and page["next_offset"] == 22 and page["source_chars"] == len(original)
+        assert page["source"]["message_id"] == "answer-" + done.job_id and page["source"]["recorded_at"]
+        assert json.loads((await invoke({"action": "status", "job_id": cancelled.job_id}))[1])["work_status"] == "cancelled"
+        for action in ("status", "result", "cancel", "stop"):
+            outcome, payload = await invoke({"action": action, "job_id": f"{2:032x}"})
+            assert outcome == "error" and "不属于当前会话" in payload and "SECRET" not in payload
+        assert isinstance(await manage.prepare({"action": "list", "parent_session_id": "other"}, source), str)
+        assert isinstance(await manage.prepare({"action": "list"}), str)
+        before = log.reader(done.session_id).snapshot()
+        log.close()
+        log = MessageLog(path)
+        jobs, state, records, delivery = service()
+        restored = await jobs.inspect("parent", job_id=done.job_id, result=True, offset=22, length=6000)
+        assert restored["result"]["text"] == original[22:6022]
+        assert restored["notification"]["status"] == "failed"
+        assert log.reader(done.session_id).snapshot() == before
+    finally:
+        log.close()
+
+
 def _shell_sources(sources: Path) -> None:
     _job_sources(sources)
     provider = sources / "test_provider/plugin.py"

@@ -9,7 +9,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from plugins.ledger.contract import ContentPart, Input, Output, ToolCall, json_value
-from plugins.tools.contract import Result, TOOLS
+from plugins.tools.contract import TOOLS, Result
 
 from .contract import Revise, SetEnabled, WatchSpec
 from .feeds import fingerprint
@@ -34,10 +34,19 @@ class Create(BaseModel):
     source_kind: Literal["feed", "webpage", "mailbox"]
     url: str | None = Field(default=None, min_length=1, max_length=2048)
     interval_seconds: int = Field(default=900, ge=60, le=86400)
-    review_mode: Literal["each_update", "interest"] = "each_update"
+    review_mode: Literal["each_update", "interest"] = Field(
+        default="each_update",
+        description="each_update：逐条进入调查，按purpose决定分享或跳过，不等于每条都通知。interest：允许先经过兴趣池门槛，单条可能不调查。‘只提醒重要/有截止的邮件’属于purpose，不能据此改成interest。明确请求的初始邮件回查始终直接调查，新增邮件再按此模式处理。",
+    )
     xpath: str | None = Field(default=None, min_length=1, max_length=512)
     mailbox_id: str | None = Field(default=None, pattern=r"^ma_[0-9a-f]{32}$")
     mail_folder: str = Field(default="INBOX", min_length=1, max_length=256)
+    mail_initial_limit: int = Field(
+        default=0,
+        ge=0,
+        le=50,
+        description="仅邮箱：用户明确要求检查已有邮件时设置。首次在指定文件夹最近 N 封实际邮件中按条件检查，最多50封；不是最近 N 封匹配邮件。默认0只监听新邮件。不得擅自回查或扩大数量。",
+    )
     mail_sender: str | None = Field(default=None, min_length=1, max_length=320)
     mail_subject: str | None = Field(default=None, min_length=1, max_length=200)
 
@@ -116,6 +125,9 @@ def watch_summary(watch):
         "policy_revision": policy.get("revision", 0),
         "origin_message_id": policy.get("origin_message_id")
         or next(iter(spec.get("anchors", ())), None),
+        **({"mail_folder": spec["mail_folder"],
+            "mail_initial_limit": spec.get("mail_initial_limit", 0)}
+           if spec["source_kind"] == "mailbox" else {}),
     }
 
 
@@ -139,7 +151,11 @@ def receipt(record):
         {
             "status": "created" if record["action"] == "create" else "enabled_changed",
             "watch": watch_summary(value),
-            "note": "已保存。首次成功读取只建基线；创建成功不等于已读取来源或已经发出通知。通知位置沿用主动联系设置，不自动改到当前会话。"
+            "note": (
+                f"已保存。首次只读回查指定文件夹最近{value['spec']['mail_initial_limit']}封邮件，再跟进新邮件；创建成功不等于已经检查或发出通知，也不代表已创建截止提醒。通知位置沿用主动联系设置。"
+                if value["spec"].get("mail_initial_limit", 0)
+                else "已保存。首次成功读取只建基线；创建成功不等于已读取来源或已经发出通知。通知位置沿用主动联系设置，不自动改到当前会话。"
+            )
             if record["action"] == "create"
             else "暂停只停止后续采集，已经接纳的调查可能继续完成。",
         }
@@ -401,24 +417,25 @@ async def register(ctx, service, readiness):
             "read",
             "read_followups",
             Read,
-            "查询主动联系是否开启、是否就绪及实际通知位置；列出当前对话的跟进及已连接邮箱。"
-            "提供 watch_id 可查看读取状态、外部变化、决定、用户历史依据和送达回执。",
+            ("查询主动联系是否开启、是否就绪及实际通知位置；列出当前对话的跟进及已连接邮箱。"
+             "提供 watch_id 可查看读取状态、外部变化、决定、用户历史依据和送达回执。"),
         ),
         (
             "create",
             "create_followup",
             Create,
-            "按用户明确请求持续跟进信息源；关注规则逐字引用本轮用户原话。自动绑定当前对话与原始消息。"
+            ("按用户明确请求持续跟进信息源；关注规则逐字引用本轮用户原话。自动绑定当前对话与原始消息。"
             "每次先重新用 read_followups 核对当前主动联系就绪及通知位置，不能沿用之前的查询；未启用时提示配置，不擅自打开。"
-            "仅使用用户提供或核实的 URL / 已连接邮箱，不接收密码。首次成功读取建基线，新变化才调查。",
+            "仅使用用户提供或核实的 URL / 已连接邮箱和文件夹，不接收密码。默认首次建基线，新变化才调查；"
+             "只有用户明确要求检查已有邮件时才设置 mail_initial_limit（最多50），可在明确指定的 Junk/Spam 文件夹回查。不能声称已读取所有邮箱或已建立邮件截止提醒。"),
         ),
         (
             "manage",
             "manage_followup",
             Manage,
-            "按用户要求暂停、恢复或修改当前对话已有跟进；先读取准确 watch_id。"
+            ("按用户要求暂停、恢复或修改当前对话已有跟进；先读取准确 watch_id。"
             "revise 逐字引用本轮新规则，生效于后续新变化；暂停后已接纳调查仍可能完成。"
-            "此工具仅确认规则或开关变更；要说明最新页面或投递结果，另用 read_followups 核对。",
+             "此工具仅确认规则或开关变更；要说明最新页面或投递结果，另用 read_followups 核对。"),
         ),
     ):
 

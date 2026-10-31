@@ -6,12 +6,8 @@ never conversation bodies, model reasoning or credentials.
 """
 import argparse
 import asyncio
-from contextlib import asynccontextmanager, closing
-from datetime import UTC, datetime
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
-from pathlib import Path
 import re
 import shutil
 import socket
@@ -22,6 +18,10 @@ import sys
 import tempfile
 import threading
 import time
+from contextlib import asynccontextmanager, closing, suppress
+from datetime import UTC, datetime
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlsplit
 from uuid import uuid4
@@ -59,11 +59,15 @@ def visible_preview(value: object) -> bool:
     return isinstance(value, list) and any(visible_preview(item) for item in value)
 
 
-async def measure_turn(client, session: str, text: str, *, programmatic=False, parts=None) -> dict:
+async def measure_turn(client, session: str, text: str, *, programmatic=False, parts=None,
+                       expected_source: str | None = None) -> dict:
     """Observe an actual durable ACK, public preview and complete output."""
     head = (await client.message_read(session, limit=1))["through_seq"]
     result = {"passed": False, "tool_results": 0, "first_visible_ms": None, "after_seq": head}
     identity = uuid4().hex
+    current_input, input_seq = None, None
+    if expected_source is not None:
+        result["input_message_id"] = identity
     async with await client.session_follow(session, after_seq=head) as feed:
         begin = time.monotonic()
         if programmatic:
@@ -74,12 +78,26 @@ async def measure_turn(client, session: str, text: str, *, programmatic=False, p
         result["ack_ms"] = (time.monotonic() - begin) * 1000
         async with asyncio.timeout(150):
             async for event in feed.events():
-                if result["first_visible_ms"] is None and event.get("type") == "reply.status" and visible_preview(event):
+                preview = event if expected_source is None else [item for item in event.get("items", [])
+                                                                 if item.get("source") == expected_source]
+                if (result["first_visible_ms"] is None and event.get("type") == "reply.status"
+                    and (expected_source is None or current_input == identity) and visible_preview(preview)):
                     result["first_visible_ms"] = (time.monotonic() - begin) * 1000
                 for message in event.get("items", []):
                     body = message.get("body", {})
+                    if expected_source is not None:
+                        if message.get("source") != expected_source:
+                            continue
+                        if body.get("kind") == "input" and message.get("seq", -1) > head:
+                            current_input = message.get("id")
+                            if current_input == identity:
+                                input_seq = message["seq"]
+                        if current_input != identity or input_seq is None or message.get("seq", -1) <= input_seq:
+                            continue
                     result["tool_results"] += body.get("kind") == "tool_result"
                     if body.get("kind") == "control" and body.get("action") == "failure":
+                        if expected_source is not None and body.get("through_seq", -1) < input_seq:
+                            continue
                         result.update(failure="native failure control", total_ms=(time.monotonic() - begin) * 1000,
                                       through_seq=message["seq"])
                         return result
@@ -264,6 +282,371 @@ async def references(args) -> dict:
         report["long_source_expanded"] = any(offset >= 4000 for offset in report["cases"][0]["source_window_offsets"])
         report["passed"] = all(row["passed"] for row in report["cases"]) and report["original_source_prefix_unchanged"] and report["long_source_expanded"]
     report["shutdown_completed"] = True
+    return report
+
+
+@asynccontextmanager
+async def background_source(nonce):
+    """A real HTTP document withheld until ordinary conversation is checked."""
+    gate, requested = asyncio.Event(), asyncio.Event()
+    state = {"requests": 0, "served": 0, "gate": gate, "requested": requested,
+             "first_requested_at": None, "longest_wait_ms": 0.0, "fixture_timeouts": 0,
+             "cleanup_completed": False}
+    handlers = set()
+
+    async def handle(reader, writer):
+        task = asyncio.current_task()
+        handlers.add(task)
+        try:
+            header = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), 10)
+            path = header.split(b"\r\n", 1)[0].split(b" ")[1]
+            if path == b"/project":
+                state["requests"] += 1
+                begin = time.monotonic()
+                if state["first_requested_at"] is None:
+                    state["first_requested_at"] = begin
+                requested.set()
+                try:
+                    await asyncio.wait_for(gate.wait(), 120)
+                except TimeoutError:
+                    state["fixture_timeouts"] += 1
+                    return
+                finally:
+                    state["longest_wait_ms"] = max(state["longest_wait_ms"], (time.monotonic() - begin) * 1000)
+                body = ("<html><head><meta charset='utf-8'></head><body><h1>青禾项目公告</h1>"
+                        f"<p>资料核验码：{nonce}。申请截止：2026年11月18日18:00（Asia/Tokyo）。"
+                        "已报名者还需要提交成绩单，否则申请材料不完整。</p></body></html>").encode()
+                status = "200 OK"
+            else:
+                body, status = b"unknown fixture document", "404 Not Found"
+            writer.write((f"HTTP/1.1 {status}\r\nContent-Type: text/html; charset=utf-8\r\n"
+                          f"Content-Length: {len(body)}\r\nConnection: close\r\n\r\n").encode() + body)
+            await writer.drain()
+            if path == b"/project":
+                state["served"] += 1
+        except (OSError, TimeoutError, ValueError, IndexError, asyncio.IncompleteReadError, asyncio.LimitOverrunError):
+            pass
+        finally:
+            try:
+                writer.close()
+                with suppress(OSError, TimeoutError):
+                    await asyncio.wait_for(writer.wait_closed(), 2)
+            finally:
+                handlers.discard(task)
+
+    server = await asyncio.start_server(handle, "127.0.0.1", 0)
+    state["url"] = f"http://127.0.0.1:{server.sockets[0].getsockname()[1]}/project"
+    try:
+        yield state
+    finally:
+        gate.set()
+        server.close()
+        await server.wait_closed()
+        pending = tuple(handlers)
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+        state["cleanup_completed"] = not handlers
+
+
+def background_facts(value: str, nonce: str) -> dict[str, bool]:
+    """Controlled fixture coverage checks, without exporting answer text."""
+    return {
+        "source_nonce": nonce in value,
+        "deadline_date": bool(re.search(r"2026\s*(?:年|[-/.])\s*11\s*(?:月|[-/.])\s*18(?:\s*日|\b)", value)),
+        "deadline_time": bool(re.search(r"(?<!\d)18\s*(?:(?:[:：]\s*00)(?!\d)|(?:点|時|时)(?:整|00分)?(?!\s*(?:\d|半|一刻|三刻)))", value)),
+        "deadline_timezone": bool(re.search(r"Asia/Tokyo|JST|(?:UTC|GMT)\s*\+\s*0?9\b|\+09:00|东京|東京|日本(?:时间|時間)", value, re.IGNORECASE)),
+        "required_material": "成绩单" in value or "成績証明" in value or "transcript" in value.lower(),
+    }
+
+
+async def background(args) -> dict:
+    """Natural-language delegation, concurrent chat, callback and later retrieval."""
+    from agent.plugin_composition.config_input import save_config
+    from core.common.file_io import run_file_io
+    from eval.models import EvaluationModel, source_identity
+    from eval.native_runtime import text
+    from kirakira_agent.runtime import ROOT, initialize_workspace, rpc, runtime
+    from plugins.delivery.contract import DELIVERY_READ
+    from plugins.ledger.contract import (
+        BINDINGS,
+        MESSAGE_CATALOG,
+        CallRef,
+        Control,
+        Input,
+        Output,
+        ToolCall,
+        ToolResult,
+        json_value,
+    )
+    from plugins.subagent.request import Request
+    from plugins.tools.contract import TOOLS
+
+    plan = ("background-admission", "ordinary-chat-during-research", "actual-source-result",
+            "completion-notification", "query-completed-result", "result-after-restart")
+    nonce = uuid4().hex[:16]
+    session = "akashic:background-" + uuid4().hex
+    report = {"scope": "Controlled real-model ordinary-language URL delegation through native tools. Gated synthetic HTTP document, no tool names in user prompts. Local delivery means a committed message, not a read receipt or Telegram measurement.",
+              "cases": [{"case": label, "status": "not_run", "passed": False} for label in plan],
+              "planned_cases": len(plan), "passed": False, "setup_passed": False, "shutdown_completed": False,
+              "fixture_configuration": {"standard_web.default_fetch_timeout_seconds": 120,
+                  "document_gate_budget_seconds": 120, "parent_admission_timeout_seconds": 60,
+                  "quality_scope": "single controlled task, fact coverage; not a public benchmark"}}
+    active_case, source = None, None
+    saved_environment = {key: os.environ.get(key) for key in ("AKASHIC_PLUGIN_HOME", "NO_PROXY", "no_proxy")}
+
+    def save():
+        write_report(args.output, report)
+
+    def start_case(label):
+        nonlocal active_case
+        active_case = label
+        row = next(row for row in report["cases"] if row["case"] == label)
+        row.update(status="running", passed=False)
+        save()
+        return row
+
+    def finish_case(row, passed, **facts):
+        row.update(facts)
+        row.update(passed=bool(passed), status="passed" if passed else "failed")
+        save()
+
+    async def wait_read(read, *, timeout=90):
+        async with asyncio.timeout(timeout):
+            while True:
+                value = await read()
+                if value is not None:
+                    return value
+                await asyncio.sleep(.05)
+
+    def named_calls(messages, bindings):
+        return [(bindings.describe(part.binding_id, TOOLS)["tool"]["name"], part,
+                 CallRef(message.message_id, index))
+                for message in messages if isinstance(message.body, Output)
+                for index, part in enumerate(message.body.parts) if isinstance(part, ToolCall)]
+
+    def successful_results(messages):
+        return {message.body.call_ref: message for message in messages
+                if isinstance(message.body, ToolResult) and message.body.outcome == "success"}
+
+    def terminal_message(messages):
+        return next((message for message in reversed(messages) if message.source == "subagent" and (
+            isinstance(message.body, Output) and message.body.finish in {"complete", "quiet"}
+            or isinstance(message.body, Control) and message.body.action in {"failure", "pause", "abandon"})), None)
+
+    def original_result_proof(messages, calls, job_id, terminal, notice_id):
+        results = successful_results(messages)
+        original = text(terminal)
+        for name, call, ref in calls:
+            if (name != "spawn_manage" or call.arguments.get("action") != "result"
+                or call.arguments.get("job_id") != job_id or ref not in results):
+                continue
+            try:
+                value = json.loads(text(results[ref]))
+                window = value["result"]
+                provenance = window["source"]
+                offset, end = window["offset"], window["end_offset"]
+                notification = value["notification"]
+                if (value["job_id"] == job_id and value["work_status"] == "completed"
+                    and provenance["session_id"] == terminal.session_id
+                    and provenance["message_id"] == terminal.message_id and provenance["seq"] == terminal.seq
+                    and provenance["recorded_at"] == terminal.recorded_at.isoformat()
+                    and provenance["body_kind"] == "output"
+                    and type(offset) is int and type(end) is int and 0 <= offset <= end <= len(original)
+                    and window["source_chars"] == len(original) and window["text"] == original[offset:end]
+                    and nonce in window["text"] and notification["status"] == "delivered"
+                    and notification["message"]["message_id"] == notice_id):
+                    return True
+            except (ValueError, KeyError, TypeError):
+                continue
+        return False
+
+    async def exercise_turn(core, client, label, prompt, *, timeout=150):
+        observed = start_case(label)
+        context = core.plugin_manager.live_root.context
+        catalog, bindings = context.require(MESSAGE_CATALOG), context.require(BINDINGS)
+        row = await asyncio.wait_for(measure_turn(client, session, prompt, expected_source="conversation"), timeout)
+        reader = catalog.reader(session)
+        answer = await run_file_io(lambda: reader.get(row.pop("ending_message_id", "")))
+        content = text(answer) if answer is not None else ""
+        messages = await reader.read_async(lambda current: current.snapshot(
+            after_seq=row["after_seq"], through_seq=row["through_seq"]))
+        actual_input = next((message for message in messages if message.message_id == row["input_message_id"]), None)
+        canonical = (actual_input is not None and isinstance(actual_input.body, Input)
+            and actual_input.source == "conversation" and actual_input.author == "user"
+            and answer is not None and isinstance(answer.body, Output) and answer.body.finish == "complete"
+            and answer.source == "conversation" and answer.seq > actual_input.seq
+            and not any(isinstance(message.body, Input) and message.source == "conversation"
+                        and actual_input.seq < message.seq < answer.seq for message in messages))
+        calls = named_calls([message for message in messages if message.source == "conversation"], bindings)
+        row.update(tools=[name for name, _, _ in calls], canonical_input_output_bound=canonical)
+        row["passed"] = row["passed"] and canonical
+        row["model_calls"] = await run_file_io(lambda: turn_model_metrics(args.workspace, session, row))
+        observed.update(row)
+        observed["passed"] = False  # A terminal alone does not pass the case's factual checks.
+        save()
+        return observed, row["passed"], content, messages, calls
+
+    save()
+    try:
+        if args.workspace.exists():
+            raise ValueError("background exercises require a new isolated workspace")
+        os.environ["AKASHIC_PLUGIN_HOME"] = str(args.workspace / "isolated-plugin-home")
+        bypass = ",".join(filter(None, [os.environ.get("NO_PROXY"), os.environ.get("no_proxy"), "127.0.0.1,localhost,::1"]))
+        os.environ["NO_PROXY"] = os.environ["no_proxy"] = bypass
+        initialize_workspace(args.workspace)
+        # This is an isolated experiment input, not a production default change.
+        save_config(args.workspace / "plugin-data/standard_web-builtin", {"default_fetch_timeout": 120})
+        extension = args.workspace / "fixtures"
+        shutil.copytree(ROOT / "eval/fixtures/alignment", extension / "alignment", ignore=shutil.ignore_patterns("__pycache__"))
+        model = EvaluationModel.read(args.model_config)
+        report.update(implementation=source_identity(), model_config=model.description())
+        async with background_source(nonce) as source:
+            async with runtime(args.workspace, extensions=(extension,)) as core:
+                await model.configure(core, args.key_file)
+                report["setup_passed"] = True
+                await rpc(core, "evaluation/seed", {"session_id": session, "visibility": "internal"})
+                context = core.plugin_manager.live_root.context
+                catalog, history = context.require(MESSAGE_CATALOG), context.require(DELIVERY_READ)
+                async with await AsyncClient.for_workspace(args.workspace) as client:
+                    try:
+                        first, terminal_ok, answer, messages, calls = await exercise_turn(core, client, "background-admission",
+                            f"这份资料 {source['url']} 帮我在后台查清楚：申请截止时间、还要补什么材料、核验码。"
+                            "资料源允许最多等待两分钟。先确认收到，让我能继续聊别的；等调查真正完成，再主动把查到的结果告诉我。", timeout=60)
+                        results, admitted_jobs = successful_results(messages), []
+                        for name, call, ref in calls:
+                            if name != "spawn" or call.arguments.get("run_in_background") is not True or ref not in results:
+                                continue
+                            for job_id in re.findall(r"job_id=([a-f0-9]{32})", text(results[ref])):
+                                admitted = await run_file_io(lambda identity=job_id: catalog.reader("subagent:" + identity).get("subagent-input:" + identity))
+                                if admitted is None or not isinstance(admitted.body, Input):
+                                    continue
+                                records = [part for part in admitted.body.parts if part.kind == "subagent.request"]
+                                if len(records) != 1:
+                                    continue
+                                request = Request.model_validate(json_value(records[0].value))
+                                if (request.job_id == job_id and request.background and request.parent_session_id == session
+                                    and request.parent_message_id == ref.message_id and request.parent_part_index == ref.part_index):
+                                    admitted_jobs.append(job_id)
+                        finish_case(first, terminal_ok and len(admitted_jobs) == 1 and source["served"] == 0 and bool(answer.strip()),
+                            background_tool_admitted=len(admitted_jobs) == 1, successful_spawn_results=len(admitted_jobs),
+                            acknowledged_before_document_release=source["served"] == 0, public_acknowledgement_present=bool(answer.strip()))
+                        if not first["passed"]:
+                            raise RuntimeError("background admission prerequisite failed")
+                        job_id = admitted_jobs[0]
+                        child = catalog.reader("subagent:" + job_id)
+                        start_case("ordinary-chat-during-research")
+                        await asyncio.wait_for(source["requested"].wait(), 60)
+                        remaining = max(.01, 120 - (time.monotonic() - source["first_requested_at"]))
+                        chat, terminal_ok, content, _, _ = await exercise_turn(core, client, "ordinary-chat-during-research",
+                            "先问个别的：37加48等于多少？只回答数字。", timeout=remaining)
+                        child_rows = await child.read_async(lambda reader: reader.snapshot())
+                        child_calls = named_calls(child_rows, context.require(BINDINGS))
+                        settled = {message.body.call_ref for message in child_rows if isinstance(message.body, ToolResult)}
+                        waiting_fetch = any(name == "web_fetch" and call.arguments.get("url") == source["url"] and ref not in settled
+                                            for name, call, ref in child_calls)
+                        ongoing = terminal_message(child_rows) is None and waiting_fetch
+                        finish_case(chat, terminal_ok and content.strip() == "85" and ongoing and source["served"] == 0,
+                            answer_correct=content.strip() == "85", research_still_waiting=ongoing,
+                            pending_source_tool_call=waiting_fetch, document_not_released=source["served"] == 0)
+                    finally:
+                        source["gate"].set()
+
+                    actual = start_case("actual-source-result")
+                    async def completed():
+                        return terminal_message(await child.read_async(lambda reader: reader.snapshot()))
+
+                    terminal = await wait_read(completed)
+                    raw = text(terminal) if isinstance(terminal.body, Output) else ""
+                    child_rows = await child.read_async(lambda reader: reader.snapshot())
+                    child_results = successful_results(child_rows)
+                    read_nonce = any(name == "web_fetch" and call.arguments.get("url") == source["url"]
+                        and ref in child_results and nonce in text(child_results[ref])
+                        for name, call, ref in named_calls(child_rows, context.require(BINDINGS)))
+                    facts = background_facts(raw, nonce)
+                    finish_case(actual, isinstance(terminal.body, Output) and read_nonce and all(facts.values()),
+                        source_read_by_tool=read_nonce, fact_coverage=facts, result_chars=len(raw),
+                        work_completed=isinstance(terminal.body, Output))
+                    if not actual["passed"]:
+                        raise RuntimeError("source result prerequisite failed")
+
+                    notification_case = start_case("completion-notification")
+                    async def notified():
+                        rows = await catalog.reader(session).read_async(lambda reader: reader.snapshot())
+                        notices = [row for row in rows if row.source == child.session_id and isinstance(row.body, Output)
+                                   and row.body.finish in {"complete", "quiet"}]
+                        if notices:
+                            receipt = await run_file_io(lambda: history.status(notices[-1].message_id, "akashic"))
+                            confirmed = (receipt or {}).get("receipt") or {}
+                            if confirmed.get("status") in {"delivered", "failed", "rejected"}:
+                                return notices, confirmed
+                        return None
+
+                    notices, receipt = await wait_read(notified)
+                    notice_facts = background_facts(text(notices[0]), nonce)
+                    finish_case(notification_case, len(notices) == 1 and receipt["status"] == "delivered" and all(notice_facts.values()),
+                        final_notices=len(notices), delivery_state=receipt["status"],
+                        source_nonce_in_notice=notice_facts["source_nonce"], fact_coverage=notice_facts)
+                    if not notification_case["passed"]:
+                        raise RuntimeError("completion notification prerequisite failed")
+                    notice_id = notices[0].message_id
+                    queried, terminal_ok, answer, messages, calls = await exercise_turn(core, client, "query-completed-result",
+                        "刚才交给你的后台任务现在完成了吗？请核对任务记录，读出它保存的原始结果，并说明完成通知是否已经送达。")
+                    proven = original_result_proof(messages, calls, job_id, terminal, notice_id)
+                    finish_case(queried, terminal_ok and proven and nonce in answer,
+                        queried_durable_status=proven, read_original_result=proven, source_nonce_in_answer=nonce in answer)
+                requests_before_restart = source["requests"]
+
+            async with (runtime(args.workspace, extensions=(extension,)) as core,
+                        await AsyncClient.for_workspace(args.workspace) as client):
+                restarted, terminal_ok, answer, messages, calls = await exercise_turn(core, client, "result-after-restart",
+                    "请重新核对刚才后台任务保存的原始结果，我要它的核验码和来源记录；不要只凭聊天中的概括回答。")
+                proven = original_result_proof(messages, calls, job_id, terminal, notice_id)
+                current = core.plugin_manager.live_root.context.require(MESSAGE_CATALOG).reader(child.session_id)
+                unchanged = await run_file_io(lambda: current.get(terminal.message_id)) == terminal
+                finish_case(restarted, terminal_ok and proven and nonce in answer and unchanged and source["requests"] == requests_before_restart,
+                    source_nonce_in_answer=nonce in answer, read_original_result=proven,
+                    saved_result_unchanged=unchanged, source_not_refetched=source["requests"] == requests_before_restart)
+            report["restart_completed"] = True
+        report["shutdown_completed"] = True
+    except Exception as error:  # noqa: BLE001 - export safe failure facts, never provider bodies
+        report["failure"] = {"case": active_case or "setup", "type": type(error).__name__,
+                             "http_statuses": sorted({int(value) for value in re.findall(r"\bHTTP\s*([1-5]\d{2})\b", str(error))})}
+        frames, trace = [], error.__traceback__
+        while trace is not None:
+            try:
+                path = Path(trace.tb_frame.f_code.co_filename).resolve().relative_to(ROOT)
+            except ValueError:
+                pass
+            else:
+                frames.append({"file": str(path), "line": trace.tb_lineno,
+                               "function": trace.tb_frame.f_code.co_name})
+            trace = trace.tb_next
+        report["failure"]["source_frames"] = frames
+        if active_case is not None:
+            row = next(row for row in report["cases"] if row["case"] == active_case)
+            if row["status"] == "running":
+                finish_case(row, False, failure=report["failure"])
+    finally:
+        if source is not None:
+            report.update(source_requests=source["requests"], source_responses=source["served"],
+                source_gate_wait_ms=source["longest_wait_ms"], fixture_gate_timeouts=source["fixture_timeouts"],
+                source_cleanup_completed=source["cleanup_completed"])
+        for row in report["cases"]:
+            if row["status"] == "not_run":
+                row["blocked_by"] = (report.get("failure") or {}).get("case", "setup")
+        report["case_counts"] = {"planned": len(plan), **{
+            status: sum(row["status"] == status for row in report["cases"])
+            for status in ("passed", "failed", "not_run")}}
+        report["passed"] = (report["setup_passed"] and report["shutdown_completed"]
+                            and not report.get("failure") and all(row["passed"] for row in report["cases"]))
+        for key, value in saved_environment.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        save()
     return report
 
 
@@ -634,7 +1017,11 @@ def main():
     linked.add_argument("--workspace", type=Path, required=True)
     linked.add_argument("--model-config", type=Path, required=True)
     linked.add_argument("--key-file", type=Path, required=True)
-    for command in (live, disk, diagnostic, web, linked):
+    delegated = commands.add_parser("background", help="Natural-language background research, normal chat, callback and restart retrieval")
+    delegated.add_argument("--workspace", type=Path, required=True)
+    delegated.add_argument("--model-config", type=Path, required=True)
+    delegated.add_argument("--key-file", type=Path, required=True)
+    for command in (live, disk, diagnostic, web, linked, delegated):
         command.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if hasattr(args, "samples") and not 1 <= args.samples <= 100:
@@ -643,7 +1030,7 @@ def main():
         parser.error("model-config and key-file must be supplied together")
     if args.command == "browser" and args.latency_ms < 0:
         parser.error("latency-ms cannot be negative")
-    operations = {"service": service, "browser": browser, "references": references, "mechanism": mechanism}
+    operations = {"service": service, "browser": browser, "references": references, "background": background, "mechanism": mechanism}
     report = storage(args) if args.command == "storage" else asyncio.run(operations[args.command](args))
     write_report(args.output, report)
     print(json.dumps({"report": str(args.output), "command": args.command}))

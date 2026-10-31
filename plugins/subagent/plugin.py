@@ -54,7 +54,7 @@ from .tools import Manage, ManageInput, Spawn
 api_version = 3
 name = "subagent"
 version = "4.0.0"
-desc = "独立内部消息任务，固定工具权限并向父会话回传"
+desc = "后台调研与多步资料整理：先登记确认，让用户继续聊天，完成后回传；查询或取消已派任务"
 
 
 inject = (
@@ -136,6 +136,8 @@ async def apply(ctx: Context) -> None:
         description=(
             "把有界、多步且可独立完成的任务交给子任务。research 只读；scripting 可在任务目录写文件、执行禁网命令；"
             "general 可调研与执行。默认同步返回结果；长任务可用 run_in_background，完成后回传原会话。"
+            "用户明确说后台查、查完叫我或先收下稍后给结果时使用后台模式；登记后即可确认接纳，"
+            "不在前台重复调查或轮询子任务。稍后用spawn_manage核对状态或读取原始结果。"
             "任务需要用户交互或只是简单操作时直接处理。task 必须包含目标、约束、上下文和预期结果。"
         ),
         parameters=SpawnInput.model_json_schema(),
@@ -146,7 +148,9 @@ async def apply(ctx: Context) -> None:
     _ = await catalog.register(
         ctx,
         name="spawn_manage",
-        description="列出或取消已接纳的子任务",
+        description=("查询或取消当前会话派出的子任务。list默认列未结算任务，include_settled=true可找回已完成任务；"
+                     "status按job_id分开核对工作状态和通知送达；result按offset/length分页读取原始结果及出处，"
+                     "没有终态只返回pending，不假定任务已完成。cancel/stop取消原任务。"),
         parameters=ManageInput.model_json_schema(),
         open=open_manage,
         idempotent=True,

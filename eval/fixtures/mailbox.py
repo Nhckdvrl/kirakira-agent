@@ -6,6 +6,7 @@ import ipaddress
 import os
 import re
 import ssl
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from email import policy
 from email.message import EmailMessage
@@ -19,14 +20,72 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 
 
+@dataclass
+class MailboxState:
+    uidvalidity: int
+    uidnext: int = 1
+    messages: dict[int, bytes] = field(default_factory=dict)
+
+
+def _mailbox_name(value):
+    """Decode a quoted modified UTF-7 mailbox without accepting raw commands."""
+    if value.startswith('"') and value.endswith('"'):
+        value = re.sub(r"\\(.)", r"\1", value[1:-1])
+
+    def decoded(match):
+        token = match[1]
+        if not token:
+            return "&"
+        encoded = token.replace(",", "/")
+        encoded += "=" * (-len(encoded) % 4)
+        return base64.b64decode(encoded, validate=True).decode("utf-16-be")
+
+    value = re.sub(r"&([A-Za-z0-9+,]*)-", decoded, value)
+    return "INBOX" if value.casefold() == "inbox" else value
+
+
 class MailboxServer:
     def __init__(self, directory):
         self.directory = Path(directory)
         self.username, self.password = "owner@example.test", uuid4().hex
-        self.uidvalidity, self.uidnext = 71, 1
-        self.messages, self.commands, self.connections = {}, [], set()
+        self.folders = {"INBOX": MailboxState(uidvalidity=71)}
+        self.commands, self.connections = [], set()
         self.hold, self.fetch_started = asyncio.Event(), asyncio.Event()
         self.hold.set()
+
+    def create_folder(self, name, *, uidvalidity=None):
+        name = "INBOX" if name.casefold() == "inbox" else name
+        if name not in self.folders:
+            self.folders[name] = MailboxState(
+                uidvalidity=uidvalidity
+                if uidvalidity is not None
+                else 71 + len(self.folders)
+            )
+        return self.folders[name]
+
+    @property
+    def messages(self):
+        return self.folders["INBOX"].messages
+
+    @messages.setter
+    def messages(self, value):
+        self.folders["INBOX"].messages = value
+
+    @property
+    def uidvalidity(self):
+        return self.folders["INBOX"].uidvalidity
+
+    @uidvalidity.setter
+    def uidvalidity(self, value):
+        self.folders["INBOX"].uidvalidity = value
+
+    @property
+    def uidnext(self):
+        return self.folders["INBOX"].uidnext
+
+    @uidnext.setter
+    def uidnext(self, value):
+        self.folders["INBOX"].uidnext = value
 
     def deliver(
         self,
@@ -36,6 +95,8 @@ class MailboxServer:
         sender="updates@example.test",
         message_id=None,
         thread=None,
+        folder="INBOX",
+        date=None,
     ):
         message = EmailMessage(policy=policy.SMTP)
         identity = message_id or "<" + uuid4().hex + "@example.test>"
@@ -45,14 +106,19 @@ class MailboxServer:
             sender,
             self.username,
         )
-        message["Date"] = format_datetime(datetime.now(UTC))
+        message["Date"] = (
+            date
+            if isinstance(date, str)
+            else format_datetime(date or datetime.now(UTC))
+        )
         if thread:
             message["References"] = thread
             message["In-Reply-To"] = thread.split()[-1]
         message.set_content(text)
-        uid = self.uidnext
-        self.uidnext += 1
-        self.messages[uid] = message.as_bytes()
+        mailbox = self.create_folder(folder)
+        uid = mailbox.uidnext
+        mailbox.uidnext += 1
+        mailbox.messages[uid] = message.as_bytes()
         return uid, identity
 
     def certificate(self):
@@ -128,20 +194,21 @@ class MailboxServer:
     async def handle(self, reader, writer):
         self.connections.add(writer)
         authenticated = False
+        selected = None
         try:
             writer.write(b"* OK Local evaluation mailbox\r\n")
             await writer.drain()
             while line := await reader.readline():
                 tag, command = line.decode().strip().split(" ", 1)
                 upper = command.upper()
-                self.commands.append(
-                    {
-                        "command": upper.split()[0]
-                        if not upper.startswith("UID ")
-                        else "UID " + upper.split()[1],
-                        "peek": "BODY.PEEK[" in upper,
-                    }
-                )
+                observed = {
+                    "command": upper.split()[0]
+                    if not upper.startswith("UID ")
+                    else "UID " + upper.split()[1],
+                    "peek": "BODY.PEEK[" in upper,
+                    "folder": selected,
+                }
+                self.commands.append(observed)
                 if upper == "CAPABILITY":
                     writer.write(b"* CAPABILITY IMAP4rev1 AUTH=XOAUTH2\r\n")
                 elif upper == "AUTHENTICATE XOAUTH2":
@@ -167,10 +234,24 @@ class MailboxServer:
                     await writer.drain()
                     continue
                 elif upper.startswith("EXAMINE "):
+                    folder = _mailbox_name(command.partition(" ")[2])
+                    observed["folder"] = folder
+                    selected = None
+                    if folder not in self.folders:
+                        writer.write(f"{tag} NO Mailbox does not exist\r\n".encode())
+                        await writer.drain()
+                        continue
+                    selected = folder
+                    mailbox = self.folders[selected]
                     writer.write(
-                        f"* {len(self.messages)} EXISTS\r\n* FLAGS (\\Seen)\r\n* OK [UIDVALIDITY {self.uidvalidity}] stable\r\n* OK [UIDNEXT {self.uidnext}] next\r\n".encode()
+                        f"* {len(mailbox.messages)} EXISTS\r\n* FLAGS (\\Seen)\r\n* OK [UIDVALIDITY {mailbox.uidvalidity}] stable\r\n* OK [UIDNEXT {mailbox.uidnext}] next\r\n".encode()
                     )
                 elif upper.startswith("UID SEARCH "):
+                    if selected is None:
+                        writer.write(f"{tag} NO Select a mailbox first\r\n".encode())
+                        await writer.drain()
+                        continue
+                    mailbox = self.folders[selected]
                     lower, high = (
                         int(value)
                         for value in re.search(r"(\d+):(\d+)$", command).groups()
@@ -179,16 +260,22 @@ class MailboxServer:
                         b"* SEARCH "
                         + b" ".join(
                             str(uid).encode()
-                            for uid in sorted(self.messages)
+                            for uid in sorted(mailbox.messages)
                             if lower <= uid <= high
                         )
                         + b"\r\n"
                     )
                 elif upper.startswith("UID FETCH "):
+                    if selected is None:
+                        writer.write(f"{tag} NO Select a mailbox first\r\n".encode())
+                        await writer.drain()
+                        continue
+                    mailbox = self.folders[selected]
                     self.fetch_started.set()
                     await self.hold.wait()
                     uid = int(command.split()[2])
-                    original = self.messages.get(uid)
+                    observed.update(uid=uid, headers="HEADER.FIELDS" in upper)
+                    original = mailbox.messages.get(uid)
                     if original is not None:
                         cap = int(re.search(r"<0\.(\d+)>", command)[1])
                         value = (

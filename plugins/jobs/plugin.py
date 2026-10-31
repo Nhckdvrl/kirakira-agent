@@ -17,7 +17,7 @@ from plugins.context.contract import MATERIALS_V4 as MATERIALS
 from plugins.conversation.contract import CONVERSATION_COMPLETE_V2 as CONVERSATION_COMPLETE
 from plugins.delivery.contract import DELIVERY_GUARDED_START as DELIVERY
 from plugins.delivery.contract import DELIVERY_SENDERS
-from plugins.ledger.contract import BINDINGS, MESSAGE_CATALOG, Input, Message, MessageReader, json_value
+from plugins.ledger.contract import BINDINGS, MESSAGE_CATALOG, Control, Input, Message, MessageReader, json_value
 from plugins.reply.contract import REPLY_PROGRAM_V3 as REPLY_PROGRAM
 from plugins.sources.contract import SourceGuard
 from plugins.ui.contract import UI_SLOTS, Configuration, ModelSettings, PluginUiDefinition, PluginUiRpcInvalidRequest, mount_settings
@@ -177,6 +177,11 @@ class Jobs:
 
         message = await ctx.require(CONVERSATION_COMPLETE)(job.session_id, report)
         if message.source != source:
+            return
+        # /stop 或步数耗尽只关闭本次唤醒，尚未告知的结算留给下一次真实用户输入。
+        # _follow 只调用一次 _wake；这里归还领取不会自行重试，更不会违背用户停止。
+        if isinstance(message.body, Control):
+            board.release_wake(notice)
             return
         board.finish_wake(notice)
         await self._deliver(message)

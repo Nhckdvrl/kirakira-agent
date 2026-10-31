@@ -1,0 +1,3347 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-31",
+  "scope": "Personal-assistant workflow acceptance. Local TLS collection, native recovery and real-model judgments are recorded separately; no population quality or latency claim.",
+  "privacy": "Whitelist metrics and repository source digests only. No credentials, private accounts, private paths, original user messages, model answers or thinking. Mail content and folder names used in these scenarios are synthetic.",
+  "implementation_snapshots": {
+    "350f0290c3e0ae345a381c0def30f75611b2ab85b9776297c01de9e0e3f162dc": {
+      "kirakira_agent/runtime.py": "7d97e4152a30662bb58256dbbe8730cb7d172350ed7df4fe503c257bbad18ea9",
+      "kirakira_agent/setup.py": "17f893bb7b35644ccfd86e236e2e1da6447f22208e7724f28b44e9d1236666a1",
+      "kirakira_agent/environment.py": "d7a2c67bb5c6efb2ef2d2c8ef011c958e012a25e87a19fb7e1cbf3bc31b88c05",
+      "kirakira_agent/client.py": "c60a6613d6d9f507560101c4310e29c8d4bc53914d1398dc5f7c46924b3a8403",
+      "eval/models.py": "31f98d6e6ff48ae6ebb869bc04c171d8bc2d28a9cddc6fb634c208abdd2e8492",
+      "plugins/akasha/contract.py": "c6d7d0c7f0969cef4426ea295c58e7045d784471aee66e039be22b9c9d766167",
+      "plugins/akasha/plugin.py": "a8bcb558cf5e5240099acd39274144de5e5d77442cc7fdb5bd241dfdd72a0cb2",
+      "plugins/akasha/query.py": "031b25033f2126da436a4229bf238a814b5bad5f5cad75cd99c71940feb78554",
+      "plugins/akasha/recalls.py": "029a6fa6b105a9b85cfe4f007a20569d8653751e35e86439876857ebea8ac8b6",
+      "plugins/akasha/recall_tool.py": "a1a38c3b47a92c761c010a78335c2f5e179b5df6becb5e0b0ae89225ee353f3c",
+      "plugins/akasha/runtime.py": "0afa4d9f9edb8c18e8fa630edb2b109ecaad11a67bd81de838cd1f2d22e652a7",
+      "plugins/akasha/excerpts.py": "9a408c9017de5722d68265c7012268bc4801c516137c8cd17b010fdbad19da7d",
+      "plugins/akasha/source_tool.py": "5cd6ba14202ac9a99e36c83e9deccc0c7872998cd67226fd856450a4439cbc41",
+      "plugins/akasha/source_search.py": "87753df2c606ed7a62341630f87f7e130af15a86a90681fbd8fca692ea418843",
+      "plugins/followups/__init__.py": "2f43daa4738a0b465626801fbefd89cd2dff70e5a26f1cf63afa84d7a571472b",
+      "plugins/followups/contract.py": "e63cb0f67ffec373cdc6105337fde68dc3409e17bd4e0cd576cf1b270ca45ae9",
+      "plugins/followups/dashboard.py": "5bdd51774087739ddc6f371023d36a493ab47d0f886139fe4a85ba2045a4f05b",
+      "plugins/followups/feeds.py": "a7da435624fef92a3581a2f0b2cac3a37f5d24a2e88dde6518b62c598299efcf",
+      "plugins/followups/mail_settings.py": "6008e854ee51a4b55af8305d5e3d0b71a6fdaf9b8699a02d47c0703a11dd70f6",
+      "plugins/followups/mailbox.py": "df4c1090dda01e0322f92f90fbe128062fc42f566f0191a8642344357452fd17",
+      "plugins/followups/plugin.py": "89081d40cf08ef012670a49592e40cca8577ae5f674df8504f0483c2baecde28",
+      "plugins/followups/service.py": "59a90301cb4909a5e402c59e9f18210b80ded776b19b27a0feadc811734b13de",
+      "plugins/followups/tools.py": "07863bd4ff4b6345b50ce479d3e8c204006016920f3cdbcc578a4bb8103d11ed",
+      "plugins/followups/webpages.py": "4a29a3d73924fdc0ca31a3f574c91e9ef70d6812f96d4c2b88e9a7e446d03d82",
+      "plugins/drift/__init__.py": "8905bcb66bd1258847589e4b4b0a4eac1f72ea044c09d3b394e98a85d265fa2e",
+      "plugins/drift/contract.py": "2b73654b779b267ec20822193408287a4abeb3426b238d08a04fa5ff2a35e278",
+      "plugins/drift/dashboard.py": "3f793998f1b35c5342298421eb446d79b7d2bf5f7d7baa9fba161c2f562c225e",
+      "plugins/drift/plugin.py": "51aa47ffbb56d487b4fdc572ba1b4df4027b6d38ef695ce0064bd8db0b7e59de",
+      "plugins/drift/producer.py": "281bc2eeb72cd2ad615ca4c868d22aae98de59248cd113b66a86d7920865cfae",
+      "plugins/drift/store.py": "256c225436b0c875f16e3f867b3ff8449cd374198811a5eba7c4114679181d6e",
+      "plugins/prompt/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "plugins/prompt/completion.py": "22df7c364b49c61d44cb71f11530faa213af8c6474cba9d045546608bdc3e1b1",
+      "plugins/prompt/dashboard.py": "32dc7b3cbdb8963d0b90f77cf28d1b18dae6ed400160cfd44d2fb66ddee9c309",
+      "plugins/prompt/persona.py": "979da6581d60524a7b4681dd36e5bb0c3e0d748b5ee31ab5c0980629a0fbb716",
+      "plugins/prompt/personality.py": "a99bfd88e77f79cc7640dc4ed469ee3ed536cb3edb5c834d060103e1f2b76fc9",
+      "plugins/prompt/plugin.py": "3280aa9ed0dafa54301923b27d8d28b2fa3a7a8818a4ef010d5ce2d8a1bb90d2",
+      "plugins/prompt/text.py": "93d2e087d6e9a6524c4464d7f25852bb7b8f88e35ce5f497fc02219a2d27464f",
+      "plugins/markdown_memory/store.py": "774012fb4ea35c4941e805e377fa57ab787997294e03b6fa7d2736df727f4e16",
+      "plugins/prompt/VEDA.md": "f387d558f7cd1ffbf217ea3ff685354af9caee59fc27ac2fa67efb8cee190db4",
+      "plugins/prompt/web_module.js": "3b6bd60494365a50d76fc6320b06ce9953a0247854fbd1bfe8f4f17d3112bf69",
+      "frontend/plugins/prompt/src/index.tsx": "32b66e799d718e573035b5a7af5b8d405425f4b97830086deb00e77469fde76b",
+      "plugins/drift/web_module.js": "87dc03aa145f6e4967498178d7c58f5327767935e6140de0301d8f091b808030",
+      "plugins/drift/web_module.css": "203990074b89d27235fd85b124e8d22b9956b9dd4c2685403ae7fa2fbab37994",
+      "frontend/plugins/drift/src/index.tsx": "739ca8ba40c8b858652efe44bfd2cb94f11ed6ceedd1168e572f3ff0ff5bb3ee",
+      "plugins/eventmail/store.py": "654f6b4c3984e625d7aab3f2b30ed4c9c7f588ce85f0502f9f6e73b0e1c2764f",
+      "plugins/wake/api.py": "c0ee0e1edf5ce0b85fdc45edd887d3c7ff598235dc7e96fb01459d11a3f29a73",
+      "plugins/wake/messages.py": "e88e279f801a95251acef11fbdac3e94b787135b9db7a3a73b8b762abed1ba30",
+      "plugins/wake/runtime.py": "d724742a6cb4d3fd1995f71d638fb7122257f354f587be1c0360c89f4989428c",
+      "plugins/wake/program.py": "53a89048c03a4eeca761a03035f32750e083f99685ea21860650649a6f70b2ab",
+      "eval/followups.py": "713dfb1bd00d774a8bafb403fd8f7fe80e0aaf889f186efa6b97e8329284420c",
+      "eval/mail_followups.py": "4c383ba912e4b75fed7538979e2b8f20a9baca3e5ed10691f81df8a135c62a1d",
+      "eval/fixtures/mailbox.py": "a92ccd2b45ec9321ba5c558cae49a60c3908aec33865c5edb887109df3c7dbbf",
+      "eval/runtime_settings.py": "c5c85f54158bd265e15d19b48cc50fd938d0a878b49fa6d19694c502fc9b8acb",
+      "eval/idle_reflection.py": "4120504207b889bdcd0e4012c0f2b85d42f23355661a229ac9955be6e55f1758",
+      "eval/personality.py": "eec5f440d38cbaff720357e087355d3c3e75972ff411b5d6a383c3156e2eee8f",
+      "eval/prompt_cache.py": "fe19586d98d72e8e1e7db052e12ea114d4970d542471080874a953db066213e0",
+      "eval/runtime_experience.py": "2d6a8f26441f53554bf5cfa9edfc97c72af1fc20e37203edb40fe7737dfc1ae3",
+      "eval/telegram_latency.py": "5db5bcbef48935990ce541d2ed417864925f4a75047ecf4365c0d1216f430d5f",
+      "eval/native_runtime.py": "7191fa894ad929a3c43b3e8122821b70039406370e3c925a99d1f408958e8d08",
+      "plugins/session_reference/plugin.py": "89722dafbad145f927f2a9b0718ac0c14d4f8ecef2b7e27fd59dda6d11b55abb",
+      "plugins/reply/follow.py": "106982277788ddc414edd2d789a163ac3e7203af03462889d0cb964f1f129f8c",
+      "plugins/delivery_policy/follow.py": "addce3d9d186a1cc1c790401d6965c5a6b8a0eb25adf9c0cc7161cda71a6f2fc",
+      "plugins/delivery_policy/plugin.py": "749f461493dff316dcc20c3d25c45d0baafd5f7d6716cbb810649964e3bc5000",
+      "plugins/delivery/execution.py": "ed75e46aff3c90fc93fe8404bbdca59423f982bec8444695c4ea7b7337fea7ab",
+      "plugins/ui/contract.py": "a3e6d35254a5dd149dbc59ffad7486e1bd9c696fc617f5d7683897c8c15c078d",
+      "plugins/gateway/service.py": "916a3e120ef1d21547854f94db757a2524fd4ba96ce693b94ec365354570f7e5",
+      "plugins/gateway/protocol/models.py": "690eee4584ba6187cb48c9104c60bedaf4dbb850deaf9bd8133ccf23679e5f0b",
+      "plugins/models/store.py": "b8462f130709c5efef1503c98fac7b0418fddb85450b575bf54d7686f9147b9e",
+      "plugins/akasha/application/consumer.py": "f37041f64c183331553786231d9f1475ac7bc7ac890b659c1dc9966caba6f380",
+      "plugins/akasha/scopes.py": "069abaf78c7a2fc813238f22a39af912fbf9f33e4e2a36b9766e2794bd0b85ea",
+      "plugins/ledger/log.py": "94a275383d6a7db1cf655e66b79e903925b54aba447818395a81dcaccd31302a",
+      "core/common/file_io.py": "f1f9b795c0463e567d41a6968bbdf3de3e9bc0e35a8c99ae99e9478a76f2cbca",
+      "sdk/python/src/akashic_sdk/client.py": "18aeedd9f754b01c63620f3d4f48fd1976ce95b8f4b0868d2fbf92c450885333",
+      "third_party/UPSTREAM.json": "51d188c836aee4d9997b42fc3ee9557b2eaa17f31ce7d4c4ae9d8e47649c4422",
+      "third_party/patches/akasha-empty-rebuild.patch": "acc310c996d2590d54fe89f1147072e0c2fabb909ad17d779c48cd65c95e4230",
+      "third_party/patches/cache-usage-coverage.patch": "8aa98fee2ab5f89a1f6be07322510981987e3525c3161d71435f940abbfe1e4f",
+      "third_party/patches/distribution-branding.patch": "7297a598db78f344f07d108525eb2f60ef48577bfbc99649dc8b160b90b7fa4c",
+      "third_party/patches/followup-investigation.patch": "a3031a8fb2e6b6998bb3b4e4354a15dd8ee75a15a911e49c7b78670fb0f55556",
+      "third_party/patches/idle-reflection.patch": "11a2ed5bfde2629b933f1e6454a6ec8596542011cf0155668fda07126ce3433a",
+      "third_party/patches/memory-query-api.patch": "bd7cbd7b00a0bcd205c146b406d17e6b643d72a719608392cb2e1a1c5aa1661c",
+      "third_party/patches/personal-assistant-experience.patch": "4c911f1e969f96c329936425dbcb36b028543285902eff1c3c2c6013b5b04bb3",
+      "third_party/patches/stage-web-assets.patch": "f23c035cf5897c61ee4dcfade30bafa8dd71c32ebdcf3c21743e31c9800abcc4",
+      "third_party/patches/telegram-latency.patch": "c59516a0e23b41c44b9f64409d8dd833e05e1e4a9819930ad21f3da9b684c716",
+      "third_party/patches/tool-io-bounds.patch": "e6988d6661a545a065ba70311d92dab501e4afa16fe6461c842b3295e898eba3",
+      "third_party/patches/zsh-snapshot-aliases.patch": "a2d4a1cd3635d62edd6ca11a8b2e7ace6b68d0dbec908feeb4bf4a17e1354f55"
+    },
+    "726d398745e96761d643726efe0fb98dc900fe0859be61fd3cf56b2b8499a52c": {
+      "kirakira_agent/runtime.py": "7d97e4152a30662bb58256dbbe8730cb7d172350ed7df4fe503c257bbad18ea9",
+      "kirakira_agent/setup.py": "17f893bb7b35644ccfd86e236e2e1da6447f22208e7724f28b44e9d1236666a1",
+      "kirakira_agent/environment.py": "d7a2c67bb5c6efb2ef2d2c8ef011c958e012a25e87a19fb7e1cbf3bc31b88c05",
+      "kirakira_agent/client.py": "c60a6613d6d9f507560101c4310e29c8d4bc53914d1398dc5f7c46924b3a8403",
+      "eval/models.py": "79b2c016f7a78e23ed1d9c040dffbcbade760ca4c866cee2e3d0a1ada0ad52d6",
+      "plugins/akasha/contract.py": "c6d7d0c7f0969cef4426ea295c58e7045d784471aee66e039be22b9c9d766167",
+      "plugins/akasha/plugin.py": "a8bcb558cf5e5240099acd39274144de5e5d77442cc7fdb5bd241dfdd72a0cb2",
+      "plugins/akasha/query.py": "031b25033f2126da436a4229bf238a814b5bad5f5cad75cd99c71940feb78554",
+      "plugins/akasha/recalls.py": "029a6fa6b105a9b85cfe4f007a20569d8653751e35e86439876857ebea8ac8b6",
+      "plugins/akasha/recall_tool.py": "a1a38c3b47a92c761c010a78335c2f5e179b5df6becb5e0b0ae89225ee353f3c",
+      "plugins/akasha/runtime.py": "0afa4d9f9edb8c18e8fa630edb2b109ecaad11a67bd81de838cd1f2d22e652a7",
+      "plugins/akasha/excerpts.py": "9a408c9017de5722d68265c7012268bc4801c516137c8cd17b010fdbad19da7d",
+      "plugins/akasha/source_tool.py": "5cd6ba14202ac9a99e36c83e9deccc0c7872998cd67226fd856450a4439cbc41",
+      "plugins/akasha/source_search.py": "87753df2c606ed7a62341630f87f7e130af15a86a90681fbd8fca692ea418843",
+      "plugins/followups/__init__.py": "2f43daa4738a0b465626801fbefd89cd2dff70e5a26f1cf63afa84d7a571472b",
+      "plugins/followups/contract.py": "e63cb0f67ffec373cdc6105337fde68dc3409e17bd4e0cd576cf1b270ca45ae9",
+      "plugins/followups/dashboard.py": "5bdd51774087739ddc6f371023d36a493ab47d0f886139fe4a85ba2045a4f05b",
+      "plugins/followups/feeds.py": "a7da435624fef92a3581a2f0b2cac3a37f5d24a2e88dde6518b62c598299efcf",
+      "plugins/followups/mail_settings.py": "6008e854ee51a4b55af8305d5e3d0b71a6fdaf9b8699a02d47c0703a11dd70f6",
+      "plugins/followups/mailbox.py": "df4c1090dda01e0322f92f90fbe128062fc42f566f0191a8642344357452fd17",
+      "plugins/followups/plugin.py": "89081d40cf08ef012670a49592e40cca8577ae5f674df8504f0483c2baecde28",
+      "plugins/followups/service.py": "59a90301cb4909a5e402c59e9f18210b80ded776b19b27a0feadc811734b13de",
+      "plugins/followups/tools.py": "07863bd4ff4b6345b50ce479d3e8c204006016920f3cdbcc578a4bb8103d11ed",
+      "plugins/followups/webpages.py": "4a29a3d73924fdc0ca31a3f574c91e9ef70d6812f96d4c2b88e9a7e446d03d82",
+      "plugins/drift/__init__.py": "8905bcb66bd1258847589e4b4b0a4eac1f72ea044c09d3b394e98a85d265fa2e",
+      "plugins/drift/contract.py": "2b73654b779b267ec20822193408287a4abeb3426b238d08a04fa5ff2a35e278",
+      "plugins/drift/dashboard.py": "3f793998f1b35c5342298421eb446d79b7d2bf5f7d7baa9fba161c2f562c225e",
+      "plugins/drift/plugin.py": "51aa47ffbb56d487b4fdc572ba1b4df4027b6d38ef695ce0064bd8db0b7e59de",
+      "plugins/drift/producer.py": "281bc2eeb72cd2ad615ca4c868d22aae98de59248cd113b66a86d7920865cfae",
+      "plugins/drift/store.py": "256c225436b0c875f16e3f867b3ff8449cd374198811a5eba7c4114679181d6e",
+      "plugins/prompt/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "plugins/prompt/completion.py": "22df7c364b49c61d44cb71f11530faa213af8c6474cba9d045546608bdc3e1b1",
+      "plugins/prompt/dashboard.py": "32dc7b3cbdb8963d0b90f77cf28d1b18dae6ed400160cfd44d2fb66ddee9c309",
+      "plugins/prompt/persona.py": "979da6581d60524a7b4681dd36e5bb0c3e0d748b5ee31ab5c0980629a0fbb716",
+      "plugins/prompt/personality.py": "a99bfd88e77f79cc7640dc4ed469ee3ed536cb3edb5c834d060103e1f2b76fc9",
+      "plugins/prompt/plugin.py": "3280aa9ed0dafa54301923b27d8d28b2fa3a7a8818a4ef010d5ce2d8a1bb90d2",
+      "plugins/prompt/text.py": "93d2e087d6e9a6524c4464d7f25852bb7b8f88e35ce5f497fc02219a2d27464f",
+      "plugins/markdown_memory/store.py": "774012fb4ea35c4941e805e377fa57ab787997294e03b6fa7d2736df727f4e16",
+      "plugins/prompt/VEDA.md": "f387d558f7cd1ffbf217ea3ff685354af9caee59fc27ac2fa67efb8cee190db4",
+      "plugins/prompt/web_module.js": "3b6bd60494365a50d76fc6320b06ce9953a0247854fbd1bfe8f4f17d3112bf69",
+      "frontend/plugins/prompt/src/index.tsx": "32b66e799d718e573035b5a7af5b8d405425f4b97830086deb00e77469fde76b",
+      "plugins/drift/web_module.js": "87dc03aa145f6e4967498178d7c58f5327767935e6140de0301d8f091b808030",
+      "plugins/drift/web_module.css": "203990074b89d27235fd85b124e8d22b9956b9dd4c2685403ae7fa2fbab37994",
+      "frontend/plugins/drift/src/index.tsx": "739ca8ba40c8b858652efe44bfd2cb94f11ed6ceedd1168e572f3ff0ff5bb3ee",
+      "plugins/eventmail/store.py": "654f6b4c3984e625d7aab3f2b30ed4c9c7f588ce85f0502f9f6e73b0e1c2764f",
+      "plugins/wake/api.py": "c0ee0e1edf5ce0b85fdc45edd887d3c7ff598235dc7e96fb01459d11a3f29a73",
+      "plugins/wake/messages.py": "e88e279f801a95251acef11fbdac3e94b787135b9db7a3a73b8b762abed1ba30",
+      "plugins/wake/runtime.py": "d724742a6cb4d3fd1995f71d638fb7122257f354f587be1c0360c89f4989428c",
+      "plugins/wake/program.py": "53a89048c03a4eeca761a03035f32750e083f99685ea21860650649a6f70b2ab",
+      "eval/followups.py": "713dfb1bd00d774a8bafb403fd8f7fe80e0aaf889f186efa6b97e8329284420c",
+      "eval/mail_followups.py": "4c383ba912e4b75fed7538979e2b8f20a9baca3e5ed10691f81df8a135c62a1d",
+      "eval/fixtures/mailbox.py": "a92ccd2b45ec9321ba5c558cae49a60c3908aec33865c5edb887109df3c7dbbf",
+      "eval/runtime_settings.py": "c5c85f54158bd265e15d19b48cc50fd938d0a878b49fa6d19694c502fc9b8acb",
+      "eval/idle_reflection.py": "4120504207b889bdcd0e4012c0f2b85d42f23355661a229ac9955be6e55f1758",
+      "eval/personality.py": "eec5f440d38cbaff720357e087355d3c3e75972ff411b5d6a383c3156e2eee8f",
+      "eval/prompt_cache.py": "fe19586d98d72e8e1e7db052e12ea114d4970d542471080874a953db066213e0",
+      "eval/runtime_experience.py": "8a5477850130d5d0d9f7c1626372bc575a4fc57d19e723f27682cc6be8fccc11",
+      "eval/telegram_latency.py": "5db5bcbef48935990ce541d2ed417864925f4a75047ecf4365c0d1216f430d5f",
+      "eval/native_runtime.py": "7191fa894ad929a3c43b3e8122821b70039406370e3c925a99d1f408958e8d08",
+      "plugins/session_reference/plugin.py": "89722dafbad145f927f2a9b0718ac0c14d4f8ecef2b7e27fd59dda6d11b55abb",
+      "plugins/reply/follow.py": "106982277788ddc414edd2d789a163ac3e7203af03462889d0cb964f1f129f8c",
+      "plugins/delivery_policy/follow.py": "addce3d9d186a1cc1c790401d6965c5a6b8a0eb25adf9c0cc7161cda71a6f2fc",
+      "plugins/delivery_policy/plugin.py": "749f461493dff316dcc20c3d25c45d0baafd5f7d6716cbb810649964e3bc5000",
+      "plugins/delivery/execution.py": "ed75e46aff3c90fc93fe8404bbdca59423f982bec8444695c4ea7b7337fea7ab",
+      "plugins/ui/contract.py": "a3e6d35254a5dd149dbc59ffad7486e1bd9c696fc617f5d7683897c8c15c078d",
+      "plugins/gateway/service.py": "916a3e120ef1d21547854f94db757a2524fd4ba96ce693b94ec365354570f7e5",
+      "plugins/gateway/protocol/models.py": "690eee4584ba6187cb48c9104c60bedaf4dbb850deaf9bd8133ccf23679e5f0b",
+      "plugins/models/store.py": "b8462f130709c5efef1503c98fac7b0418fddb85450b575bf54d7686f9147b9e",
+      "plugins/akasha/application/consumer.py": "f37041f64c183331553786231d9f1475ac7bc7ac890b659c1dc9966caba6f380",
+      "plugins/akasha/scopes.py": "069abaf78c7a2fc813238f22a39af912fbf9f33e4e2a36b9766e2794bd0b85ea",
+      "plugins/ledger/log.py": "94a275383d6a7db1cf655e66b79e903925b54aba447818395a81dcaccd31302a",
+      "core/common/file_io.py": "f1f9b795c0463e567d41a6968bbdf3de3e9bc0e35a8c99ae99e9478a76f2cbca",
+      "sdk/python/src/akashic_sdk/client.py": "18aeedd9f754b01c63620f3d4f48fd1976ce95b8f4b0868d2fbf92c450885333",
+      "plugins/subagent/runtime.py": "794204aabcae6debe7fe460f0b535da93602bc0a7671bf93dae37ea1fe6e4537",
+      "plugins/subagent/tools.py": "8ec1c1a5b3f015fa629947bf59412e0a39677d78324f8658e6aba7f29129d90c",
+      "plugins/subagent/plugin.py": "a0e77f15eb59c874cb9b2656f334c6fb71c7a040e2f715acaff101e441d12fba",
+      "plugins/jobs/plugin.py": "fd6be0fcb253615b4632064c932f5af8051b5b998e07ee42db06e44cbec4d2c0",
+      "frontend/plugins/followups/src/index.tsx": "d6723b77330c2cbb032bf37086415e6de5ef96b80e595f4c84c8a67d5aeaf756",
+      "plugins/followups/web_module.js": "3152ed6c0f45abc55b05dc4ad126196b88c571cbd3d159d58a55bac5a9179d6b",
+      "third_party/UPSTREAM.json": "51d188c836aee4d9997b42fc3ee9557b2eaa17f31ce7d4c4ae9d8e47649c4422",
+      "third_party/patches/akasha-empty-rebuild.patch": "acc310c996d2590d54fe89f1147072e0c2fabb909ad17d779c48cd65c95e4230",
+      "third_party/patches/cache-usage-coverage.patch": "8aa98fee2ab5f89a1f6be07322510981987e3525c3161d71435f940abbfe1e4f",
+      "third_party/patches/distribution-branding.patch": "7297a598db78f344f07d108525eb2f60ef48577bfbc99649dc8b160b90b7fa4c",
+      "third_party/patches/followup-investigation.patch": "a3031a8fb2e6b6998bb3b4e4354a15dd8ee75a15a911e49c7b78670fb0f55556",
+      "third_party/patches/idle-reflection.patch": "11a2ed5bfde2629b933f1e6454a6ec8596542011cf0155668fda07126ce3433a",
+      "third_party/patches/memory-query-api.patch": "bd7cbd7b00a0bcd205c146b406d17e6b643d72a719608392cb2e1a1c5aa1661c",
+      "third_party/patches/personal-assistant-experience.patch": "4c911f1e969f96c329936425dbcb36b028543285902eff1c3c2c6013b5b04bb3",
+      "third_party/patches/stage-web-assets.patch": "f23c035cf5897c61ee4dcfade30bafa8dd71c32ebdcf3c21743e31c9800abcc4",
+      "third_party/patches/telegram-latency.patch": "c59516a0e23b41c44b9f64409d8dd833e05e1e4a9819930ad21f3da9b684c716",
+      "third_party/patches/tool-io-bounds.patch": "e6988d6661a545a065ba70311d92dab501e4afa16fe6461c842b3295e898eba3",
+      "third_party/patches/zsh-snapshot-aliases.patch": "a2d4a1cd3635d62edd6ca11a8b2e7ace6b68d0dbec908feeb4bf4a17e1354f55"
+    },
+    "7da2ac329236c4758a05ea5114666ac772e1d480b34ad1284f7ae5af79068110": {
+      "kirakira_agent/runtime.py": "7d97e4152a30662bb58256dbbe8730cb7d172350ed7df4fe503c257bbad18ea9",
+      "kirakira_agent/setup.py": "17f893bb7b35644ccfd86e236e2e1da6447f22208e7724f28b44e9d1236666a1",
+      "kirakira_agent/environment.py": "d7a2c67bb5c6efb2ef2d2c8ef011c958e012a25e87a19fb7e1cbf3bc31b88c05",
+      "kirakira_agent/client.py": "c60a6613d6d9f507560101c4310e29c8d4bc53914d1398dc5f7c46924b3a8403",
+      "eval/models.py": "79b2c016f7a78e23ed1d9c040dffbcbade760ca4c866cee2e3d0a1ada0ad52d6",
+      "plugins/akasha/contract.py": "c6d7d0c7f0969cef4426ea295c58e7045d784471aee66e039be22b9c9d766167",
+      "plugins/akasha/plugin.py": "a8bcb558cf5e5240099acd39274144de5e5d77442cc7fdb5bd241dfdd72a0cb2",
+      "plugins/akasha/query.py": "031b25033f2126da436a4229bf238a814b5bad5f5cad75cd99c71940feb78554",
+      "plugins/akasha/recalls.py": "029a6fa6b105a9b85cfe4f007a20569d8653751e35e86439876857ebea8ac8b6",
+      "plugins/akasha/recall_tool.py": "a1a38c3b47a92c761c010a78335c2f5e179b5df6becb5e0b0ae89225ee353f3c",
+      "plugins/akasha/runtime.py": "0afa4d9f9edb8c18e8fa630edb2b109ecaad11a67bd81de838cd1f2d22e652a7",
+      "plugins/akasha/excerpts.py": "9a408c9017de5722d68265c7012268bc4801c516137c8cd17b010fdbad19da7d",
+      "plugins/akasha/source_tool.py": "5cd6ba14202ac9a99e36c83e9deccc0c7872998cd67226fd856450a4439cbc41",
+      "plugins/akasha/source_search.py": "87753df2c606ed7a62341630f87f7e130af15a86a90681fbd8fca692ea418843",
+      "plugins/followups/__init__.py": "2f43daa4738a0b465626801fbefd89cd2dff70e5a26f1cf63afa84d7a571472b",
+      "plugins/followups/contract.py": "e63cb0f67ffec373cdc6105337fde68dc3409e17bd4e0cd576cf1b270ca45ae9",
+      "plugins/followups/dashboard.py": "5bdd51774087739ddc6f371023d36a493ab47d0f886139fe4a85ba2045a4f05b",
+      "plugins/followups/feeds.py": "a7da435624fef92a3581a2f0b2cac3a37f5d24a2e88dde6518b62c598299efcf",
+      "plugins/followups/mail_settings.py": "6008e854ee51a4b55af8305d5e3d0b71a6fdaf9b8699a02d47c0703a11dd70f6",
+      "plugins/followups/mailbox.py": "df4c1090dda01e0322f92f90fbe128062fc42f566f0191a8642344357452fd17",
+      "plugins/followups/plugin.py": "89081d40cf08ef012670a49592e40cca8577ae5f674df8504f0483c2baecde28",
+      "plugins/followups/service.py": "59a90301cb4909a5e402c59e9f18210b80ded776b19b27a0feadc811734b13de",
+      "plugins/followups/tools.py": "07863bd4ff4b6345b50ce479d3e8c204006016920f3cdbcc578a4bb8103d11ed",
+      "plugins/followups/webpages.py": "4a29a3d73924fdc0ca31a3f574c91e9ef70d6812f96d4c2b88e9a7e446d03d82",
+      "plugins/drift/__init__.py": "8905bcb66bd1258847589e4b4b0a4eac1f72ea044c09d3b394e98a85d265fa2e",
+      "plugins/drift/contract.py": "2b73654b779b267ec20822193408287a4abeb3426b238d08a04fa5ff2a35e278",
+      "plugins/drift/dashboard.py": "3f793998f1b35c5342298421eb446d79b7d2bf5f7d7baa9fba161c2f562c225e",
+      "plugins/drift/plugin.py": "51aa47ffbb56d487b4fdc572ba1b4df4027b6d38ef695ce0064bd8db0b7e59de",
+      "plugins/drift/producer.py": "281bc2eeb72cd2ad615ca4c868d22aae98de59248cd113b66a86d7920865cfae",
+      "plugins/drift/store.py": "256c225436b0c875f16e3f867b3ff8449cd374198811a5eba7c4114679181d6e",
+      "plugins/prompt/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "plugins/prompt/completion.py": "22df7c364b49c61d44cb71f11530faa213af8c6474cba9d045546608bdc3e1b1",
+      "plugins/prompt/dashboard.py": "32dc7b3cbdb8963d0b90f77cf28d1b18dae6ed400160cfd44d2fb66ddee9c309",
+      "plugins/prompt/persona.py": "979da6581d60524a7b4681dd36e5bb0c3e0d748b5ee31ab5c0980629a0fbb716",
+      "plugins/prompt/personality.py": "a99bfd88e77f79cc7640dc4ed469ee3ed536cb3edb5c834d060103e1f2b76fc9",
+      "plugins/prompt/plugin.py": "3280aa9ed0dafa54301923b27d8d28b2fa3a7a8818a4ef010d5ce2d8a1bb90d2",
+      "plugins/prompt/text.py": "3c6b8643f3ce7db2a5971319bc1e7f3c6f3f479d6211f269e3f0bd15bc690d0f",
+      "plugins/markdown_memory/store.py": "774012fb4ea35c4941e805e377fa57ab787997294e03b6fa7d2736df727f4e16",
+      "plugins/prompt/VEDA.md": "f387d558f7cd1ffbf217ea3ff685354af9caee59fc27ac2fa67efb8cee190db4",
+      "plugins/prompt/web_module.js": "3b6bd60494365a50d76fc6320b06ce9953a0247854fbd1bfe8f4f17d3112bf69",
+      "frontend/plugins/prompt/src/index.tsx": "32b66e799d718e573035b5a7af5b8d405425f4b97830086deb00e77469fde76b",
+      "plugins/drift/web_module.js": "87dc03aa145f6e4967498178d7c58f5327767935e6140de0301d8f091b808030",
+      "plugins/drift/web_module.css": "203990074b89d27235fd85b124e8d22b9956b9dd4c2685403ae7fa2fbab37994",
+      "frontend/plugins/drift/src/index.tsx": "739ca8ba40c8b858652efe44bfd2cb94f11ed6ceedd1168e572f3ff0ff5bb3ee",
+      "plugins/eventmail/store.py": "654f6b4c3984e625d7aab3f2b30ed4c9c7f588ce85f0502f9f6e73b0e1c2764f",
+      "plugins/wake/api.py": "c0ee0e1edf5ce0b85fdc45edd887d3c7ff598235dc7e96fb01459d11a3f29a73",
+      "plugins/wake/messages.py": "e88e279f801a95251acef11fbdac3e94b787135b9db7a3a73b8b762abed1ba30",
+      "plugins/wake/runtime.py": "d724742a6cb4d3fd1995f71d638fb7122257f354f587be1c0360c89f4989428c",
+      "plugins/wake/program.py": "53a89048c03a4eeca761a03035f32750e083f99685ea21860650649a6f70b2ab",
+      "eval/followups.py": "713dfb1bd00d774a8bafb403fd8f7fe80e0aaf889f186efa6b97e8329284420c",
+      "eval/mail_followups.py": "c9d3761438c5e675ba1c8593cb6c0f4b69461b20cf9357c2660d56bdb679c533",
+      "eval/fixtures/mailbox.py": "a92ccd2b45ec9321ba5c558cae49a60c3908aec33865c5edb887109df3c7dbbf",
+      "eval/runtime_settings.py": "c5c85f54158bd265e15d19b48cc50fd938d0a878b49fa6d19694c502fc9b8acb",
+      "eval/idle_reflection.py": "4120504207b889bdcd0e4012c0f2b85d42f23355661a229ac9955be6e55f1758",
+      "eval/personality.py": "eec5f440d38cbaff720357e087355d3c3e75972ff411b5d6a383c3156e2eee8f",
+      "eval/prompt_cache.py": "fe19586d98d72e8e1e7db052e12ea114d4970d542471080874a953db066213e0",
+      "eval/runtime_experience.py": "8a5477850130d5d0d9f7c1626372bc575a4fc57d19e723f27682cc6be8fccc11",
+      "eval/telegram_latency.py": "5db5bcbef48935990ce541d2ed417864925f4a75047ecf4365c0d1216f430d5f",
+      "eval/native_runtime.py": "7191fa894ad929a3c43b3e8122821b70039406370e3c925a99d1f408958e8d08",
+      "plugins/session_reference/plugin.py": "89722dafbad145f927f2a9b0718ac0c14d4f8ecef2b7e27fd59dda6d11b55abb",
+      "plugins/reply/follow.py": "106982277788ddc414edd2d789a163ac3e7203af03462889d0cb964f1f129f8c",
+      "plugins/delivery_policy/follow.py": "addce3d9d186a1cc1c790401d6965c5a6b8a0eb25adf9c0cc7161cda71a6f2fc",
+      "plugins/delivery_policy/plugin.py": "749f461493dff316dcc20c3d25c45d0baafd5f7d6716cbb810649964e3bc5000",
+      "plugins/delivery/execution.py": "ed75e46aff3c90fc93fe8404bbdca59423f982bec8444695c4ea7b7337fea7ab",
+      "plugins/ui/contract.py": "a3e6d35254a5dd149dbc59ffad7486e1bd9c696fc617f5d7683897c8c15c078d",
+      "plugins/gateway/service.py": "916a3e120ef1d21547854f94db757a2524fd4ba96ce693b94ec365354570f7e5",
+      "plugins/gateway/protocol/models.py": "690eee4584ba6187cb48c9104c60bedaf4dbb850deaf9bd8133ccf23679e5f0b",
+      "plugins/models/store.py": "b8462f130709c5efef1503c98fac7b0418fddb85450b575bf54d7686f9147b9e",
+      "plugins/akasha/application/consumer.py": "f37041f64c183331553786231d9f1475ac7bc7ac890b659c1dc9966caba6f380",
+      "plugins/akasha/scopes.py": "069abaf78c7a2fc813238f22a39af912fbf9f33e4e2a36b9766e2794bd0b85ea",
+      "plugins/ledger/log.py": "94a275383d6a7db1cf655e66b79e903925b54aba447818395a81dcaccd31302a",
+      "core/common/file_io.py": "f1f9b795c0463e567d41a6968bbdf3de3e9bc0e35a8c99ae99e9478a76f2cbca",
+      "sdk/python/src/akashic_sdk/client.py": "18aeedd9f754b01c63620f3d4f48fd1976ce95b8f4b0868d2fbf92c450885333",
+      "plugins/subagent/runtime.py": "794204aabcae6debe7fe460f0b535da93602bc0a7671bf93dae37ea1fe6e4537",
+      "plugins/subagent/tools.py": "8ec1c1a5b3f015fa629947bf59412e0a39677d78324f8658e6aba7f29129d90c",
+      "plugins/subagent/plugin.py": "d5306f8fb6acc159dcf79b424ada062e9a1bd2e15e23db5020a65d86f9d5c83d",
+      "plugins/jobs/plugin.py": "fd6be0fcb253615b4632064c932f5af8051b5b998e07ee42db06e44cbec4d2c0",
+      "frontend/plugins/followups/src/index.tsx": "d6723b77330c2cbb032bf37086415e6de5ef96b80e595f4c84c8a67d5aeaf756",
+      "plugins/followups/web_module.js": "3152ed6c0f45abc55b05dc4ad126196b88c571cbd3d159d58a55bac5a9179d6b",
+      "third_party/UPSTREAM.json": "51d188c836aee4d9997b42fc3ee9557b2eaa17f31ce7d4c4ae9d8e47649c4422",
+      "third_party/patches/akasha-empty-rebuild.patch": "acc310c996d2590d54fe89f1147072e0c2fabb909ad17d779c48cd65c95e4230",
+      "third_party/patches/cache-usage-coverage.patch": "8aa98fee2ab5f89a1f6be07322510981987e3525c3161d71435f940abbfe1e4f",
+      "third_party/patches/distribution-branding.patch": "7297a598db78f344f07d108525eb2f60ef48577bfbc99649dc8b160b90b7fa4c",
+      "third_party/patches/followup-investigation.patch": "a3031a8fb2e6b6998bb3b4e4354a15dd8ee75a15a911e49c7b78670fb0f55556",
+      "third_party/patches/idle-reflection.patch": "11a2ed5bfde2629b933f1e6454a6ec8596542011cf0155668fda07126ce3433a",
+      "third_party/patches/memory-query-api.patch": "bd7cbd7b00a0bcd205c146b406d17e6b643d72a719608392cb2e1a1c5aa1661c",
+      "third_party/patches/personal-assistant-experience.patch": "4c911f1e969f96c329936425dbcb36b028543285902eff1c3c2c6013b5b04bb3",
+      "third_party/patches/stage-web-assets.patch": "f23c035cf5897c61ee4dcfade30bafa8dd71c32ebdcf3c21743e31c9800abcc4",
+      "third_party/patches/telegram-latency.patch": "c59516a0e23b41c44b9f64409d8dd833e05e1e4a9819930ad21f3da9b684c716",
+      "third_party/patches/tool-io-bounds.patch": "e6988d6661a545a065ba70311d92dab501e4afa16fe6461c842b3295e898eba3",
+      "third_party/patches/zsh-snapshot-aliases.patch": "a2d4a1cd3635d62edd6ca11a8b2e7ace6b68d0dbec908feeb4bf4a17e1354f55"
+    },
+    "bf1575e93ecea9a5e8f4a17488764aebdb021587087f2a40aed845a730636b0c": {
+      "kirakira_agent/runtime.py": "7d97e4152a30662bb58256dbbe8730cb7d172350ed7df4fe503c257bbad18ea9",
+      "kirakira_agent/setup.py": "17f893bb7b35644ccfd86e236e2e1da6447f22208e7724f28b44e9d1236666a1",
+      "kirakira_agent/environment.py": "d7a2c67bb5c6efb2ef2d2c8ef011c958e012a25e87a19fb7e1cbf3bc31b88c05",
+      "kirakira_agent/client.py": "c60a6613d6d9f507560101c4310e29c8d4bc53914d1398dc5f7c46924b3a8403",
+      "eval/models.py": "79b2c016f7a78e23ed1d9c040dffbcbade760ca4c866cee2e3d0a1ada0ad52d6",
+      "plugins/akasha/contract.py": "c6d7d0c7f0969cef4426ea295c58e7045d784471aee66e039be22b9c9d766167",
+      "plugins/akasha/plugin.py": "a8bcb558cf5e5240099acd39274144de5e5d77442cc7fdb5bd241dfdd72a0cb2",
+      "plugins/akasha/query.py": "031b25033f2126da436a4229bf238a814b5bad5f5cad75cd99c71940feb78554",
+      "plugins/akasha/recalls.py": "029a6fa6b105a9b85cfe4f007a20569d8653751e35e86439876857ebea8ac8b6",
+      "plugins/akasha/recall_tool.py": "a1a38c3b47a92c761c010a78335c2f5e179b5df6becb5e0b0ae89225ee353f3c",
+      "plugins/akasha/runtime.py": "0afa4d9f9edb8c18e8fa630edb2b109ecaad11a67bd81de838cd1f2d22e652a7",
+      "plugins/akasha/excerpts.py": "9a408c9017de5722d68265c7012268bc4801c516137c8cd17b010fdbad19da7d",
+      "plugins/akasha/source_tool.py": "5cd6ba14202ac9a99e36c83e9deccc0c7872998cd67226fd856450a4439cbc41",
+      "plugins/akasha/source_search.py": "87753df2c606ed7a62341630f87f7e130af15a86a90681fbd8fca692ea418843",
+      "plugins/followups/__init__.py": "2f43daa4738a0b465626801fbefd89cd2dff70e5a26f1cf63afa84d7a571472b",
+      "plugins/followups/contract.py": "e63cb0f67ffec373cdc6105337fde68dc3409e17bd4e0cd576cf1b270ca45ae9",
+      "plugins/followups/dashboard.py": "5bdd51774087739ddc6f371023d36a493ab47d0f886139fe4a85ba2045a4f05b",
+      "plugins/followups/feeds.py": "a7da435624fef92a3581a2f0b2cac3a37f5d24a2e88dde6518b62c598299efcf",
+      "plugins/followups/mail_settings.py": "6008e854ee51a4b55af8305d5e3d0b71a6fdaf9b8699a02d47c0703a11dd70f6",
+      "plugins/followups/mailbox.py": "df4c1090dda01e0322f92f90fbe128062fc42f566f0191a8642344357452fd17",
+      "plugins/followups/plugin.py": "89081d40cf08ef012670a49592e40cca8577ae5f674df8504f0483c2baecde28",
+      "plugins/followups/service.py": "59a90301cb4909a5e402c59e9f18210b80ded776b19b27a0feadc811734b13de",
+      "plugins/followups/tools.py": "07863bd4ff4b6345b50ce479d3e8c204006016920f3cdbcc578a4bb8103d11ed",
+      "plugins/followups/webpages.py": "4a29a3d73924fdc0ca31a3f574c91e9ef70d6812f96d4c2b88e9a7e446d03d82",
+      "plugins/drift/__init__.py": "8905bcb66bd1258847589e4b4b0a4eac1f72ea044c09d3b394e98a85d265fa2e",
+      "plugins/drift/contract.py": "2b73654b779b267ec20822193408287a4abeb3426b238d08a04fa5ff2a35e278",
+      "plugins/drift/dashboard.py": "3f793998f1b35c5342298421eb446d79b7d2bf5f7d7baa9fba161c2f562c225e",
+      "plugins/drift/plugin.py": "51aa47ffbb56d487b4fdc572ba1b4df4027b6d38ef695ce0064bd8db0b7e59de",
+      "plugins/drift/producer.py": "281bc2eeb72cd2ad615ca4c868d22aae98de59248cd113b66a86d7920865cfae",
+      "plugins/drift/store.py": "256c225436b0c875f16e3f867b3ff8449cd374198811a5eba7c4114679181d6e",
+      "plugins/prompt/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "plugins/prompt/completion.py": "22df7c364b49c61d44cb71f11530faa213af8c6474cba9d045546608bdc3e1b1",
+      "plugins/prompt/dashboard.py": "32dc7b3cbdb8963d0b90f77cf28d1b18dae6ed400160cfd44d2fb66ddee9c309",
+      "plugins/prompt/persona.py": "979da6581d60524a7b4681dd36e5bb0c3e0d748b5ee31ab5c0980629a0fbb716",
+      "plugins/prompt/personality.py": "a99bfd88e77f79cc7640dc4ed469ee3ed536cb3edb5c834d060103e1f2b76fc9",
+      "plugins/prompt/plugin.py": "3280aa9ed0dafa54301923b27d8d28b2fa3a7a8818a4ef010d5ce2d8a1bb90d2",
+      "plugins/prompt/text.py": "3c6b8643f3ce7db2a5971319bc1e7f3c6f3f479d6211f269e3f0bd15bc690d0f",
+      "plugins/markdown_memory/store.py": "774012fb4ea35c4941e805e377fa57ab787997294e03b6fa7d2736df727f4e16",
+      "plugins/prompt/VEDA.md": "f387d558f7cd1ffbf217ea3ff685354af9caee59fc27ac2fa67efb8cee190db4",
+      "plugins/prompt/web_module.js": "3b6bd60494365a50d76fc6320b06ce9953a0247854fbd1bfe8f4f17d3112bf69",
+      "frontend/plugins/prompt/src/index.tsx": "32b66e799d718e573035b5a7af5b8d405425f4b97830086deb00e77469fde76b",
+      "plugins/drift/web_module.js": "87dc03aa145f6e4967498178d7c58f5327767935e6140de0301d8f091b808030",
+      "plugins/drift/web_module.css": "203990074b89d27235fd85b124e8d22b9956b9dd4c2685403ae7fa2fbab37994",
+      "frontend/plugins/drift/src/index.tsx": "739ca8ba40c8b858652efe44bfd2cb94f11ed6ceedd1168e572f3ff0ff5bb3ee",
+      "plugins/eventmail/store.py": "654f6b4c3984e625d7aab3f2b30ed4c9c7f588ce85f0502f9f6e73b0e1c2764f",
+      "plugins/wake/api.py": "c0ee0e1edf5ce0b85fdc45edd887d3c7ff598235dc7e96fb01459d11a3f29a73",
+      "plugins/wake/messages.py": "e88e279f801a95251acef11fbdac3e94b787135b9db7a3a73b8b762abed1ba30",
+      "plugins/wake/runtime.py": "d724742a6cb4d3fd1995f71d638fb7122257f354f587be1c0360c89f4989428c",
+      "plugins/wake/program.py": "53a89048c03a4eeca761a03035f32750e083f99685ea21860650649a6f70b2ab",
+      "eval/followups.py": "713dfb1bd00d774a8bafb403fd8f7fe80e0aaf889f186efa6b97e8329284420c",
+      "eval/mail_followups.py": "c9d3761438c5e675ba1c8593cb6c0f4b69461b20cf9357c2660d56bdb679c533",
+      "eval/fixtures/mailbox.py": "a92ccd2b45ec9321ba5c558cae49a60c3908aec33865c5edb887109df3c7dbbf",
+      "eval/runtime_settings.py": "c5c85f54158bd265e15d19b48cc50fd938d0a878b49fa6d19694c502fc9b8acb",
+      "eval/idle_reflection.py": "4120504207b889bdcd0e4012c0f2b85d42f23355661a229ac9955be6e55f1758",
+      "eval/personality.py": "eec5f440d38cbaff720357e087355d3c3e75972ff411b5d6a383c3156e2eee8f",
+      "eval/prompt_cache.py": "fe19586d98d72e8e1e7db052e12ea114d4970d542471080874a953db066213e0",
+      "eval/runtime_experience.py": "4fafc9f17c2904a5b23ec03daacb1350dbcc5dd005b02393a1da8c5a1bd4a5a3",
+      "eval/telegram_latency.py": "5db5bcbef48935990ce541d2ed417864925f4a75047ecf4365c0d1216f430d5f",
+      "eval/native_runtime.py": "7191fa894ad929a3c43b3e8122821b70039406370e3c925a99d1f408958e8d08",
+      "plugins/session_reference/plugin.py": "89722dafbad145f927f2a9b0718ac0c14d4f8ecef2b7e27fd59dda6d11b55abb",
+      "plugins/reply/follow.py": "106982277788ddc414edd2d789a163ac3e7203af03462889d0cb964f1f129f8c",
+      "plugins/delivery_policy/follow.py": "addce3d9d186a1cc1c790401d6965c5a6b8a0eb25adf9c0cc7161cda71a6f2fc",
+      "plugins/delivery_policy/plugin.py": "749f461493dff316dcc20c3d25c45d0baafd5f7d6716cbb810649964e3bc5000",
+      "plugins/delivery/execution.py": "ed75e46aff3c90fc93fe8404bbdca59423f982bec8444695c4ea7b7337fea7ab",
+      "plugins/ui/contract.py": "a3e6d35254a5dd149dbc59ffad7486e1bd9c696fc617f5d7683897c8c15c078d",
+      "plugins/gateway/service.py": "916a3e120ef1d21547854f94db757a2524fd4ba96ce693b94ec365354570f7e5",
+      "plugins/gateway/protocol/models.py": "690eee4584ba6187cb48c9104c60bedaf4dbb850deaf9bd8133ccf23679e5f0b",
+      "plugins/models/store.py": "b8462f130709c5efef1503c98fac7b0418fddb85450b575bf54d7686f9147b9e",
+      "plugins/akasha/application/consumer.py": "f37041f64c183331553786231d9f1475ac7bc7ac890b659c1dc9966caba6f380",
+      "plugins/akasha/scopes.py": "069abaf78c7a2fc813238f22a39af912fbf9f33e4e2a36b9766e2794bd0b85ea",
+      "plugins/ledger/log.py": "94a275383d6a7db1cf655e66b79e903925b54aba447818395a81dcaccd31302a",
+      "core/common/file_io.py": "f1f9b795c0463e567d41a6968bbdf3de3e9bc0e35a8c99ae99e9478a76f2cbca",
+      "sdk/python/src/akashic_sdk/client.py": "18aeedd9f754b01c63620f3d4f48fd1976ce95b8f4b0868d2fbf92c450885333",
+      "plugins/subagent/runtime.py": "794204aabcae6debe7fe460f0b535da93602bc0a7671bf93dae37ea1fe6e4537",
+      "plugins/subagent/tools.py": "8ec1c1a5b3f015fa629947bf59412e0a39677d78324f8658e6aba7f29129d90c",
+      "plugins/subagent/plugin.py": "d5306f8fb6acc159dcf79b424ada062e9a1bd2e15e23db5020a65d86f9d5c83d",
+      "plugins/jobs/plugin.py": "fd6be0fcb253615b4632064c932f5af8051b5b998e07ee42db06e44cbec4d2c0",
+      "frontend/plugins/followups/src/index.tsx": "d6723b77330c2cbb032bf37086415e6de5ef96b80e595f4c84c8a67d5aeaf756",
+      "plugins/followups/web_module.js": "562925f03132fb637a164d82e609ab19fd678aa5d187415582fab88a60cfae21",
+      "third_party/UPSTREAM.json": "68840f0332f0a473376c820091084e59545e4bf6c2faa7035020230315a42b76",
+      "third_party/patches/akasha-empty-rebuild.patch": "acc310c996d2590d54fe89f1147072e0c2fabb909ad17d779c48cd65c95e4230",
+      "third_party/patches/cache-usage-coverage.patch": "8aa98fee2ab5f89a1f6be07322510981987e3525c3161d71435f940abbfe1e4f",
+      "third_party/patches/distribution-branding.patch": "bcc8864d12896ce3410afe7b33ff69ea99c2b474413116d47919b3e301a689f1",
+      "third_party/patches/followup-investigation.patch": "a3031a8fb2e6b6998bb3b4e4354a15dd8ee75a15a911e49c7b78670fb0f55556",
+      "third_party/patches/idle-reflection.patch": "11a2ed5bfde2629b933f1e6454a6ec8596542011cf0155668fda07126ce3433a",
+      "third_party/patches/memory-query-api.patch": "bd7cbd7b00a0bcd205c146b406d17e6b643d72a719608392cb2e1a1c5aa1661c",
+      "third_party/patches/personal-assistant-experience.patch": "52ed5f6f7cbbc30f24838063aab0cc6edf7a8e45fc703b22d57b917cd47a50bd",
+      "third_party/patches/stage-web-assets.patch": "f23c035cf5897c61ee4dcfade30bafa8dd71c32ebdcf3c21743e31c9800abcc4",
+      "third_party/patches/telegram-latency.patch": "c59516a0e23b41c44b9f64409d8dd833e05e1e4a9819930ad21f3da9b684c716",
+      "third_party/patches/tool-io-bounds.patch": "e6988d6661a545a065ba70311d92dab501e4afa16fe6461c842b3295e898eba3",
+      "third_party/patches/zsh-snapshot-aliases.patch": "a2d4a1cd3635d62edd6ca11a8b2e7ace6b68d0dbec908feeb4bf4a17e1354f55"
+    },
+    "b918fe715d2bfe25019cf385c00eccc85b88382de35f554632037bf5eaaadbf3": {
+      "kirakira_agent/runtime.py": "7d97e4152a30662bb58256dbbe8730cb7d172350ed7df4fe503c257bbad18ea9",
+      "kirakira_agent/setup.py": "17f893bb7b35644ccfd86e236e2e1da6447f22208e7724f28b44e9d1236666a1",
+      "kirakira_agent/environment.py": "d7a2c67bb5c6efb2ef2d2c8ef011c958e012a25e87a19fb7e1cbf3bc31b88c05",
+      "kirakira_agent/client.py": "c60a6613d6d9f507560101c4310e29c8d4bc53914d1398dc5f7c46924b3a8403",
+      "eval/models.py": "79b2c016f7a78e23ed1d9c040dffbcbade760ca4c866cee2e3d0a1ada0ad52d6",
+      "plugins/akasha/contract.py": "c6d7d0c7f0969cef4426ea295c58e7045d784471aee66e039be22b9c9d766167",
+      "plugins/akasha/plugin.py": "a8bcb558cf5e5240099acd39274144de5e5d77442cc7fdb5bd241dfdd72a0cb2",
+      "plugins/akasha/query.py": "031b25033f2126da436a4229bf238a814b5bad5f5cad75cd99c71940feb78554",
+      "plugins/akasha/recalls.py": "029a6fa6b105a9b85cfe4f007a20569d8653751e35e86439876857ebea8ac8b6",
+      "plugins/akasha/recall_tool.py": "a1a38c3b47a92c761c010a78335c2f5e179b5df6becb5e0b0ae89225ee353f3c",
+      "plugins/akasha/runtime.py": "0afa4d9f9edb8c18e8fa630edb2b109ecaad11a67bd81de838cd1f2d22e652a7",
+      "plugins/akasha/excerpts.py": "9a408c9017de5722d68265c7012268bc4801c516137c8cd17b010fdbad19da7d",
+      "plugins/akasha/source_tool.py": "5cd6ba14202ac9a99e36c83e9deccc0c7872998cd67226fd856450a4439cbc41",
+      "plugins/akasha/source_search.py": "87753df2c606ed7a62341630f87f7e130af15a86a90681fbd8fca692ea418843",
+      "plugins/followups/__init__.py": "2f43daa4738a0b465626801fbefd89cd2dff70e5a26f1cf63afa84d7a571472b",
+      "plugins/followups/contract.py": "e63cb0f67ffec373cdc6105337fde68dc3409e17bd4e0cd576cf1b270ca45ae9",
+      "plugins/followups/dashboard.py": "5bdd51774087739ddc6f371023d36a493ab47d0f886139fe4a85ba2045a4f05b",
+      "plugins/followups/feeds.py": "a7da435624fef92a3581a2f0b2cac3a37f5d24a2e88dde6518b62c598299efcf",
+      "plugins/followups/mail_settings.py": "6008e854ee51a4b55af8305d5e3d0b71a6fdaf9b8699a02d47c0703a11dd70f6",
+      "plugins/followups/mailbox.py": "df4c1090dda01e0322f92f90fbe128062fc42f566f0191a8642344357452fd17",
+      "plugins/followups/plugin.py": "89081d40cf08ef012670a49592e40cca8577ae5f674df8504f0483c2baecde28",
+      "plugins/followups/service.py": "59a90301cb4909a5e402c59e9f18210b80ded776b19b27a0feadc811734b13de",
+      "plugins/followups/tools.py": "07863bd4ff4b6345b50ce479d3e8c204006016920f3cdbcc578a4bb8103d11ed",
+      "plugins/followups/webpages.py": "4a29a3d73924fdc0ca31a3f574c91e9ef70d6812f96d4c2b88e9a7e446d03d82",
+      "plugins/drift/__init__.py": "8905bcb66bd1258847589e4b4b0a4eac1f72ea044c09d3b394e98a85d265fa2e",
+      "plugins/drift/contract.py": "2b73654b779b267ec20822193408287a4abeb3426b238d08a04fa5ff2a35e278",
+      "plugins/drift/dashboard.py": "3f793998f1b35c5342298421eb446d79b7d2bf5f7d7baa9fba161c2f562c225e",
+      "plugins/drift/plugin.py": "51aa47ffbb56d487b4fdc572ba1b4df4027b6d38ef695ce0064bd8db0b7e59de",
+      "plugins/drift/producer.py": "281bc2eeb72cd2ad615ca4c868d22aae98de59248cd113b66a86d7920865cfae",
+      "plugins/drift/store.py": "256c225436b0c875f16e3f867b3ff8449cd374198811a5eba7c4114679181d6e",
+      "plugins/prompt/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "plugins/prompt/completion.py": "22df7c364b49c61d44cb71f11530faa213af8c6474cba9d045546608bdc3e1b1",
+      "plugins/prompt/dashboard.py": "32dc7b3cbdb8963d0b90f77cf28d1b18dae6ed400160cfd44d2fb66ddee9c309",
+      "plugins/prompt/persona.py": "979da6581d60524a7b4681dd36e5bb0c3e0d748b5ee31ab5c0980629a0fbb716",
+      "plugins/prompt/personality.py": "a99bfd88e77f79cc7640dc4ed469ee3ed536cb3edb5c834d060103e1f2b76fc9",
+      "plugins/prompt/plugin.py": "3280aa9ed0dafa54301923b27d8d28b2fa3a7a8818a4ef010d5ce2d8a1bb90d2",
+      "plugins/prompt/text.py": "93d2e087d6e9a6524c4464d7f25852bb7b8f88e35ce5f497fc02219a2d27464f",
+      "plugins/markdown_memory/store.py": "774012fb4ea35c4941e805e377fa57ab787997294e03b6fa7d2736df727f4e16",
+      "plugins/prompt/VEDA.md": "f387d558f7cd1ffbf217ea3ff685354af9caee59fc27ac2fa67efb8cee190db4",
+      "plugins/prompt/web_module.js": "3b6bd60494365a50d76fc6320b06ce9953a0247854fbd1bfe8f4f17d3112bf69",
+      "frontend/plugins/prompt/src/index.tsx": "32b66e799d718e573035b5a7af5b8d405425f4b97830086deb00e77469fde76b",
+      "plugins/drift/web_module.js": "87dc03aa145f6e4967498178d7c58f5327767935e6140de0301d8f091b808030",
+      "plugins/drift/web_module.css": "203990074b89d27235fd85b124e8d22b9956b9dd4c2685403ae7fa2fbab37994",
+      "frontend/plugins/drift/src/index.tsx": "739ca8ba40c8b858652efe44bfd2cb94f11ed6ceedd1168e572f3ff0ff5bb3ee",
+      "plugins/eventmail/store.py": "654f6b4c3984e625d7aab3f2b30ed4c9c7f588ce85f0502f9f6e73b0e1c2764f",
+      "plugins/wake/api.py": "c0ee0e1edf5ce0b85fdc45edd887d3c7ff598235dc7e96fb01459d11a3f29a73",
+      "plugins/wake/messages.py": "e88e279f801a95251acef11fbdac3e94b787135b9db7a3a73b8b762abed1ba30",
+      "plugins/wake/runtime.py": "d724742a6cb4d3fd1995f71d638fb7122257f354f587be1c0360c89f4989428c",
+      "plugins/wake/program.py": "53a89048c03a4eeca761a03035f32750e083f99685ea21860650649a6f70b2ab",
+      "eval/followups.py": "713dfb1bd00d774a8bafb403fd8f7fe80e0aaf889f186efa6b97e8329284420c",
+      "eval/mail_followups.py": "4c383ba912e4b75fed7538979e2b8f20a9baca3e5ed10691f81df8a135c62a1d",
+      "eval/fixtures/mailbox.py": "a92ccd2b45ec9321ba5c558cae49a60c3908aec33865c5edb887109df3c7dbbf",
+      "eval/runtime_settings.py": "c5c85f54158bd265e15d19b48cc50fd938d0a878b49fa6d19694c502fc9b8acb",
+      "eval/idle_reflection.py": "4120504207b889bdcd0e4012c0f2b85d42f23355661a229ac9955be6e55f1758",
+      "eval/personality.py": "eec5f440d38cbaff720357e087355d3c3e75972ff411b5d6a383c3156e2eee8f",
+      "eval/prompt_cache.py": "fe19586d98d72e8e1e7db052e12ea114d4970d542471080874a953db066213e0",
+      "eval/runtime_experience.py": "8a5477850130d5d0d9f7c1626372bc575a4fc57d19e723f27682cc6be8fccc11",
+      "eval/telegram_latency.py": "5db5bcbef48935990ce541d2ed417864925f4a75047ecf4365c0d1216f430d5f",
+      "eval/native_runtime.py": "7191fa894ad929a3c43b3e8122821b70039406370e3c925a99d1f408958e8d08",
+      "plugins/session_reference/plugin.py": "89722dafbad145f927f2a9b0718ac0c14d4f8ecef2b7e27fd59dda6d11b55abb",
+      "plugins/reply/follow.py": "106982277788ddc414edd2d789a163ac3e7203af03462889d0cb964f1f129f8c",
+      "plugins/delivery_policy/follow.py": "addce3d9d186a1cc1c790401d6965c5a6b8a0eb25adf9c0cc7161cda71a6f2fc",
+      "plugins/delivery_policy/plugin.py": "749f461493dff316dcc20c3d25c45d0baafd5f7d6716cbb810649964e3bc5000",
+      "plugins/delivery/execution.py": "ed75e46aff3c90fc93fe8404bbdca59423f982bec8444695c4ea7b7337fea7ab",
+      "plugins/ui/contract.py": "a3e6d35254a5dd149dbc59ffad7486e1bd9c696fc617f5d7683897c8c15c078d",
+      "plugins/gateway/service.py": "916a3e120ef1d21547854f94db757a2524fd4ba96ce693b94ec365354570f7e5",
+      "plugins/gateway/protocol/models.py": "690eee4584ba6187cb48c9104c60bedaf4dbb850deaf9bd8133ccf23679e5f0b",
+      "plugins/models/store.py": "b8462f130709c5efef1503c98fac7b0418fddb85450b575bf54d7686f9147b9e",
+      "plugins/akasha/application/consumer.py": "f37041f64c183331553786231d9f1475ac7bc7ac890b659c1dc9966caba6f380",
+      "plugins/akasha/scopes.py": "069abaf78c7a2fc813238f22a39af912fbf9f33e4e2a36b9766e2794bd0b85ea",
+      "plugins/ledger/log.py": "94a275383d6a7db1cf655e66b79e903925b54aba447818395a81dcaccd31302a",
+      "core/common/file_io.py": "f1f9b795c0463e567d41a6968bbdf3de3e9bc0e35a8c99ae99e9478a76f2cbca",
+      "sdk/python/src/akashic_sdk/client.py": "18aeedd9f754b01c63620f3d4f48fd1976ce95b8f4b0868d2fbf92c450885333",
+      "plugins/subagent/runtime.py": "4791a388fc0d0b4a53bfe819ec9e9da40fe7783b5331cf4d4bc30b7dbc55f65c",
+      "plugins/subagent/tools.py": "8ec1c1a5b3f015fa629947bf59412e0a39677d78324f8658e6aba7f29129d90c",
+      "plugins/subagent/plugin.py": "a0e77f15eb59c874cb9b2656f334c6fb71c7a040e2f715acaff101e441d12fba",
+      "plugins/jobs/plugin.py": "fd6be0fcb253615b4632064c932f5af8051b5b998e07ee42db06e44cbec4d2c0",
+      "frontend/plugins/followups/src/index.tsx": "d6723b77330c2cbb032bf37086415e6de5ef96b80e595f4c84c8a67d5aeaf756",
+      "plugins/followups/web_module.js": "3152ed6c0f45abc55b05dc4ad126196b88c571cbd3d159d58a55bac5a9179d6b",
+      "third_party/UPSTREAM.json": "51d188c836aee4d9997b42fc3ee9557b2eaa17f31ce7d4c4ae9d8e47649c4422",
+      "third_party/patches/akasha-empty-rebuild.patch": "acc310c996d2590d54fe89f1147072e0c2fabb909ad17d779c48cd65c95e4230",
+      "third_party/patches/cache-usage-coverage.patch": "8aa98fee2ab5f89a1f6be07322510981987e3525c3161d71435f940abbfe1e4f",
+      "third_party/patches/distribution-branding.patch": "7297a598db78f344f07d108525eb2f60ef48577bfbc99649dc8b160b90b7fa4c",
+      "third_party/patches/followup-investigation.patch": "a3031a8fb2e6b6998bb3b4e4354a15dd8ee75a15a911e49c7b78670fb0f55556",
+      "third_party/patches/idle-reflection.patch": "11a2ed5bfde2629b933f1e6454a6ec8596542011cf0155668fda07126ce3433a",
+      "third_party/patches/memory-query-api.patch": "bd7cbd7b00a0bcd205c146b406d17e6b643d72a719608392cb2e1a1c5aa1661c",
+      "third_party/patches/personal-assistant-experience.patch": "4c911f1e969f96c329936425dbcb36b028543285902eff1c3c2c6013b5b04bb3",
+      "third_party/patches/stage-web-assets.patch": "f23c035cf5897c61ee4dcfade30bafa8dd71c32ebdcf3c21743e31c9800abcc4",
+      "third_party/patches/telegram-latency.patch": "c59516a0e23b41c44b9f64409d8dd833e05e1e4a9819930ad21f3da9b684c716",
+      "third_party/patches/tool-io-bounds.patch": "e6988d6661a545a065ba70311d92dab501e4afa16fe6461c842b3295e898eba3",
+      "third_party/patches/zsh-snapshot-aliases.patch": "a2d4a1cd3635d62edd6ca11a8b2e7ace6b68d0dbec908feeb4bf4a17e1354f55"
+    },
+    "676f9c74e24d3ee65406c5d4637ef2a453bc0e7820947b81fe9a95156cae93df": {
+      "kirakira_agent/runtime.py": "7d97e4152a30662bb58256dbbe8730cb7d172350ed7df4fe503c257bbad18ea9",
+      "kirakira_agent/setup.py": "17f893bb7b35644ccfd86e236e2e1da6447f22208e7724f28b44e9d1236666a1",
+      "kirakira_agent/environment.py": "d7a2c67bb5c6efb2ef2d2c8ef011c958e012a25e87a19fb7e1cbf3bc31b88c05",
+      "kirakira_agent/client.py": "c60a6613d6d9f507560101c4310e29c8d4bc53914d1398dc5f7c46924b3a8403",
+      "eval/models.py": "79b2c016f7a78e23ed1d9c040dffbcbade760ca4c866cee2e3d0a1ada0ad52d6",
+      "plugins/akasha/contract.py": "c6d7d0c7f0969cef4426ea295c58e7045d784471aee66e039be22b9c9d766167",
+      "plugins/akasha/plugin.py": "a8bcb558cf5e5240099acd39274144de5e5d77442cc7fdb5bd241dfdd72a0cb2",
+      "plugins/akasha/query.py": "031b25033f2126da436a4229bf238a814b5bad5f5cad75cd99c71940feb78554",
+      "plugins/akasha/recalls.py": "029a6fa6b105a9b85cfe4f007a20569d8653751e35e86439876857ebea8ac8b6",
+      "plugins/akasha/recall_tool.py": "a1a38c3b47a92c761c010a78335c2f5e179b5df6becb5e0b0ae89225ee353f3c",
+      "plugins/akasha/runtime.py": "0afa4d9f9edb8c18e8fa630edb2b109ecaad11a67bd81de838cd1f2d22e652a7",
+      "plugins/akasha/excerpts.py": "9a408c9017de5722d68265c7012268bc4801c516137c8cd17b010fdbad19da7d",
+      "plugins/akasha/source_tool.py": "5cd6ba14202ac9a99e36c83e9deccc0c7872998cd67226fd856450a4439cbc41",
+      "plugins/akasha/source_search.py": "87753df2c606ed7a62341630f87f7e130af15a86a90681fbd8fca692ea418843",
+      "plugins/followups/__init__.py": "2f43daa4738a0b465626801fbefd89cd2dff70e5a26f1cf63afa84d7a571472b",
+      "plugins/followups/contract.py": "e63cb0f67ffec373cdc6105337fde68dc3409e17bd4e0cd576cf1b270ca45ae9",
+      "plugins/followups/dashboard.py": "5bdd51774087739ddc6f371023d36a493ab47d0f886139fe4a85ba2045a4f05b",
+      "plugins/followups/feeds.py": "a7da435624fef92a3581a2f0b2cac3a37f5d24a2e88dde6518b62c598299efcf",
+      "plugins/followups/mail_settings.py": "6008e854ee51a4b55af8305d5e3d0b71a6fdaf9b8699a02d47c0703a11dd70f6",
+      "plugins/followups/mailbox.py": "df4c1090dda01e0322f92f90fbe128062fc42f566f0191a8642344357452fd17",
+      "plugins/followups/plugin.py": "89081d40cf08ef012670a49592e40cca8577ae5f674df8504f0483c2baecde28",
+      "plugins/followups/service.py": "59a90301cb4909a5e402c59e9f18210b80ded776b19b27a0feadc811734b13de",
+      "plugins/followups/tools.py": "07863bd4ff4b6345b50ce479d3e8c204006016920f3cdbcc578a4bb8103d11ed",
+      "plugins/followups/webpages.py": "4a29a3d73924fdc0ca31a3f574c91e9ef70d6812f96d4c2b88e9a7e446d03d82",
+      "plugins/drift/__init__.py": "8905bcb66bd1258847589e4b4b0a4eac1f72ea044c09d3b394e98a85d265fa2e",
+      "plugins/drift/contract.py": "2b73654b779b267ec20822193408287a4abeb3426b238d08a04fa5ff2a35e278",
+      "plugins/drift/dashboard.py": "3f793998f1b35c5342298421eb446d79b7d2bf5f7d7baa9fba161c2f562c225e",
+      "plugins/drift/plugin.py": "51aa47ffbb56d487b4fdc572ba1b4df4027b6d38ef695ce0064bd8db0b7e59de",
+      "plugins/drift/producer.py": "281bc2eeb72cd2ad615ca4c868d22aae98de59248cd113b66a86d7920865cfae",
+      "plugins/drift/store.py": "256c225436b0c875f16e3f867b3ff8449cd374198811a5eba7c4114679181d6e",
+      "plugins/prompt/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "plugins/prompt/completion.py": "22df7c364b49c61d44cb71f11530faa213af8c6474cba9d045546608bdc3e1b1",
+      "plugins/prompt/dashboard.py": "32dc7b3cbdb8963d0b90f77cf28d1b18dae6ed400160cfd44d2fb66ddee9c309",
+      "plugins/prompt/persona.py": "979da6581d60524a7b4681dd36e5bb0c3e0d748b5ee31ab5c0980629a0fbb716",
+      "plugins/prompt/personality.py": "a99bfd88e77f79cc7640dc4ed469ee3ed536cb3edb5c834d060103e1f2b76fc9",
+      "plugins/prompt/plugin.py": "3280aa9ed0dafa54301923b27d8d28b2fa3a7a8818a4ef010d5ce2d8a1bb90d2",
+      "plugins/prompt/text.py": "3c6b8643f3ce7db2a5971319bc1e7f3c6f3f479d6211f269e3f0bd15bc690d0f",
+      "plugins/markdown_memory/store.py": "774012fb4ea35c4941e805e377fa57ab787997294e03b6fa7d2736df727f4e16",
+      "plugins/prompt/VEDA.md": "f387d558f7cd1ffbf217ea3ff685354af9caee59fc27ac2fa67efb8cee190db4",
+      "plugins/prompt/web_module.js": "3b6bd60494365a50d76fc6320b06ce9953a0247854fbd1bfe8f4f17d3112bf69",
+      "frontend/plugins/prompt/src/index.tsx": "32b66e799d718e573035b5a7af5b8d405425f4b97830086deb00e77469fde76b",
+      "plugins/drift/web_module.js": "87dc03aa145f6e4967498178d7c58f5327767935e6140de0301d8f091b808030",
+      "plugins/drift/web_module.css": "203990074b89d27235fd85b124e8d22b9956b9dd4c2685403ae7fa2fbab37994",
+      "frontend/plugins/drift/src/index.tsx": "739ca8ba40c8b858652efe44bfd2cb94f11ed6ceedd1168e572f3ff0ff5bb3ee",
+      "plugins/eventmail/store.py": "654f6b4c3984e625d7aab3f2b30ed4c9c7f588ce85f0502f9f6e73b0e1c2764f",
+      "plugins/wake/api.py": "c0ee0e1edf5ce0b85fdc45edd887d3c7ff598235dc7e96fb01459d11a3f29a73",
+      "plugins/wake/messages.py": "e88e279f801a95251acef11fbdac3e94b787135b9db7a3a73b8b762abed1ba30",
+      "plugins/wake/runtime.py": "d724742a6cb4d3fd1995f71d638fb7122257f354f587be1c0360c89f4989428c",
+      "plugins/wake/program.py": "53a89048c03a4eeca761a03035f32750e083f99685ea21860650649a6f70b2ab",
+      "eval/followups.py": "713dfb1bd00d774a8bafb403fd8f7fe80e0aaf889f186efa6b97e8329284420c",
+      "eval/mail_followups.py": "c9d3761438c5e675ba1c8593cb6c0f4b69461b20cf9357c2660d56bdb679c533",
+      "eval/fixtures/mailbox.py": "a92ccd2b45ec9321ba5c558cae49a60c3908aec33865c5edb887109df3c7dbbf",
+      "eval/runtime_settings.py": "c5c85f54158bd265e15d19b48cc50fd938d0a878b49fa6d19694c502fc9b8acb",
+      "eval/idle_reflection.py": "4120504207b889bdcd0e4012c0f2b85d42f23355661a229ac9955be6e55f1758",
+      "eval/personality.py": "eec5f440d38cbaff720357e087355d3c3e75972ff411b5d6a383c3156e2eee8f",
+      "eval/prompt_cache.py": "fe19586d98d72e8e1e7db052e12ea114d4970d542471080874a953db066213e0",
+      "eval/runtime_experience.py": "70482ef57563624e1ae3206801a6743c4d64758d033ba0409e0dae57000589ba",
+      "eval/telegram_latency.py": "5db5bcbef48935990ce541d2ed417864925f4a75047ecf4365c0d1216f430d5f",
+      "eval/native_runtime.py": "7191fa894ad929a3c43b3e8122821b70039406370e3c925a99d1f408958e8d08",
+      "plugins/session_reference/plugin.py": "89722dafbad145f927f2a9b0718ac0c14d4f8ecef2b7e27fd59dda6d11b55abb",
+      "plugins/reply/follow.py": "106982277788ddc414edd2d789a163ac3e7203af03462889d0cb964f1f129f8c",
+      "plugins/delivery_policy/follow.py": "addce3d9d186a1cc1c790401d6965c5a6b8a0eb25adf9c0cc7161cda71a6f2fc",
+      "plugins/delivery_policy/plugin.py": "749f461493dff316dcc20c3d25c45d0baafd5f7d6716cbb810649964e3bc5000",
+      "plugins/delivery/execution.py": "ed75e46aff3c90fc93fe8404bbdca59423f982bec8444695c4ea7b7337fea7ab",
+      "plugins/ui/contract.py": "a3e6d35254a5dd149dbc59ffad7486e1bd9c696fc617f5d7683897c8c15c078d",
+      "plugins/gateway/service.py": "916a3e120ef1d21547854f94db757a2524fd4ba96ce693b94ec365354570f7e5",
+      "plugins/gateway/protocol/models.py": "690eee4584ba6187cb48c9104c60bedaf4dbb850deaf9bd8133ccf23679e5f0b",
+      "plugins/models/store.py": "b8462f130709c5efef1503c98fac7b0418fddb85450b575bf54d7686f9147b9e",
+      "plugins/akasha/application/consumer.py": "f37041f64c183331553786231d9f1475ac7bc7ac890b659c1dc9966caba6f380",
+      "plugins/akasha/scopes.py": "069abaf78c7a2fc813238f22a39af912fbf9f33e4e2a36b9766e2794bd0b85ea",
+      "plugins/ledger/log.py": "94a275383d6a7db1cf655e66b79e903925b54aba447818395a81dcaccd31302a",
+      "core/common/file_io.py": "f1f9b795c0463e567d41a6968bbdf3de3e9bc0e35a8c99ae99e9478a76f2cbca",
+      "sdk/python/src/akashic_sdk/client.py": "18aeedd9f754b01c63620f3d4f48fd1976ce95b8f4b0868d2fbf92c450885333",
+      "plugins/subagent/runtime.py": "794204aabcae6debe7fe460f0b535da93602bc0a7671bf93dae37ea1fe6e4537",
+      "plugins/subagent/tools.py": "8ec1c1a5b3f015fa629947bf59412e0a39677d78324f8658e6aba7f29129d90c",
+      "plugins/subagent/plugin.py": "d5306f8fb6acc159dcf79b424ada062e9a1bd2e15e23db5020a65d86f9d5c83d",
+      "plugins/jobs/plugin.py": "fd6be0fcb253615b4632064c932f5af8051b5b998e07ee42db06e44cbec4d2c0",
+      "frontend/plugins/followups/src/index.tsx": "d6723b77330c2cbb032bf37086415e6de5ef96b80e595f4c84c8a67d5aeaf756",
+      "plugins/followups/web_module.js": "562925f03132fb637a164d82e609ab19fd678aa5d187415582fab88a60cfae21",
+      "third_party/UPSTREAM.json": "68840f0332f0a473376c820091084e59545e4bf6c2faa7035020230315a42b76",
+      "third_party/patches/akasha-empty-rebuild.patch": "acc310c996d2590d54fe89f1147072e0c2fabb909ad17d779c48cd65c95e4230",
+      "third_party/patches/cache-usage-coverage.patch": "8aa98fee2ab5f89a1f6be07322510981987e3525c3161d71435f940abbfe1e4f",
+      "third_party/patches/distribution-branding.patch": "bcc8864d12896ce3410afe7b33ff69ea99c2b474413116d47919b3e301a689f1",
+      "third_party/patches/followup-investigation.patch": "a3031a8fb2e6b6998bb3b4e4354a15dd8ee75a15a911e49c7b78670fb0f55556",
+      "third_party/patches/idle-reflection.patch": "11a2ed5bfde2629b933f1e6454a6ec8596542011cf0155668fda07126ce3433a",
+      "third_party/patches/memory-query-api.patch": "bd7cbd7b00a0bcd205c146b406d17e6b643d72a719608392cb2e1a1c5aa1661c",
+      "third_party/patches/personal-assistant-experience.patch": "52ed5f6f7cbbc30f24838063aab0cc6edf7a8e45fc703b22d57b917cd47a50bd",
+      "third_party/patches/stage-web-assets.patch": "f23c035cf5897c61ee4dcfade30bafa8dd71c32ebdcf3c21743e31c9800abcc4",
+      "third_party/patches/telegram-latency.patch": "c59516a0e23b41c44b9f64409d8dd833e05e1e4a9819930ad21f3da9b684c716",
+      "third_party/patches/tool-io-bounds.patch": "e6988d6661a545a065ba70311d92dab501e4afa16fe6461c842b3295e898eba3",
+      "third_party/patches/zsh-snapshot-aliases.patch": "a2d4a1cd3635d62edd6ca11a8b2e7ace6b68d0dbec908feeb4bf4a17e1354f55"
+    },
+    "eb81332d4f024e78d6f3ff7086e1d5f16458071f6f1d5ccca1feb7976461638c": {
+      "kirakira_agent/runtime.py": "7d97e4152a30662bb58256dbbe8730cb7d172350ed7df4fe503c257bbad18ea9",
+      "kirakira_agent/setup.py": "17f893bb7b35644ccfd86e236e2e1da6447f22208e7724f28b44e9d1236666a1",
+      "kirakira_agent/environment.py": "d7a2c67bb5c6efb2ef2d2c8ef011c958e012a25e87a19fb7e1cbf3bc31b88c05",
+      "kirakira_agent/client.py": "c60a6613d6d9f507560101c4310e29c8d4bc53914d1398dc5f7c46924b3a8403",
+      "eval/models.py": "79b2c016f7a78e23ed1d9c040dffbcbade760ca4c866cee2e3d0a1ada0ad52d6",
+      "plugins/akasha/contract.py": "c6d7d0c7f0969cef4426ea295c58e7045d784471aee66e039be22b9c9d766167",
+      "plugins/akasha/plugin.py": "a8bcb558cf5e5240099acd39274144de5e5d77442cc7fdb5bd241dfdd72a0cb2",
+      "plugins/akasha/query.py": "031b25033f2126da436a4229bf238a814b5bad5f5cad75cd99c71940feb78554",
+      "plugins/akasha/recalls.py": "029a6fa6b105a9b85cfe4f007a20569d8653751e35e86439876857ebea8ac8b6",
+      "plugins/akasha/recall_tool.py": "a1a38c3b47a92c761c010a78335c2f5e179b5df6becb5e0b0ae89225ee353f3c",
+      "plugins/akasha/runtime.py": "0afa4d9f9edb8c18e8fa630edb2b109ecaad11a67bd81de838cd1f2d22e652a7",
+      "plugins/akasha/excerpts.py": "9a408c9017de5722d68265c7012268bc4801c516137c8cd17b010fdbad19da7d",
+      "plugins/akasha/source_tool.py": "5cd6ba14202ac9a99e36c83e9deccc0c7872998cd67226fd856450a4439cbc41",
+      "plugins/akasha/source_search.py": "87753df2c606ed7a62341630f87f7e130af15a86a90681fbd8fca692ea418843",
+      "plugins/followups/__init__.py": "2f43daa4738a0b465626801fbefd89cd2dff70e5a26f1cf63afa84d7a571472b",
+      "plugins/followups/contract.py": "e63cb0f67ffec373cdc6105337fde68dc3409e17bd4e0cd576cf1b270ca45ae9",
+      "plugins/followups/dashboard.py": "5bdd51774087739ddc6f371023d36a493ab47d0f886139fe4a85ba2045a4f05b",
+      "plugins/followups/feeds.py": "a7da435624fef92a3581a2f0b2cac3a37f5d24a2e88dde6518b62c598299efcf",
+      "plugins/followups/mail_settings.py": "6008e854ee51a4b55af8305d5e3d0b71a6fdaf9b8699a02d47c0703a11dd70f6",
+      "plugins/followups/mailbox.py": "df4c1090dda01e0322f92f90fbe128062fc42f566f0191a8642344357452fd17",
+      "plugins/followups/plugin.py": "89081d40cf08ef012670a49592e40cca8577ae5f674df8504f0483c2baecde28",
+      "plugins/followups/service.py": "59a90301cb4909a5e402c59e9f18210b80ded776b19b27a0feadc811734b13de",
+      "plugins/followups/tools.py": "07863bd4ff4b6345b50ce479d3e8c204006016920f3cdbcc578a4bb8103d11ed",
+      "plugins/followups/webpages.py": "4a29a3d73924fdc0ca31a3f574c91e9ef70d6812f96d4c2b88e9a7e446d03d82",
+      "plugins/drift/__init__.py": "8905bcb66bd1258847589e4b4b0a4eac1f72ea044c09d3b394e98a85d265fa2e",
+      "plugins/drift/contract.py": "2b73654b779b267ec20822193408287a4abeb3426b238d08a04fa5ff2a35e278",
+      "plugins/drift/dashboard.py": "3f793998f1b35c5342298421eb446d79b7d2bf5f7d7baa9fba161c2f562c225e",
+      "plugins/drift/plugin.py": "51aa47ffbb56d487b4fdc572ba1b4df4027b6d38ef695ce0064bd8db0b7e59de",
+      "plugins/drift/producer.py": "281bc2eeb72cd2ad615ca4c868d22aae98de59248cd113b66a86d7920865cfae",
+      "plugins/drift/store.py": "256c225436b0c875f16e3f867b3ff8449cd374198811a5eba7c4114679181d6e",
+      "plugins/prompt/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "plugins/prompt/completion.py": "22df7c364b49c61d44cb71f11530faa213af8c6474cba9d045546608bdc3e1b1",
+      "plugins/prompt/dashboard.py": "32dc7b3cbdb8963d0b90f77cf28d1b18dae6ed400160cfd44d2fb66ddee9c309",
+      "plugins/prompt/persona.py": "979da6581d60524a7b4681dd36e5bb0c3e0d748b5ee31ab5c0980629a0fbb716",
+      "plugins/prompt/personality.py": "a99bfd88e77f79cc7640dc4ed469ee3ed536cb3edb5c834d060103e1f2b76fc9",
+      "plugins/prompt/plugin.py": "3280aa9ed0dafa54301923b27d8d28b2fa3a7a8818a4ef010d5ce2d8a1bb90d2",
+      "plugins/prompt/text.py": "3c6b8643f3ce7db2a5971319bc1e7f3c6f3f479d6211f269e3f0bd15bc690d0f",
+      "plugins/markdown_memory/store.py": "774012fb4ea35c4941e805e377fa57ab787997294e03b6fa7d2736df727f4e16",
+      "plugins/prompt/VEDA.md": "f387d558f7cd1ffbf217ea3ff685354af9caee59fc27ac2fa67efb8cee190db4",
+      "plugins/prompt/web_module.js": "3b6bd60494365a50d76fc6320b06ce9953a0247854fbd1bfe8f4f17d3112bf69",
+      "frontend/plugins/prompt/src/index.tsx": "32b66e799d718e573035b5a7af5b8d405425f4b97830086deb00e77469fde76b",
+      "plugins/drift/web_module.js": "87dc03aa145f6e4967498178d7c58f5327767935e6140de0301d8f091b808030",
+      "plugins/drift/web_module.css": "203990074b89d27235fd85b124e8d22b9956b9dd4c2685403ae7fa2fbab37994",
+      "frontend/plugins/drift/src/index.tsx": "739ca8ba40c8b858652efe44bfd2cb94f11ed6ceedd1168e572f3ff0ff5bb3ee",
+      "plugins/eventmail/store.py": "654f6b4c3984e625d7aab3f2b30ed4c9c7f588ce85f0502f9f6e73b0e1c2764f",
+      "plugins/wake/api.py": "c0ee0e1edf5ce0b85fdc45edd887d3c7ff598235dc7e96fb01459d11a3f29a73",
+      "plugins/wake/messages.py": "e88e279f801a95251acef11fbdac3e94b787135b9db7a3a73b8b762abed1ba30",
+      "plugins/wake/runtime.py": "d724742a6cb4d3fd1995f71d638fb7122257f354f587be1c0360c89f4989428c",
+      "plugins/wake/program.py": "53a89048c03a4eeca761a03035f32750e083f99685ea21860650649a6f70b2ab",
+      "eval/followups.py": "713dfb1bd00d774a8bafb403fd8f7fe80e0aaf889f186efa6b97e8329284420c",
+      "eval/mail_followups.py": "50552c0b60083d327d84b802971a50069bbe132438dbedfdbbb6dcf77329bc2f",
+      "eval/fixtures/mailbox.py": "a92ccd2b45ec9321ba5c558cae49a60c3908aec33865c5edb887109df3c7dbbf",
+      "eval/runtime_settings.py": "c5c85f54158bd265e15d19b48cc50fd938d0a878b49fa6d19694c502fc9b8acb",
+      "eval/idle_reflection.py": "4120504207b889bdcd0e4012c0f2b85d42f23355661a229ac9955be6e55f1758",
+      "eval/personality.py": "eec5f440d38cbaff720357e087355d3c3e75972ff411b5d6a383c3156e2eee8f",
+      "eval/prompt_cache.py": "fe19586d98d72e8e1e7db052e12ea114d4970d542471080874a953db066213e0",
+      "eval/runtime_experience.py": "70482ef57563624e1ae3206801a6743c4d64758d033ba0409e0dae57000589ba",
+      "eval/telegram_latency.py": "5db5bcbef48935990ce541d2ed417864925f4a75047ecf4365c0d1216f430d5f",
+      "eval/native_runtime.py": "7191fa894ad929a3c43b3e8122821b70039406370e3c925a99d1f408958e8d08",
+      "plugins/session_reference/plugin.py": "89722dafbad145f927f2a9b0718ac0c14d4f8ecef2b7e27fd59dda6d11b55abb",
+      "plugins/reply/follow.py": "106982277788ddc414edd2d789a163ac3e7203af03462889d0cb964f1f129f8c",
+      "plugins/delivery_policy/follow.py": "addce3d9d186a1cc1c790401d6965c5a6b8a0eb25adf9c0cc7161cda71a6f2fc",
+      "plugins/delivery_policy/plugin.py": "749f461493dff316dcc20c3d25c45d0baafd5f7d6716cbb810649964e3bc5000",
+      "plugins/delivery/execution.py": "ed75e46aff3c90fc93fe8404bbdca59423f982bec8444695c4ea7b7337fea7ab",
+      "plugins/ui/contract.py": "a3e6d35254a5dd149dbc59ffad7486e1bd9c696fc617f5d7683897c8c15c078d",
+      "plugins/gateway/service.py": "916a3e120ef1d21547854f94db757a2524fd4ba96ce693b94ec365354570f7e5",
+      "plugins/gateway/protocol/models.py": "690eee4584ba6187cb48c9104c60bedaf4dbb850deaf9bd8133ccf23679e5f0b",
+      "plugins/models/store.py": "b8462f130709c5efef1503c98fac7b0418fddb85450b575bf54d7686f9147b9e",
+      "plugins/akasha/application/consumer.py": "f37041f64c183331553786231d9f1475ac7bc7ac890b659c1dc9966caba6f380",
+      "plugins/akasha/scopes.py": "069abaf78c7a2fc813238f22a39af912fbf9f33e4e2a36b9766e2794bd0b85ea",
+      "plugins/ledger/log.py": "94a275383d6a7db1cf655e66b79e903925b54aba447818395a81dcaccd31302a",
+      "core/common/file_io.py": "f1f9b795c0463e567d41a6968bbdf3de3e9bc0e35a8c99ae99e9478a76f2cbca",
+      "sdk/python/src/akashic_sdk/client.py": "18aeedd9f754b01c63620f3d4f48fd1976ce95b8f4b0868d2fbf92c450885333",
+      "plugins/subagent/runtime.py": "794204aabcae6debe7fe460f0b535da93602bc0a7671bf93dae37ea1fe6e4537",
+      "plugins/subagent/tools.py": "8ec1c1a5b3f015fa629947bf59412e0a39677d78324f8658e6aba7f29129d90c",
+      "plugins/subagent/plugin.py": "d5306f8fb6acc159dcf79b424ada062e9a1bd2e15e23db5020a65d86f9d5c83d",
+      "plugins/jobs/plugin.py": "fd6be0fcb253615b4632064c932f5af8051b5b998e07ee42db06e44cbec4d2c0",
+      "frontend/plugins/followups/src/index.tsx": "d6723b77330c2cbb032bf37086415e6de5ef96b80e595f4c84c8a67d5aeaf756",
+      "plugins/followups/web_module.js": "562925f03132fb637a164d82e609ab19fd678aa5d187415582fab88a60cfae21",
+      "third_party/UPSTREAM.json": "68840f0332f0a473376c820091084e59545e4bf6c2faa7035020230315a42b76",
+      "third_party/patches/akasha-empty-rebuild.patch": "acc310c996d2590d54fe89f1147072e0c2fabb909ad17d779c48cd65c95e4230",
+      "third_party/patches/cache-usage-coverage.patch": "8aa98fee2ab5f89a1f6be07322510981987e3525c3161d71435f940abbfe1e4f",
+      "third_party/patches/distribution-branding.patch": "bcc8864d12896ce3410afe7b33ff69ea99c2b474413116d47919b3e301a689f1",
+      "third_party/patches/followup-investigation.patch": "a3031a8fb2e6b6998bb3b4e4354a15dd8ee75a15a911e49c7b78670fb0f55556",
+      "third_party/patches/idle-reflection.patch": "11a2ed5bfde2629b933f1e6454a6ec8596542011cf0155668fda07126ce3433a",
+      "third_party/patches/memory-query-api.patch": "bd7cbd7b00a0bcd205c146b406d17e6b643d72a719608392cb2e1a1c5aa1661c",
+      "third_party/patches/personal-assistant-experience.patch": "52ed5f6f7cbbc30f24838063aab0cc6edf7a8e45fc703b22d57b917cd47a50bd",
+      "third_party/patches/stage-web-assets.patch": "f23c035cf5897c61ee4dcfade30bafa8dd71c32ebdcf3c21743e31c9800abcc4",
+      "third_party/patches/telegram-latency.patch": "e2501c67228634a30c579c657d380264897e21be0a14e1a5c2b96eeae4980899",
+      "third_party/patches/tool-io-bounds.patch": "e6988d6661a545a065ba70311d92dab501e4afa16fe6461c842b3295e898eba3",
+      "third_party/patches/zsh-snapshot-aliases.patch": "a2d4a1cd3635d62edd6ca11a8b2e7ace6b68d0dbec908feeb4bf4a17e1354f55"
+    },
+    "c1061c339de7516022b15428bfadb260ae25f446c7b14ddc1d3033cc0f5d53da": {
+      "kirakira_agent/runtime.py": "7d97e4152a30662bb58256dbbe8730cb7d172350ed7df4fe503c257bbad18ea9",
+      "kirakira_agent/setup.py": "17f893bb7b35644ccfd86e236e2e1da6447f22208e7724f28b44e9d1236666a1",
+      "kirakira_agent/environment.py": "d7a2c67bb5c6efb2ef2d2c8ef011c958e012a25e87a19fb7e1cbf3bc31b88c05",
+      "kirakira_agent/client.py": "c60a6613d6d9f507560101c4310e29c8d4bc53914d1398dc5f7c46924b3a8403",
+      "eval/models.py": "79b2c016f7a78e23ed1d9c040dffbcbade760ca4c866cee2e3d0a1ada0ad52d6",
+      "plugins/akasha/contract.py": "c6d7d0c7f0969cef4426ea295c58e7045d784471aee66e039be22b9c9d766167",
+      "plugins/akasha/plugin.py": "a8bcb558cf5e5240099acd39274144de5e5d77442cc7fdb5bd241dfdd72a0cb2",
+      "plugins/akasha/query.py": "031b25033f2126da436a4229bf238a814b5bad5f5cad75cd99c71940feb78554",
+      "plugins/akasha/recalls.py": "029a6fa6b105a9b85cfe4f007a20569d8653751e35e86439876857ebea8ac8b6",
+      "plugins/akasha/recall_tool.py": "a1a38c3b47a92c761c010a78335c2f5e179b5df6becb5e0b0ae89225ee353f3c",
+      "plugins/akasha/runtime.py": "0afa4d9f9edb8c18e8fa630edb2b109ecaad11a67bd81de838cd1f2d22e652a7",
+      "plugins/akasha/excerpts.py": "9a408c9017de5722d68265c7012268bc4801c516137c8cd17b010fdbad19da7d",
+      "plugins/akasha/source_tool.py": "5cd6ba14202ac9a99e36c83e9deccc0c7872998cd67226fd856450a4439cbc41",
+      "plugins/akasha/source_search.py": "87753df2c606ed7a62341630f87f7e130af15a86a90681fbd8fca692ea418843",
+      "plugins/followups/__init__.py": "2f43daa4738a0b465626801fbefd89cd2dff70e5a26f1cf63afa84d7a571472b",
+      "plugins/followups/contract.py": "c443dc24e86f9e1b237748d9eeb36cecca99f766f4aa9aa484a4039b6cd18202",
+      "plugins/followups/dashboard.py": "5bdd51774087739ddc6f371023d36a493ab47d0f886139fe4a85ba2045a4f05b",
+      "plugins/followups/feeds.py": "a7da435624fef92a3581a2f0b2cac3a37f5d24a2e88dde6518b62c598299efcf",
+      "plugins/followups/mail_settings.py": "6008e854ee51a4b55af8305d5e3d0b71a6fdaf9b8699a02d47c0703a11dd70f6",
+      "plugins/followups/mailbox.py": "df4c1090dda01e0322f92f90fbe128062fc42f566f0191a8642344357452fd17",
+      "plugins/followups/plugin.py": "89081d40cf08ef012670a49592e40cca8577ae5f674df8504f0483c2baecde28",
+      "plugins/followups/service.py": "7c4adbdc51f9b7f87964888398eb993eb784251f1234f3046a697271ad9c899b",
+      "plugins/followups/tools.py": "a5c528054bdcf913d20b9b208875453439db695f00d777fba2aea33410f3a63b",
+      "plugins/followups/webpages.py": "4a29a3d73924fdc0ca31a3f574c91e9ef70d6812f96d4c2b88e9a7e446d03d82",
+      "plugins/drift/__init__.py": "8905bcb66bd1258847589e4b4b0a4eac1f72ea044c09d3b394e98a85d265fa2e",
+      "plugins/drift/contract.py": "2b73654b779b267ec20822193408287a4abeb3426b238d08a04fa5ff2a35e278",
+      "plugins/drift/dashboard.py": "3f793998f1b35c5342298421eb446d79b7d2bf5f7d7baa9fba161c2f562c225e",
+      "plugins/drift/plugin.py": "51aa47ffbb56d487b4fdc572ba1b4df4027b6d38ef695ce0064bd8db0b7e59de",
+      "plugins/drift/producer.py": "281bc2eeb72cd2ad615ca4c868d22aae98de59248cd113b66a86d7920865cfae",
+      "plugins/drift/store.py": "256c225436b0c875f16e3f867b3ff8449cd374198811a5eba7c4114679181d6e",
+      "plugins/prompt/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "plugins/prompt/completion.py": "22df7c364b49c61d44cb71f11530faa213af8c6474cba9d045546608bdc3e1b1",
+      "plugins/prompt/dashboard.py": "32dc7b3cbdb8963d0b90f77cf28d1b18dae6ed400160cfd44d2fb66ddee9c309",
+      "plugins/prompt/persona.py": "979da6581d60524a7b4681dd36e5bb0c3e0d748b5ee31ab5c0980629a0fbb716",
+      "plugins/prompt/personality.py": "a99bfd88e77f79cc7640dc4ed469ee3ed536cb3edb5c834d060103e1f2b76fc9",
+      "plugins/prompt/plugin.py": "3280aa9ed0dafa54301923b27d8d28b2fa3a7a8818a4ef010d5ce2d8a1bb90d2",
+      "plugins/prompt/text.py": "3c6b8643f3ce7db2a5971319bc1e7f3c6f3f479d6211f269e3f0bd15bc690d0f",
+      "plugins/markdown_memory/store.py": "774012fb4ea35c4941e805e377fa57ab787997294e03b6fa7d2736df727f4e16",
+      "plugins/prompt/VEDA.md": "f387d558f7cd1ffbf217ea3ff685354af9caee59fc27ac2fa67efb8cee190db4",
+      "plugins/prompt/web_module.js": "3b6bd60494365a50d76fc6320b06ce9953a0247854fbd1bfe8f4f17d3112bf69",
+      "frontend/plugins/prompt/src/index.tsx": "32b66e799d718e573035b5a7af5b8d405425f4b97830086deb00e77469fde76b",
+      "plugins/drift/web_module.js": "87dc03aa145f6e4967498178d7c58f5327767935e6140de0301d8f091b808030",
+      "plugins/drift/web_module.css": "203990074b89d27235fd85b124e8d22b9956b9dd4c2685403ae7fa2fbab37994",
+      "frontend/plugins/drift/src/index.tsx": "739ca8ba40c8b858652efe44bfd2cb94f11ed6ceedd1168e572f3ff0ff5bb3ee",
+      "plugins/eventmail/store.py": "654f6b4c3984e625d7aab3f2b30ed4c9c7f588ce85f0502f9f6e73b0e1c2764f",
+      "plugins/wake/api.py": "c0ee0e1edf5ce0b85fdc45edd887d3c7ff598235dc7e96fb01459d11a3f29a73",
+      "plugins/wake/messages.py": "e88e279f801a95251acef11fbdac3e94b787135b9db7a3a73b8b762abed1ba30",
+      "plugins/wake/runtime.py": "d724742a6cb4d3fd1995f71d638fb7122257f354f587be1c0360c89f4989428c",
+      "plugins/wake/program.py": "53a89048c03a4eeca761a03035f32750e083f99685ea21860650649a6f70b2ab",
+      "eval/followups.py": "713dfb1bd00d774a8bafb403fd8f7fe80e0aaf889f186efa6b97e8329284420c",
+      "eval/mail_followups.py": "8bede842bdb4fbc5252e469f087f7a06554706880b897ea2b6a0dc59137fb4e9",
+      "eval/fixtures/mailbox.py": "a92ccd2b45ec9321ba5c558cae49a60c3908aec33865c5edb887109df3c7dbbf",
+      "eval/runtime_settings.py": "c5c85f54158bd265e15d19b48cc50fd938d0a878b49fa6d19694c502fc9b8acb",
+      "eval/idle_reflection.py": "4120504207b889bdcd0e4012c0f2b85d42f23355661a229ac9955be6e55f1758",
+      "eval/personality.py": "eec5f440d38cbaff720357e087355d3c3e75972ff411b5d6a383c3156e2eee8f",
+      "eval/prompt_cache.py": "fe19586d98d72e8e1e7db052e12ea114d4970d542471080874a953db066213e0",
+      "eval/runtime_experience.py": "70482ef57563624e1ae3206801a6743c4d64758d033ba0409e0dae57000589ba",
+      "eval/telegram_latency.py": "5db5bcbef48935990ce541d2ed417864925f4a75047ecf4365c0d1216f430d5f",
+      "eval/native_runtime.py": "7191fa894ad929a3c43b3e8122821b70039406370e3c925a99d1f408958e8d08",
+      "plugins/session_reference/plugin.py": "89722dafbad145f927f2a9b0718ac0c14d4f8ecef2b7e27fd59dda6d11b55abb",
+      "plugins/reply/follow.py": "106982277788ddc414edd2d789a163ac3e7203af03462889d0cb964f1f129f8c",
+      "plugins/delivery_policy/follow.py": "addce3d9d186a1cc1c790401d6965c5a6b8a0eb25adf9c0cc7161cda71a6f2fc",
+      "plugins/delivery_policy/plugin.py": "749f461493dff316dcc20c3d25c45d0baafd5f7d6716cbb810649964e3bc5000",
+      "plugins/delivery/execution.py": "ed75e46aff3c90fc93fe8404bbdca59423f982bec8444695c4ea7b7337fea7ab",
+      "plugins/ui/contract.py": "a3e6d35254a5dd149dbc59ffad7486e1bd9c696fc617f5d7683897c8c15c078d",
+      "plugins/gateway/service.py": "916a3e120ef1d21547854f94db757a2524fd4ba96ce693b94ec365354570f7e5",
+      "plugins/gateway/protocol/models.py": "690eee4584ba6187cb48c9104c60bedaf4dbb850deaf9bd8133ccf23679e5f0b",
+      "plugins/models/store.py": "b8462f130709c5efef1503c98fac7b0418fddb85450b575bf54d7686f9147b9e",
+      "plugins/akasha/application/consumer.py": "f37041f64c183331553786231d9f1475ac7bc7ac890b659c1dc9966caba6f380",
+      "plugins/akasha/scopes.py": "069abaf78c7a2fc813238f22a39af912fbf9f33e4e2a36b9766e2794bd0b85ea",
+      "plugins/ledger/log.py": "94a275383d6a7db1cf655e66b79e903925b54aba447818395a81dcaccd31302a",
+      "core/common/file_io.py": "f1f9b795c0463e567d41a6968bbdf3de3e9bc0e35a8c99ae99e9478a76f2cbca",
+      "sdk/python/src/akashic_sdk/client.py": "18aeedd9f754b01c63620f3d4f48fd1976ce95b8f4b0868d2fbf92c450885333",
+      "plugins/subagent/runtime.py": "794204aabcae6debe7fe460f0b535da93602bc0a7671bf93dae37ea1fe6e4537",
+      "plugins/subagent/tools.py": "8ec1c1a5b3f015fa629947bf59412e0a39677d78324f8658e6aba7f29129d90c",
+      "plugins/subagent/plugin.py": "d5306f8fb6acc159dcf79b424ada062e9a1bd2e15e23db5020a65d86f9d5c83d",
+      "plugins/jobs/plugin.py": "fd6be0fcb253615b4632064c932f5af8051b5b998e07ee42db06e44cbec4d2c0",
+      "frontend/plugins/followups/src/index.tsx": "53ffcfc7d618bfdf0d644cf8ed992bdd62eef6d8729410cb35cf2e27dd21362d",
+      "plugins/followups/web_module.js": "b3d6f6feff70decd85e30c239bee35f196d54bec889e8c6ebb987f22b93cfb92",
+      "third_party/UPSTREAM.json": "f58f0fdd2263a7f985f0d878f8c1566ae8594e43f8b3ff99ba4735bee98ce9a2",
+      "third_party/patches/akasha-empty-rebuild.patch": "acc310c996d2590d54fe89f1147072e0c2fabb909ad17d779c48cd65c95e4230",
+      "third_party/patches/cache-usage-coverage.patch": "8aa98fee2ab5f89a1f6be07322510981987e3525c3161d71435f940abbfe1e4f",
+      "third_party/patches/distribution-branding.patch": "bcc8864d12896ce3410afe7b33ff69ea99c2b474413116d47919b3e301a689f1",
+      "third_party/patches/followup-investigation.patch": "a3031a8fb2e6b6998bb3b4e4354a15dd8ee75a15a911e49c7b78670fb0f55556",
+      "third_party/patches/idle-reflection.patch": "11a2ed5bfde2629b933f1e6454a6ec8596542011cf0155668fda07126ce3433a",
+      "third_party/patches/memory-query-api.patch": "bd7cbd7b00a0bcd205c146b406d17e6b643d72a719608392cb2e1a1c5aa1661c",
+      "third_party/patches/personal-assistant-experience.patch": "52ed5f6f7cbbc30f24838063aab0cc6edf7a8e45fc703b22d57b917cd47a50bd",
+      "third_party/patches/stage-web-assets.patch": "f23c035cf5897c61ee4dcfade30bafa8dd71c32ebdcf3c21743e31c9800abcc4",
+      "third_party/patches/telegram-latency.patch": "e2501c67228634a30c579c657d380264897e21be0a14e1a5c2b96eeae4980899",
+      "third_party/patches/tool-io-bounds.patch": "e6988d6661a545a065ba70311d92dab501e4afa16fe6461c842b3295e898eba3",
+      "third_party/patches/zsh-snapshot-aliases.patch": "a2d4a1cd3635d62edd6ca11a8b2e7ace6b68d0dbec908feeb4bf4a17e1354f55"
+    },
+    "9478e26cba76d6bff03f2c41cd7c8890f8bbbd49b3508a4f153071a675f77bab": {
+      "kirakira_agent/runtime.py": "7d97e4152a30662bb58256dbbe8730cb7d172350ed7df4fe503c257bbad18ea9",
+      "kirakira_agent/setup.py": "17f893bb7b35644ccfd86e236e2e1da6447f22208e7724f28b44e9d1236666a1",
+      "kirakira_agent/environment.py": "d7a2c67bb5c6efb2ef2d2c8ef011c958e012a25e87a19fb7e1cbf3bc31b88c05",
+      "kirakira_agent/client.py": "c60a6613d6d9f507560101c4310e29c8d4bc53914d1398dc5f7c46924b3a8403",
+      "eval/models.py": "79b2c016f7a78e23ed1d9c040dffbcbade760ca4c866cee2e3d0a1ada0ad52d6",
+      "plugins/akasha/contract.py": "c6d7d0c7f0969cef4426ea295c58e7045d784471aee66e039be22b9c9d766167",
+      "plugins/akasha/plugin.py": "a8bcb558cf5e5240099acd39274144de5e5d77442cc7fdb5bd241dfdd72a0cb2",
+      "plugins/akasha/query.py": "031b25033f2126da436a4229bf238a814b5bad5f5cad75cd99c71940feb78554",
+      "plugins/akasha/recalls.py": "029a6fa6b105a9b85cfe4f007a20569d8653751e35e86439876857ebea8ac8b6",
+      "plugins/akasha/recall_tool.py": "a1a38c3b47a92c761c010a78335c2f5e179b5df6becb5e0b0ae89225ee353f3c",
+      "plugins/akasha/runtime.py": "0afa4d9f9edb8c18e8fa630edb2b109ecaad11a67bd81de838cd1f2d22e652a7",
+      "plugins/akasha/excerpts.py": "9a408c9017de5722d68265c7012268bc4801c516137c8cd17b010fdbad19da7d",
+      "plugins/akasha/source_tool.py": "5cd6ba14202ac9a99e36c83e9deccc0c7872998cd67226fd856450a4439cbc41",
+      "plugins/akasha/source_search.py": "87753df2c606ed7a62341630f87f7e130af15a86a90681fbd8fca692ea418843",
+      "plugins/followups/__init__.py": "2f43daa4738a0b465626801fbefd89cd2dff70e5a26f1cf63afa84d7a571472b",
+      "plugins/followups/contract.py": "c443dc24e86f9e1b237748d9eeb36cecca99f766f4aa9aa484a4039b6cd18202",
+      "plugins/followups/dashboard.py": "5bdd51774087739ddc6f371023d36a493ab47d0f886139fe4a85ba2045a4f05b",
+      "plugins/followups/feeds.py": "a7da435624fef92a3581a2f0b2cac3a37f5d24a2e88dde6518b62c598299efcf",
+      "plugins/followups/mail_settings.py": "6008e854ee51a4b55af8305d5e3d0b71a6fdaf9b8699a02d47c0703a11dd70f6",
+      "plugins/followups/mailbox.py": "df4c1090dda01e0322f92f90fbe128062fc42f566f0191a8642344357452fd17",
+      "plugins/followups/plugin.py": "89081d40cf08ef012670a49592e40cca8577ae5f674df8504f0483c2baecde28",
+      "plugins/followups/service.py": "7c4adbdc51f9b7f87964888398eb993eb784251f1234f3046a697271ad9c899b",
+      "plugins/followups/tools.py": "a5c528054bdcf913d20b9b208875453439db695f00d777fba2aea33410f3a63b",
+      "plugins/followups/webpages.py": "4a29a3d73924fdc0ca31a3f574c91e9ef70d6812f96d4c2b88e9a7e446d03d82",
+      "plugins/drift/__init__.py": "8905bcb66bd1258847589e4b4b0a4eac1f72ea044c09d3b394e98a85d265fa2e",
+      "plugins/drift/contract.py": "2b73654b779b267ec20822193408287a4abeb3426b238d08a04fa5ff2a35e278",
+      "plugins/drift/dashboard.py": "3f793998f1b35c5342298421eb446d79b7d2bf5f7d7baa9fba161c2f562c225e",
+      "plugins/drift/plugin.py": "51aa47ffbb56d487b4fdc572ba1b4df4027b6d38ef695ce0064bd8db0b7e59de",
+      "plugins/drift/producer.py": "281bc2eeb72cd2ad615ca4c868d22aae98de59248cd113b66a86d7920865cfae",
+      "plugins/drift/store.py": "256c225436b0c875f16e3f867b3ff8449cd374198811a5eba7c4114679181d6e",
+      "plugins/prompt/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "plugins/prompt/completion.py": "22df7c364b49c61d44cb71f11530faa213af8c6474cba9d045546608bdc3e1b1",
+      "plugins/prompt/dashboard.py": "32dc7b3cbdb8963d0b90f77cf28d1b18dae6ed400160cfd44d2fb66ddee9c309",
+      "plugins/prompt/persona.py": "979da6581d60524a7b4681dd36e5bb0c3e0d748b5ee31ab5c0980629a0fbb716",
+      "plugins/prompt/personality.py": "a99bfd88e77f79cc7640dc4ed469ee3ed536cb3edb5c834d060103e1f2b76fc9",
+      "plugins/prompt/plugin.py": "3280aa9ed0dafa54301923b27d8d28b2fa3a7a8818a4ef010d5ce2d8a1bb90d2",
+      "plugins/prompt/text.py": "3c6b8643f3ce7db2a5971319bc1e7f3c6f3f479d6211f269e3f0bd15bc690d0f",
+      "plugins/markdown_memory/store.py": "774012fb4ea35c4941e805e377fa57ab787997294e03b6fa7d2736df727f4e16",
+      "plugins/prompt/VEDA.md": "f387d558f7cd1ffbf217ea3ff685354af9caee59fc27ac2fa67efb8cee190db4",
+      "plugins/prompt/web_module.js": "3b6bd60494365a50d76fc6320b06ce9953a0247854fbd1bfe8f4f17d3112bf69",
+      "frontend/plugins/prompt/src/index.tsx": "32b66e799d718e573035b5a7af5b8d405425f4b97830086deb00e77469fde76b",
+      "plugins/drift/web_module.js": "87dc03aa145f6e4967498178d7c58f5327767935e6140de0301d8f091b808030",
+      "plugins/drift/web_module.css": "203990074b89d27235fd85b124e8d22b9956b9dd4c2685403ae7fa2fbab37994",
+      "frontend/plugins/drift/src/index.tsx": "739ca8ba40c8b858652efe44bfd2cb94f11ed6ceedd1168e572f3ff0ff5bb3ee",
+      "plugins/eventmail/store.py": "654f6b4c3984e625d7aab3f2b30ed4c9c7f588ce85f0502f9f6e73b0e1c2764f",
+      "plugins/wake/api.py": "c0ee0e1edf5ce0b85fdc45edd887d3c7ff598235dc7e96fb01459d11a3f29a73",
+      "plugins/wake/messages.py": "e88e279f801a95251acef11fbdac3e94b787135b9db7a3a73b8b762abed1ba30",
+      "plugins/wake/runtime.py": "d724742a6cb4d3fd1995f71d638fb7122257f354f587be1c0360c89f4989428c",
+      "plugins/wake/program.py": "53a89048c03a4eeca761a03035f32750e083f99685ea21860650649a6f70b2ab",
+      "eval/followups.py": "713dfb1bd00d774a8bafb403fd8f7fe80e0aaf889f186efa6b97e8329284420c",
+      "eval/mail_followups.py": "2c63de6ebaf3e3282d4b26ff650966a589e0def43038f3569c0dd6d9859a041f",
+      "eval/fixtures/mailbox.py": "a92ccd2b45ec9321ba5c558cae49a60c3908aec33865c5edb887109df3c7dbbf",
+      "eval/runtime_settings.py": "c5c85f54158bd265e15d19b48cc50fd938d0a878b49fa6d19694c502fc9b8acb",
+      "eval/idle_reflection.py": "4120504207b889bdcd0e4012c0f2b85d42f23355661a229ac9955be6e55f1758",
+      "eval/personality.py": "eec5f440d38cbaff720357e087355d3c3e75972ff411b5d6a383c3156e2eee8f",
+      "eval/prompt_cache.py": "fe19586d98d72e8e1e7db052e12ea114d4970d542471080874a953db066213e0",
+      "eval/runtime_experience.py": "70482ef57563624e1ae3206801a6743c4d64758d033ba0409e0dae57000589ba",
+      "eval/telegram_latency.py": "5db5bcbef48935990ce541d2ed417864925f4a75047ecf4365c0d1216f430d5f",
+      "eval/native_runtime.py": "7191fa894ad929a3c43b3e8122821b70039406370e3c925a99d1f408958e8d08",
+      "plugins/session_reference/plugin.py": "89722dafbad145f927f2a9b0718ac0c14d4f8ecef2b7e27fd59dda6d11b55abb",
+      "plugins/reply/follow.py": "106982277788ddc414edd2d789a163ac3e7203af03462889d0cb964f1f129f8c",
+      "plugins/delivery_policy/follow.py": "addce3d9d186a1cc1c790401d6965c5a6b8a0eb25adf9c0cc7161cda71a6f2fc",
+      "plugins/delivery_policy/plugin.py": "749f461493dff316dcc20c3d25c45d0baafd5f7d6716cbb810649964e3bc5000",
+      "plugins/delivery/execution.py": "ed75e46aff3c90fc93fe8404bbdca59423f982bec8444695c4ea7b7337fea7ab",
+      "plugins/ui/contract.py": "a3e6d35254a5dd149dbc59ffad7486e1bd9c696fc617f5d7683897c8c15c078d",
+      "plugins/gateway/service.py": "916a3e120ef1d21547854f94db757a2524fd4ba96ce693b94ec365354570f7e5",
+      "plugins/gateway/protocol/models.py": "690eee4584ba6187cb48c9104c60bedaf4dbb850deaf9bd8133ccf23679e5f0b",
+      "plugins/models/store.py": "b8462f130709c5efef1503c98fac7b0418fddb85450b575bf54d7686f9147b9e",
+      "plugins/akasha/application/consumer.py": "f37041f64c183331553786231d9f1475ac7bc7ac890b659c1dc9966caba6f380",
+      "plugins/akasha/scopes.py": "069abaf78c7a2fc813238f22a39af912fbf9f33e4e2a36b9766e2794bd0b85ea",
+      "plugins/ledger/log.py": "94a275383d6a7db1cf655e66b79e903925b54aba447818395a81dcaccd31302a",
+      "core/common/file_io.py": "f1f9b795c0463e567d41a6968bbdf3de3e9bc0e35a8c99ae99e9478a76f2cbca",
+      "sdk/python/src/akashic_sdk/client.py": "18aeedd9f754b01c63620f3d4f48fd1976ce95b8f4b0868d2fbf92c450885333",
+      "plugins/subagent/runtime.py": "794204aabcae6debe7fe460f0b535da93602bc0a7671bf93dae37ea1fe6e4537",
+      "plugins/subagent/tools.py": "8ec1c1a5b3f015fa629947bf59412e0a39677d78324f8658e6aba7f29129d90c",
+      "plugins/subagent/plugin.py": "d5306f8fb6acc159dcf79b424ada062e9a1bd2e15e23db5020a65d86f9d5c83d",
+      "plugins/jobs/plugin.py": "fd6be0fcb253615b4632064c932f5af8051b5b998e07ee42db06e44cbec4d2c0",
+      "frontend/plugins/followups/src/index.tsx": "53ffcfc7d618bfdf0d644cf8ed992bdd62eef6d8729410cb35cf2e27dd21362d",
+      "plugins/followups/web_module.js": "b3d6f6feff70decd85e30c239bee35f196d54bec889e8c6ebb987f22b93cfb92",
+      "third_party/UPSTREAM.json": "f58f0fdd2263a7f985f0d878f8c1566ae8594e43f8b3ff99ba4735bee98ce9a2",
+      "third_party/patches/akasha-empty-rebuild.patch": "acc310c996d2590d54fe89f1147072e0c2fabb909ad17d779c48cd65c95e4230",
+      "third_party/patches/cache-usage-coverage.patch": "8aa98fee2ab5f89a1f6be07322510981987e3525c3161d71435f940abbfe1e4f",
+      "third_party/patches/distribution-branding.patch": "bcc8864d12896ce3410afe7b33ff69ea99c2b474413116d47919b3e301a689f1",
+      "third_party/patches/followup-investigation.patch": "a3031a8fb2e6b6998bb3b4e4354a15dd8ee75a15a911e49c7b78670fb0f55556",
+      "third_party/patches/idle-reflection.patch": "11a2ed5bfde2629b933f1e6454a6ec8596542011cf0155668fda07126ce3433a",
+      "third_party/patches/memory-query-api.patch": "bd7cbd7b00a0bcd205c146b406d17e6b643d72a719608392cb2e1a1c5aa1661c",
+      "third_party/patches/personal-assistant-experience.patch": "52ed5f6f7cbbc30f24838063aab0cc6edf7a8e45fc703b22d57b917cd47a50bd",
+      "third_party/patches/stage-web-assets.patch": "f23c035cf5897c61ee4dcfade30bafa8dd71c32ebdcf3c21743e31c9800abcc4",
+      "third_party/patches/telegram-latency.patch": "e2501c67228634a30c579c657d380264897e21be0a14e1a5c2b96eeae4980899",
+      "third_party/patches/tool-io-bounds.patch": "e6988d6661a545a065ba70311d92dab501e4afa16fe6461c842b3295e898eba3",
+      "third_party/patches/zsh-snapshot-aliases.patch": "a2d4a1cd3635d62edd6ca11a8b2e7ace6b68d0dbec908feeb4bf4a17e1354f55"
+    },
+    "b76dcf8f858f6bc09d8fe6ae4ef8f9b4fc9d8d028d4210cb545115293a405250": {
+      "kirakira_agent/runtime.py": "7d97e4152a30662bb58256dbbe8730cb7d172350ed7df4fe503c257bbad18ea9",
+      "kirakira_agent/setup.py": "17f893bb7b35644ccfd86e236e2e1da6447f22208e7724f28b44e9d1236666a1",
+      "kirakira_agent/environment.py": "d7a2c67bb5c6efb2ef2d2c8ef011c958e012a25e87a19fb7e1cbf3bc31b88c05",
+      "kirakira_agent/client.py": "c60a6613d6d9f507560101c4310e29c8d4bc53914d1398dc5f7c46924b3a8403",
+      "eval/models.py": "79b2c016f7a78e23ed1d9c040dffbcbade760ca4c866cee2e3d0a1ada0ad52d6",
+      "plugins/akasha/contract.py": "c6d7d0c7f0969cef4426ea295c58e7045d784471aee66e039be22b9c9d766167",
+      "plugins/akasha/plugin.py": "a8bcb558cf5e5240099acd39274144de5e5d77442cc7fdb5bd241dfdd72a0cb2",
+      "plugins/akasha/query.py": "031b25033f2126da436a4229bf238a814b5bad5f5cad75cd99c71940feb78554",
+      "plugins/akasha/recalls.py": "029a6fa6b105a9b85cfe4f007a20569d8653751e35e86439876857ebea8ac8b6",
+      "plugins/akasha/recall_tool.py": "a1a38c3b47a92c761c010a78335c2f5e179b5df6becb5e0b0ae89225ee353f3c",
+      "plugins/akasha/runtime.py": "0afa4d9f9edb8c18e8fa630edb2b109ecaad11a67bd81de838cd1f2d22e652a7",
+      "plugins/akasha/excerpts.py": "9a408c9017de5722d68265c7012268bc4801c516137c8cd17b010fdbad19da7d",
+      "plugins/akasha/source_tool.py": "5cd6ba14202ac9a99e36c83e9deccc0c7872998cd67226fd856450a4439cbc41",
+      "plugins/akasha/source_search.py": "87753df2c606ed7a62341630f87f7e130af15a86a90681fbd8fca692ea418843",
+      "plugins/followups/__init__.py": "2f43daa4738a0b465626801fbefd89cd2dff70e5a26f1cf63afa84d7a571472b",
+      "plugins/followups/contract.py": "c443dc24e86f9e1b237748d9eeb36cecca99f766f4aa9aa484a4039b6cd18202",
+      "plugins/followups/dashboard.py": "5bdd51774087739ddc6f371023d36a493ab47d0f886139fe4a85ba2045a4f05b",
+      "plugins/followups/feeds.py": "a7da435624fef92a3581a2f0b2cac3a37f5d24a2e88dde6518b62c598299efcf",
+      "plugins/followups/mail_settings.py": "6008e854ee51a4b55af8305d5e3d0b71a6fdaf9b8699a02d47c0703a11dd70f6",
+      "plugins/followups/mailbox.py": "df4c1090dda01e0322f92f90fbe128062fc42f566f0191a8642344357452fd17",
+      "plugins/followups/plugin.py": "89081d40cf08ef012670a49592e40cca8577ae5f674df8504f0483c2baecde28",
+      "plugins/followups/service.py": "7c4adbdc51f9b7f87964888398eb993eb784251f1234f3046a697271ad9c899b",
+      "plugins/followups/tools.py": "a5c528054bdcf913d20b9b208875453439db695f00d777fba2aea33410f3a63b",
+      "plugins/followups/webpages.py": "4a29a3d73924fdc0ca31a3f574c91e9ef70d6812f96d4c2b88e9a7e446d03d82",
+      "plugins/drift/__init__.py": "8905bcb66bd1258847589e4b4b0a4eac1f72ea044c09d3b394e98a85d265fa2e",
+      "plugins/drift/contract.py": "2b73654b779b267ec20822193408287a4abeb3426b238d08a04fa5ff2a35e278",
+      "plugins/drift/dashboard.py": "3f793998f1b35c5342298421eb446d79b7d2bf5f7d7baa9fba161c2f562c225e",
+      "plugins/drift/plugin.py": "51aa47ffbb56d487b4fdc572ba1b4df4027b6d38ef695ce0064bd8db0b7e59de",
+      "plugins/drift/producer.py": "281bc2eeb72cd2ad615ca4c868d22aae98de59248cd113b66a86d7920865cfae",
+      "plugins/drift/store.py": "256c225436b0c875f16e3f867b3ff8449cd374198811a5eba7c4114679181d6e",
+      "plugins/prompt/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "plugins/prompt/completion.py": "22df7c364b49c61d44cb71f11530faa213af8c6474cba9d045546608bdc3e1b1",
+      "plugins/prompt/dashboard.py": "32dc7b3cbdb8963d0b90f77cf28d1b18dae6ed400160cfd44d2fb66ddee9c309",
+      "plugins/prompt/persona.py": "979da6581d60524a7b4681dd36e5bb0c3e0d748b5ee31ab5c0980629a0fbb716",
+      "plugins/prompt/personality.py": "a99bfd88e77f79cc7640dc4ed469ee3ed536cb3edb5c834d060103e1f2b76fc9",
+      "plugins/prompt/plugin.py": "3280aa9ed0dafa54301923b27d8d28b2fa3a7a8818a4ef010d5ce2d8a1bb90d2",
+      "plugins/prompt/text.py": "3c6b8643f3ce7db2a5971319bc1e7f3c6f3f479d6211f269e3f0bd15bc690d0f",
+      "plugins/markdown_memory/store.py": "774012fb4ea35c4941e805e377fa57ab787997294e03b6fa7d2736df727f4e16",
+      "plugins/prompt/VEDA.md": "f387d558f7cd1ffbf217ea3ff685354af9caee59fc27ac2fa67efb8cee190db4",
+      "plugins/prompt/web_module.js": "3b6bd60494365a50d76fc6320b06ce9953a0247854fbd1bfe8f4f17d3112bf69",
+      "frontend/plugins/prompt/src/index.tsx": "32b66e799d718e573035b5a7af5b8d405425f4b97830086deb00e77469fde76b",
+      "plugins/drift/web_module.js": "87dc03aa145f6e4967498178d7c58f5327767935e6140de0301d8f091b808030",
+      "plugins/drift/web_module.css": "203990074b89d27235fd85b124e8d22b9956b9dd4c2685403ae7fa2fbab37994",
+      "frontend/plugins/drift/src/index.tsx": "739ca8ba40c8b858652efe44bfd2cb94f11ed6ceedd1168e572f3ff0ff5bb3ee",
+      "plugins/eventmail/store.py": "654f6b4c3984e625d7aab3f2b30ed4c9c7f588ce85f0502f9f6e73b0e1c2764f",
+      "plugins/wake/api.py": "c0ee0e1edf5ce0b85fdc45edd887d3c7ff598235dc7e96fb01459d11a3f29a73",
+      "plugins/wake/messages.py": "e88e279f801a95251acef11fbdac3e94b787135b9db7a3a73b8b762abed1ba30",
+      "plugins/wake/runtime.py": "d724742a6cb4d3fd1995f71d638fb7122257f354f587be1c0360c89f4989428c",
+      "plugins/wake/program.py": "53a89048c03a4eeca761a03035f32750e083f99685ea21860650649a6f70b2ab",
+      "eval/followups.py": "713dfb1bd00d774a8bafb403fd8f7fe80e0aaf889f186efa6b97e8329284420c",
+      "eval/mail_followups.py": "5e7b0b5ae7e84ddb3d9bc17872d5b15b2c4a20a99e3e7f71d9fb9708adbf6bd4",
+      "eval/fixtures/mailbox.py": "a92ccd2b45ec9321ba5c558cae49a60c3908aec33865c5edb887109df3c7dbbf",
+      "eval/runtime_settings.py": "c5c85f54158bd265e15d19b48cc50fd938d0a878b49fa6d19694c502fc9b8acb",
+      "eval/idle_reflection.py": "4120504207b889bdcd0e4012c0f2b85d42f23355661a229ac9955be6e55f1758",
+      "eval/personality.py": "eec5f440d38cbaff720357e087355d3c3e75972ff411b5d6a383c3156e2eee8f",
+      "eval/prompt_cache.py": "fe19586d98d72e8e1e7db052e12ea114d4970d542471080874a953db066213e0",
+      "eval/runtime_experience.py": "c8c69e0a61c6182a6883d0f73a11ca95f546e4a5c06c456bc14e1122573a5841",
+      "eval/telegram_latency.py": "5db5bcbef48935990ce541d2ed417864925f4a75047ecf4365c0d1216f430d5f",
+      "eval/native_runtime.py": "7191fa894ad929a3c43b3e8122821b70039406370e3c925a99d1f408958e8d08",
+      "plugins/session_reference/plugin.py": "89722dafbad145f927f2a9b0718ac0c14d4f8ecef2b7e27fd59dda6d11b55abb",
+      "plugins/reply/follow.py": "106982277788ddc414edd2d789a163ac3e7203af03462889d0cb964f1f129f8c",
+      "plugins/delivery_policy/follow.py": "addce3d9d186a1cc1c790401d6965c5a6b8a0eb25adf9c0cc7161cda71a6f2fc",
+      "plugins/delivery_policy/plugin.py": "749f461493dff316dcc20c3d25c45d0baafd5f7d6716cbb810649964e3bc5000",
+      "plugins/delivery/execution.py": "ed75e46aff3c90fc93fe8404bbdca59423f982bec8444695c4ea7b7337fea7ab",
+      "plugins/ui/contract.py": "a3e6d35254a5dd149dbc59ffad7486e1bd9c696fc617f5d7683897c8c15c078d",
+      "plugins/gateway/service.py": "916a3e120ef1d21547854f94db757a2524fd4ba96ce693b94ec365354570f7e5",
+      "plugins/gateway/protocol/models.py": "690eee4584ba6187cb48c9104c60bedaf4dbb850deaf9bd8133ccf23679e5f0b",
+      "plugins/models/store.py": "b8462f130709c5efef1503c98fac7b0418fddb85450b575bf54d7686f9147b9e",
+      "plugins/akasha/application/consumer.py": "f37041f64c183331553786231d9f1475ac7bc7ac890b659c1dc9966caba6f380",
+      "plugins/akasha/scopes.py": "069abaf78c7a2fc813238f22a39af912fbf9f33e4e2a36b9766e2794bd0b85ea",
+      "plugins/ledger/log.py": "94a275383d6a7db1cf655e66b79e903925b54aba447818395a81dcaccd31302a",
+      "core/common/file_io.py": "f1f9b795c0463e567d41a6968bbdf3de3e9bc0e35a8c99ae99e9478a76f2cbca",
+      "sdk/python/src/akashic_sdk/client.py": "18aeedd9f754b01c63620f3d4f48fd1976ce95b8f4b0868d2fbf92c450885333",
+      "plugins/subagent/runtime.py": "794204aabcae6debe7fe460f0b535da93602bc0a7671bf93dae37ea1fe6e4537",
+      "plugins/subagent/tools.py": "8ec1c1a5b3f015fa629947bf59412e0a39677d78324f8658e6aba7f29129d90c",
+      "plugins/subagent/plugin.py": "d5306f8fb6acc159dcf79b424ada062e9a1bd2e15e23db5020a65d86f9d5c83d",
+      "plugins/jobs/plugin.py": "fd6be0fcb253615b4632064c932f5af8051b5b998e07ee42db06e44cbec4d2c0",
+      "frontend/plugins/followups/src/index.tsx": "53ffcfc7d618bfdf0d644cf8ed992bdd62eef6d8729410cb35cf2e27dd21362d",
+      "plugins/followups/web_module.js": "b3d6f6feff70decd85e30c239bee35f196d54bec889e8c6ebb987f22b93cfb92",
+      "third_party/UPSTREAM.json": "f58f0fdd2263a7f985f0d878f8c1566ae8594e43f8b3ff99ba4735bee98ce9a2",
+      "third_party/patches/akasha-empty-rebuild.patch": "acc310c996d2590d54fe89f1147072e0c2fabb909ad17d779c48cd65c95e4230",
+      "third_party/patches/cache-usage-coverage.patch": "8aa98fee2ab5f89a1f6be07322510981987e3525c3161d71435f940abbfe1e4f",
+      "third_party/patches/distribution-branding.patch": "bcc8864d12896ce3410afe7b33ff69ea99c2b474413116d47919b3e301a689f1",
+      "third_party/patches/followup-investigation.patch": "a3031a8fb2e6b6998bb3b4e4354a15dd8ee75a15a911e49c7b78670fb0f55556",
+      "third_party/patches/idle-reflection.patch": "11a2ed5bfde2629b933f1e6454a6ec8596542011cf0155668fda07126ce3433a",
+      "third_party/patches/memory-query-api.patch": "bd7cbd7b00a0bcd205c146b406d17e6b643d72a719608392cb2e1a1c5aa1661c",
+      "third_party/patches/personal-assistant-experience.patch": "52ed5f6f7cbbc30f24838063aab0cc6edf7a8e45fc703b22d57b917cd47a50bd",
+      "third_party/patches/stage-web-assets.patch": "f23c035cf5897c61ee4dcfade30bafa8dd71c32ebdcf3c21743e31c9800abcc4",
+      "third_party/patches/telegram-latency.patch": "e2501c67228634a30c579c657d380264897e21be0a14e1a5c2b96eeae4980899",
+      "third_party/patches/tool-io-bounds.patch": "e6988d6661a545a065ba70311d92dab501e4afa16fe6461c842b3295e898eba3",
+      "third_party/patches/zsh-snapshot-aliases.patch": "a2d4a1cd3635d62edd6ca11a8b2e7ace6b68d0dbec908feeb4bf4a17e1354f55"
+    }
+  },
+  "mail_protocol_intermediate": {
+    "source_file": "mail-protocol-first.json",
+    "source_sha256": "e84850ff86d10148c04e41d7a7839ba66df2fbd732c4dc210073ecc9d6b746e0",
+    "implementation_snapshot": "350f0290c3e0ae345a381c0def30f75611b2ab85b9776297c01de9e0e3f162dc",
+    "scope": "Controlled local TLS IMAP and actual collector, no external email or model API. Serialized collector cursors are checked; this mode does not claim native Runtime restart or notification quality.",
+    "passed": true,
+    "external_chat_calls": 0,
+    "cases": [
+      {
+        "name": "default_only_new_mail_does_not_read_existing_junk",
+        "passed": true,
+        "detail": {
+          "scanned": 0,
+          "existing_messages": 14,
+          "fetched": 0
+        }
+      },
+      {
+        "name": "explicit_review_freezes_actual_uid_window_before_fetch",
+        "passed": true,
+        "detail": {
+          "limit": 12,
+          "planned_uids": [
+            50,
+            51,
+            52,
+            53,
+            54,
+            55,
+            56,
+            57,
+            58,
+            59,
+            60,
+            61
+          ],
+          "frozen_last_uid": 61,
+          "fetched": 0
+        }
+      },
+      {
+        "name": "initial_batch_is_bounded_and_preserves_source_deadline",
+        "passed": true,
+        "detail": {
+          "scanned": 10,
+          "pending": 2,
+          "source_uids": [
+            50,
+            51,
+            52,
+            53,
+            54,
+            55,
+            56,
+            57,
+            58,
+            59
+          ],
+          "exact_deadline_present": true
+        }
+      },
+      {
+        "name": "serialized_cursor_drains_frozen_window_before_new_mail",
+        "passed": true,
+        "detail": {
+          "scanned": 2,
+          "source_uids": [
+            60,
+            61
+          ]
+        }
+      },
+      {
+        "name": "new_mail_arriving_during_initial_review_is_later_collected_once",
+        "passed": true,
+        "detail": {
+          "scanned": 1,
+          "new_uid": 62,
+          "repeated_poll_entries": 0
+        }
+      },
+      {
+        "name": "same_message_at_a_new_uid_is_not_resubmitted",
+        "passed": true,
+        "detail": {
+          "duplicates": 1,
+          "accepted_entries": 0
+        }
+      },
+      {
+        "name": "missing_folder_never_falls_back_to_inbox",
+        "passed": true,
+        "detail": {
+          "fallback": false
+        }
+      },
+      {
+        "name": "changed_uid_epoch_stops_collection",
+        "passed": true,
+        "detail": {
+          "expected_code": "uidvalidity_changed"
+        }
+      },
+      {
+        "name": "all_reads_are_examine_and_peek_with_folder_isolation",
+        "passed": true,
+        "detail": {
+          "fetch_commands": 28,
+          "store_commands": 0,
+          "window_exclusions_verified": true
+        }
+      }
+    ],
+    "imap_commands": [
+      {
+        "command": "CAPABILITY",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "LOGIN",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "EXAMINE",
+        "peek": false,
+        "folder": "Junk"
+      },
+      {
+        "command": "CAPABILITY",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "LOGIN",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "EXAMINE",
+        "peek": false,
+        "folder": "Junk"
+      },
+      {
+        "command": "UID SEARCH",
+        "peek": false,
+        "folder": "Junk"
+      },
+      {
+        "command": "CAPABILITY",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "LOGIN",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "EXAMINE",
+        "peek": false,
+        "folder": "Junk"
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 50,
+        "headers": true
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 50,
+        "headers": false
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 51,
+        "headers": true
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 51,
+        "headers": false
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 52,
+        "headers": true
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 52,
+        "headers": false
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 53,
+        "headers": true
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 53,
+        "headers": false
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 54,
+        "headers": true
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 54,
+        "headers": false
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 55,
+        "headers": true
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 55,
+        "headers": false
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 56,
+        "headers": true
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 56,
+        "headers": false
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 57,
+        "headers": true
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 57,
+        "headers": false
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 58,
+        "headers": true
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 58,
+        "headers": false
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 59,
+        "headers": true
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 59,
+        "headers": false
+      },
+      {
+        "command": "CAPABILITY",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "LOGIN",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "EXAMINE",
+        "peek": false,
+        "folder": "Junk"
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 60,
+        "headers": true
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 60,
+        "headers": false
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 61,
+        "headers": true
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 61,
+        "headers": false
+      },
+      {
+        "command": "UID SEARCH",
+        "peek": false,
+        "folder": "Junk"
+      },
+      {
+        "command": "CAPABILITY",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "LOGIN",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "EXAMINE",
+        "peek": false,
+        "folder": "Junk"
+      },
+      {
+        "command": "UID SEARCH",
+        "peek": false,
+        "folder": "Junk"
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 62,
+        "headers": true
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 62,
+        "headers": false
+      },
+      {
+        "command": "CAPABILITY",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "LOGIN",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "EXAMINE",
+        "peek": false,
+        "folder": "Junk"
+      },
+      {
+        "command": "CAPABILITY",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "LOGIN",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "EXAMINE",
+        "peek": false,
+        "folder": "Junk"
+      },
+      {
+        "command": "UID SEARCH",
+        "peek": false,
+        "folder": "Junk"
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 63,
+        "headers": true
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 63,
+        "headers": false
+      },
+      {
+        "command": "CAPABILITY",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "LOGIN",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "EXAMINE",
+        "peek": false,
+        "folder": "Missing"
+      },
+      {
+        "command": "CAPABILITY",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "LOGIN",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "EXAMINE",
+        "peek": false,
+        "folder": "Junk"
+      }
+    ]
+  },
+  "mail_protocol": {
+    "source_file": "mail-protocol-final.json",
+    "source_sha256": "7cf1cda48de82a55edd5fa93fea4e53de943305ca3e5599563cc711158cfad9a",
+    "implementation_snapshot": "726d398745e96761d643726efe0fb98dc900fe0859be61fd3cf56b2b8499a52c",
+    "scope": "Controlled local TLS IMAP and actual collector, no external email or model API. Serialized collector cursors are checked; this mode does not claim native Runtime restart or notification quality.",
+    "passed": true,
+    "external_chat_calls": 0,
+    "cases": [
+      {
+        "name": "default_only_new_mail_does_not_read_existing_junk",
+        "passed": true,
+        "detail": {
+          "scanned": 0,
+          "existing_messages": 14,
+          "fetched": 0
+        }
+      },
+      {
+        "name": "explicit_review_freezes_actual_uid_window_before_fetch",
+        "passed": true,
+        "detail": {
+          "limit": 12,
+          "planned_uids": [
+            50,
+            51,
+            52,
+            53,
+            54,
+            55,
+            56,
+            57,
+            58,
+            59,
+            60,
+            61
+          ],
+          "frozen_last_uid": 61,
+          "fetched": 0
+        }
+      },
+      {
+        "name": "initial_batch_is_bounded_and_preserves_source_deadline",
+        "passed": true,
+        "detail": {
+          "scanned": 10,
+          "pending": 2,
+          "source_uids": [
+            50,
+            51,
+            52,
+            53,
+            54,
+            55,
+            56,
+            57,
+            58,
+            59
+          ],
+          "exact_deadline_present": true
+        }
+      },
+      {
+        "name": "serialized_cursor_drains_frozen_window_before_new_mail",
+        "passed": true,
+        "detail": {
+          "scanned": 2,
+          "source_uids": [
+            60,
+            61
+          ]
+        }
+      },
+      {
+        "name": "new_mail_arriving_during_initial_review_is_later_collected_once",
+        "passed": true,
+        "detail": {
+          "scanned": 1,
+          "new_uid": 62,
+          "repeated_poll_entries": 0
+        }
+      },
+      {
+        "name": "same_message_at_a_new_uid_is_not_resubmitted",
+        "passed": true,
+        "detail": {
+          "duplicates": 1,
+          "accepted_entries": 0
+        }
+      },
+      {
+        "name": "missing_folder_never_falls_back_to_inbox",
+        "passed": true,
+        "detail": {
+          "fallback": false
+        }
+      },
+      {
+        "name": "changed_uid_epoch_stops_collection",
+        "passed": true,
+        "detail": {
+          "expected_code": "uidvalidity_changed"
+        }
+      },
+      {
+        "name": "all_reads_are_examine_and_peek_with_folder_isolation",
+        "passed": true,
+        "detail": {
+          "fetch_commands": 28,
+          "store_commands": 0,
+          "window_exclusions_verified": true
+        }
+      }
+    ],
+    "imap_commands": [
+      {
+        "command": "CAPABILITY",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "LOGIN",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "EXAMINE",
+        "peek": false,
+        "folder": "Junk"
+      },
+      {
+        "command": "CAPABILITY",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "LOGIN",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "EXAMINE",
+        "peek": false,
+        "folder": "Junk"
+      },
+      {
+        "command": "UID SEARCH",
+        "peek": false,
+        "folder": "Junk"
+      },
+      {
+        "command": "CAPABILITY",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "LOGIN",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "EXAMINE",
+        "peek": false,
+        "folder": "Junk"
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 50,
+        "headers": true
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 50,
+        "headers": false
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 51,
+        "headers": true
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 51,
+        "headers": false
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 52,
+        "headers": true
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 52,
+        "headers": false
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 53,
+        "headers": true
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 53,
+        "headers": false
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 54,
+        "headers": true
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 54,
+        "headers": false
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 55,
+        "headers": true
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 55,
+        "headers": false
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 56,
+        "headers": true
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 56,
+        "headers": false
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 57,
+        "headers": true
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 57,
+        "headers": false
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 58,
+        "headers": true
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 58,
+        "headers": false
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 59,
+        "headers": true
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 59,
+        "headers": false
+      },
+      {
+        "command": "CAPABILITY",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "LOGIN",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "EXAMINE",
+        "peek": false,
+        "folder": "Junk"
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 60,
+        "headers": true
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 60,
+        "headers": false
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 61,
+        "headers": true
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 61,
+        "headers": false
+      },
+      {
+        "command": "UID SEARCH",
+        "peek": false,
+        "folder": "Junk"
+      },
+      {
+        "command": "CAPABILITY",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "LOGIN",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "EXAMINE",
+        "peek": false,
+        "folder": "Junk"
+      },
+      {
+        "command": "UID SEARCH",
+        "peek": false,
+        "folder": "Junk"
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 62,
+        "headers": true
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 62,
+        "headers": false
+      },
+      {
+        "command": "CAPABILITY",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "LOGIN",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "EXAMINE",
+        "peek": false,
+        "folder": "Junk"
+      },
+      {
+        "command": "CAPABILITY",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "LOGIN",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "EXAMINE",
+        "peek": false,
+        "folder": "Junk"
+      },
+      {
+        "command": "UID SEARCH",
+        "peek": false,
+        "folder": "Junk"
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 63,
+        "headers": true
+      },
+      {
+        "command": "UID FETCH",
+        "peek": true,
+        "folder": "Junk",
+        "uid": 63,
+        "headers": false
+      },
+      {
+        "command": "CAPABILITY",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "LOGIN",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "EXAMINE",
+        "peek": false,
+        "folder": "Missing"
+      },
+      {
+        "command": "CAPABILITY",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "LOGIN",
+        "peek": false,
+        "folder": null
+      },
+      {
+        "command": "EXAMINE",
+        "peek": false,
+        "folder": "Junk"
+      }
+    ]
+  },
+  "mail_real_model_first_attempt": {
+    "source_file": "mail-first.json",
+    "source_sha256": "4a209ad3dae7648051d6237bd9c7b451cd7d289be44942b73138d7ae89c20b1b",
+    "implementation_snapshot": "7da2ac329236c4758a05ea5114666ac772e1d480b34ad1284f7ae5af79068110",
+    "scope": "Controlled existing-mail review with actual local TLS folders, native Runtime, model decisions and confirmed local notification receipts. Two planned independent mail decisions; not private-email access, spam classification accuracy or population notification quality.",
+    "model_config": {
+      "model": "step-5-preview",
+      "endpoint": "https://api.stepfun.com/step_plan/v1",
+      "driver_id": "openai-compatible",
+      "context_window": 32768,
+      "max_output_tokens": 4096,
+      "reasoning_effort": "low"
+    },
+    "planned_mail_decisions": 2,
+    "content_decisions_started": 0,
+    "deadline_registration_attempted": false,
+    "deadline_restore_attempted": false,
+    "unstarted_scope": "No content observations or deadline record; configuration failed before these stages. The original file has a two-decision plan, but no explicit planned-deadline-count field.",
+    "passed": false,
+    "cases": [
+      {
+        "name": "configure_real_provider",
+        "passed": false,
+        "seconds": 1.147,
+        "failure_http_statuses": [
+          429
+        ]
+      }
+    ],
+    "provider_failure_classification": {
+      "concurrency": true,
+      "source": "Category matched against the original retained error text in memory; no response text exported. Does not establish who else was using the shared endpoint."
+    }
+  },
+  "engineering_validation": {
+    "scope": "Final local regression including explicit historical-review admission; separate from mail-decision quality and end-to-end workflow acceptance. Later evaluator-only observer repairs received AST/Ruff checks.",
+    "pytest": {
+      "source_file": "regression-final.log",
+      "source_sha256": "086f6b3c9d93fc07ea5821944e5d063db94b94dc2b7cdf8334d091ad91644c04",
+      "passed": 168,
+      "duration_seconds": 58.18
+    },
+    "native_source_files_checked": 969,
+    "distribution_plugins_checked": 75,
+    "frontend_build": {
+      "source_file": "frontend-build-final.log",
+      "source_sha256": "b932172bd11e1e795817c1cdf3b00354f6e9f3ac9301c30f556e7d4f30677ad0",
+      "result": "passed"
+    },
+    "frontend_typecheck": {
+      "source_file": "frontend-typecheck-final.log",
+      "source_sha256": "4321a50854221145cf54459a219f91073d37b159dcbcdab7ec129bce6302c8b2",
+      "result": "passed"
+    },
+    "telegram_failure_prompt_targeted_passed": 3,
+    "package_verification": {
+      "source_file": "package-verified.json",
+      "source_sha256": "259e6fc7cf3882698b6b831f13ca177fd2168e85b09e9b68c38b84dd43e2a473",
+      "built_in_project_environment": true,
+      "wheel_source_files_exact": 15,
+      "sdist_provenance_exact": true,
+      "source_files_sha256": {
+        "plugins/followups/contract.py": "c443dc24e86f9e1b237748d9eeb36cecca99f766f4aa9aa484a4039b6cd18202",
+        "plugins/followups/mailbox.py": "df4c1090dda01e0322f92f90fbe128062fc42f566f0191a8642344357452fd17",
+        "plugins/followups/service.py": "7c4adbdc51f9b7f87964888398eb993eb784251f1234f3046a697271ad9c899b",
+        "plugins/followups/tools.py": "a5c528054bdcf913d20b9b208875453439db695f00d777fba2aea33410f3a63b",
+        "plugins/followups/web_module.js": "b3d6f6feff70decd85e30c239bee35f196d54bec889e8c6ebb987f22b93cfb92",
+        "plugins/subagent/plugin.py": "d5306f8fb6acc159dcf79b424ada062e9a1bd2e15e23db5020a65d86f9d5c83d",
+        "plugins/subagent/tools.py": "8ec1c1a5b3f015fa629947bf59412e0a39677d78324f8658e6aba7f29129d90c",
+        "plugins/subagent/runtime.py": "794204aabcae6debe7fe460f0b535da93602bc0a7671bf93dae37ea1fe6e4537",
+        "plugins/jobs/plugin.py": "fd6be0fcb253615b4632064c932f5af8051b5b998e07ee42db06e44cbec4d2c0",
+        "plugins/prompt/text.py": "3c6b8643f3ce7db2a5971319bc1e7f3c6f3f479d6211f269e3f0bd15bc690d0f",
+        "plugins/telegram_sender/sender.py": "2c63c6eb1d04ffbfe392d92d5d9884128f0abcd6bb26b7c89b4ff5bd7c9dad04",
+        "eval/runtime_experience.py": "c8c69e0a61c6182a6883d0f73a11ca95f546e4a5c06c456bc14e1122573a5841",
+        "eval/mail_followups.py": "5e7b0b5ae7e84ddb3d9bc17872d5b15b2c4a20a99e3e7f71d9fb9708adbf6bd4",
+        "eval/fixtures/mailbox.py": "a92ccd2b45ec9321ba5c558cae49a60c3908aec33865c5edb887109df3c7dbbf",
+        "eval/models.py": "79b2c016f7a78e23ed1d9c040dffbcbade760ca4c866cee2e3d0a1ada0ad52d6"
+      },
+      "scope": "Wheel/sdist build in the existing project environment; 15 runtime/evaluation files byte-match checked source, including final observer repairs. Packaging checks do not establish real-model workflow completion."
+    },
+    "workspace_cleanup": {
+      "source_file": "workspace-cleanup.json",
+      "source_sha256": "27092ccf594bc6f4a17a4a57a3ae77c5ffa0056b44471171487b3767f82af81d",
+      "dry_run": false,
+      "removed_paths": 20,
+      "removed_bytes": 137991681,
+      "failed_paths": 0,
+      "busy_paths": 0
+    }
+  },
+  "mail_real_model_second_attempt": {
+    "source_file": "mail-second.json",
+    "source_sha256": "ad2fe8c47c9a9abf28c28345e8bf0215a8d33471b29b7fbe143338bf772c9758",
+    "implementation_snapshot": "bf1575e93ecea9a5e8f4a17488764aebdb021587087f2a40aed845a730636b0c",
+    "scope": "Retained failed second attempt. The evaluator sent an actionable natural request and then created another RPC watch for the same source, so its hand-picked watch was a duplicate. Unsuitable for judging mail-decision accuracy or product latency.",
+    "model_quality_usable": false,
+    "latency_usable_for_product_claims": false,
+    "planned_mail_decisions": 2,
+    "passed": false,
+    "cases": [
+      {
+        "name": "configure_real_provider",
+        "passed": true,
+        "seconds": 1.868
+      },
+      {
+        "name": "default_watch_does_not_read_old_mail",
+        "passed": true,
+        "seconds": 26.121
+      },
+      {
+        "name": "existing_junk_action",
+        "passed": false,
+        "seconds": 181.241,
+        "failure_http_statuses": []
+      },
+      {
+        "name": "existing_inbox_advert",
+        "passed": false,
+        "seconds": 26.921,
+        "failure_http_statuses": [
+          429
+        ]
+      },
+      {
+        "name": "important_mail_owner_confirmation_registers_exact_reminder",
+        "passed": false,
+        "seconds": 0.009,
+        "failure_http_statuses": []
+      },
+      {
+        "name": "native_restart_does_not_repeat_initial_review_or_notification",
+        "passed": false,
+        "seconds": 0.029,
+        "failure_http_statuses": []
+      },
+      {
+        "name": "restart_preserves_mail_deadline_reminder",
+        "passed": false,
+        "seconds": 0.0,
+        "failure_http_statuses": []
+      }
+    ],
+    "metrics": {
+      "remote_chat_calls": 30,
+      "remote_states": {
+        "error": 8,
+        "success": 22
+      },
+      "input_tokens": 170047,
+      "output_tokens": 11917,
+      "embedding_metering": "native model_calls records chat only; vectors verified separately"
+    },
+    "no_schedule_before_owner_confirmation": true,
+    "deadline_registration_attempted": false,
+    "deadline_restore_attempted": false,
+    "diagnostic": {
+      "source_file": "mail-second-native-audit.json",
+      "source_sha256": "53b85956342e3048d61db3577ddae19f4d16ba32174879430ad7b1b313a3878a",
+      "read_only": true,
+      "natural_and_rpc_watches_total": 5,
+      "untracked_natural_watches_enabled": 3,
+      "natural_important_flow_decision": "share_content",
+      "natural_important_flow_confirmed_delivery": true,
+      "duplicate_rpc_important_flow_decision": "skip_content",
+      "duplicate_skip_reason_category": "same_source_already_delivered",
+      "advertisement_creation_committed_before_conversation_http_429": true,
+      "restart_model_call_change_scope": "untracked advertisement watch entered a new Wake flow; not evidence of redelivering the important message",
+      "current_latest_selected_flow_failure_polluted": false,
+      "same_junk_source_message_in_two_watches": true,
+      "settled_junk_sources_with_settlement": 1,
+      "pending_duplicate_junk_sources": 1,
+      "native_wake_notification_outputs": 1
+    }
+  },
+  "background_first_attempt": {
+    "source_file": "background-first.json",
+    "source_sha256": "1768c634e7ed5221c67e80ac81d89ff7a17789603bb633edcc29de19eb7544f7",
+    "implementation_snapshot": "b918fe715d2bfe25019cf385c00eccc85b88382de35f554632037bf5eaaadbf3",
+    "scope": "Controlled real-model ordinary-language URL delegation through native tools. Gated synthetic HTTP document, no tool names in user prompts. Local delivery means a committed message, not a read receipt or Telegram measurement.",
+    "passed": false,
+    "setup_passed": true,
+    "shutdown_completed": true,
+    "failure": {
+      "type": "TimeoutError",
+      "http_statuses": []
+    },
+    "model_config": {
+      "model": "step-5-preview",
+      "endpoint": "https://api.stepfun.com/step_plan/v1",
+      "driver_id": "openai-compatible",
+      "context_window": 32768,
+      "max_output_tokens": 4096,
+      "reasoning_effort": "low"
+    },
+    "cases": [],
+    "observer_limitations": "Old evaluator did not archive the fixed six-case plan; zero recorded cases is not a passing empty suite. Parent acknowledgement timed out at 60 seconds; later read-only native audit is separate.",
+    "posthoc_native_metadata": {
+      "source_file": "background-first-native-audit.json",
+      "source_sha256": "a51bc35d573c9600f0ae6ecaa46884d3df412f7e4c56d392018cb2a1cffeefe9",
+      "scope": "Read-only posthoc metadata audit of the first background attempt; original old-evaluator empty cases and timeout remain failed. No new model request or reconstructed success.",
+      "tool_calls": [
+        {
+          "owner": "shell",
+          "tool": "shell",
+          "count": 2
+        },
+        {
+          "owner": "standard_web",
+          "tool": "web_fetch",
+          "count": 2
+        }
+      ],
+      "subagent_tool_calls": 0,
+      "model_call_states": {
+        "success": 3
+      },
+      "successful_model_duration_ms": [
+        17520.558547,
+        2513.009901,
+        6616.999982
+      ]
+    }
+  },
+  "background_second_attempt": {
+    "source_file": "background-second.json",
+    "source_sha256": "6e9590a16d81d40668cf70fcd6236e781a36078f20a377ee66d26c3b1738b737",
+    "implementation_snapshot": "676f9c74e24d3ee65406c5d4637ef2a453bc0e7820947b81fe9a95156cae93df",
+    "scope": "Controlled real-model ordinary-language URL delegation through native tools. Gated synthetic HTTP document, no tool names in user prompts. Local delivery means a committed message, not a read receipt or Telegram measurement.",
+    "passed": false,
+    "setup_passed": false,
+    "shutdown_completed": false,
+    "fixture_configuration": {
+      "standard_web.default_fetch_timeout_seconds": 120,
+      "document_gate_budget_seconds": 120,
+      "parent_admission_timeout_seconds": 60,
+      "quality_scope": "single controlled task, fact coverage; not a public benchmark"
+    },
+    "planned_cases": 6,
+    "source_requests": 0,
+    "source_responses": 0,
+    "source_gate_wait_ms": 0.0,
+    "fixture_gate_timeouts": 0,
+    "source_cleanup_completed": true,
+    "case_counts": {
+      "planned": 6,
+      "passed": 0,
+      "failed": 0,
+      "not_run": 6
+    },
+    "failure": {
+      "case": "setup",
+      "type": "RuntimeError",
+      "http_statuses": [
+        429
+      ]
+    },
+    "model_config": {
+      "model": "step-5-preview",
+      "endpoint": "https://api.stepfun.com/step_plan/v1",
+      "driver_id": "openai-compatible",
+      "context_window": 32768,
+      "max_output_tokens": 4096,
+      "reasoning_effort": "low"
+    },
+    "cases": [
+      {
+        "case": "background-admission",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "setup"
+      },
+      {
+        "case": "ordinary-chat-during-research",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "setup"
+      },
+      {
+        "case": "actual-source-result",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "setup"
+      },
+      {
+        "case": "completion-notification",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "setup"
+      },
+      {
+        "case": "query-completed-result",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "setup"
+      },
+      {
+        "case": "result-after-restart",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "setup"
+      }
+    ]
+  },
+  "background_third_attempt": {
+    "source_file": "background-third.json",
+    "source_sha256": "6e9590a16d81d40668cf70fcd6236e781a36078f20a377ee66d26c3b1738b737",
+    "implementation_snapshot": "676f9c74e24d3ee65406c5d4637ef2a453bc0e7820947b81fe9a95156cae93df",
+    "scope": "Controlled real-model ordinary-language URL delegation through native tools. Gated synthetic HTTP document, no tool names in user prompts. Local delivery means a committed message, not a read receipt or Telegram measurement.",
+    "passed": false,
+    "setup_passed": false,
+    "shutdown_completed": false,
+    "fixture_configuration": {
+      "standard_web.default_fetch_timeout_seconds": 120,
+      "document_gate_budget_seconds": 120,
+      "parent_admission_timeout_seconds": 60,
+      "quality_scope": "single controlled task, fact coverage; not a public benchmark"
+    },
+    "planned_cases": 6,
+    "source_requests": 0,
+    "source_responses": 0,
+    "source_gate_wait_ms": 0.0,
+    "fixture_gate_timeouts": 0,
+    "source_cleanup_completed": true,
+    "case_counts": {
+      "planned": 6,
+      "passed": 0,
+      "failed": 0,
+      "not_run": 6
+    },
+    "failure": {
+      "case": "setup",
+      "type": "RuntimeError",
+      "http_statuses": [
+        429
+      ]
+    },
+    "model_config": {
+      "model": "step-5-preview",
+      "endpoint": "https://api.stepfun.com/step_plan/v1",
+      "driver_id": "openai-compatible",
+      "context_window": 32768,
+      "max_output_tokens": 4096,
+      "reasoning_effort": "low"
+    },
+    "cases": [
+      {
+        "case": "background-admission",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "setup"
+      },
+      {
+        "case": "ordinary-chat-during-research",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "setup"
+      },
+      {
+        "case": "actual-source-result",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "setup"
+      },
+      {
+        "case": "completion-notification",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "setup"
+      },
+      {
+        "case": "query-completed-result",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "setup"
+      },
+      {
+        "case": "result-after-restart",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "setup"
+      }
+    ]
+  },
+  "background_fourth_attempt": {
+    "source_file": "background-fourth.json",
+    "source_sha256": "6e9590a16d81d40668cf70fcd6236e781a36078f20a377ee66d26c3b1738b737",
+    "implementation_snapshot": "676f9c74e24d3ee65406c5d4637ef2a453bc0e7820947b81fe9a95156cae93df",
+    "scope": "Controlled real-model ordinary-language URL delegation through native tools. Gated synthetic HTTP document, no tool names in user prompts. Local delivery means a committed message, not a read receipt or Telegram measurement.",
+    "passed": false,
+    "setup_passed": false,
+    "shutdown_completed": false,
+    "fixture_configuration": {
+      "standard_web.default_fetch_timeout_seconds": 120,
+      "document_gate_budget_seconds": 120,
+      "parent_admission_timeout_seconds": 60,
+      "quality_scope": "single controlled task, fact coverage; not a public benchmark"
+    },
+    "planned_cases": 6,
+    "source_requests": 0,
+    "source_responses": 0,
+    "source_gate_wait_ms": 0.0,
+    "fixture_gate_timeouts": 0,
+    "source_cleanup_completed": true,
+    "case_counts": {
+      "planned": 6,
+      "passed": 0,
+      "failed": 0,
+      "not_run": 6
+    },
+    "failure": {
+      "case": "setup",
+      "type": "RuntimeError",
+      "http_statuses": [
+        429
+      ]
+    },
+    "model_config": {
+      "model": "step-5-preview",
+      "endpoint": "https://api.stepfun.com/step_plan/v1",
+      "driver_id": "openai-compatible",
+      "context_window": 32768,
+      "max_output_tokens": 4096,
+      "reasoning_effort": "low"
+    },
+    "cases": [
+      {
+        "case": "background-admission",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "setup"
+      },
+      {
+        "case": "ordinary-chat-during-research",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "setup"
+      },
+      {
+        "case": "actual-source-result",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "setup"
+      },
+      {
+        "case": "completion-notification",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "setup"
+      },
+      {
+        "case": "query-completed-result",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "setup"
+      },
+      {
+        "case": "result-after-restart",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "setup"
+      }
+    ]
+  },
+  "deployment": {
+    "source_file": "deployment.json",
+    "source_sha256": "123e09bfce9260963984445e72e358fd8acb824e3b3af3b90952e440748df081",
+    "immutable_history_unchanged": true,
+    "profile_count": 8,
+    "profiles_unchanged": true,
+    "configuration_count": 8,
+    "configurations_unchanged": true,
+    "proactive_enabled_unchanged": true,
+    "notification_destination_unchanged": true,
+    "existing_message_count": 246
+  },
+  "production_verification": {
+    "source_file": "production-verified.json",
+    "source_sha256": "c7a6b1870fd9c90aba7f77bb5c8e19dcb8177ef69a5db78755aa03125afcc915",
+    "new_boot": true,
+    "loaded_source_count": 21,
+    "all_loaded_sources_match": true,
+    "health_status": 200,
+    "gateway_read_only_check": true
+  },
+  "mail_real_model_third_attempt": {
+    "source_file": "mail-third.json",
+    "source_sha256": "400ac0355e07c456af1e97cf3f6760bb2f079fb9ef410cb18cc1cb3cd4d48d28",
+    "implementation_snapshot": "eb81332d4f024e78d6f3ff7086e1d5f16458071f6f1d5ccca1feb7976461638c",
+    "passed": false,
+    "planned_mail_decisions": 2,
+    "cases": [
+      {
+        "name": "configure_real_provider",
+        "passed": true,
+        "seconds": 3.233
+      },
+      {
+        "name": "default_watch_does_not_read_old_mail",
+        "passed": true,
+        "seconds": 34.642
+      },
+      {
+        "name": "existing_junk_action",
+        "passed": false,
+        "seconds": 312.474,
+        "failure_http_statuses": []
+      },
+      {
+        "name": "existing_inbox_advert",
+        "passed": true,
+        "seconds": 40.362
+      },
+      {
+        "name": "important_mail_owner_confirmation_registers_exact_reminder",
+        "passed": false,
+        "seconds": 0.001,
+        "failure_http_statuses": []
+      },
+      {
+        "name": "native_restart_does_not_repeat_initial_review_or_notification",
+        "passed": true,
+        "seconds": 0.048
+      },
+      {
+        "name": "restart_preserves_mail_deadline_reminder",
+        "passed": false,
+        "seconds": 0.0,
+        "failure_http_statuses": []
+      }
+    ],
+    "model_config": {
+      "model": "step-5-preview",
+      "endpoint": "https://api.stepfun.com/step_plan/v1",
+      "driver_id": "openai-compatible",
+      "context_window": 32768,
+      "max_output_tokens": 4096,
+      "reasoning_effort": "low"
+    },
+    "natural_mail_requests": [
+      {
+        "folder": "Junk",
+        "initial_limit": 0,
+        "reply_completed": true,
+        "watch_committed": true,
+        "successful_create_tool_results": 1,
+        "failure_http_statuses": [],
+        "same_input_tool_receipt": true,
+        "source_folder_limit_and_owner_rule_verified": true
+      },
+      {
+        "folder": "Junk",
+        "initial_limit": 1,
+        "reply_completed": true,
+        "watch_committed": true,
+        "successful_create_tool_results": 1,
+        "failure_http_statuses": [],
+        "same_input_tool_receipt": true,
+        "source_folder_limit_and_owner_rule_verified": true
+      },
+      {
+        "folder": "INBOX",
+        "initial_limit": 1,
+        "reply_completed": true,
+        "watch_committed": true,
+        "successful_create_tool_results": 1,
+        "failure_http_statuses": [],
+        "same_input_tool_receipt": true,
+        "source_folder_limit_and_owner_rule_verified": true
+      }
+    ],
+    "observations": [
+      {
+        "case": "existing_junk_action",
+        "expected": "share_content",
+        "folder": "Junk",
+        "source_uid": 2,
+        "status": "failed",
+        "failure_type": "TimeoutError",
+        "failure_http_statuses": []
+      },
+      {
+        "case": "existing_inbox_advert",
+        "expected": "skip_content",
+        "folder": "INBOX",
+        "source_uid": 1,
+        "status": "completed",
+        "decision": "skip_content",
+        "confirmed_deliveries": 0,
+        "duplicate_poll_submitted": 0,
+        "event_summary": {
+          "status": "pending",
+          "decision_tools": [
+            "screen_content",
+            "skip_content"
+          ],
+          "confirmed_deliveries": 0,
+          "selected_count": 1
+        }
+      }
+    ],
+    "metrics": {
+      "remote_chat_calls": 22,
+      "remote_states": {
+        "success": 22
+      },
+      "input_tokens": 184758,
+      "output_tokens": 8686,
+      "embedding_metering": "native model_calls records chat only; vectors verified separately"
+    },
+    "posthoc_native_audit": {
+      "source_file": "mail-third-native-audit.json",
+      "source_sha256": "7115735c029b962f1aed18dd636f0e3b89756f699bed7306a062d4cc2c77b456",
+      "scope": "Read-only posthoc native states; no new Runtime or model request. Original report is unchanged.",
+      "schedule_file_exists": true,
+      "schedule_jobs": 0,
+      "schedule_operations": 0,
+      "schedule_fires": 0,
+      "runtime_startup_zero_calls_verified": false,
+      "runtime_startup_zero_calls_limitation": "Original harness sampled the calls/FETCH baseline after entering the restarted Runtime; its checks cover the subsequent observation window only.",
+      "watch_states": [
+        {
+          "folder": "Junk",
+          "initial_limit": 0,
+          "review_mode": "interest",
+          "enabled": false
+        },
+        {
+          "folder": "Junk",
+          "initial_limit": 1,
+          "review_mode": "interest",
+          "enabled": false
+        },
+        {
+          "folder": "INBOX",
+          "initial_limit": 1,
+          "review_mode": "each_update",
+          "enabled": false
+        }
+      ],
+      "native_failure_counts": {
+        "http_429": 0,
+        "output_length": 0
+      },
+      "native_wake_notification_outputs": 0,
+      "source_items": [
+        {
+          "folder": "INBOX",
+          "status": "pending",
+          "review_policy": "owner-requested",
+          "messages": 1
+        },
+        {
+          "folder": "Junk",
+          "status": "pending",
+          "review_policy": null,
+          "messages": 1
+        }
+      ],
+      "selections_by_status": {
+        "released": 1
+      },
+      "failure_category": "Explicit historical review was blocked by ordinary interest-pool admission; the Junk source was read but never selected. INBOX advertisement had its own requested-review and skip decision.",
+      "advertisement_decision_posthoc": {
+        "scope": "Actual archived latest selected request, production Wake phase/terminal/decision decoders and EventMail selection; read-only. Output prose removed before decoding.",
+        "selected_count": 1,
+        "accepted_input_verified": true,
+        "phase": "investigate",
+        "phase_terminal_present": true,
+        "decision": "skip_content",
+        "domain_status": "released",
+        "confirmed_deliveries": 0,
+        "old_decision_used": false
+      }
+    },
+    "deadline_registration_attempted": false,
+    "deadline_restore_attempted": false,
+    "scope": "Retained failed pre-fix interest-admission attempt; one advertisement judgment passed, the explicit Junk review never entered investigation.",
+    "fixture": {
+      "important_folder": "Junk",
+      "important_uid": 2,
+      "advert_folder": "INBOX",
+      "advert_uid": 1,
+      "default_limit": 0,
+      "explicit_limit": 1,
+      "expected_deadline": "2026-11-03T18:00:00+08:00"
+    }
+  },
+  "mail_real_model_fourth_attempt": {
+    "source_file": "mail-fourth.json",
+    "source_sha256": "16c5b90724797f5eabaf213099071b713649376dfa149c15750178624f286754",
+    "implementation_snapshot": "c1061c339de7516022b15428bfadb260ae25f446c7b14ddc1d3033cc0f5d53da",
+    "passed": false,
+    "planned_mail_decisions": 2,
+    "cases": [
+      {
+        "name": "configure_real_provider",
+        "passed": true,
+        "seconds": 8.576
+      },
+      {
+        "name": "default_watch_does_not_read_old_mail",
+        "passed": true,
+        "seconds": 25.359
+      },
+      {
+        "name": "existing_junk_action",
+        "passed": false,
+        "seconds": 2.932,
+        "failure_http_statuses": [
+          429
+        ]
+      },
+      {
+        "name": "existing_inbox_advert",
+        "passed": false,
+        "seconds": 81.262,
+        "failure_http_statuses": []
+      },
+      {
+        "name": "important_mail_owner_confirmation_registers_exact_reminder",
+        "passed": false,
+        "seconds": 0.001,
+        "failure_http_statuses": []
+      },
+      {
+        "name": "native_restart_does_not_repeat_initial_review_or_notification",
+        "passed": true,
+        "seconds": 0.014
+      },
+      {
+        "name": "restart_preserves_mail_deadline_reminder",
+        "passed": false,
+        "seconds": 0.0,
+        "failure_http_statuses": []
+      }
+    ],
+    "model_config": {
+      "model": "step-5-preview",
+      "endpoint": "https://api.stepfun.com/step_plan/v1",
+      "driver_id": "openai-compatible",
+      "context_window": 32768,
+      "max_output_tokens": 4096,
+      "reasoning_effort": "low"
+    },
+    "natural_mail_requests": [
+      {
+        "folder": "Junk",
+        "initial_limit": 0,
+        "reply_completed": true,
+        "watch_committed": true,
+        "successful_create_tool_results": 1,
+        "failure_http_statuses": [],
+        "same_input_tool_receipt": true,
+        "source_folder_limit_and_owner_rule_verified": true,
+        "observed_review_mode": "each_update"
+      },
+      {
+        "folder": "Junk",
+        "initial_limit": 1,
+        "reply_completed": false,
+        "watch_committed": false,
+        "successful_create_tool_results": 0,
+        "failure_http_statuses": [
+          429
+        ]
+      },
+      {
+        "folder": "INBOX",
+        "initial_limit": 1,
+        "reply_completed": false,
+        "watch_committed": false,
+        "successful_create_tool_results": 0,
+        "failure_http_statuses": []
+      }
+    ],
+    "observations": [
+      {
+        "case": "existing_junk_action",
+        "expected": "share_content",
+        "folder": "Junk",
+        "source_uid": 2,
+        "status": "failed",
+        "failure_type": "RuntimeError",
+        "failure_http_statuses": [
+          429
+        ]
+      },
+      {
+        "case": "existing_inbox_advert",
+        "expected": "skip_content",
+        "folder": "INBOX",
+        "source_uid": 1,
+        "status": "failed",
+        "failure_type": "RuntimeError",
+        "failure_http_statuses": []
+      }
+    ],
+    "metrics": {
+      "remote_chat_calls": 17,
+      "remote_states": {
+        "error": 5,
+        "success": 12
+      },
+      "input_tokens": 93818,
+      "output_tokens": 6816,
+      "embedding_metering": "native model_calls records chat only; vectors verified separately"
+    },
+    "posthoc_native_audit": {
+      "source_file": "mail-fourth-native-audit.json",
+      "source_sha256": "54501c7f485081d7ec469a182c9d7375634ca175fdbe5f05310663d394153313",
+      "scope": "Read-only posthoc native states; no new Runtime or model request. Original report is unchanged.",
+      "schedule_file_exists": true,
+      "schedule_jobs": 0,
+      "schedule_operations": 0,
+      "schedule_fires": 0,
+      "runtime_startup_zero_calls_verified": false,
+      "runtime_startup_zero_calls_limitation": "Original harness sampled the calls/FETCH baseline after entering the restarted Runtime; its checks cover the subsequent observation window only.",
+      "watch_states": [
+        {
+          "folder": "Junk",
+          "initial_limit": 0,
+          "review_mode": "each_update",
+          "enabled": false
+        }
+      ],
+      "native_failure_counts": {
+        "http_429": 1,
+        "output_length": 1
+      },
+      "native_wake_notification_outputs": 0,
+      "source_items": [],
+      "selections_by_status": {},
+      "failure_category": "Junk request failed with HTTP 429 before creation. Advertisement request reached output length limit before create_followup execution; no initial-review source or scheduled job was committed."
+    },
+    "deadline_registration_attempted": false,
+    "deadline_restore_attempted": false,
+    "scope": "Retained failed 4096-output-budget attempt: Junk request rejected with HTTP 429, advertisement truncated before creation. No mail judgment or scheduler registration began.",
+    "fixture": {
+      "important_folder": "Junk",
+      "important_uid": 2,
+      "advert_folder": "INBOX",
+      "advert_uid": 1,
+      "default_limit": 0,
+      "explicit_limit": 1,
+      "source_date": "2026-10-31T12:15:03+00:00",
+      "source_date_header": "Sat, 31 Oct 2026 12:15:03 +0000",
+      "expected_deadline": "2026-11-03T18:00:00+08:00",
+      "expected_reminder": "2026-11-02T18:00:00+08:00",
+      "expected_reminder_utc": "2026-11-02T10:00:00+00:00",
+      "expected_timezone": "Asia/Shanghai",
+      "window_excluded_old_deadline": "2026-11-01T10:00:00+08:00"
+    }
+  },
+  "background_fifth_attempt": {
+    "source_file": "background-fifth.json",
+    "source_sha256": "b7fc977ddc166c26c96a8fc03f56482ecec0c5578e714af9843f74cdc9d06853",
+    "implementation_snapshot": "c1061c339de7516022b15428bfadb260ae25f446c7b14ddc1d3033cc0f5d53da",
+    "scope": "Controlled real-model ordinary-language URL delegation through native tools. Gated synthetic HTTP document, no tool names in user prompts. Local delivery means a committed message, not a read receipt or Telegram measurement.",
+    "passed": false,
+    "setup_passed": false,
+    "shutdown_completed": false,
+    "fixture_configuration": {
+      "standard_web.default_fetch_timeout_seconds": 120,
+      "document_gate_budget_seconds": 120,
+      "parent_admission_timeout_seconds": 60,
+      "quality_scope": "single controlled task, fact coverage; not a public benchmark"
+    },
+    "planned_cases": 6,
+    "source_requests": 0,
+    "source_responses": 0,
+    "source_gate_wait_ms": 0.0,
+    "fixture_gate_timeouts": 0,
+    "source_cleanup_completed": true,
+    "case_counts": {
+      "planned": 6,
+      "passed": 0,
+      "failed": 0,
+      "not_run": 6
+    },
+    "failure": {
+      "case": "setup",
+      "type": "RuntimeError",
+      "http_statuses": [
+        429
+      ]
+    },
+    "model_config": {
+      "model": "step-5-preview",
+      "endpoint": "https://api.stepfun.com/step_plan/v1",
+      "driver_id": "openai-compatible",
+      "context_window": 32768,
+      "max_output_tokens": 4096,
+      "reasoning_effort": "low"
+    },
+    "cases": [
+      {
+        "case": "background-admission",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "setup"
+      },
+      {
+        "case": "ordinary-chat-during-research",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "setup"
+      },
+      {
+        "case": "actual-source-result",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "setup"
+      },
+      {
+        "case": "completion-notification",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "setup"
+      },
+      {
+        "case": "query-completed-result",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "setup"
+      },
+      {
+        "case": "result-after-restart",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "setup"
+      }
+    ]
+  },
+  "background_sixth_attempt": {
+    "source_file": "background-sixth.json",
+    "source_sha256": "2c89c7e77c2171dabce6dace221383149e9280244e00375de5be0f1b4cf173ed",
+    "implementation_snapshot": "9478e26cba76d6bff03f2c41cd7c8890f8bbbd49b3508a4f153071a675f77bab",
+    "scope": "Controlled real-model ordinary-language URL delegation through native tools. Gated synthetic HTTP document, no tool names in user prompts. Local delivery means a committed message, not a read receipt or Telegram measurement.",
+    "passed": false,
+    "setup_passed": true,
+    "shutdown_completed": false,
+    "fixture_configuration": {
+      "standard_web.default_fetch_timeout_seconds": 120,
+      "document_gate_budget_seconds": 120,
+      "parent_admission_timeout_seconds": 60,
+      "quality_scope": "single controlled task, fact coverage; not a public benchmark"
+    },
+    "planned_cases": 6,
+    "source_requests": 1,
+    "source_responses": 1,
+    "source_gate_wait_ms": 0.018730759620666504,
+    "fixture_gate_timeouts": 0,
+    "source_cleanup_completed": true,
+    "case_counts": {
+      "planned": 6,
+      "passed": 0,
+      "failed": 1,
+      "not_run": 5
+    },
+    "failure": {
+      "case": "background-admission",
+      "type": "TypeError",
+      "http_statuses": []
+    },
+    "model_config": {
+      "model": "step-5-preview",
+      "endpoint": "https://api.stepfun.com/step_plan/v1",
+      "driver_id": "openai-compatible",
+      "context_window": 32768,
+      "max_output_tokens": 8192,
+      "reasoning_effort": "low"
+    },
+    "cases": [
+      {
+        "case": "background-admission",
+        "status": "failed",
+        "passed": false
+      },
+      {
+        "case": "ordinary-chat-during-research",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "background-admission"
+      },
+      {
+        "case": "actual-source-result",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "background-admission"
+      },
+      {
+        "case": "completion-notification",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "background-admission"
+      },
+      {
+        "case": "query-completed-result",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "background-admission"
+      },
+      {
+        "case": "result-after-restart",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "background-admission"
+      }
+    ],
+    "posthoc_native_metadata": {
+      "source_file": "background-sixth-native-audit.json",
+      "source_sha256": "c251d306566348db366cd272dce9f259d6a93c8086ae2ad61bd1f0f69da0fbc7",
+      "scope": "Read-only native tool metadata after the sixth background attempt. The evaluator TypeError remains failed; successful task admission is not a passed workflow.",
+      "tool_calls": [
+        {
+          "owner": "tool_search",
+          "tool": "load_tools",
+          "count": 1,
+          "successful_results": 1
+        },
+        {
+          "owner": "subagent",
+          "tool": "spawn",
+          "count": 1,
+          "successful_results": 1
+        },
+        {
+          "owner": "standard_web",
+          "tool": "web_fetch",
+          "count": 1,
+          "successful_results": 1
+        }
+      ],
+      "session_type_counts": {
+        "akashic": 1,
+        "subagent": 1
+      },
+      "successful_subagent_tool_results": 1
+    }
+  },
+  "engineering_validation_intermediate": {
+    "scope": "Local source regression and build checks, separate from model decisions, user-message value and end-to-end workflow acceptance.",
+    "pytest": {
+      "source_file": "regression.log",
+      "source_sha256": "462a79aeccb553d5f4b804c92436ed09e34ba1d8f36c4a3f20f5f98c57c671ff",
+      "passed": 168,
+      "duration_seconds": 60.99
+    },
+    "native_source_files_checked": 969,
+    "distribution_plugins_checked": 75,
+    "frontend_build": {
+      "source_file": "frontend-build.log",
+      "source_sha256": "db051f4c481921733916caa528baf19d742531adf0996bf655bf901b90400003",
+      "result": "passed"
+    },
+    "frontend_typecheck": {
+      "source_file": "frontend-typecheck.log",
+      "source_sha256": "4321a50854221145cf54459a219f91073d37b159dcbcdab7ec129bce6302c8b2",
+      "result": "passed"
+    }
+  },
+  "deployment_final": {
+    "source_file": "deployment-final.json",
+    "source_sha256": "d31c694f214548a360718f9bab227ef51df753e08c817ceb2d355a010033be3f",
+    "immutable_history_unchanged": true,
+    "profile_count": 8,
+    "profiles_unchanged": true,
+    "configuration_count": 8,
+    "configurations_unchanged": true,
+    "proactive_enabled_unchanged": true,
+    "notification_destination_unchanged": true,
+    "existing_message_count": 246
+  },
+  "production_verification_final": {
+    "source_file": "production-verified-final.json",
+    "source_sha256": "c7a6b1870fd9c90aba7f77bb5c8e19dcb8177ef69a5db78755aa03125afcc915",
+    "new_boot": true,
+    "loaded_source_count": 21,
+    "all_loaded_sources_match": true,
+    "health_status": 200,
+    "gateway_read_only_check": true
+  },
+  "mail_real_model_fifth_attempt": {
+    "source_file": "mail-fifth.json",
+    "source_sha256": "d01be03472a352e54a0a754c730bb33e250ec6d272a25652d7fe874c13f55e37",
+    "implementation_snapshot": "b76dcf8f858f6bc09d8fe6ae4ef8f9b4fc9d8d028d4210cb545115293a405250",
+    "scope": "Final mail attempt under a separate 8192-output-token configuration. Setup-only retries failed six times with HTTP 429 before any mail-decision or deadline step. No production model configuration or endpoint changed.",
+    "passed": false,
+    "planned_mail_decisions": 2,
+    "planned_deadline_steps": [
+      "owner_confirmation_registration",
+      "restart_preservation"
+    ],
+    "content_decisions_started": 0,
+    "deadline_registration_attempted": false,
+    "deadline_restore_attempted": false,
+    "model_config": {
+      "model": "step-5-preview",
+      "endpoint": "https://api.stepfun.com/step_plan/v1",
+      "driver_id": "openai-compatible",
+      "context_window": 32768,
+      "max_output_tokens": 8192,
+      "reasoning_effort": "low"
+    },
+    "cases": [
+      {
+        "name": "configure_real_provider",
+        "passed": false,
+        "seconds": 79.057,
+        "failure_http_statuses": [
+          429
+        ]
+      }
+    ]
+  },
+  "background_seventh_attempt": {
+    "source_file": "background-seventh.json",
+    "source_sha256": "3e05b0bbd37f63d63af15548259380b772a5c4687c0c543972e01f18c05122f0",
+    "implementation_snapshot": "b76dcf8f858f6bc09d8fe6ae4ef8f9b4fc9d8d028d4210cb545115293a405250",
+    "scope": "Controlled real-model ordinary-language URL delegation through native tools. Gated synthetic HTTP document, no tool names in user prompts. Local delivery means a committed message, not a read receipt or Telegram measurement.",
+    "passed": false,
+    "setup_passed": false,
+    "shutdown_completed": false,
+    "fixture_configuration": {
+      "standard_web.default_fetch_timeout_seconds": 120,
+      "document_gate_budget_seconds": 120,
+      "parent_admission_timeout_seconds": 60,
+      "quality_scope": "single controlled task, fact coverage; not a public benchmark"
+    },
+    "planned_cases": 6,
+    "source_requests": 0,
+    "source_responses": 0,
+    "source_gate_wait_ms": 0.0,
+    "fixture_gate_timeouts": 0,
+    "source_cleanup_completed": true,
+    "case_counts": {
+      "planned": 6,
+      "passed": 0,
+      "failed": 0,
+      "not_run": 6
+    },
+    "failure": {
+      "case": "setup",
+      "type": "RuntimeError",
+      "http_statuses": [
+        429
+      ],
+      "source_frames": [
+        {
+          "file": "eval/runtime_experience.py",
+          "line": 507,
+          "function": "background"
+        },
+        {
+          "file": "eval/models.py",
+          "line": 104,
+          "function": "configure"
+        },
+        {
+          "file": "kirakira_agent/runtime.py",
+          "line": 146,
+          "function": "configure_chat_model"
+        },
+        {
+          "file": "kirakira_agent/runtime.py",
+          "line": 114,
+          "function": "rpc"
+        }
+      ]
+    },
+    "model_config": {
+      "model": "step-5-preview",
+      "endpoint": "https://api.stepfun.com/step_plan/v1",
+      "driver_id": "openai-compatible",
+      "context_window": 32768,
+      "max_output_tokens": 8192,
+      "reasoning_effort": "low"
+    },
+    "cases": [
+      {
+        "case": "background-admission",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "setup"
+      },
+      {
+        "case": "ordinary-chat-during-research",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "setup"
+      },
+      {
+        "case": "actual-source-result",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "setup"
+      },
+      {
+        "case": "completion-notification",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "setup"
+      },
+      {
+        "case": "query-completed-result",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "setup"
+      },
+      {
+        "case": "result-after-restart",
+        "status": "not_run",
+        "passed": false,
+        "blocked_by": "setup"
+      }
+    ]
+  },
+  "setup_attempts": {
+    "source_file": "setup-throttles.jsonl",
+    "source_sha256": "f974b18161d71d8b753f0aead146c07f93ac106766745b8330d272c21875d58c",
+    "scope": "Phase-two wrapper records only. Setup probes are not mail judgments or task successes; no quality-case retry and no cash-endpoint fallback. Not a complete provider/account traffic log.",
+    "recorded_attempts": 28,
+    "http_429_attempts": 25,
+    "passed_attempts": 3,
+    "attempts": [
+      {
+        "module": "eval.runtime_experience",
+        "attempt": 1,
+        "passed": false,
+        "http_status": 429,
+        "duration_ms": 1390.1855871081352
+      },
+      {
+        "module": "eval.runtime_experience",
+        "attempt": 2,
+        "passed": false,
+        "http_status": 429,
+        "duration_ms": 862.3438663780689
+      },
+      {
+        "module": "eval.runtime_experience",
+        "attempt": 3,
+        "passed": false,
+        "http_status": 429,
+        "duration_ms": 708.6547166109085
+      },
+      {
+        "module": "eval.runtime_experience",
+        "attempt": 4,
+        "passed": false,
+        "http_status": 429,
+        "duration_ms": 2395.151346921921
+      },
+      {
+        "module": "eval.runtime_experience",
+        "attempt": 5,
+        "passed": false,
+        "http_status": 429,
+        "duration_ms": 968.6961323022842
+      },
+      {
+        "module": "eval.runtime_experience",
+        "attempt": 6,
+        "passed": false,
+        "http_status": 429,
+        "duration_ms": 1352.668583393097
+      },
+      {
+        "module": "eval.mail_followups",
+        "attempt": 1,
+        "passed": true,
+        "duration_ms": 3233.0087646842003
+      },
+      {
+        "module": "eval.mail_followups",
+        "attempt": 1,
+        "passed": true,
+        "duration_ms": 1183.459635823965
+      },
+      {
+        "module": "eval.runtime_experience",
+        "attempt": 1,
+        "passed": false,
+        "http_status": 429,
+        "duration_ms": 598.0088375508785
+      },
+      {
+        "module": "eval.runtime_experience",
+        "attempt": 2,
+        "passed": false,
+        "http_status": 429,
+        "duration_ms": 3497.8240840137005
+      },
+      {
+        "module": "eval.runtime_experience",
+        "attempt": 3,
+        "passed": false,
+        "http_status": 429,
+        "duration_ms": 2756.7951940000057
+      },
+      {
+        "module": "eval.runtime_experience",
+        "attempt": 4,
+        "passed": false,
+        "http_status": 429,
+        "duration_ms": 348.74944388866425
+      },
+      {
+        "module": "eval.runtime_experience",
+        "attempt": 5,
+        "passed": false,
+        "http_status": 429,
+        "duration_ms": 548.6518703401089
+      },
+      {
+        "module": "eval.runtime_experience",
+        "attempt": 6,
+        "passed": false,
+        "http_status": 429,
+        "duration_ms": 745.2382370829582
+      },
+      {
+        "module": "eval.runtime_experience",
+        "attempt": 1,
+        "passed": false,
+        "http_status": 429,
+        "duration_ms": 811.6931244730949
+      },
+      {
+        "module": "eval.runtime_experience",
+        "attempt": 2,
+        "passed": true,
+        "duration_ms": 2889.2047367990017
+      },
+      {
+        "module": "eval.mail_followups",
+        "attempt": 1,
+        "passed": false,
+        "http_status": 429,
+        "duration_ms": 582.0677913725376
+      },
+      {
+        "module": "eval.mail_followups",
+        "attempt": 2,
+        "passed": false,
+        "http_status": 429,
+        "duration_ms": 434.4133585691452
+      },
+      {
+        "module": "eval.mail_followups",
+        "attempt": 3,
+        "passed": false,
+        "http_status": 429,
+        "duration_ms": 411.8941053748131
+      },
+      {
+        "module": "eval.mail_followups",
+        "attempt": 4,
+        "passed": false,
+        "http_status": 429,
+        "duration_ms": 349.5505265891552
+      },
+      {
+        "module": "eval.mail_followups",
+        "attempt": 5,
+        "passed": false,
+        "http_status": 429,
+        "duration_ms": 332.95247331261635
+      },
+      {
+        "module": "eval.mail_followups",
+        "attempt": 6,
+        "passed": false,
+        "http_status": 429,
+        "duration_ms": 1935.304183512926
+      },
+      {
+        "module": "eval.runtime_experience",
+        "attempt": 1,
+        "passed": false,
+        "http_status": 429,
+        "duration_ms": 3669.0900810062885
+      },
+      {
+        "module": "eval.runtime_experience",
+        "attempt": 2,
+        "passed": false,
+        "http_status": 429,
+        "duration_ms": 518.4960626065731
+      },
+      {
+        "module": "eval.runtime_experience",
+        "attempt": 3,
+        "passed": false,
+        "http_status": 429,
+        "duration_ms": 456.94976672530174
+      },
+      {
+        "module": "eval.runtime_experience",
+        "attempt": 4,
+        "passed": false,
+        "http_status": 429,
+        "duration_ms": 612.5364974141121
+      },
+      {
+        "module": "eval.runtime_experience",
+        "attempt": 5,
+        "passed": false,
+        "http_status": 429,
+        "duration_ms": 491.02817848324776
+      },
+      {
+        "module": "eval.runtime_experience",
+        "attempt": 6,
+        "passed": false,
+        "http_status": 429,
+        "duration_ms": 521.5632356703281
+      }
+    ]
+  },
+  "native_call_lifecycle_concurrency": {
+    "source_file": "mail-second-concurrency.json",
+    "source_sha256": "7973dcc2635d08dacae5b4f3f6b347e4e0cce70412c96bfaf587ac79be8ca55c",
+    "scope": "Overlap of durable native call lifetimes, not provider HTTP in-flight trace. Setup validation probes and other clients are not recorded here. No provider concurrency limit inferred.",
+    "completed_native_calls": 30,
+    "states": {
+      "success": 22,
+      "error": 8
+    },
+    "peak_native_call_overlap": 2,
+    "roles": {
+      "fast": 4,
+      "agent": 26
+    },
+    "other_native_calls_at_error_start": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      0
+    ],
+    "limitation": "Native recorded call lifetimes are not simultaneous HTTP connections. Excludes setup probes and other clients; does not establish a provider concurrency limit or justify global Runtime serialization."
+  },
+  "historical_review_native_regression_contract": {
+    "scope": "Existing comprehensive TLS/CompositionRoot/EventMail test included in the source regression. Does not invoke a real model or claim notification quality.",
+    "repository_file": "tests/test_followup_mailbox.py",
+    "repository_file_sha256": "3d2a8d25fe8cd59b9923a744cff7782bcbdf31c1238132e4b679f88ef609cf55",
+    "node": "test_recent_junk_plan_survives_cancel_restart_and_native_commit",
+    "initial_review_mode": "interest",
+    "historical_messages_requested_review": 12,
+    "subsequent_live_messages_without_override": 1,
+    "window_persisted_before_fetch": true,
+    "cancel_and_restart": true,
+    "native_submission_commit_then_finish_failure_recovery": true,
+    "upstream_expunged_after_commit": true,
+    "no_duplicate_source_events": true
+  },
+  "final_workflow_status": {
+    "mail": {
+      "latest_attempt": "fifth",
+      "passed": false,
+      "planned_content_decisions": 2,
+      "content_decisions_started": 0,
+      "deadline_steps_started": 0,
+      "blocker": "configuration HTTP 429"
+    },
+    "background": {
+      "latest_attempt": "seventh",
+      "passed": false,
+      "planned": 6,
+      "passed_cases": 0,
+      "failed_cases": 0,
+      "not_run": 6,
+      "blocker": "configuration HTTP 429"
+    },
+    "scope": "Protocol/native regression and posthoc committed-tool evidence do not replace an end-to-end workflow pass. No claim of memory superiority, user notification precision or latency improvement."
+  }
+}

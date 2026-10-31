@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
@@ -11,6 +12,7 @@ import pytest
 from agent.plugin_composition import CompositionRoot, CredentialRef
 from eval.fixtures.mailbox import MailboxServer
 from plugins.content.plugin import check_text
+from plugins.eventmail.contract import REQUESTED_REVIEW
 from plugins.eventmail.plugin import _SourceServices, _StoreIO
 from plugins.eventmail.store import EventMailStore
 from plugins.followups.contract import (
@@ -137,6 +139,142 @@ async def test_cancel_drains_actual_imap_work_before_return(tmp_path):
         work.cancel()
         with pytest.raises(asyncio.CancelledError):
             await asyncio.wait_for(work, 5)
+
+
+@pytest.mark.asyncio
+async def test_recent_junk_plan_survives_cancel_restart_and_native_commit(tmp_path):
+    log = MessageLog(tmp_path / "ledger.db")
+    log.ensure_session("owner", SessionAttributes())
+    log.writer("owner", author="user", source="conversation", body_types=(Input,),
+               content={"text": check_text}).append(
+        "original", Input((ContentPart("text", "请检查 Junk 最近12封邮件里的重要事项，然后跟进新邮件。"),)))
+    native = EventMailStore(tmp_path / "events.db")
+    native.initialize()
+    sources = _SourceServices(native, _StoreIO(), lambda: None)
+
+    try:
+        async with MailboxServer(tmp_path / "tls") as server:
+            server.deliver("另一文件夹的重要信", "不得误读 INBOX")
+            old, _ = server.deliver("窗口外重要信", "不得扩大回查", folder="Junk")
+            junk = server.folders["Junk"]
+            junk.uidnext = 50  # UID gaps must not shrink the actual-message window.
+            for index in range(12):
+                server.deliver(f"历史信{index}", f"需核对的真实材料{index}", folder="Junk")
+            cfg = MailboxConfig.model_validate(
+                {**server.config(), "password": CredentialRef(("test", "version"))})
+            spec = WatchSpec(
+                watch_id="w_" + "c" * 32, session_id="owner", name="Junk检查",
+                purpose="检查已有重要事项", anchors=("original",), source_kind="mailbox",
+                mailbox_id=cfg.account_id, mail_folder="Junk", mail_initial_limit=12,
+                review_mode="interest",
+            )
+
+            async def read_mailbox(spec, cursor):
+                return await collect(cfg, server.password, spec, cursor)
+
+            @asynccontextmanager
+            async def opened():
+                root, mounted = CompositionRoot("mail-history-test"), []
+
+                async def mount(ctx):
+                    service = Service(
+                        ctx, log.owner("followups"), log.catalog(), sources,
+                        SimpleNamespace(recent=lambda **_: ()), None, lambda: None,
+                        mailbox=SimpleNamespace(
+                            available=lambda: [{"account_id": cfg.account_id}], read=read_mailbox),
+                    )
+                    await ctx.effect(lambda: service.http.aclose)
+                    mounted.append(service)
+
+                fiber = await root.mount(mount, name="followups")
+                assert fiber.error is None
+                try:
+                    yield mounted[0]
+                finally:
+                    await root.dispose()
+
+            # Existing watches remain future-only and never FETCH old bodies.
+            baseline = await collect(cfg, server.password,
+                                     spec.model_copy(update={"mail_initial_limit": 0}), {})
+            assert baseline.cursor["last_uid"] == 61 and not baseline.entries
+            assert not any(row["command"] == "UID FETCH" for row in server.commands)
+            with pytest.raises(MailboxError, match="只读操作"):
+                await collect(cfg, server.password, spec.model_copy(update={"mail_folder": "Spam"}), {})
+
+            async with opened() as service:
+                await service.create(spec)
+                server.hold.clear()
+                work = asyncio.create_task(service.poll(spec.watch_id))
+                await asyncio.wait_for(server.fetch_started.wait(), 5)
+                admitted = service.store.read("cursor:" + spec.watch_id).value
+                assert admitted["initialized"] and admitted["mail_initial_started"]
+                assert admitted["mailbox"]["last_uid"] == 61
+                assert list(admitted["mailbox"]["initial_uids"]) == list(range(50, 62))
+                assert not native.snapshot(datetime.now(UTC))["items"]
+                server.deliver("冻结窗口后的新信", "须在回查之后追上", folder="Junk")
+                work.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await asyncio.wait_for(work, 5)
+                assert service.store.read("cursor:" + spec.watch_id).value == admitted
+                server.hold.set()
+
+            # An unsubmitted intent also survives restart with its exact review
+            # choice and timestamp, rather than reverting to the future mode.
+            async with opened() as service:
+                source = await service._source(spec.watch_id)
+
+                async def not_submitted(*_):
+                    raise RuntimeError("crash before native mail commit")
+
+                source.submit = not_submitted
+                with pytest.raises(RuntimeError, match="before native mail commit"):
+                    await service.poll(spec.watch_id)
+                original_intent = service.store.read("intent:" + spec.watch_id).value
+                assert original_intent["review_policy"] == REQUESTED_REVIEW
+                assert not native.snapshot(datetime.now(UTC))["items"]
+
+            # Restart must retain the original window even after a new arrival.
+            async with opened() as service:
+                async def crash(*_):
+                    intended = service.store.read("intent:" + spec.watch_id).value
+                    assert intended == original_intent
+                    raise RuntimeError("crash after native mail commit")
+
+                service._finish = crash
+                with pytest.raises(RuntimeError, match="native mail commit"):
+                    await service.poll(spec.watch_id)
+                assert len(native.snapshot(datetime.now(UTC))["items"]) == 10
+                for uid in range(50, 60):
+                    del junk.messages[uid]
+
+            # Accepted native receipts recover even when those messages vanish.
+            async with opened() as service:
+                second = await service.poll(spec.watch_id)
+                assert second["scanned"] == 2 and second["pending"] == 1
+                assert len(native.snapshot(datetime.now(UTC))["items"]) == 12
+                assert (await service.poll(spec.watch_id))["scanned"] == 1
+                events = (await service.timeline(spec.watch_id))["events"]
+                assert len(events) == 13
+                assert all(event["payload"]["mail"]["folder"] == "Junk" for event in events)
+                for event in events:
+                    if max(event["payload"]["mail"]["uids"]) <= 61:
+                        assert event["payload"]["review_policy"] == REQUESTED_REVIEW
+                    else:
+                        assert "review_policy" not in event["payload"]
+                assert service._watch(spec.watch_id)["spec"]["review_mode"] == "interest"
+                assert (await service.poll(spec.watch_id))["submitted"] == 0
+                assert len((await service.timeline(spec.watch_id))["events"]) == 13
+                fetches = [row for row in server.commands if row["command"] == "UID FETCH"]
+                assert all(row["folder"] == "Junk" and row["uid"] != old and row["peek"]
+                           for row in fetches)
+                junk.uidvalidity += 1
+                assert (await service.poll(spec.watch_id))["error"] == "uidvalidity_changed"
+                await service.reset_mailbox(spec.watch_id)
+                assert (await service.poll(spec.watch_id))["status"] == "baseline"
+                assert fetches == [row for row in server.commands if row["command"] == "UID FETCH"]
+                assert len((await service.timeline(spec.watch_id))["events"]) == 13
+    finally:
+        log.close()
 
 
 @pytest.mark.asyncio

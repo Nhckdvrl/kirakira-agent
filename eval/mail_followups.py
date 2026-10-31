@@ -8,9 +8,13 @@ import argparse
 import asyncio
 import json
 import os
+import re
 import time
+from datetime import UTC, datetime, timedelta
+from email.utils import format_datetime
 from pathlib import Path
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from agent.plugin_composition.config_input import save_config, save_credential
 from eval.fixtures.mailbox import MailboxServer
@@ -24,6 +28,8 @@ from kirakira_agent.setup import (
 )
 from plugins.akasha.infrastructure.consumption import load_message_nodes
 from plugins.ledger.contract import MESSAGE_CATALOG
+from plugins.followups.contract import MailboxConfig, WatchSpec
+from plugins.followups.mailbox import MailboxError, collect
 from plugins.ui.contract import PLUGIN_UI
 
 FAMILIES = (
@@ -90,17 +96,261 @@ FAMILIES = (
 )
 
 
+async def initial_review_protocol(args):
+    """Exercise real TLS collection and saved cursors without a model or account."""
+    from agent.plugin_composition import CredentialRef
+
+    report = {
+        "implementation": source_identity(),
+        "scope": "Controlled local TLS IMAP and actual collector, no external email or model API. Serialized collector cursors are checked; this mode does not claim native Runtime restart or notification quality.",
+        "external_chat_calls": 0,
+        "cases": [],
+    }
+
+    def save():
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+
+    def record(name, **detail):
+        report["cases"].append({"name": name, "passed": True, "detail": detail})
+        save()
+
+    def checkpoint(batch):
+        # A JSON round trip models storage, without inventing a native restart.
+        return json.loads(
+            json.dumps(
+                {
+                    "initialized": True,
+                    "mail_initial_started": True,
+                    "mailbox": batch.cursor,
+                }
+            )
+        )
+
+    try:
+        async with MailboxServer(
+            args.workspace.parent / (args.workspace.name + "-tls")
+        ) as server:
+            date = datetime(2026, 10, 30, 9, 0, tzinfo=UTC)
+            server.deliver(
+                "澄湾申请 广告", "INBOX 中的广告，不能出现在 Junk 查询结果。", date=date
+            )
+            for index in range(3):
+                server.deliver(
+                    "澄湾申请 旧材料",
+                    f"窗口外旧信 {index}，截止2026-10-29 12:00。",
+                    folder="Junk",
+                    date=date,
+                )
+            junk = server.folders["Junk"]
+            del junk.messages[2]
+            junk.uidnext = 50  # SEARCH results, not numeric UID distance, define N.
+            for index in range(12):
+                body = "普通广告，无需回复，没有截止时间。"
+                if index == 0:
+                    body = "请在2026-11-03 18:00（UTC+8）前补交作品集，逾期关闭申请。"
+                server.deliver("澄湾申请 窗口资料", body, folder="Junk", date=date)
+            config = MailboxConfig.model_validate(
+                {**server.config(), "password": CredentialRef(("fixture", "version"))}
+            )
+            spec = WatchSpec(
+                watch_id="w_" + "a" * 32,
+                session_id="synthetic-owner",
+                name="澄湾申请",
+                purpose="仅提醒需要行动的申请邮件",
+                anchors=("synthetic-original",),
+                source_kind="mailbox",
+                mailbox_id=config.account_id,
+                mail_folder="Junk",
+                mail_subject="澄湾申请",
+            )
+            before = len(server.commands)
+            baseline = await collect(config, server.password, spec, {})
+            assert baseline.scanned == 0 and not baseline.entries
+            assert baseline.cursor["last_uid"] == 61
+            assert not any(
+                c["command"] == "UID FETCH" for c in server.commands[before:]
+            )
+            record(
+                "default_only_new_mail_does_not_read_existing_junk",
+                scanned=0,
+                existing_messages=14,
+                fetched=0,
+            )
+
+            opt_in = spec.model_copy(update={"mail_initial_limit": 12})
+            before = len(server.commands)
+            plan = await collect(config, server.password, opt_in, {})
+            assert plan.scanned == 0 and not plan.entries
+            assert plan.cursor["initial_uids"] == list(range(50, 62))
+            assert not any(
+                c["command"] == "UID FETCH" for c in server.commands[before:]
+            )
+            record(
+                "explicit_review_freezes_actual_uid_window_before_fetch",
+                limit=12,
+                planned_uids=plan.cursor["initial_uids"],
+                frozen_last_uid=plan.cursor["last_uid"],
+                fetched=0,
+            )
+
+            server.deliver(
+                "澄湾申请 新到材料",
+                "新到信：请在2026-11-04 12:00（UTC+8）前确认参加。",
+                folder="Junk",
+                date=date,
+            )
+            before = len(server.commands)
+            first = await collect(config, server.password, opt_in, checkpoint(plan))
+            assert first.scanned == 10 and first.pending == 2
+            first_uids = sorted(
+                {
+                    uid
+                    for entry in first.entries
+                    for uid in entry.payload["mail"]["uids"]
+                }
+            )
+            assert first_uids == list(range(50, 60))
+            assert all(e.payload["mail"]["folder"] == "Junk" for e in first.entries)
+            assert any(
+                "2026-11-03 18:00（UTC+8）" in e.payload["content"]
+                for e in first.entries
+            )
+            record(
+                "initial_batch_is_bounded_and_preserves_source_deadline",
+                scanned=first.scanned,
+                pending=first.pending,
+                source_uids=first_uids,
+                exact_deadline_present=True,
+            )
+
+            second = await collect(config, server.password, opt_in, checkpoint(first))
+            second_uids = sorted(
+                {
+                    uid
+                    for entry in second.entries
+                    for uid in entry.payload["mail"]["uids"]
+                }
+            )
+            assert second.scanned == 2 and second_uids == [60, 61]
+            assert not second.cursor.get("initial_uids")
+            record(
+                "serialized_cursor_drains_frozen_window_before_new_mail",
+                scanned=second.scanned,
+                source_uids=second_uids,
+            )
+
+            live = await collect(config, server.password, opt_in, checkpoint(second))
+            assert live.scanned == 1
+            assert [uid for e in live.entries for uid in e.payload["mail"]["uids"]] == [
+                62
+            ]
+            assert "2026-11-04 12:00（UTC+8）" in live.entries[0].payload["content"]
+            again = await collect(config, server.password, opt_in, checkpoint(live))
+            assert not again.entries and again.scanned == 0
+            record(
+                "new_mail_arriving_during_initial_review_is_later_collected_once",
+                scanned=live.scanned,
+                new_uid=62,
+                repeated_poll_entries=len(again.entries),
+            )
+
+            duplicate_uid = junk.uidnext
+            junk.messages[duplicate_uid] = junk.messages[62]
+            junk.uidnext += 1
+            duplicate = await collect(config, server.password, opt_in, checkpoint(live))
+            assert duplicate.duplicates == 1 and not duplicate.entries
+            record(
+                "same_message_at_a_new_uid_is_not_resubmitted",
+                duplicates=duplicate.duplicates,
+                accepted_entries=0,
+            )
+
+            try:
+                await collect(
+                    config,
+                    server.password,
+                    spec.model_copy(update={"mail_folder": "Missing"}),
+                    {},
+                )
+            except MailboxError as error:
+                assert error.code in {"protocol_error", "imap_failed"}
+            else:
+                raise AssertionError("missing folder silently selected another mailbox")
+            record("missing_folder_never_falls_back_to_inbox", fallback=False)
+
+            junk.uidvalidity += 1
+            try:
+                await collect(config, server.password, opt_in, checkpoint(duplicate))
+            except MailboxError as error:
+                assert error.code == "uidvalidity_changed"
+            else:
+                raise AssertionError("changed UID namespace was accepted")
+            record(
+                "changed_uid_epoch_stops_collection",
+                expected_code="uidvalidity_changed",
+            )
+
+            allowed = {"CAPABILITY", "LOGIN", "EXAMINE", "UID SEARCH", "UID FETCH"}
+            assert all(c["command"] in allowed for c in server.commands)
+            fetches = [c for c in server.commands if c["command"] == "UID FETCH"]
+            assert fetches and all(c["peek"] and c["folder"] == "Junk" for c in fetches)
+            assert all(c["uid"] >= 50 for c in fetches)
+            report["imap_commands"] = server.commands
+            record(
+                "all_reads_are_examine_and_peek_with_folder_isolation",
+                fetch_commands=len(fetches),
+                store_commands=0,
+                window_exclusions_verified=True,
+            )
+    except Exception as error:  # noqa: BLE001 - preserve the first failed protocol check
+        report["cases"].append(
+            {
+                "name": "protocol_failure",
+                "passed": False,
+                "error_type": type(error).__name__,
+                "error": str(error)[:1000],
+            }
+        )
+    report["passed"] = all(c["passed"] for c in report["cases"])
+    save()
+    return report["passed"]
+
+
 async def evaluate(args):
+    started_at = datetime.now(UTC).replace(microsecond=0)
+    local_started = started_at.astimezone(ZoneInfo("Asia/Shanghai"))
+    deadline = (local_started + timedelta(days=3)).replace(
+        hour=18, minute=0, second=0, microsecond=0
+    )
+    reminder_at = deadline - timedelta(hours=24)
+    old_deadline = (local_started + timedelta(days=1)).replace(
+        hour=10, minute=0, second=0, microsecond=0
+    )
     model = EvaluationModel.read(args.model_config)
     initialize_workspace(args.workspace, profile="web")
     report = {
         "implementation": source_identity(),
+        "started_at": started_at.isoformat(),
         "model_config": model.description(),
         "scope": "controlled paired history intervention and functional acceptance; not population quality",
         "families": FAMILIES,
         "cases": [],
         "observations": [],
+        "passed": False,
     }
+    if args.initial_review_only:
+        report["scope"] = (
+            "Controlled existing-mail review with actual local TLS folders, native Runtime, model decisions and confirmed local notification receipts. Two planned independent mail decisions; not private-email access, spam classification accuracy or population notification quality."
+        )
+        report["planned_mail_decisions"] = 2
+        report["planned_deadline_steps"] = [
+            "owner_confirmation_registration",
+            "restart_preservation",
+        ]
+        report["initial_review_observations"] = []
+        report["natural_mail_requests"] = []
+        report["tracked_natural_watch_ids"] = []
 
     def save():
         args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -118,6 +368,9 @@ async def evaluate(args):
                 "name": name,
                 "passed": False,
                 "error": type(error).__name__ + ": " + str(error)[:1500],
+                "failure_http_statuses": sorted(
+                    {int(v) for v in re.findall(r"\bHTTP\s*([1-5]\d{2})\b", str(error))}
+                ),
             }
         row["seconds"] = round(time.monotonic() - start, 3)
         report["cases"].append(row)
@@ -163,7 +416,37 @@ async def evaluate(args):
                 row["id"]: row for row in (await slots.catalog())["items"]
             }
 
-            async def create_watch(topic, profile=None, purpose=None):
+            async def submit_effect_request(session, identity, text, *, metadata=None):
+                """On observer timeout, pause and physically drain only its parent turn."""
+                try:
+                    await submit(core, session, identity, text, metadata=metadata)
+                    return None
+                except (
+                    Exception
+                ) as error:  # effects are inspected after the parent stops
+                    if isinstance(error, TimeoutError):
+                        from plugins.channels.contract import (
+                            CHANNEL_INPUT_V2,
+                            ChannelInboundMessage,
+                        )
+
+                        await ctx.require(CHANNEL_INPUT_V2)(
+                            session,
+                            identity + ":evaluation-timeout-stop",
+                            ChannelInboundMessage(
+                                "akashic",
+                                "user",
+                                session.removeprefix("akashic:"),
+                                "/stop",
+                                datetime.now(UTC),
+                                {},
+                            ),
+                        )
+                    return error
+
+            async def create_watch(
+                topic, profile=None, purpose=None, *, folder="INBOX", initial_limit=0
+            ):
                 project = "p_" + uuid4().hex
                 await slots.query(
                     "projects",
@@ -204,11 +487,181 @@ async def evaluate(args):
                     )
                 else:
                     profile_id = None
+                if args.initial_review_only:
+                    from plugins.ledger.contract import (
+                        BINDINGS,
+                        Input,
+                        Output,
+                        ToolCall,
+                        ToolResult,
+                    )
+                    from plugins.tools.contract import TOOLS
+
+                    owner_request = (
+                        f"请帮我持续留意{topic}的邮件，使用我已经连接的邮箱，只检查{folder}文件夹。"
+                        + (
+                            f"先回查最近{initial_limit}封已有邮件，再继续监听新邮件。"
+                            if initial_limit
+                            else "只监听新邮件，不回查已有邮件。"
+                        )
+                        + f"每小时检查一次。我的关注规则是：{purpose}"
+                    )
+                    trace = {
+                        "folder": folder,
+                        "initial_limit": initial_limit,
+                        "reply_completed": False,
+                        "watch_committed": False,
+                        "source_input_verified": False,
+                        "successful_create_tool_results": 0,
+                        "failure_http_statuses": [],
+                    }
+                    report["natural_mail_requests"].append(trace)
+                    reply_error = await submit_effect_request(
+                        session, anchor, owner_request, metadata=metadata
+                    )
+                    trace["reply_completed"] = reply_error is None
+                    if reply_error is not None:
+                        trace["failure_type"] = type(reply_error).__name__
+                        trace["failure_http_statuses"] = sorted(
+                            {
+                                int(v)
+                                for v in re.findall(
+                                    r"\bHTTP\s*([1-5]\d{2})\b", str(reply_error)
+                                )
+                            }
+                        )
+                        trace["timed_out_parent_paused_and_drained"] = isinstance(
+                            reply_error, TimeoutError
+                        )
+                    rows = await catalog.reader(session).read_async(
+                        lambda reader: reader.snapshot()
+                    )
+                    by_id = {m.message_id: m for m in rows}
+                    original = by_id.get(anchor)
+                    assert (
+                        original is not None
+                        and isinstance(original.body, Input)
+                        and original.author == "user"
+                        and original.source == "conversation"
+                    )
+                    actual_request = "\n".join(
+                        str(p.value) for p in original.body.parts if p.kind == "text"
+                    )
+                    assert actual_request == owner_request
+                    trace["source_input_verified"] = True
+                    created = []
+                    for message in rows:
+                        result = message.body
+                        if (
+                            message.source != "conversation"
+                            or not isinstance(result, ToolResult)
+                            or result.outcome != "success"
+                        ):
+                            continue
+                        caller = by_id.get(result.call_ref.message_id)
+                        if (
+                            caller is None
+                            or caller.seq <= original.seq
+                            or caller.source != "conversation"
+                            or not isinstance(caller.body, Output)
+                        ):
+                            continue
+                        if any(
+                            isinstance(m.body, Input)
+                            and m.author == "user"
+                            and m.source == "conversation"
+                            and original.seq < m.seq < caller.seq
+                            for m in rows
+                        ):
+                            continue
+                        call = caller.body.parts[result.call_ref.part_index]
+                        if not isinstance(call, ToolCall):
+                            continue
+                        tool = (
+                            ctx.require(BINDINGS)
+                            .describe(call.binding_id, TOOLS)
+                            .get("tool", {})
+                        )
+                        if (
+                            tool.get("owner") != "followups"
+                            or tool.get("name") != "create_followup"
+                        ):
+                            continue
+                        receipt = next(
+                            json.loads(p.value)
+                            for p in result.parts
+                            if p.kind == "text"
+                        )
+                        assert receipt["status"] == "created"
+                        identity = receipt["watch"]["watch_id"]
+                        created.append(identity)
+                        if identity not in report["tracked_natural_watch_ids"]:
+                            report["tracked_natural_watch_ids"].append(identity)
+                    trace["successful_create_tool_results"] = len(created)
+                    # Draining may commit a domain receipt even if result recording fails.
+                    overview = await rpc(
+                        core, "followups/overview", {"session_id": session}
+                    )
+                    committed = [
+                        w["spec"]["watch_id"]
+                        for w in overview["watches"]
+                        if anchor in w["spec"]["anchors"]
+                    ]
+                    for identity in committed:
+                        if identity not in report["tracked_natural_watch_ids"]:
+                            report["tracked_natural_watch_ids"].append(identity)
+                    trace["watch_committed"] = bool(committed)
+                    trace["committed_watches_for_input"] = len(committed)
+                    if not created and reply_error is not None:
+                        raise reply_error
+                    assert len(created) == 1, (
+                        "natural request must actually create exactly one watch; no RPC fallback"
+                    )
+                    identity = created[0]
+                    value = await rpc(
+                        core, "followups/timeline", {"watch_id": identity}
+                    )
+                    spec = value["watch"]["spec"]
+                    assert spec["session_id"] == session and spec["anchors"] == [anchor]
+                    assert (
+                        spec["source_kind"] == "mailbox"
+                        and spec["mailbox_id"] == server.config()["account_id"]
+                    )
+                    assert (
+                        spec["mail_folder"] == folder
+                        and spec["mail_initial_limit"] == initial_limit
+                    )
+                    assert (
+                        spec["purpose"].strip() in actual_request
+                        and purpose in spec["purpose"]
+                    )
+                    trace.update(
+                        same_input_tool_receipt=True,
+                        source_folder_limit_and_owner_rule_verified=True,
+                        observed_review_mode=spec["review_mode"],
+                    )
+                    initial_poll = await rpc(
+                        core, "followups/poll", {"watch_id": identity}
+                    )
+                    if not initial_limit:
+                        assert not (
+                            await rpc(
+                                core, "followups/timeline", {"watch_id": identity}
+                            )
+                        )["events"]
+                    return {
+                        "watch_id": identity,
+                        "profile_message": None,
+                        "session": session,
+                        "project": project,
+                        "initial_poll": initial_poll,
+                        "natural_request": trace,
+                    }
                 await submit(
                     core,
                     session,
                     anchor,
-                    f"我想持续跟进{topic}的邮件。请只回复已记下。",
+                    f"这条只记录历史背景：我在了解{topic}。现在不创建邮件关注、不安排通知，请只回复已记下。",
                     metadata=metadata,
                 )
                 identity = "w_" + uuid4().hex
@@ -221,27 +674,38 @@ async def evaluate(args):
                     "anchors": [anchor],
                     "source_kind": "mailbox",
                     "mailbox_id": server.config()["account_id"],
+                    "mail_folder": folder,
+                    "mail_initial_limit": initial_limit,
                     "mail_sender": "updates@example.test",
                     "mail_subject": topic,
                     "interval_seconds": 3600,
                 }
                 await rpc(core, "followups/create", spec)
-                await rpc(core, "followups/poll", {"watch_id": identity})
+                initial_poll = await rpc(core, "followups/poll", {"watch_id": identity})
                 timeline = await rpc(core, "followups/timeline", {"watch_id": identity})
-                assert not timeline["events"]
+                if not initial_limit:
+                    assert not timeline["events"]
                 return {
                     "watch_id": identity,
                     "profile_message": profile_id,
                     "session": session,
                     "project": project,
+                    "initial_poll": initial_poll,
                 }
 
             async def outcome(watch, poll=None):
                 poll = poll or await rpc(
                     core, "followups/poll", {"watch_id": watch["watch_id"]}
                 )
-                assert poll["submitted"] == 1, poll
-                reference = poll["refs"][0]
+                if poll["submitted"] == 1:
+                    reference = poll["refs"][0]
+                else:
+                    # The scheduler may have won the same locked first poll.
+                    timeline = await rpc(
+                        core, "followups/timeline", {"watch_id": watch["watch_id"]}
+                    )
+                    assert len(timeline["events"]) == 1, poll
+                    reference = timeline["events"][0]
                 async with asyncio.timeout(240):
                     while True:
                         value = await rpc(
@@ -253,22 +717,100 @@ async def evaluate(args):
                             if e["item_id"] == reference["item_id"]
                             and e["revision"] == reference["revision"]
                         )
-                        decision = next(
+                        latest = next(
                             (
-                                row
-                                for row in reversed(event["decisions"])
-                                if row["tool"] in {"share_content", "skip_content"}
+                                h
+                                for h in reversed(event["history"])
+                                if h["action"] == "selected"
                             ),
                             None,
                         )
-                        if decision and (
-                            decision["tool"] == "skip_content" or event["deliveries"]
-                        ):
-                            return {
-                                "decision": decision["tool"],
-                                "event": event,
-                                "poll": poll,
-                            }
+                        accepted = (
+                            latest.get("detail", {}).get("accepted_turn")
+                            if latest
+                            else None
+                        )
+                        if isinstance(accepted, dict):
+                            from plugins.eventmail.contract import EVENTMAIL_WAKE_V2
+                            from plugins.ledger.contract import Control, Input
+                            from plugins.wake.messages import decision, finished
+                            from plugins.wake.request import read_phase, read_request
+                            from plugins.wake.tools import Share, Skip
+
+                            def current_phase(reader):
+                                rows = reader.snapshot()
+                                request = read_request(rows)
+                                assert (
+                                    request.input_id == accepted["turn_id"]
+                                    and request.session_id == accepted["session_id"]
+                                )
+                                if not any(
+                                    isinstance(m.body, Input)
+                                    and m.source == "wake"
+                                    and any(
+                                        p.kind == "wake.phase" for p in m.body.parts
+                                    )
+                                    for m in rows
+                                ):
+                                    return request, None, None, None
+                                _, phase = read_phase(rows, request)
+                                ending = finished(reader, request, phase.stage)
+                                value = (
+                                    decision(reader, request, phase.stage)
+                                    if ending is not None
+                                    else None
+                                )
+                                return request, phase, ending, value
+
+                            request, phase, ending, value = await catalog.reader(
+                                accepted["session_id"]
+                            ).read_async(current_phase)
+                            if (
+                                ending is not None
+                                and isinstance(ending.body, Control)
+                                and ending.body.action == "failure"
+                            ):
+                                statuses = sorted(
+                                    {
+                                        int(v)
+                                        for v in re.findall(
+                                            r"\bHTTP\s*([1-5]\d{2})\b",
+                                            ending.body.reason or "",
+                                        )
+                                    }
+                                )
+                                raise RuntimeError(
+                                    "native mail investigation failed"
+                                    + "".join(f" HTTP {status}" for status in statuses)
+                                )
+                            if (
+                                phase is not None
+                                and phase.stage == "investigate"
+                                and isinstance(value, (Share, Skip))
+                            ):
+                                settlement = await ctx.require(
+                                    EVENTMAIL_WAKE_V2
+                                ).selection(request.accepted)
+                                status = (
+                                    settlement.get("status") if settlement else None
+                                )
+                                if (
+                                    isinstance(value, Skip) and status == "released"
+                                ) or (
+                                    isinstance(value, Share)
+                                    and status in {"settled", "delivered"}
+                                    and event["deliveries"]
+                                ):
+                                    return {
+                                        "decision": "skip_content"
+                                        if isinstance(value, Skip)
+                                        else "share_content",
+                                        "event": event,
+                                        "poll": poll,
+                                        "accepted_turn_verified": True,
+                                        "phase_complete": True,
+                                        "domain_status": status,
+                                    }
                         await asyncio.sleep(0.2)
 
             async def pause(watch):
@@ -278,7 +820,355 @@ async def evaluate(args):
                     {"watch_id": watch["watch_id"], "enabled": False},
                 )
 
-            if not args.functional_only:
+            async def pause_natural_watches():
+                for identity in report.get("tracked_natural_watch_ids", []):
+                    await pause({"watch_id": identity})
+
+            if args.initial_review_only:
+                from core.common.file_io import run_file_io
+                from plugins.ledger.contract import (
+                    BINDINGS,
+                    Output,
+                    ToolCall,
+                    ToolResult,
+                )
+                from plugins.scheduler.contract import SCHEDULER_INSPECTION
+                from plugins.scheduler.store import JobStore
+                from plugins.tools.contract import TOOLS, durable_call_key
+
+                schedules = JobStore(args.workspace / "schedules.json")
+                schedule_view = ctx.require(SCHEDULER_INSPECTION)
+                assert not (await run_file_io(schedules.read)).jobs
+                date = started_at
+                server.deliver(
+                    "澄湾申请 已过期旧安排",
+                    f"窗口外旧安排：请在{old_deadline:%Y-%m-%d %H:%M}前回复，随后邮件会更正。",
+                    folder="Junk",
+                    date=date,
+                )
+                important_uid, _ = server.deliver(
+                    "澄湾申请 补交材料",
+                    f"你的申请还缺作品集。请在{deadline:%Y-%m-%d %H:%M}（北京时间，UTC+8）前补交附件，逾期将关闭申请。",
+                    folder="Junk",
+                    date=date,
+                )
+                advert_uid, _ = server.deliver(
+                    "澄湾申请 推广周报",
+                    "这是面向所有订阅者的普通推广周报，与个人申请无关。无需决定、补材料、回复或操作，没有截止日期。",
+                    date=date,
+                )
+                report["initial_review_fixture"] = {
+                    "important_folder": "Junk",
+                    "important_uid": important_uid,
+                    "advert_folder": "INBOX",
+                    "advert_uid": advert_uid,
+                    "default_limit": 0,
+                    "explicit_limit": 1,
+                    "source_date": date.isoformat(),
+                    "source_date_header": format_datetime(date),
+                    "expected_deadline": deadline.isoformat(),
+                    "expected_reminder": reminder_at.isoformat(),
+                    "expected_reminder_utc": reminder_at.astimezone(UTC).isoformat(),
+                    "expected_timezone": "Asia/Shanghai",
+                    "window_excluded_old_deadline": old_deadline.isoformat(),
+                }
+                purpose = "只提醒需要我决定、补交材料或明确截止时间的个人申请邮件；普通推广不提醒。核对原文的日期、时区和动作，不采用窗口外旧安排。"
+
+                async def default_history():
+                    default = await create_watch(
+                        "澄湾申请", purpose=purpose, folder="Junk"
+                    )
+                    try:
+                        value = await rpc(
+                            core,
+                            "followups/timeline",
+                            {"watch_id": default["watch_id"]},
+                        )
+                        assert not value["events"]
+                        return {
+                            "submitted_events": 0,
+                            "initial_limit": 0,
+                            "existing_important_mail_not_read": True,
+                        }
+                    finally:
+                        await pause(default)
+
+                await record("default_watch_does_not_read_old_mail", default_history)
+                await pause_natural_watches()
+                report["initial_review_watches"] = []
+                for label, folder, expected, uid in (
+                    ("existing_junk_action", "Junk", "share_content", important_uid),
+                    ("existing_inbox_advert", "INBOX", "skip_content", advert_uid),
+                ):
+
+                    async def decision_trial(
+                        label=label, folder=folder, expected=expected, uid=uid
+                    ):
+                        observation = {
+                            "case": label,
+                            "expected": expected,
+                            "folder": folder,
+                            "source_uid": uid,
+                            "status": "started",
+                        }
+                        report["initial_review_observations"].append(observation)
+                        watch = None
+                        try:
+                            watch = await create_watch(
+                                "澄湾申请",
+                                purpose=purpose,
+                                folder=folder,
+                                initial_limit=1,
+                            )
+                            observation["watch_review_mode"] = watch["natural_request"][
+                                "observed_review_mode"
+                            ]
+                            result = await outcome(watch, watch["initial_poll"])
+                            event = result["event"]
+                            observation.update(
+                                decision=result["decision"],
+                                event=event,
+                                source_review_policy=event["payload"].get(
+                                    "review_policy"
+                                ),
+                                accepted_turn_verified=result["accepted_turn_verified"],
+                                phase_complete=result["phase_complete"],
+                                domain_status=result["domain_status"],
+                            )
+                            assert event["payload"]["mail"]["folder"] == folder
+                            assert event["payload"]["mail"]["uids"] == [uid]
+                            assert result["decision"] == expected, result["decision"]
+                            delivered = "\n".join(
+                                row["text"] for row in event["deliveries"]
+                            )
+                            if expected == "share_content":
+                                assert len(event["deliveries"]) == 1
+                                assert re.search(
+                                    rf"(?<!\d)(?:{deadline.year}[-年/.])?0?{deadline.month}[-月/.]0?{deadline.day}(?!\d)",
+                                    delivered,
+                                )
+                                assert re.search(r"18[：:]00|18点|18时", delivered)
+                                assert re.search(
+                                    r"北京时间|UTC\+0?8|东八区|中国标准时间", delivered
+                                )
+                                assert (
+                                    "作品集" in delivered
+                                    and old_deadline.strftime("%Y-%m-%d")
+                                    not in delivered
+                                )
+                            else:
+                                assert not event["deliveries"]
+                            before = await rpc(
+                                core,
+                                "followups/timeline",
+                                {"watch_id": watch["watch_id"]},
+                            )
+                            repeated = await rpc(
+                                core, "followups/poll", {"watch_id": watch["watch_id"]}
+                            )
+                            after = await rpc(
+                                core,
+                                "followups/timeline",
+                                {"watch_id": watch["watch_id"]},
+                            )
+                            assert (
+                                repeated["submitted"] == 0
+                                and after["events"] == before["events"]
+                            )
+                            observation.update(
+                                status="completed",
+                                decision=result["decision"],
+                                confirmed_deliveries=len(event["deliveries"]),
+                                exact_deadline_preserved=expected == "share_content",
+                                duplicate_poll_submitted=0,
+                                event=event,
+                            )
+                            return {
+                                key: observation[key]
+                                for key in (
+                                    "decision",
+                                    "confirmed_deliveries",
+                                    "duplicate_poll_submitted",
+                                )
+                            }
+                        except Exception as error:
+                            observation.update(
+                                status="failed",
+                                failure_type=type(error).__name__,
+                                failure_http_statuses=sorted(
+                                    {
+                                        int(v)
+                                        for v in re.findall(
+                                            r"\bHTTP\s*([1-5]\d{2})\b", str(error)
+                                        )
+                                    }
+                                ),
+                            )
+                            raise
+                        finally:
+                            if watch is not None:
+                                await pause(watch)
+                                report["initial_review_watches"].append(
+                                    await rpc(
+                                        core,
+                                        "followups/timeline",
+                                        {"watch_id": watch["watch_id"]},
+                                    )
+                                )
+
+                    await record(label, decision_trial)
+                    await pause_natural_watches()
+
+                report["initial_review_watches"] = [
+                    await rpc(core, "followups/timeline", {"watch_id": identity})
+                    for identity in report["tracked_natural_watch_ids"]
+                ]
+
+                async def explicit_deadline_confirmation():
+                    before = await run_file_io(schedules.read)
+                    assert not before.jobs and not before.fires
+                    report["no_schedule_before_owner_confirmation"] = True
+                    important = next(
+                        (
+                            o
+                            for o in report["initial_review_observations"]
+                            if o["case"] == "existing_junk_action"
+                        ),
+                        None,
+                    )
+                    if important is None or important["status"] != "completed":
+                        raise RuntimeError(
+                            "important mail notification did not complete; deadline confirmation was not attempted"
+                        )
+                    confirmation_text = "好，就刚才那封澄湾申请补交材料邮件，截止前24小时提醒我一次，按上海时区。到时直接发这句话：\n澄湾申请：补交作品集。\n只登记一条，不要替我发邮件。"
+                    reply_error = await submit_effect_request(
+                        "akashic:mail-inbox",
+                        "mail-deadline-confirmation",
+                        confirmation_text,
+                    )
+                    report["deadline_confirmation"] = {
+                        "attempted": True,
+                        "reply_completed": reply_error is None,
+                        "failure_http_statuses": sorted(
+                            {
+                                int(v)
+                                for v in re.findall(
+                                    r"\bHTTP\s*([1-5]\d{2})\b", str(reply_error)
+                                )
+                            }
+                        )
+                        if reply_error
+                        else [],
+                    }
+                    state = await run_file_io(schedules.read)
+                    report["deadline_confirmation"]["persisted_job_count"] = len(
+                        state.jobs
+                    )
+                    if not state.jobs and reply_error is not None:
+                        raise reply_error
+                    assert len(state.jobs) == 1 and not state.fires
+                    job = next(iter(state.jobs.values()))
+                    assert job.action == "notify" and job.trigger == "at"
+                    assert job.fire_at.astimezone(UTC) == reminder_at.astimezone(UTC)
+                    assert job.timezone == "Asia/Shanghai"
+                    assert job.session_id == "akashic:mail-inbox"
+                    assert job.text == "澄湾申请：补交作品集。"
+                    assert job.enabled and job.run_count == 0
+                    assert len(await schedule_view.list_jobs()) == 1
+                    assert await schedule_view.get_job(job.id) is not None
+                    messages = await catalog.reader("akashic:mail-inbox").read_async(
+                        lambda reader: reader.snapshot()
+                    )
+                    by_id = {m.message_id: m for m in messages}
+                    from plugins.ledger.contract import Input
+
+                    original = by_id.get("mail-deadline-confirmation")
+                    assert (
+                        original is not None
+                        and isinstance(original.body, Input)
+                        and original.source == "conversation"
+                        and original.author == "user"
+                    )
+                    assert (
+                        "\n".join(
+                            str(p.value)
+                            for p in original.body.parts
+                            if p.kind == "text"
+                        )
+                        == confirmation_text
+                    )
+                    linked = []
+                    for message in messages:
+                        result = message.body
+                        if (
+                            not isinstance(result, ToolResult)
+                            or result.outcome != "success"
+                        ):
+                            continue
+                        caller = by_id.get(result.call_ref.message_id)
+                        if (
+                            caller is None
+                            or caller.source != "conversation"
+                            or caller.seq <= original.seq
+                            or not isinstance(caller.body, Output)
+                        ):
+                            continue
+                        if any(
+                            isinstance(m.body, Input)
+                            and m.author == "user"
+                            and m.source == "conversation"
+                            and original.seq < m.seq < caller.seq
+                            for m in messages
+                        ):
+                            continue
+                        call = caller.body.parts[result.call_ref.part_index]
+                        if not isinstance(call, ToolCall):
+                            continue
+                        tool = (
+                            ctx.require(BINDINGS)
+                            .describe(call.binding_id, TOOLS)
+                            .get("tool", {})
+                        )
+                        if (
+                            tool.get("owner") != "scheduler"
+                            or tool.get("name") != "schedule"
+                        ):
+                            continue
+                        key = durable_call_key(result.call_ref)
+                        operation = state.operations.get(key)
+                        assert (
+                            operation is not None
+                            and operation.kind == "schedule"
+                            and operation.outcome == "success"
+                        )
+                        assert operation.job_ids == (job.id,)
+                        linked.append(key)
+                    assert len(linked) == 1
+                    report["deadline_reminder"] = {
+                        "job_id": job.id,
+                        "operation_key": linked[0],
+                        "job": schedules.encode_job(job),
+                        "confirmed_tool_result": True,
+                        "registered_jobs": 1,
+                        "future_delivery_tested": False,
+                    }
+                    if reply_error is not None:
+                        raise reply_error
+                    return {
+                        "registered_jobs": 1,
+                        "exact_due_utc": job.fire_at.astimezone(UTC).isoformat(),
+                        "timezone": job.timezone,
+                        "confirmed_tool_result": True,
+                        "automatic_jobs_before_confirmation": 0,
+                        "fire_count": 0,
+                    }
+
+                await record(
+                    "important_mail_owner_confirmation_registers_exact_reminder",
+                    explicit_deadline_confirmation,
+                )
+
+            if not args.functional_only and not args.initial_review_only:
                 for family in FAMILIES[args.family_start : args.family_end]:
                     for history in ("present", "withheld"):
                         for index, profile in enumerate(family["profiles"]):
@@ -460,21 +1350,51 @@ async def evaluate(args):
                     # Additional controlled content, not a held-out public
                     # benchmark. Mix useful actions with non-actionable topics.
                     attention_cases = (
-                        ("雨笛招募 安全知识", "公开科普：识别陌生邮件中的冒充指令。这不是账户异常通知，无需回复，也没有待办或期限。", "skip_content"),
-                        ("雨笛招募 补充材料", "审核还缺你的作品集，请在后天17:00前回复附件，逾期将无法安排下一轮。", "share_content"),
-                        ("雨笛招募 偏好话题", "这是一则自动发送的讨论话题：招聘周报可以有哪些形式。没有要求你设置任何选项，不需要回复，没有截止时间。", "skip_content"),
-                        ("雨笛招募 参与确认", "目前需要你决定是否继续参与本轮招募，请明天中午12:00前回复确认；无需重复发送已经提交的材料。", "share_content"),
+                        (
+                            "雨笛招募 安全知识",
+                            "公开科普：识别陌生邮件中的冒充指令。这不是账户异常通知，无需回复，也没有待办或期限。",
+                            "skip_content",
+                        ),
+                        (
+                            "雨笛招募 补充材料",
+                            "审核还缺你的作品集，请在后天17:00前回复附件，逾期将无法安排下一轮。",
+                            "share_content",
+                        ),
+                        (
+                            "雨笛招募 偏好话题",
+                            "这是一则自动发送的讨论话题：招聘周报可以有哪些形式。没有要求你设置任何选项，不需要回复，没有截止时间。",
+                            "skip_content",
+                        ),
+                        (
+                            "雨笛招募 参与确认",
+                            "目前需要你决定是否继续参与本轮招募，请明天中午12:00前回复确认；无需重复发送已经提交的材料。",
+                            "share_content",
+                        ),
                     )
                     report["attention_cases"] = []
                     for index, (subject, body, expected) in enumerate(attention_cases):
-                        async def check_attention(subject=subject, body=body, expected=expected):
+
+                        async def check_attention(
+                            subject=subject, body=body, expected=expected
+                        ):
                             server.deliver(subject, body)
                             result = await outcome(watch)
-                            report["attention_cases"].append({"subject": subject, "body": body,
-                                                               "expected": expected, "result": result})
+                            report["attention_cases"].append(
+                                {
+                                    "subject": subject,
+                                    "body": body,
+                                    "expected": expected,
+                                    "result": result,
+                                }
+                            )
                             assert result["decision"] == expected, result["decision"]
-                            return {"decision": result["decision"], "expected": expected,
-                                    "confirmed_deliveries": len(result["event"]["deliveries"])}
+                            return {
+                                "decision": result["decision"],
+                                "expected": expected,
+                                "confirmed_deliveries": len(
+                                    result["event"]["deliveries"]
+                                ),
+                            }
 
                         await record(f"attention_scope_{index + 1}", check_attention)
 
@@ -544,9 +1464,115 @@ async def evaluate(args):
                 await record(
                     "restart_preserves_corrected_rule_and_delivery_evidence", restart
                 )
+        if args.initial_review_only and report.get("initial_review_watches"):
+            calls_before = metrics(args.workspace, model)["remote_chat_calls"]
+            fetches_before = sum(c["command"] == "UID FETCH" for c in server.commands)
+            report["restart_baseline"] = {
+                "scope": "Before entering the restarted Runtime, including startup recovery",
+                "remote_chat_calls": calls_before,
+                "fetch_commands": fetches_before,
+            }
+            async with runtime(args.workspace) as core:
+
+                async def restart_initial_review():
+                    for before in report["initial_review_watches"]:
+                        identity = before["watch"]["spec"]["watch_id"]
+                        current = await rpc(
+                            core, "followups/timeline", {"watch_id": identity}
+                        )
+                        assert current["events"] == before["events"]
+                        await rpc(
+                            core,
+                            "followups/set-enabled",
+                            {"watch_id": identity, "enabled": True},
+                        )
+                        try:
+                            poll = await rpc(
+                                core, "followups/poll", {"watch_id": identity}
+                            )
+                            current = await rpc(
+                                core, "followups/timeline", {"watch_id": identity}
+                            )
+                            assert (
+                                poll["submitted"] == 0
+                                and current["events"] == before["events"]
+                            )
+                        finally:
+                            await rpc(
+                                core,
+                                "followups/set-enabled",
+                                {"watch_id": identity, "enabled": False},
+                            )
+                    assert (
+                        metrics(args.workspace, model)["remote_chat_calls"]
+                        == calls_before
+                    )
+                    assert (
+                        sum(c["command"] == "UID FETCH" for c in server.commands)
+                        == fetches_before
+                    )
+                    return {
+                        "watches": len(report["initial_review_watches"]),
+                        "new_submissions": 0,
+                        "new_model_calls": 0,
+                        "new_fetches": 0,
+                        "prior_delivery_receipts_unchanged": True,
+                    }
+
+                await record(
+                    "native_restart_does_not_repeat_initial_review_or_notification",
+                    restart_initial_review,
+                )
+
+                async def restart_deadline_reminder():
+                    original = report.get("deadline_reminder")
+                    if original is None:
+                        raise RuntimeError(
+                            "deadline registration did not complete; restoration cannot be verified"
+                        )
+                    calls_before = metrics(args.workspace, model)["remote_chat_calls"]
+                    state = await run_file_io(schedules.read)
+                    assert len(state.jobs) == 1 and not state.fires
+                    job = state.jobs[original["job_id"]]
+                    assert schedules.encode_job(job) == original["job"]
+                    operation = state.operations[original["operation_key"]]
+                    assert (
+                        operation.kind == "schedule"
+                        and operation.outcome == "success"
+                        and operation.job_ids == (job.id,)
+                    )
+                    view = core.plugin_manager.live_root.context.require(
+                        SCHEDULER_INSPECTION
+                    )
+                    assert (
+                        len(await view.list_jobs()) == 1
+                        and await view.get_job(job.id) is not None
+                    )
+                    assert (
+                        metrics(args.workspace, model)["remote_chat_calls"]
+                        == calls_before
+                    )
+                    return {
+                        "same_job": True,
+                        "same_due_timezone_text_and_session": True,
+                        "registered_jobs": 1,
+                        "new_model_calls": 0,
+                        "fire_count": 0,
+                        "future_delivery_tested": False,
+                    }
+
+                await record(
+                    "restart_preserves_mail_deadline_reminder",
+                    restart_deadline_reminder,
+                )
+            report["metrics"] = metrics(args.workspace, model)
+            report["imap_commands"] = server.commands
         assert server.password not in json.dumps(report)
+    report["passed"] = all(row["passed"] for row in report["cases"]) and all(
+        row["reply_completed"] for row in report.get("natural_mail_requests", [])
+    )
     save()
-    return all(row["passed"] for row in report["cases"])
+    return report["passed"]
 
 
 async def recheck_existing(args):
@@ -657,22 +1683,44 @@ async def recheck_existing(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    for name in ("workspace", "key-file", "embedding-manifest", "output"):
+    for name in ("workspace", "output"):
         parser.add_argument("--" + name, type=Path, required=True)
+    for name in ("key-file", "embedding-manifest"):
+        parser.add_argument("--" + name, type=Path)
     parser.add_argument("--model-config", type=Path)
     parser.add_argument("--functional-only", action="store_true")
     parser.add_argument("--with-functional", action="store_true")
     parser.add_argument("--attention-cases", action="store_true")
+    parser.add_argument("--initial-review-only", action="store_true")
+    parser.add_argument(
+        "--protocol-only",
+        action="store_true",
+        help="Local TLS collector checks only; no model, private mailbox or Runtime notification claim.",
+    )
     parser.add_argument("--recheck-existing", action="store_true")
     parser.add_argument("--first-pass", type=Path)
     parser.add_argument("--family-start", type=int, default=0)
     parser.add_argument("--family-end", type=int, default=len(FAMILIES))
     args = parser.parse_args()
+    if not args.protocol_only and (
+        args.key_file is None or args.embedding_manifest is None
+    ):
+        parser.error(
+            "real-model acceptance requires --key-file and --embedding-manifest"
+        )
+    if args.initial_review_only and (
+        args.functional_only or args.with_functional or args.recheck_existing
+    ):
+        parser.error(
+            "--initial-review-only cannot be combined with other acceptance modes"
+        )
     os.environ["AKASHIC_PLUGIN_HOME"] = str(
         args.workspace.parent / (args.workspace.name + "-home")
     )
 
     async def run():
+        if args.protocol_only:
+            return await initial_review_protocol(args)
         async with provider_slot(
             EvaluationModel.read(args.model_config), args.key_file
         ):

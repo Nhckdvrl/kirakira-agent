@@ -100,7 +100,10 @@ async def read_content(message: Message, catalog: MessageCatalog, artifacts: Art
             detail = "处理回复时发生错误"
         # Provider error bodies can contain credentials or request fragments.
         # Send an actionable status without forwarding the raw exception.
-        return (f"这次没能生成回复：{detail}。请检查模型设置，或稍后重新发送。原始消息和已完成的操作仍保留。",)
+        # Reply failure does not roll back tool receipts; don't ask the owner
+        # to repeat an instruction whose effects may already be committed.
+        return (f"这次没能生成最后的文字回复：{detail}。原始消息和已完成的操作仍保留。"
+                "如果交办过任务，可先在工作台核对状态；模型服务恢复后，再查询已保存的结果。",)
     refs = {}
     if any(isinstance(part, ContentPart) and part.kind == "artifact_ref" for part in message.body.parts):
         reader = catalog.reader(message.session_id)

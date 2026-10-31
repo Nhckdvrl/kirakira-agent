@@ -45,7 +45,10 @@ def source_identity():
                                   "plugins/models/store.py", "plugins/akasha/application/consumer.py",
                                   "plugins/akasha/plugin.py", "plugins/akasha/scopes.py",
                                   "plugins/ledger/log.py", "core/common/file_io.py",
-                                  "sdk/python/src/akashic_sdk/client.py") if (ROOT / name).is_file())
+                                  "sdk/python/src/akashic_sdk/client.py", "plugins/subagent/runtime.py",
+                                  "plugins/subagent/tools.py", "plugins/subagent/plugin.py",
+                                  "plugins/jobs/plugin.py", "frontend/plugins/followups/src/index.tsx",
+                                  "plugins/followups/web_module.js") if (ROOT / name).is_file())
     if (ROOT / "third_party/UPSTREAM.json").is_file():
         names.append("third_party/UPSTREAM.json")
     names.extend(str(path.relative_to(ROOT)) for path in sorted((ROOT / "third_party/patches").glob("*.patch")))

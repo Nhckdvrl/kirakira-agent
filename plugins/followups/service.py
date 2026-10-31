@@ -246,11 +246,16 @@ class Service:
             not in {m["account_id"] for m in self.mailbox.available()}
         ):
             raise ValueError("请先在邮件账户设置中连接原账号")
+        request = spec.model_dump(mode="json")
+        if not spec.mail_initial_limit:
+            # A new opt-in field must not invalidate already committed default
+            # create receipts when an archived tool retries after an upgrade.
+            request.pop("mail_initial_limit")
         async with self.locks.setdefault(spec.watch_id, asyncio.Lock()):
 
             def commit(tx):
                 previous = self._previous_operation(
-                    tx, operation_key, "create", spec.model_dump(mode="json")
+                    tx, operation_key, "create", request
                 )
                 if previous is not None:
                     return previous
@@ -262,7 +267,7 @@ class Service:
                     ) != spec.model_dump(mode="json"):
                         raise ValueError("跟进标识已用于其他配置")
                     return self._record_operation(
-                        tx, operation_key, "create", spec.model_dump(mode="json"), value
+                        tx, operation_key, "create", request, value
                     )
                 if len(self._watches()) >= MAX_WATCHES:
                     raise ValueError("最多创建 100 个跟进")
@@ -276,7 +281,7 @@ class Service:
                 }
                 tx.save("watch:" + spec.watch_id, value, expected_version=None)
                 return self._record_operation(
-                    tx, operation_key, "create", spec.model_dump(mode="json"), value
+                    tx, operation_key, "create", request, value
                 )
 
             result = await self.store.transact_async(commit)
@@ -499,7 +504,7 @@ class Service:
                 datetime.now(UTC),
             )
 
-    async def _accept(self, watch, spec, source, fresh, checkpoint, now):
+    async def _accept(self, watch, spec, source, fresh, checkpoint, now, *, requested_review=False):
         anchors = await run_file_io(lambda: self._anchors(spec))
         policy = await run_file_io(lambda: self._policy(watch))
         context = {
@@ -518,6 +523,30 @@ class Service:
             ],
             "created_at": watch["created_at"],
         }
+        refs = [{"item_id": entry.item_id, "revision": entry.revision} for entry in fresh]
+        intent = {
+            "batch_id": fingerprint([[ref["item_id"], ref["revision"]] for ref in refs]),
+            "refs": refs,
+            "cursor": checkpoint,
+            "observed_at": now.isoformat(),
+            "review_policy": REQUESTED_REVIEW if requested_review or spec.review_mode == "each_update" else None,
+        }
+
+        def stage(tx):
+            key = "intent:" + spec.watch_id
+            current = tx.read(key)
+            if current is not None and current.value:
+                original = dict(json_value(current.value))
+                if original["batch_id"] == intent["batch_id"] and "review_policy" in original:
+                    if original["review_policy"] not in {None, REQUESTED_REVIEW}:
+                        raise ValueError("跟进调查意图无效")
+                    return original
+            tx.save(key, intent, expected_version=None if current is None else current.version)
+            return intent
+
+        # The admitted batch owns this choice across failed submission/restart.
+        # It requests an investigation, never a share decision or an interest score.
+        intent = await self.store.transact_async(stage)
         items = [
             {
                 "item_id": entry.item_id,
@@ -529,26 +558,14 @@ class Service:
                     "follow_up": context,
                     "context_session_id": spec.session_id,
                     **(
-                        {"review_policy": REQUESTED_REVIEW}
-                        if spec.review_mode == "each_update"
+                        {"review_policy": intent["review_policy"]}
+                        if intent["review_policy"] is not None
                         else {}
                     ),
                 },
             }
             for entry in fresh
         ]
-        intent = {
-            "batch_id": fingerprint(
-                [[item["item_id"], item["revision"]] for item in items]
-            ),
-            "refs": [
-                {"item_id": item["item_id"], "revision": item["revision"]}
-                for item in items
-            ],
-            "cursor": checkpoint,
-            "observed_at": now.isoformat(),
-        }
-        await self._save("intent:" + spec.watch_id, intent)
         await source.submit(intent["batch_id"], items)
         await self._finish(spec.watch_id, intent)
         return {"status": "submitted", "submitted": len(items), "refs": intent["refs"]}
@@ -556,7 +573,16 @@ class Service:
     async def _poll_mailbox(self, watch, spec, source, cursor, now):
         if self.mailbox is None:
             raise MailboxError("mailbox_unavailable", "邮箱连接能力不可用")
+        initializing = not cursor.get("initialized")
         batch = await self.mailbox.read(spec, cursor)
+        if initializing and spec.mail_initial_limit and not cursor.get("mail_initial_started"):
+            # Persist the fixed UID window before FETCH. Reuse the same cursor
+            # object so poll's failure path cannot overwrite this admitted plan.
+            plan = self._mailbox_checkpoint(spec, cursor, batch, now)
+            await self._save("cursor:" + spec.watch_id, plan)
+            cursor.update(plan)
+            if batch.pending:
+                batch = await self.mailbox.read(spec, cursor)
         known = set(cursor.get("seen", ()))
         fresh = []
         for entry in batch.entries:
@@ -565,8 +591,29 @@ class Service:
                 and await source.inspect_revision(entry.item_id, entry.revision) is None
             ):
                 fresh.append(entry)
-        checkpoint = {
+        checkpoint = self._mailbox_checkpoint(spec, cursor, batch, now)
+        if not fresh or initializing and not spec.mail_initial_limit:
+            await self._save("cursor:" + spec.watch_id, checkpoint)
+            result = {
+                "status": "baseline" if initializing else "unchanged",
+                "submitted": 0,
+            }
+        else:
+            result = await self._accept(watch, spec, source, fresh, checkpoint, now,
+                requested_review=bool(cursor.get("mailbox", {}).get("initial_uids")))
+        return {
+            **result,
+            "scanned": batch.scanned,
+            "matched": batch.matched,
+            "pending": batch.pending,
+            "duplicates": batch.duplicates,
+        }
+
+    @staticmethod
+    def _mailbox_checkpoint(spec, cursor, batch, now):
+        return {
             "initialized": True,
+            "mail_initial_started": bool(cursor.get("mail_initial_started") or spec.mail_initial_limit),
             "mailbox": batch.cursor,
             "seen": list(
                 dict.fromkeys(
@@ -584,21 +631,6 @@ class Service:
             "next_check": (
                 now + timedelta(seconds=5 if batch.pending else spec.interval_seconds)
             ).isoformat(),
-        }
-        if not cursor.get("initialized") or not fresh:
-            await self._save("cursor:" + spec.watch_id, checkpoint)
-            result = {
-                "status": "baseline" if not cursor.get("initialized") else "unchanged",
-                "submitted": 0,
-            }
-        else:
-            result = await self._accept(watch, spec, source, fresh, checkpoint, now)
-        return {
-            **result,
-            "scanned": batch.scanned,
-            "matched": batch.matched,
-            "pending": batch.pending,
-            "duplicates": batch.duplicates,
         }
 
     async def _finish(self, watch_id, intent):

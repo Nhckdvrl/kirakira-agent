@@ -4,7 +4,7 @@ import "./style.css";
 import { registerForm, Field } from "../../shared/src/configuration";
 
 interface Anchor { message_id: string; text: string; recorded_at: string }
-interface Spec { watch_id: string; name: string; purpose: string; url: string | null; source_kind?: string }
+interface Spec { watch_id: string; name: string; purpose: string; url: string | null; source_kind?: string; mail_folder?: string; mail_initial_limit?: number }
 interface Watch { spec: Spec; enabled: boolean; policy: { revision: number; purpose: string; message_id: string | null } }
 interface Mailbox { account_id: string; label: string }
 interface Decision { tool: string; arguments: { reason?: string; message?: string } }
@@ -104,11 +104,17 @@ class FollowupTab {
     const folder = field("邮件文件夹", "INBOX"); folder.value = "INBOX"; folder.required = false; folder.parentElement!.hidden = true;
     const sender = field("发件地址（可选，精确匹配）", "updates@example.com"); sender.required = false; sender.parentElement!.hidden = true;
     const subject = field("主题包含（可选）", "例如：申请进度"); subject.required = false; subject.parentElement!.hidden = true;
+    const initialLabel = el("label", "首次检查已有邮件");
+    const initialLimit = el("input"); initialLimit.type = "number"; initialLimit.min = "0"; initialLimit.max = "50";
+    initialLimit.step = "1"; initialLimit.value = "0"; initialLimit.required = true;
+    initialLabel.append(initialLimit, el("small", "0 表示只跟进新邮件；填写 1—50，授权检查该文件夹最近的指定封数，逐条调查后决定是否通知。后续新邮件按所选调查方式处理；垃圾邮件需填写实际文件夹名。"));
+    initialLabel.hidden = true; initialLimit.disabled = true; form.append(initialLabel);
     sourceKind.addEventListener("change", () => {
       regionLabel.hidden = sourceKind.value !== "webpage";
       const email = sourceKind.value === "mailbox";
       url.parentElement!.hidden = email; url.required = !email;
       mailboxLabel.hidden = !email; mailbox.required = email;
+      initialLabel.hidden = !email; initialLimit.disabled = !email;
       for (const field of [folder, sender, subject]) field.parentElement!.hidden = !email;
       folder.required = email;
       url.placeholder = sourceKind.value === "webpage" ? "https://example.com/updates" : "RSS / Atom 地址，或 https://github.com/owner/repo";
@@ -137,6 +143,7 @@ class FollowupTab {
         url: sourceKind.value === "mailbox" ? null : url.value, anchors: selected, interval_seconds: Number(interval.value) * 60, review_mode: mode.value,
         source_kind: sourceKind.value, xpath: sourceKind.value === "webpage" && region.value.trim() ? region.value.trim() : null,
         mailbox_id: sourceKind.value === "mailbox" ? mailbox.value : null, mail_folder: folder.value || "INBOX",
+        mail_initial_limit: sourceKind.value === "mailbox" ? Number(initialLimit.value) : 0,
         mail_sender: sender.value.trim() || null, mail_subject: subject.value.trim() || null }).then(watch => {
         if (this.session !== session || this.stopped) return;
         this.selected = watch.spec.watch_id; this.pendingId = "w_" + crypto.randomUUID().replaceAll("-", ""); void this.load();
@@ -194,7 +201,9 @@ class FollowupTab {
         if (window.confirm("重建基线后，只处理之后的新邮件，现有邮件不会补发通知；已接受的记录会保留。继续吗？"))
           void this.request("/reset-mailbox", { watch_id: selected }).then(() => this.refreshTimeline()).catch(error => this.error(error));
       }));
-      if (!value.events.length) pane.append(el("p", "等待新变化。建立基线时的信息不会触发历史通知。"));
+      if (!value.events.length) pane.append(el("p", value.watch.spec.source_kind === "mailbox" && value.watch.spec.mail_initial_limit
+        ? `首次只读检查 ${value.watch.spec.mail_folder || "INBOX"} 最近 ${value.watch.spec.mail_initial_limit} 封邮件，再持续跟进新邮件。检查、调查与送达分别记录；发现截止日期不等于已经创建提醒。`
+        : "等待新变化。建立基线时的信息不会触发历史通知。"));
       for (const event of value.events) pane.append(this.event(event, selected, value.watch.policy.revision));
       this.root.append(pane);
       this.timer = window.setTimeout(() => { void this.refreshTimeline(); }, 8000);
