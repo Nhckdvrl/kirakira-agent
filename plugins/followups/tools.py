@@ -33,12 +33,17 @@ class Create(BaseModel):
     )
     source_kind: Literal["feed", "webpage", "mailbox"]
     url: str | None = Field(default=None, min_length=1, max_length=2048)
-    interval_seconds: int = Field(default=900, ge=60, le=86400)
+    interval_seconds: int = Field(default=900, ge=10, le=86400,
+        description="检查间隔秒数，默认900，范围10—86400。仅来源允许时采用高频；来源的限流等待优先，不承诺每10秒一定能完成一次检查。")
     review_mode: Literal["each_update", "interest"] = Field(
         default="each_update",
-        description="each_update：逐条进入调查，按purpose决定分享或跳过，不等于每条都通知。interest：允许先经过兴趣池门槛，单条可能不调查。‘只提醒重要/有截止的邮件’属于purpose，不能据此改成interest。明确请求的初始邮件回查始终直接调查，新增邮件再按此模式处理。",
+        description="each_update：逐条进入调查，按purpose决定分享或跳过，不等于每条都通知。interest：允许先经过兴趣池门槛，单条可能不调查。‘只提醒重要/有截止的邮件’属于purpose，不能据此改成interest。明确请求的网页初次现状检查和初始邮件回查始终直接调查，后续更新再按此模式处理。",
     )
     xpath: str | None = Field(default=None, min_length=1, max_length=512)
+    check_initial: bool = Field(default=False, description=(
+        "仅网页：用户要求先确认当前状态，或明确要求有票/有货就告知（包括现在已经可购）时设置true，"
+        "首次读取即调查现状，再按关注规则决定分享或跳过；不是创建即通知。"
+        "默认false只建立基线，用户只关注未来变化时保持false。"))
     mailbox_id: str | None = Field(default=None, pattern=r"^ma_[0-9a-f]{32}$")
     mail_folder: str = Field(default="INBOX", min_length=1, max_length=256)
     mail_initial_limit: int = Field(
@@ -111,9 +116,9 @@ def origin(source, *, write):
     return calling.session_id, inputs[-1]
 
 
-def watch_summary(watch):
+def watch_summary(watch, *, runtime_status=False):
     spec, policy = watch["spec"], watch.get("policy", {})
-    return {
+    value = {
         "watch_id": spec["watch_id"],
         "name": spec["name"],
         "enabled": watch["enabled"],
@@ -128,7 +133,17 @@ def watch_summary(watch):
         **({"mail_folder": spec["mail_folder"],
             "mail_initial_limit": spec.get("mail_initial_limit", 0)}
            if spec["source_kind"] == "mailbox" else {}),
+        **({"check_initial": spec.get("check_initial", False)}
+           if spec["source_kind"] == "webpage" else {}),
     }
+    # Runtime connection state belongs to a fresh read, never a durable create
+    # receipt replayed long after the corresponding connection has disappeared.
+    if runtime_status and spec["source_kind"] == "mailbox":
+        monitor = watch.get("mailbox_monitor")
+        value["mailbox_monitor"] = None if monitor is None else {
+            key: monitor[key] for key in ("mode", "reason", "retry_seconds") if key in monitor
+        }
+    return value
 
 
 def result(value, outcome="success"):
@@ -154,6 +169,8 @@ def receipt(record):
             "note": (
                 f"已保存。首次只读回查指定文件夹最近{value['spec']['mail_initial_limit']}封邮件，再跟进新邮件；创建成功不等于已经检查或发出通知，也不代表已创建截止提醒。通知位置沿用主动联系设置。"
                 if value["spec"].get("mail_initial_limit", 0)
+                else "已保存。首次读取将调查网页当前状态，再按关注规则决定是否通知；之后继续跟进变化。创建成功不等于已经检查、可成功下单或已经发出通知。通知位置沿用主动联系设置。"
+                if value["spec"].get("check_initial", False)
                 else "已保存。首次成功读取只建基线；创建成功不等于已读取来源或已经发出通知。通知位置沿用主动联系设置，不自动改到当前会话。"
             )
             if record["action"] == "create"
@@ -292,7 +309,7 @@ class FollowupTool:
         if arguments["watch_id"] is None:
             offset, limit = arguments["offset"], arguments["limit"]
             watches = overview["watches"]
-            rows = [watch_summary(row) for row in watches[offset : offset + limit]]
+            rows = [watch_summary(row, runtime_status=True) for row in watches[offset : offset + limit]]
             for row in rows:
                 row["purpose"] = row["purpose"][:300]
             return {
@@ -384,7 +401,7 @@ class FollowupTool:
                 }
             )
         value = {
-            "watch": watch_summary(timeline["watch"]),
+            "watch": watch_summary(timeline["watch"], runtime_status=True),
             "proactive": await self._contact(arguments["session_id"]),
             "initialized": bool(cursor.get("initialized")),
             "last_error": cursor.get("last_error"),
@@ -392,7 +409,8 @@ class FollowupTool:
             "events": events,
             "events_in_current_window": len(timeline["events"]),
             "note": "source 是接纳时的外部内容，evidence 是调查实际读取的历史节选（优先用户原话）；"
-            "截断不表示其余证据不存在。仅 deliveries 中确认的回执表示已送达，不表示已读。",
+            "截断不表示其余证据不存在。仅 deliveries 中确认的回执表示已送达，不表示已读。"
+            "mailbox_monitor 仅表示本次读取时的实际邮箱连接方式；创建回执不证明即时监听已经连接，不能用历史状态推断当前。",
         }
         while events and len(json.dumps(value, ensure_ascii=False)) > 12000:
             events.pop()
@@ -427,6 +445,8 @@ async def register(ctx, service, readiness):
             ("按用户明确请求持续跟进信息源；关注规则逐字引用本轮用户原话。自动绑定当前对话与原始消息。"
             "每次先重新用 read_followups 核对当前主动联系就绪及通知位置，不能沿用之前的查询；未启用时提示配置，不擅自打开。"
             "仅使用用户提供或核实的 URL / 已连接邮箱和文件夹，不接收密码。默认首次建基线，新变化才调查；"
+             "网页若要求先看现状或有票/有货即告知，设置check_initial=true，首查进入调查而非直接通知；只读静态文字与按钮/链接属性，不执行页面脚本或自动购票。"
+             "检查间隔默认900秒，来源允许时最短10秒，不能无视限流。"
              "只有用户明确要求检查已有邮件时才设置 mail_initial_limit（最多50），可在明确指定的 Junk/Spam 文件夹回查。不能声称已读取所有邮箱或已建立邮件截止提醒。"),
         ),
         (

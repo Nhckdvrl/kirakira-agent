@@ -59,13 +59,14 @@ class WatchSpec(BaseModel):
     purpose: str = Field(min_length=1, max_length=1000)
     url: str | None = Field(default=None, min_length=1, max_length=2048)
     anchors: tuple[str, ...] = Field(min_length=1, max_length=6)
-    interval_seconds: int = Field(default=900, ge=60, le=86400)
+    interval_seconds: int = Field(default=900, ge=10, le=86400)
     review_mode: Literal["each_update", "interest"] = Field(
         default="each_update",
-        description="each_update逐条调查后按关注条件分享或跳过；interest先经过兴趣池门槛，单条内容可能不调查。只提醒重要事项属于purpose，不等于interest。明确要求的初始邮件回查始终直接调查，之后新增邮件才使用此模式。",
+        description="each_update逐条调查后按关注条件分享或跳过；interest先经过兴趣池门槛，单条内容可能不调查。只提醒重要事项属于purpose，不等于interest。明确要求的网页初次现状检查、初始邮件回查始终直接调查，后续更新才使用此模式。",
     )
     source_kind: Literal["feed", "webpage", "mailbox"] = "feed"
     xpath: str | None = Field(default=None, min_length=1, max_length=512)
+    check_initial: bool = Field(default=False, strict=True)
     mailbox_id: str | None = Field(default=None, pattern=r"^ma_[0-9a-f]{32}$")
     mail_folder: str = Field(default="INBOX", min_length=1, max_length=256)
     mail_initial_limit: int = Field(default=0, ge=0, le=50, strict=True)
@@ -81,6 +82,8 @@ class WatchSpec(BaseModel):
             raise ValueError("订阅源和网页需要 URL，不能带邮箱账号")
         if self.mail_initial_limit and self.source_kind != "mailbox":
             raise ValueError("仅邮箱跟进可回查已有邮件")
+        if self.check_initial and self.source_kind != "webpage":
+            raise ValueError("仅网页跟进可检查初次现状")
         if any(c in self.mail_folder + (self.mail_sender or "") for c in "\r\n\x00"):
             raise ValueError("邮箱文件夹或发件人无效")
         if self.xpath is not None:

@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
+from email.utils import parsedate_to_datetime
 
 import httpx
 from lxml import etree
@@ -26,6 +29,23 @@ from .feeds import MAX_BYTES, Entry, decode, feed_url, fingerprint
 from .mailbox import MailboxError
 
 MAX_WATCHES = 100
+MAX_CONCURRENT_POLLS = 4
+logger = logging.getLogger(__name__)
+
+
+def _retry_after(value: str | None, now: datetime) -> datetime | None:
+    if not value:
+        return None
+    value = value.strip()
+    try:
+        if value.isascii() and value.isdecimal():
+            return now + timedelta(seconds=int(value))
+        parsed = parsedate_to_datetime(value)
+        if parsed.tzinfo is None:
+            return None
+        return max(now, parsed.astimezone(UTC))
+    except (ValueError, TypeError, OverflowError):
+        return None
 
 
 def text(message) -> str:
@@ -61,10 +81,40 @@ class Service:
             timeout=20, follow_redirects=True, max_redirects=5
         )
         self.changed = asyncio.Event()
+        self._change_subscribers: set[asyncio.Event] = set()
+        self._requested: set[str] = set()
         self.locks: dict[str, asyncio.Lock] = {}
         self.sources = {}
         self.source_lock = asyncio.Lock()
         self.mailbox, self.writers = mailbox, writers
+
+    def _notify_changed(self):
+        self.changed.set()
+        for event in self._change_subscribers:
+            event.set()
+
+    @asynccontextmanager
+    async def subscribe_changes(self):
+        """Each observer owns its signal; clearing it never consumes another observer's change."""
+        event = asyncio.Event()
+        self._change_subscribers.add(event)
+        event.set()
+        try:
+            yield event
+        finally:
+            self._change_subscribers.discard(event)
+
+    def request_check(self, watch_id: str) -> None:
+        """An in-memory hint only; poll still owns admission, pause and cursor recovery."""
+        if watch_id in self._requested or len(self._requested) < MAX_WATCHES:
+            self._requested.add(watch_id)
+            self.changed.set()
+
+    async def enabled_mail_watches(self) -> tuple[WatchSpec, ...]:
+        return await run_file_io(lambda: tuple(
+            WatchSpec.model_validate(watch["spec"]) for watch in self._watches()
+            if watch["enabled"] and watch["spec"]["source_kind"] == "mailbox"
+        ))
 
     def _policy(self, watch):
         policy = watch.get("policy")
@@ -98,7 +148,14 @@ class Service:
         }
 
     def _present(self, watch):
-        return {**watch, "policy": self._policy(watch)}
+        value = {**watch, "policy": self._policy(watch)}
+        if watch["spec"]["source_kind"] == "mailbox":
+            status = getattr(self.mailbox, "status", None)
+            value["mailbox_monitor"] = (
+                {"mode": "inactive", "reason": "watch_not_active", "retry_seconds": None}
+                if not watch["enabled"] else status(WatchSpec.model_validate(watch["spec"])) if callable(status) else None
+            )
+        return value
 
     def _watch(self, identity):
         record = self.store.read("watch:" + identity)
@@ -251,6 +308,8 @@ class Service:
             # A new opt-in field must not invalidate already committed default
             # create receipts when an archived tool retries after an upgrade.
             request.pop("mail_initial_limit")
+        if not spec.check_initial:
+            request.pop("check_initial")
         async with self.locks.setdefault(spec.watch_id, asyncio.Lock()):
 
             def commit(tx):
@@ -285,7 +344,7 @@ class Service:
                 )
 
             result = await self.store.transact_async(commit)
-        self.changed.set()
+        self._notify_changed()
         return result
 
     async def set_enabled(self, request: SetEnabled, *, operation_key=None):
@@ -314,7 +373,9 @@ class Service:
                 )
 
             value = await self.store.transact_async(commit)
-        self.changed.set()
+        if not request.enabled:
+            self._requested.discard(request.watch_id)
+        self._notify_changed()
         return value
 
     async def revise(self, request: Revise, *, operation_key=None):
@@ -404,7 +465,9 @@ class Service:
                     tx, operation_key, "revise", payload, result
                 )
 
-            return await self.store.transact_async(commit)
+            result = await self.store.transact_async(commit)
+        self._notify_changed()
+        return result
 
     async def reset_mailbox(self, watch_id):
         async with self.locks.setdefault(watch_id, asyncio.Lock()):
@@ -422,7 +485,7 @@ class Service:
                 next_check=datetime.now(UTC).isoformat(),
             )
             await self._save("cursor:" + watch_id, value)
-        self.changed.set()
+        self._notify_changed()
         return {"status": "baseline_requested", "accepted_events_preserved": True}
 
     async def recheck(self, request: Recheck):
@@ -705,6 +768,9 @@ class Service:
                 {} if cursor_record is None else dict(json_value(cursor_record.value))
             )
             now = datetime.now(UTC)
+            retry_at = cursor.get("retry_not_before")
+            if retry_at and now < datetime.fromisoformat(retry_at):
+                return {"status": "deferred", "submitted": 0, "retry_at": retry_at}
             try:
                 if spec.source_kind == "mailbox":
                     return await self._poll_mailbox(watch, spec, source, cursor, now)
@@ -732,6 +798,7 @@ class Service:
                                 now + timedelta(seconds=spec.interval_seconds)
                             ).isoformat(),
                         )
+                        cursor.pop("retry_not_before", None)
                         await self._save("cursor:" + watch_id, cursor)
                         return {"status": "unchanged", "submitted": 0}
                     response.raise_for_status()
@@ -750,9 +817,11 @@ class Service:
                         if media_type not in {"text/html", "application/xhtml+xml"}:
                             raise ValueError("网页跟进需要 HTML；本次不推进基线")
                         page = webpages.snapshot(
-                            bytes(data), str(response.url), spec.xpath
+                            bytes(data), str(response.url), spec.xpath,
+                            encoding=response.charset_encoding,
                         )
-                        entries = (webpages.change(cursor.get("page"), page, spec.url),)
+                        entries = (webpages.change(cursor.get("page"), page, spec.url,
+                            initial=bool(not cursor.get("initialized") and spec.check_initial)),)
                     else:
                         entries = decode(bytes(data), str(response.url))
                     etag, modified = (
@@ -762,6 +831,7 @@ class Service:
                 seen = list(cursor.get("seen", []))
                 baseline = cursor.get("baseline", [])
                 known = set(seen) | set(baseline)
+                initial_review = bool(page is not None and not cursor.get("initialized") and spec.check_initial)
                 fresh = [
                     entry
                     for entry in entries
@@ -772,7 +842,7 @@ class Service:
                     old_page = cursor.get("page")
                     fresh = (
                         list(entries)
-                        if old_page is not None and old_page["sha256"] != page["sha256"]
+                        if initial_review or old_page is not None and webpages.has_change(old_page, page)
                         else []
                     )
                 pairs = [entry.item_id + ":" + entry.revision for entry in entries]
@@ -805,7 +875,7 @@ class Service:
                         )
                     else:
                         checkpoint["page_transition"] = cursor.get("page_transition", 0)
-                if not cursor.get("initialized"):
+                if not cursor.get("initialized") and not initial_review:
                     await self._save("cursor:" + watch_id, checkpoint)
                     return {
                         "status": "baseline",
@@ -815,10 +885,12 @@ class Service:
                 if not fresh:
                     await self._save("cursor:" + watch_id, checkpoint)
                     return {"status": "unchanged", "submitted": 0}
-                return await self._accept(watch, spec, source, fresh, checkpoint, now)
+                return await self._accept(watch, spec, source, fresh, checkpoint, now,
+                    requested_review=initial_review)
             except (httpx.HTTPError, ValueError, etree.XMLSyntaxError) as error:
+                failed_at = datetime.now(UTC)
                 cursor.update(
-                    last_checked=now.isoformat(),
+                    last_checked=failed_at.isoformat(),
                     last_error=error.code
                     if isinstance(error, MailboxError)
                     else type(error).__name__,
@@ -832,7 +904,15 @@ class Service:
                     max(60, spec.interval_seconds)
                     * 2 ** min(cursor["failures"] - 1, 5),
                 )
-                cursor["next_check"] = (now + timedelta(seconds=delay)).isoformat()
+                retry = (
+                    _retry_after(error.response.headers.get("Retry-After"), failed_at)
+                    if isinstance(error, httpx.HTTPStatusError) and error.response.status_code in {429, 503}
+                    else None
+                )
+                cursor.pop("retry_not_before", None)
+                cursor["next_check"] = max(failed_at + timedelta(seconds=delay), retry or failed_at).isoformat()
+                if retry is not None and retry > failed_at:
+                    cursor["retry_not_before"] = retry.isoformat()
                 await self._save("cursor:" + watch_id, cursor)
                 return {
                     "status": "error",
@@ -1084,31 +1164,70 @@ class Service:
         return await self.store.transact_async(commit)
 
     async def follow(self):
-        while True:
-            self.changed.clear()
-            watches = await run_file_io(self._watches)
-            now = datetime.now(UTC)
-            deadline = now + timedelta(seconds=60)
-            for watch in watches:
-                if not watch["enabled"]:
-                    continue
-                identity = watch["spec"]["watch_id"]
-                record = await run_file_io(
-                    lambda identity=identity: self.store.read("cursor:" + identity)
-                )
-                due = (
-                    datetime.fromisoformat(record.value["next_check"])
-                    if record and record.value.get("next_check")
-                    else now
-                )
-                if due <= now:
-                    await self.poll(identity)
-                else:
-                    deadline = min(deadline, due)
+        active: dict[str, asyncio.Task] = {}
+        failed_until: dict[str, datetime] = {}
+
+        def schedule():
+            return [
+                (watch, json_value(row.value) if (row := self.store.read("cursor:" + watch["spec"]["watch_id"])) else {})
+                for watch in self._watches()
+            ]
+
+        async def check(identity):
             try:
-                await asyncio.wait_for(
-                    self.changed.wait(),
-                    max(0.1, (deadline - datetime.now(UTC)).total_seconds()),
-                )
-            except TimeoutError:
-                pass
+                # TaskGroup children need their own live OwnerCall; a copied contextvar
+                # does not authorize this Task's source registration or credentials.
+                async with self.ctx.runtime_scope():
+                    await self.poll(identity)
+                failed_until.pop(identity, None)
+            except Exception as error:  # noqa: BLE001 - isolate one source without stopping the watch loop
+                # A broken source/adapter cannot terminate the other watches or create a hot retry loop.
+                failed_until[identity] = datetime.now(UTC) + timedelta(seconds=60)
+                logger.warning("跟进采集未完成 watch=%s error_type=%s", identity, type(error).__name__)
+            finally:
+                active.pop(identity, None)
+                # Read the newly committed next_check rather than keeping the deadline from before poll.
+                self.changed.set()
+
+        async with asyncio.TaskGroup() as group:
+            while True:
+                self.changed.clear()
+                watches = await run_file_io(lambda: self.store.snapshot(schedule))
+                known = {watch["spec"]["watch_id"] for watch, _ in watches}
+                self._requested.intersection_update(known)
+                for identity in tuple(failed_until):
+                    if identity not in known:
+                        failed_until.pop(identity)
+                now = datetime.now(UTC)
+                deadline = now + timedelta(seconds=60)
+                due = []
+                for watch, cursor in watches:
+                    identity = watch["spec"]["watch_id"]
+                    if not watch["enabled"]:
+                        self._requested.discard(identity)
+                        continue
+                    if identity in active:
+                        continue
+                    ready = (
+                        datetime.fromisoformat(cursor["next_check"])
+                        if cursor.get("next_check") else now
+                    )
+                    if identity in self._requested and not cursor.get("last_error"):
+                        ready = now
+                    if cursor.get("retry_not_before"):
+                        ready = max(ready, datetime.fromisoformat(cursor["retry_not_before"]))
+                    if identity in failed_until:
+                        ready = max(ready, failed_until[identity])
+                    if ready <= now:
+                        due.append((ready, identity))
+                    else:
+                        deadline = min(deadline, ready)
+                for _, identity in sorted(due)[:max(0, MAX_CONCURRENT_POLLS - len(active))]:
+                    # Consume only this signal; a new hint arriving during the poll stays pending.
+                    self._requested.discard(identity)
+                    active[identity] = group.create_task(check(identity), name="followups.check:" + identity)
+                try:
+                    await asyncio.wait_for(self.changed.wait(),
+                        max(0.1, (deadline - datetime.now(UTC)).total_seconds()))
+                except TimeoutError:
+                    pass

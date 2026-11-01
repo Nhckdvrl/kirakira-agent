@@ -6,7 +6,12 @@ from types import SimpleNamespace
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from agent.plugin_composition import CREDENTIALS, RUNTIME_STARTED, RUNTIME_STOPPING, ServiceKey
+from agent.plugin_composition import (
+    CREDENTIALS,
+    RUNTIME_STARTED,
+    RUNTIME_STOPPING,
+    ServiceKey,
+)
 from agent.plugin_composition.plugin_config import PLUGIN_CONFIG
 from plugins.akasha.contract import AKASHA_RECORDS_VIEW
 from plugins.delivery.contract import DELIVERY_READ
@@ -20,8 +25,8 @@ from plugins.ledger.contract import (
     ContentReferences,
     Input,
 )
-from plugins.ui.contract import Configuration, UI
 from plugins.tools.contract import TOOLS
+from plugins.ui.contract import UI, Configuration
 
 from .contract import (
     FOLLOWUPS,
@@ -75,6 +80,7 @@ async def apply(ctx):
         body_types=(Input,),
         content={"text": check_policy, "followups.policy": check_policy_record},
     )
+    mailboxes = Mailboxes(ctx, config.mailbox)
     service = Service(
         ctx,
         ctx.require(OWNER_STATE).open(ctx),
@@ -83,7 +89,7 @@ async def apply(ctx):
         ctx.require(DELIVERY_READ),
         ctx.require(BINDINGS),
         ctx.require(AKASHA_RECORDS_VIEW),
-        mailbox=Mailboxes(ctx, config.mailbox),
+        mailbox=mailboxes,
         writers=writers,
     )
     await ctx.effect(lambda: service.http.aclose, label="followups.http")
@@ -159,16 +165,20 @@ async def apply(ctx):
     await ctx.inject((UI, FOLLOWUPS, MAIL_SETTINGS), register_ui, name="web")
 
     watcher = None
+    mail_watcher = None
 
     async def start(_event):
-        nonlocal watcher
+        nonlocal watcher, mail_watcher
         watcher = await ctx.spawn(service.follow(), name="followups.poll")
+        mail_watcher = await ctx.spawn(mailboxes.follow(service), name="followups.mail-idle")
 
     async def stop(_event):
-        if watcher is not None:
-            watcher.cancel()
+        tasks = tuple(task for task in (mail_watcher, watcher) if task is not None)
+        for task in tasks:
+            task.cancel()
+        for task in tasks:
             try:
-                await watcher
+                await task
             except asyncio.CancelledError:
                 pass
 

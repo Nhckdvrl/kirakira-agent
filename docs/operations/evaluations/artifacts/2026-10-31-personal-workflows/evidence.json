@@ -4704,5 +4704,493 @@
         }
       ]
     }
+  },
+  "monitoring_2026_11_01": {
+    "scope": "Controlled monitoring implementation and evidence; local TLS/HTTP, native Runtime and confirmed local delivery. No private mailbox, real ticket site, Telegram or population quality claim.",
+    "service_stopped": true,
+    "not_deployed": true,
+    "current_critical_implementation": {
+      "plugins/followups/mailbox.py": "e2584ff0d7a76ca602f1d698a2a25ef07ab7c5552cd5644cb4ca0266a90e5296",
+      "plugins/followups/mail_settings.py": "c36df858a76478b450464907cbcc53bd50ef1beab79d49ee0fff6aad0b3dc1a4",
+      "plugins/followups/service.py": "114b1fde38860cc9deafb1f80519f2292883e2931e266ae8ea333d39d0df2d89",
+      "plugins/followups/plugin.py": "1a82e5493782df161d8ab9ae929f37c7b8dfcada3338144f19bdc627627f540c",
+      "plugins/followups/contract.py": "4e73341fe03c9e35e2ac12882f1094c35d8bb632414ac32d81d62080c7b487ef",
+      "eval/fixtures/mailbox.py": "ed75ef454a30f214c71d26d237564abd3fc6a85391048080ad9ee09b66210c42",
+      "agent/plugin_composition/credentials.py": "897dab5b4b32fa13af0df1cd37c885d11c97ca848693772b191490e51399ab09",
+      "agent/plugin_composition/context.py": "f3c50d07969cd57a3f0bfffa7325c0729c2a496336aa23962d8d1958ee3db42f"
+    },
+    "real_model_source_identity": {
+      "report_file_hashes_preserved": true,
+      "only_post_start_source_drift": {
+        "path": "plugins/followups/service.py",
+        "before_sha256": "2f7bc9d5a667af93447d20ff10b37c5a7a51df7cb21b38d20e53745ccdb296f3",
+        "after_sha256": "114b1fde38860cc9deafb1f80519f2292883e2931e266ae8ea333d39d0df2d89",
+        "changes": [
+          "stdlib logging import sorting",
+          "BLE001 explanatory comment"
+        ],
+        "runtime_logic_unchanged": true
+      }
+    },
+    "regression": {
+      "passed": 186,
+      "failed": 0,
+      "log_sha256": "251f6658610f068499843f4cd223e144a01bb17f45aed837c8eb113ee527d612"
+    },
+    "collection": {
+      "scope": "A full native Runtime with real credential authority and automatic UID collection; no models configured, no investigation or notification delivery.",
+      "transport": "Local TLS IMAP fixture, same host, temporary local filesystem workspace",
+      "configured_poll_interval_seconds": 3600,
+      "observation_interval_ms": 5,
+      "observation_boundary": "After fixture deliver() until a read-only SQLite observer sees the native EventMail item",
+      "manual_poll_calls": 0,
+      "model_calls": 0,
+      "automatic_baseline": true,
+      "real_credential_authority": true,
+      "steady_summary_ms": {
+        "samples": 24,
+        "p50": 16.63,
+        "p95_nearest_rank": 28.489,
+        "max": 37.859
+      },
+      "reconnect": {
+        "cases": 1,
+        "backoff_seconds_when_delivered": 1,
+        "admission_ms": 1031.94,
+        "no_event_during_first_100_ms": true,
+        "new_events": 1,
+        "distinct_total_after_recovery": 25
+      },
+      "events": {
+        "steady_expected": 24,
+        "steady_observed": 24,
+        "recovery_expected": 1,
+        "total_observed": 25,
+        "distinct_observed": 25,
+        "duplicates": 0
+      },
+      "protocol": {
+        "command_counts": {
+          "CAPABILITY": 31,
+          "EXAMINE": 29,
+          "IDLE": 2,
+          "LOGIN": 29,
+          "UID FETCH": 50,
+          "UID SEARCH": 25
+        },
+        "only_read_only_commands": true,
+        "all_fetches_use_peek": true
+      },
+      "runtime_exit_idle_threads": 0,
+      "fixture_cleanup_completed": true,
+      "exit_handlers": 0,
+      "exit_connections": 0,
+      "critical_implementation_unchanged": true,
+      "script_sha256": "60ff1bb17c8433e5f7e6ac46c06f2e3c490ab73ce0558ffa3aefb52754fac869"
+    },
+    "collection_samples_ms": [
+      16.737,
+      14.949,
+      15.018,
+      16.201,
+      16.522,
+      24.757,
+      14.622,
+      15.172,
+      14.353,
+      17.353,
+      37.859,
+      15.51,
+      26.105,
+      15.978,
+      19.881,
+      15.421,
+      20.665,
+      19.545,
+      17.893,
+      28.489,
+      16.077,
+      16.416,
+      23.052,
+      23.612
+    ],
+    "real_mail": {
+      "passed": true,
+      "planned_cases": 15,
+      "completed_cases": 15,
+      "content_decisions": 8,
+      "shares": 4,
+      "skips": 4,
+      "confirmed_local_notifications": 4,
+      "manual_polls_for_new_mail_acceptance": 0,
+      "explicit_uid_rebaseline_polls": 2,
+      "setup_uses_rpc_and_explicit_baseline": true,
+      "fixture_cleanup_completed": true,
+      "cases": [
+        {
+          "name": "configure_real_provider",
+          "passed": true,
+          "seconds": 2.694
+        },
+        {
+          "name": "prepare_notification_and_memory",
+          "passed": true,
+          "seconds": 5.17
+        },
+        {
+          "name": "configured_watch_has_uid_baseline_and_real_idle_connection",
+          "passed": true,
+          "seconds": 0.008
+        },
+        {
+          "name": "explicit_all_progress_request_is_followed",
+          "passed": true,
+          "seconds": 36.971
+        },
+        {
+          "name": "rule_correction_is_an_atomic_traceable_user_fact",
+          "passed": true,
+          "seconds": 0.009
+        },
+        {
+          "name": "corrected_attention_rule_changes_the_next_progress_decision",
+          "passed": true,
+          "seconds": 38.765
+        },
+        {
+          "name": "thread_amendment_is_coalesced_and_still_gets_action_notification",
+          "passed": true,
+          "seconds": 28.928
+        },
+        {
+          "name": "external_email_cannot_become_an_owner_rule_update",
+          "passed": true,
+          "seconds": 34.357
+        },
+        {
+          "name": "attention_scope_1",
+          "passed": true,
+          "seconds": 17.332
+        },
+        {
+          "name": "attention_scope_2",
+          "passed": true,
+          "seconds": 42.215
+        },
+        {
+          "name": "attention_scope_3",
+          "passed": true,
+          "seconds": 44.132
+        },
+        {
+          "name": "attention_scope_4",
+          "passed": true,
+          "seconds": 22.944
+        },
+        {
+          "name": "uid_namespace_reset_is_visible_and_requires_owner_rebaseline",
+          "passed": true,
+          "seconds": 0.076
+        },
+        {
+          "name": "idle_noise_does_not_duplicate_investigation_or_delivery",
+          "passed": true,
+          "seconds": 0.133
+        },
+        {
+          "name": "restart_preserves_corrected_rule_and_delivery_evidence",
+          "passed": true,
+          "seconds": 0.024
+        }
+      ],
+      "observations": [
+        {
+          "decision": "share_content",
+          "confirmed_deliveries": 1,
+          "source_to_event_observed_seconds": 0.063,
+          "source_to_terminal_observed_seconds": 36.97,
+          "source_uid_and_message_identity_verified": true,
+          "accepted_turn_verified": true,
+          "phase_complete": true,
+          "delivery_identity_verified": true
+        },
+        {
+          "decision": "skip_content",
+          "confirmed_deliveries": 0,
+          "source_to_event_observed_seconds": 0.08,
+          "source_to_terminal_observed_seconds": 38.764,
+          "source_uid_and_message_identity_verified": true,
+          "accepted_turn_verified": true,
+          "phase_complete": true,
+          "delivery_identity_verified": false
+        },
+        {
+          "decision": "share_content",
+          "confirmed_deliveries": 1,
+          "source_to_event_observed_seconds": 0.09,
+          "source_to_terminal_observed_seconds": 28.926,
+          "source_uid_and_message_identity_verified": true,
+          "accepted_turn_verified": true,
+          "phase_complete": true,
+          "delivery_identity_verified": true
+        },
+        {
+          "decision": "skip_content",
+          "confirmed_deliveries": 0,
+          "source_to_event_observed_seconds": 0.095,
+          "source_to_terminal_observed_seconds": 34.339,
+          "source_uid_and_message_identity_verified": true,
+          "accepted_turn_verified": true,
+          "phase_complete": true,
+          "delivery_identity_verified": false
+        },
+        {
+          "decision": "skip_content",
+          "confirmed_deliveries": 0,
+          "source_to_event_observed_seconds": 0.1,
+          "source_to_terminal_observed_seconds": 17.33,
+          "source_uid_and_message_identity_verified": true,
+          "accepted_turn_verified": true,
+          "phase_complete": true,
+          "delivery_identity_verified": false
+        },
+        {
+          "decision": "share_content",
+          "confirmed_deliveries": 1,
+          "source_to_event_observed_seconds": 0.112,
+          "source_to_terminal_observed_seconds": 42.213,
+          "source_uid_and_message_identity_verified": true,
+          "accepted_turn_verified": true,
+          "phase_complete": true,
+          "delivery_identity_verified": true
+        },
+        {
+          "decision": "skip_content",
+          "confirmed_deliveries": 0,
+          "source_to_event_observed_seconds": 0.106,
+          "source_to_terminal_observed_seconds": 44.129,
+          "source_uid_and_message_identity_verified": true,
+          "accepted_turn_verified": true,
+          "phase_complete": true,
+          "delivery_identity_verified": false
+        },
+        {
+          "decision": "share_content",
+          "confirmed_deliveries": 1,
+          "source_to_event_observed_seconds": 0.112,
+          "source_to_terminal_observed_seconds": 22.94,
+          "source_uid_and_message_identity_verified": true,
+          "accepted_turn_verified": true,
+          "phase_complete": true,
+          "delivery_identity_verified": true
+        }
+      ],
+      "metrics": {
+        "remote_chat_calls": 34,
+        "local_embedding_ledger_calls": 0,
+        "embedding_metering": "native model_calls records chat only; vectors verified separately",
+        "remote_states": {
+          "success": 34
+        },
+        "input_tokens": 271670,
+        "output_tokens": 16140
+      }
+    },
+    "real_web": {
+      "passed": true,
+      "planned_cases": 6,
+      "completed_cases": 6,
+      "manual_source_polls": 0,
+      "source_cleanup_completed": true,
+      "cases": [
+        {
+          "name": "configure_monitoring_runtime",
+          "passed": true,
+          "seconds": 10.018
+        },
+        {
+          "name": "natural_unknown_opening_request_creates_initial_check",
+          "passed": true,
+          "seconds": 17.626
+        },
+        {
+          "name": "initial_unavailable_status_is_investigated_without_notification",
+          "passed": true,
+          "seconds": 26.708
+        },
+        {
+          "name": "button_only_opening_is_automatically_detected_and_delivered",
+          "passed": true,
+          "seconds": 35.416
+        },
+        {
+          "name": "irrelevant_changes_and_repeated_open_page_stay_quiet",
+          "passed": true,
+          "seconds": 3.524
+        },
+        {
+          "name": "restart_preserves_monitoring_and_delivery_evidence",
+          "passed": true,
+          "seconds": 0.019
+        }
+      ],
+      "observations": [
+        {
+          "decision": "skip_content",
+          "confirmed_deliveries": 0,
+          "event_observed_seconds": 17.64,
+          "terminal_observed_seconds": 44.334,
+          "initial": true,
+          "source_snapshot_identity_verified": true,
+          "latency_origin": "owner_request_submitted",
+          "accepted_turn_verified": true,
+          "phase_complete": true,
+          "delivery_identity_verified": false,
+          "domain_status": "released"
+        },
+        {
+          "decision": "share_content",
+          "confirmed_deliveries": 1,
+          "event_observed_seconds": 9.01,
+          "terminal_observed_seconds": 35.415,
+          "initial": false,
+          "source_snapshot_identity_verified": true,
+          "latency_origin": "source_change_published",
+          "accepted_turn_verified": true,
+          "phase_complete": true,
+          "delivery_identity_verified": true,
+          "domain_status": "settled",
+          "visible_text_unchanged": true
+        }
+      ],
+      "metrics": {
+        "remote_chat_calls": 12,
+        "local_embedding_ledger_calls": 0,
+        "embedding_metering": "native model_calls records chat only; vectors verified separately",
+        "remote_states": {
+          "success": 12
+        },
+        "input_tokens": 108762,
+        "output_tokens": 3191
+      },
+      "read_only_notification_fact_checks": [
+        {
+          "decision": "share_content",
+          "accepted_turn_verified": true,
+          "phase_complete": true,
+          "domain_status": "settled",
+          "delivery_identity_verified": true,
+          "initial": false,
+          "confirmed_deliveries": 1,
+          "price_120_present": true,
+          "source_link_present": true,
+          "availability_explained": true,
+          "no_purchase_claim": true
+        },
+        {
+          "decision": "skip_content",
+          "accepted_turn_verified": true,
+          "phase_complete": true,
+          "domain_status": "released",
+          "delivery_identity_verified": false,
+          "initial": true,
+          "confirmed_deliveries": 0
+        }
+      ],
+      "review_model_calls_added": 0
+    },
+    "earlier_attempts": {
+      "mail": {
+        "name": "mail",
+        "scope": "pre-final functional trial before background OwnerCall/encoding and observer corrections",
+        "completed_cases": 2,
+        "recorded_failures": 0,
+        "final_version": false,
+        "fatal_error_type": "TimeoutError",
+        "stage": "real TLS IDLE readiness",
+        "mail_arrivals_exercised": 0
+      },
+      "web": {
+        "name": "web",
+        "scope": "pre-final functional trial before background OwnerCall/encoding and observer corrections",
+        "completed_cases": 6,
+        "recorded_failures": 0,
+        "final_version": false
+      },
+      "not_counted_in_final_validation": true
+    },
+    "packaging": {
+      "passed": true,
+      "wheel": {
+        "sha256": "0c705ed1917e74bb0207f067a3d8c2bcf5c4101f9e03e2f50aa224592f3754ff",
+        "critical_files_equal": 11
+      },
+      "sdist": {
+        "sha256": "212797035d0dff6bbc5309cf7b30abab49984b4d38b5fb528070294125398ae6",
+        "critical_files_equal": 12
+      },
+      "isolated_build_environment_created": false
+    },
+    "known_limits": [
+      "No Gmail Pub/Sub or Microsoft Graph push adapters. IMAP IDLE is capability-detected and falls back to polling.",
+      "Web collector reads static HTML and attributes; no JavaScript execution, account login, actual ticket purchase or stock verification.",
+      "Native collection latency is distinct from model investigation and notification delivery. Real-model mail terminal outcomes took 17.330–44.129 seconds in these eight cases.",
+      "Local TLS and temporary local storage timings are not production NFS or internet-provider latency.",
+      "Kept native model screening; no demonstrated screening-bypass speedup or quality result."
+    ],
+    "source_artifacts": {
+      "mail.json": {
+        "sha256": "3934d2374acda2ecc634ae0f8c1c6ed59a552517287fe9d2d65950dbbc8e9338",
+        "bytes": 13269
+      },
+      "web.json": {
+        "sha256": "9407e55de6715f389c2f3a6b77eef159be1e53c3c4cb304496f11c28ee015570",
+        "bytes": 13080
+      },
+      "mail-first-trial-summary.json": {
+        "sha256": "b8b36aa06f332884d273806fed767ff774c2950391784217f21d850cc98541ee",
+        "bytes": 308
+      },
+      "web-first-trial-summary.json": {
+        "sha256": "35be8057af52454bc218bb94cb3ee43b9b805cd3ba3f6fd9ae534885b888bff9",
+        "bytes": 199
+      },
+      "mail-final.json": {
+        "sha256": "d59ae79d9b3f2a422a7feb47ecf14bfb8502ce2367109df6ca5e928d6fb8d971",
+        "bytes": 430618
+      },
+      "web-final.json": {
+        "sha256": "1d857bab3e31e574bd8c34b76528f5e16f1c0b0a7360d576dc212578cfe38f14",
+        "bytes": 14160
+      },
+      "web-final-reviewed.json": {
+        "sha256": "7c09d5614834d2e39a76424189d2f08452778a6252a189040053b7222433ae09",
+        "bytes": 910
+      },
+      "idle-collection.json": {
+        "sha256": "8ac4e0cfb9b615862fc71f4332c2badbdf4fccbc298dbca16865bfb484d86c82",
+        "bytes": 16050
+      },
+      "lint-only-source-change.json": {
+        "sha256": "01493b446b054ec83af1c083f69e8f553ca955529ab293ae6030aeecef65427d",
+        "bytes": 343
+      },
+      "wake-stage-diagnostic.json": {
+        "sha256": "45adcfda603cf8f2147b33310b9d697a19f4351f8ec2b4f879855f0ace79ed9f",
+        "bytes": 8211
+      },
+      "package-verified.json": {
+        "sha256": "c27ceead63c9e5a9db80152b6166a406837595b2cbedab1dd95d62ee8cb49d5b",
+        "bytes": 330
+      },
+      "regression-final.log": {
+        "sha256": "251f6658610f068499843f4cd223e144a01bb17f45aed837c8eb113ee527d612",
+        "bytes": 271
+      },
+      "idle-collection-probe.py": {
+        "sha256": "60ff1bb17c8433e5f7e6ac46c06f2e3c490ab73ce0558ffa3aefb52754fac869",
+        "bytes": 10991
+      }
+    }
   }
 }

@@ -23,10 +23,271 @@ from plugins.followups.contract import (
     WatchSpec,
     check_policy_record,
 )
+from plugins.followups.mail_settings import Mailboxes
 from plugins.followups.mailbox import MailboxError, collect, mailbox_name
 from plugins.followups.service import Service
 from plugins.ledger.contract import ContentPart, Input, SessionAttributes, json_value
 from plugins.ledger.log import MessageLog
+
+
+class _IdleWatchService:
+    def __init__(self, specs):
+        self.specs = specs
+        self.changed = asyncio.Event()
+        self.checks = set()
+        self.requested = asyncio.Event()
+
+    async def enabled_mail_watches(self):
+        return tuple(self.specs)
+
+    @asynccontextmanager
+    async def subscribe_changes(self):
+        self.changed.set()
+        yield self.changed
+
+    def request_check(self, watch_id):
+        self.checks.add(watch_id)
+        self.requested.set()
+
+    async def take(self, expected):
+        async with asyncio.timeout(5):
+            while not expected <= self.checks:
+                self.requested.clear()
+                await self.requested.wait()
+        value, self.checks = self.checks, set()
+        return value
+
+
+class _MailboxLeases:
+    def __init__(self, secret):
+        self.secret, self.active = secret, 0
+
+    @asynccontextmanager
+    async def open(self, _ctx, _refs):
+        self.active += 1
+        try:
+            yield SimpleNamespace(credential=lambda _ref: self.secret)
+        finally:
+            self.active -= 1
+
+
+async def _until(predicate):
+    async with asyncio.timeout(5):
+        while not predicate():
+            await asyncio.sleep(0.01)
+
+
+@asynccontextmanager
+async def _fixture_scope():
+    yield
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("auth", ["password", "oauth2"])
+async def test_idle_shares_folder_connection_recovers_gap_and_drains_credentials(tmp_path, auth):
+    async with MailboxServer(tmp_path / "tls", idle=True) as server:
+        server.deliver("基线", "原有邮件")
+        server.create_folder("Junk")
+        cfg = MailboxConfig.model_validate({**server.config(), "auth_method": auth,
+            "password": CredentialRef(("test", "version"))})
+        first = WatchSpec(watch_id="w_" + "1" * 32, session_id="owner", name="收件箱",
+            purpose="只提醒重要邮件", anchors=("original",), source_kind="mailbox",
+            mailbox_id=cfg.account_id, interval_seconds=3600)
+        second = first.model_copy(update={"watch_id": "w_" + "2" * 32, "mail_folder": "inbox"})
+        junk = first.model_copy(update={"watch_id": "w_" + "3" * 32, "mail_folder": "Junk"})
+        baseline = await collect(cfg, server.password, first, {})
+        leases = _MailboxLeases(server.password)
+        mailboxes = Mailboxes(SimpleNamespace(require=lambda _key: leases, runtime_scope=_fixture_scope), cfg)
+        service = _IdleWatchService([first, second, junk])
+        server.idle_hold.clear()
+        watcher = asyncio.create_task(mailboxes.follow(service))
+        try:
+            # The server accepts IDLE only after this arrival, and emits no
+            # EXISTS for it. The initial wake must close this connection race.
+            await asyncio.wait_for(server.idle_entered.wait(), 5)
+            race_uid, _ = server.deliver("接入竞态邮件", "及时补查，不重新建基线")
+            server.idle_hold.set()
+            await server.wait_idle("INBOX")
+            await server.wait_idle("Junk")
+            assert await service.take({first.watch_id, second.watch_id, junk.watch_id}) == {
+                first.watch_id, second.watch_id, junk.watch_id}
+            await _until(lambda: mailboxes.status(first)["mode"] == "idle")
+            assert leases.active == 2 and len(server.idle_connections) == 2
+            assert sum(folder == "INBOX" for folder in server.idle_connections.values()) == 1
+            assert not any(row["command"] == "UID FETCH" for row in server.commands)
+            initial = await collect(cfg, server.password, first,
+                {"initialized": True, "mailbox": baseline.cursor})
+            assert initial.entries[0].payload["mail"]["uids"] == [race_uid]
+            before = len(server.commands)
+            server.notify_idle("INBOX", kind="FETCH")
+            await asyncio.sleep(0.1)
+            assert not service.checks and not any(row["command"] == "UID FETCH" for row in server.commands[before:])
+            # EXISTS/RECENT are wake signals only, not independently admitted
+            # mails or model calls. Actual facts still require UID collection.
+            server.deliver("新的待办", "请核对截止")
+            server.notify_idle("INBOX", kind="RECENT")
+            assert await service.take({first.watch_id, second.watch_id}) == {first.watch_id, second.watch_id}
+            assert not any(row["command"] == "UID FETCH" for row in server.commands[before:])
+            await server.drop_idle("INBOX")
+            await _until(lambda: mailboxes.status(first)["mode"] == "retrying")
+            assert 0 <= mailboxes.status(first)["retry_seconds"] <= 1
+            gap_uid, _ = server.deliver("断线期间的新信", "重连后按UID补查")
+            await server.wait_idle("INBOX")
+            assert await service.take({first.watch_id, second.watch_id}) == {first.watch_id, second.watch_id}
+            recovered = await collect(cfg, server.password, first,
+                {"initialized": True, "mailbox": initial.cursor})
+            assert gap_uid in [uid for entry in recovered.entries for uid in entry.payload["mail"]["uids"]]
+            await server.drop_idle("INBOX")
+            await _until(lambda: mailboxes.status(first)["mode"] == "retrying")
+            assert 1 <= mailboxes.status(first)["retry_seconds"] <= 2
+            await server.wait_idle("INBOX")
+            await service.take({first.watch_id, second.watch_id})
+            # Pausing one watch retains the shared connection for the other.
+            service.specs = [second, junk]
+            service.changed.set()
+            await _until(lambda: mailboxes.status(first)["mode"] == "inactive")
+            assert leases.active == 2
+            service.checks.clear()
+            server.notify_idle("INBOX")
+            assert await service.take({second.watch_id}) == {second.watch_id}
+            service.specs = [junk]
+            service.changed.set()
+            await _until(lambda: leases.active == 1 and "INBOX" not in server.idle_connections.values())
+            assert mailboxes.status(second)["mode"] == "inactive"
+            # Cancellation also drains a worker waiting for the server's IDLE
+            # continuation, before releasing the credential it was using.
+            server.idle_entered.clear()
+            server.idle_hold.clear()
+            service.specs = [first, junk]
+            service.changed.set()
+            await asyncio.wait_for(server.idle_entered.wait(), 5)
+            assert leases.active == 2 and mailboxes.status(first)["mode"] == "connecting"
+        finally:
+            watcher.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(watcher, 5)
+            server.idle_hold.set()
+        assert leases.active == 0
+        await _until(lambda: not server.connections and not server.handlers)
+        allowed = {"CAPABILITY", "LOGIN", "AUTHENTICATE", "EXAMINE", "IDLE", "DONE", "UID SEARCH", "UID FETCH"}
+        assert all(row["command"] in allowed for row in server.commands)
+        assert all(row["peek"] for row in server.commands if row["command"] == "UID FETCH")
+
+
+@pytest.mark.asyncio
+async def test_idle_unavailable_and_excess_folders_keep_explicit_polling_status(tmp_path, monkeypatch):
+    import plugins.followups.mail_settings as settings
+
+    monkeypatch.setattr(settings, "MAX_IDLE_FOLDERS", 1)
+    for supported in (False, True):
+        async with MailboxServer(tmp_path / str(supported), idle=supported) as server:
+            server.create_folder("Junk")
+            cfg = MailboxConfig.model_validate({**server.config(), "password": CredentialRef(("test", "version"))})
+            inbox = WatchSpec(watch_id="w_" + "4" * 32, session_id="owner", name="邮箱",
+                purpose="检查新邮件", anchors=("original",), source_kind="mailbox", mailbox_id=cfg.account_id)
+            junk = inbox.model_copy(update={"watch_id": "w_" + "5" * 32, "mail_folder": "Junk"})
+            service, leases = _IdleWatchService([inbox, junk]), _MailboxLeases(server.password)
+            mailboxes = Mailboxes(SimpleNamespace(require=lambda _key, leases=leases: leases, runtime_scope=_fixture_scope), cfg)
+            watcher = asyncio.create_task(mailboxes.follow(service))
+            try:
+                await _until(lambda mailboxes=mailboxes, inbox=inbox, supported=supported:
+                    mailboxes.status(inbox)["mode"] == ("idle" if supported else "polling"))
+                assert mailboxes.status(junk) == {"mode": "polling", "reason": "idle_folder_limit", "retry_seconds": None}
+                assert leases.active == int(supported)
+                if not supported:
+                    assert mailboxes.status(inbox)["reason"] == "server_has_no_idle"
+                    assert not service.checks and not any(row["command"] == "IDLE" for row in server.commands)
+                baseline = await mailboxes.read(inbox, {})
+                new_uid, _ = server.deliver("新信", "原有轮询仍可收集")
+                batch = await mailboxes.read(inbox, {"initialized": True, "mailbox": baseline.cursor})
+                assert batch.entries[0].payload["mail"]["uids"] == [new_uid]
+                # Presenting the mode never resolves credentials or returns an address.
+                assert server.username not in json.dumps(mailboxes.status(inbox))
+                assert server.password not in json.dumps(mailboxes.status(inbox))
+            finally:
+                watcher.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await asyncio.wait_for(watcher, 5)
+            assert leases.active == 0
+            await _until(lambda: not server.connections and not server.handlers)
+
+
+@pytest.mark.asyncio
+async def test_native_runtime_idle_and_automatic_uid_poll_hold_real_credential_authority(tmp_path, monkeypatch):
+    import sqlite3
+    import threading
+
+    from agent.plugin_composition.config_input import save_config, save_credential
+    from agent.plugin_composition.credentials import CredentialClients
+    from core.common.file_io import run_file_io
+    from kirakira_agent.runtime import initialize_workspace, rpc, runtime
+    from plugins.models.contract import MODEL_CATALOG
+
+    monkeypatch.setenv("AKASHIC_PLUGIN_HOME", str(tmp_path / "plugin-home"))
+    workspace = tmp_path / "workspace"
+    initialize_workspace(workspace)
+    original_create = CredentialClients.create
+    admitted, denied = [], []
+
+    async def checked_create(self, ctx, refs):
+        try:
+            client = await original_create(self, ctx, refs)
+        except Exception as error:
+            denied.append((type(error).__name__, getattr(error, "code", None)))
+            raise
+        admitted.append(ctx.runtime.plugin_id)
+        return client
+
+    monkeypatch.setattr(CredentialClients, "create", checked_create)
+    session = "akashic:idle-authority-fixture"
+    log = MessageLog(workspace / "sessions.db")
+    log.ensure_session(session, SessionAttributes())
+    log.writer(session, author="user", source="conversation", body_types=(Input,),
+               content={"text": check_text}).append("original", Input((ContentPart("text", "跟进新邮件"),)))
+    from plugins.ledger.contract import Output
+    log.writer(session, author="agent", source="conversation", body_types=(Output,), content={}).append(
+        "recorded", Output((), "complete"))
+    log.close()
+
+    async def observed(watch_id):
+        def read():
+            with sqlite3.connect((workspace / "sessions.db").as_uri() + "?mode=ro", uri=True) as connection:
+                row = connection.execute("SELECT value FROM owner_records WHERE key=?", ("cursor:" + watch_id,)).fetchone()
+            event_path = workspace / "plugin-data/eventmail-builtin/eventmail.sqlite3"
+            with sqlite3.connect(event_path.as_uri() + "?mode=ro", uri=True) as connection:
+                count = connection.execute("SELECT COUNT(*) FROM items WHERE source_id=?", ("followups:" + watch_id,)).fetchone()[0]
+            return (json.loads(row[0]) if row else {}), count
+        return await run_file_io(read)
+
+    async with MailboxServer(tmp_path / "tls", idle=True) as server:
+        server.deliver("已有邮件", "首次基线不补发")
+        data = workspace / "plugin-data/followups-builtin"
+        password = save_credential(data, server.password)
+        save_config(data, {"mailbox": {**server.config(), "password": password}})
+        async with runtime(workspace) as core:
+            assert not core.plugin_manager.live_root.context.require(MODEL_CATALOG).snapshot().models
+            spec = WatchSpec(watch_id="w_" + "6" * 32, session_id=session, name="邮箱",
+                purpose="跟进新邮件", anchors=("original",), source_kind="mailbox",
+                mailbox_id=server.config()["account_id"], interval_seconds=3600)
+            await rpc(core, "followups/create", spec.model_dump(mode="json"))
+            # Never call poll or timeline: either would enter the owner on the
+            # RPC task and could conceal the missing background-task permit.
+            async with asyncio.timeout(15):
+                while True:
+                    cursor, count = await observed(spec.watch_id)
+                    if cursor.get("initialized"):
+                        break
+                    await asyncio.sleep(0.01)
+            await server.wait_idle()
+            assert count == 0
+            server.deliver("重要的新邮件", "IDLE唤醒原生UID采集，不等待一小时轮询")
+            async with asyncio.timeout(15):
+                while (await observed(spec.watch_id))[1] != 1:
+                    await asyncio.sleep(0.01)
+            assert not denied and admitted.count("followups") >= 3
+            assert all(row["peek"] for row in server.commands if row["command"] == "UID FETCH")
+        await _until(lambda: not server.handlers and not server.connections)
+        assert not any(thread.name.startswith("mailbox-idle") for thread in threading.enumerate())
 
 
 @pytest.mark.asyncio

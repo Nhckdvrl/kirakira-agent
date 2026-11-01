@@ -385,3 +385,92 @@ async def collect(
         if isinstance(error, TimeoutError):
             raise MailboxError("timeout", "邮箱读取超时，已保留原水位") from None
         raise
+
+
+def _idle(config, secret, folder, connection, signal, ready):
+    """Observe mailbox changes only; the UID collector remains the fact owner."""
+    client = None
+    try:
+        context = ssl.create_default_context()
+        if config.tls_ca_file:
+            context.load_verify_locations(cafile=config.tls_ca_file)
+        client = _ReadOnlyIMAP(config.host, config.port, ssl_context=context, timeout=10)
+        connection.attach(client)
+
+        def command(method, *args):
+            status, result = method(*args)
+            if status != "OK":
+                raise MailboxError("protocol_error", "邮箱未完成只读监听操作")
+            return result
+
+        if config.auth_method == "oauth2":
+            auth = f"user={config.username}\x01auth=Bearer {secret}\x01\x01".encode()
+            command(client.authenticate, "XOAUTH2", lambda challenge: auth if not challenge else b"")
+        else:
+            command(client.login, config.username, secret)
+        # Some servers advertise additional capabilities only after login.
+        capabilities = command(client.capability)
+        client.capabilities = tuple(b" ".join(capabilities).decode("ascii").upper().split())
+        if "IDLE" not in client.capabilities:
+            return False
+        command(client.select, mailbox_name(folder), True)
+        while not connection.cancelled:
+            with client.idle(duration=29 * 60) as responses:
+                ready()
+                # Cover mail arriving before this connection starts IDLE, or
+                # while a disconnected listener was being re-established.
+                signal()
+                for kind, _data in responses:
+                    if kind in {"EXISTS", "RECENT", "EXPUNGE"}:
+                        signal()
+        return True
+    except MailboxError:
+        if connection.cancelled:
+            return True
+        raise
+    except (imaplib.IMAP4.error, OSError, UnicodeError):
+        if connection.cancelled:
+            return True
+        raise MailboxError("idle_connection_failed", "邮箱及时监听连接中断；轮询继续，稍后重连") from None
+    finally:
+        if client is not None:
+            try:
+                client.shutdown()
+            except OSError:
+                pass
+
+
+async def watch_idle(config, secret, folder, executor, notify, on_ready):
+    """Drain the real IDLE worker before releasing its credential lease."""
+    connection = _Connection()
+    loop = asyncio.get_running_loop()
+    queued = threading.Event()
+
+    def deliver():
+        queued.clear()
+        if not connection.cancelled:
+            notify()
+
+    def signal():
+        if not queued.is_set() and not connection.cancelled:
+            queued.set()
+            loop.call_soon_threadsafe(deliver)
+
+    def ready():
+        loop.call_soon_threadsafe(lambda: None if connection.cancelled else on_ready())
+
+    work = loop.run_in_executor(executor, _idle, config, secret, folder, connection, signal, ready)
+    try:
+        return await asyncio.shield(work)
+    except asyncio.CancelledError:
+        connection.abort()
+        while not work.done():
+            try:
+                await asyncio.shield(work)
+            except asyncio.CancelledError:
+                connection.abort()
+            except Exception:  # noqa: BLE001 - drain before credential revocation
+                break
+        if not work.cancelled():
+            work.exception()
+        raise

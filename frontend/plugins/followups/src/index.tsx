@@ -4,13 +4,14 @@ import "./style.css";
 import { registerForm, Field } from "../../shared/src/configuration";
 
 interface Anchor { message_id: string; text: string; recorded_at: string }
-interface Spec { watch_id: string; name: string; purpose: string; url: string | null; source_kind?: string; mail_folder?: string; mail_initial_limit?: number }
-interface Watch { spec: Spec; enabled: boolean; policy: { revision: number; purpose: string; message_id: string | null } }
+interface Spec { watch_id: string; name: string; purpose: string; url: string | null; source_kind?: string; interval_seconds?: number; check_initial?: boolean; mail_folder?: string; mail_initial_limit?: number }
+interface MailboxMonitor { mode: "idle" | "connecting" | "retrying" | "polling" | "inactive"; reason: string; retry_seconds?: number }
+interface Watch { spec: Spec; enabled: boolean; policy: { revision: number; purpose: string; message_id: string | null }; mailbox_monitor?: MailboxMonitor | null }
 interface Mailbox { account_id: string; label: string }
 interface Decision { tool: string; arguments: { reason?: string; message?: string } }
 interface Event {
   item_id: string; revision: string; status: string;
-  payload: { title: string; content: string; url: string | null; content_truncated?: boolean; mail?: { messages_in_update: number }; follow_up: { purpose: string; policy_revision?: number }; owner_recheck?: { original_revision: string } }; decisions: Decision[];
+  payload: { title: string; content: string; url: string | null; content_truncated?: boolean; page_change?: { kind?: string }; mail?: { messages_in_update: number }; follow_up: { purpose: string; policy_revision?: number }; owner_recheck?: { original_revision: string } }; decisions: Decision[];
   evidence: { kind: string; text?: string; recorded_at?: string; start?: number; end?: number; truncated?: boolean }[];
   deliveries: { text: string; confirmed_at: string }[]; feedback: { value: string } | null;
 }
@@ -23,6 +24,17 @@ function button(label: string, action: () => void): HTMLButtonElement {
   const node = el("button", label); node.type = "button"; node.addEventListener("click", action); return node;
 }
 function date(value: string): string { return new Date(value).toLocaleString("zh-CN"); }
+function mailboxMode(status: MailboxMonitor | null | undefined): string {
+  if (!status) return "监控方式暂不可用，请重新读取状态";
+  const modes = { idle: "及时监听", connecting: "连接中", retrying: "重连中", polling: "定时检查", inactive: "已暂停" };
+  const reasons: Record<string, string> = {
+    server_idle: "正在等待服务器推送新邮件", server_has_no_idle: "服务器不支持即时监听，按间隔检查",
+    idle_folder_limit: "同时监听的文件夹已达上限，按间隔检查", connection_unavailable: "连接暂不可用",
+    watch_not_active: "跟进未启用", account_not_connected: "账号尚未连接",
+  };
+  const retry = status.retry_seconds === undefined ? "" : `，约 ${Math.ceil(status.retry_seconds)} 秒后重试`;
+  return `${modes[status.mode]} · ${reasons[status.reason] || "以当前连接状态为准"}${retry}`;
+}
 
 class FollowupTab {
   readonly root = el("section", "", "followups-root");
@@ -70,6 +82,7 @@ class FollowupTab {
       const list = el("div", "", "followups-list");
       for (const watch of value.watches) {
         list.append(button(watch.spec.name + (watch.enabled ? "" : " · 已暂停采集"), () => { this.selected = watch.spec.watch_id; void this.refreshTimeline(); }));
+        if (watch.spec.source_kind === "mailbox") list.append(el("p", mailboxMode(watch.mailbox_monitor), "followups-note"));
       }
       const mailSettings = el("a", "连接只读邮件账户"); mailSettings.href = "#followups-settings";
       this.root.replaceChildren(heading, intro, settings, el("span", " · "), mailSettings, list);
@@ -90,13 +103,17 @@ class FollowupTab {
     const url = field("信息源", "RSS / Atom 地址，或 https://github.com/owner/repo");
     const sourceLabel = el("label", "来源类型"); const sourceKind = el("select");
     sourceKind.setAttribute("aria-label", "来源类型");
-    for (const [value, label] of [["feed", "RSS / Atom · GitHub 发布"], ["webpage", "普通网页 · 关注正文变化"], ["mailbox", "邮件 · 只读跟进线程更新"]]) {
+    for (const [value, label] of [["feed", "RSS / Atom · GitHub 发布"], ["webpage", "普通网页 · 正文与按钮、链接状态"], ["mailbox", "邮件 · 只读跟进线程更新"]]) {
       const option = el("option", label); option.value = value; sourceKind.append(option);
     }
     sourceLabel.append(sourceKind); form.append(sourceLabel);
     const regionLabel = el("label", "关注区域（可选 XPath）"); const region = el("input");
     region.placeholder = "例如：//*[@id='pricing']；留空关注正文"; region.maxLength = 512;
     regionLabel.append(region); regionLabel.hidden = true; form.append(regionLabel);
+    const checkInitialLabel = el("label", "先检查网页当前状态");
+    const checkInitial = el("input"); checkInitial.type = "checkbox"; checkInitial.disabled = true;
+    checkInitialLabel.append(checkInitial, el("small", "勾选后，首次读取也会调查是否已满足关注条件，再决定是否通知；例如现在已经有票。未勾选则只跟进之后的变化。"));
+    checkInitialLabel.hidden = true; form.append(checkInitialLabel);
     const mailboxLabel = el("label", "邮件账户"); const mailbox = el("select"); mailbox.setAttribute("aria-label", "邮件账户");
     for (const account of mailboxes) { const option = el("option", account.label); option.value = account.account_id; mailbox.append(option); }
     if (!mailboxes.length) mailboxLabel.append(el("small", "先通过上面的邮件账户链接连接账号。"));
@@ -111,6 +128,7 @@ class FollowupTab {
     initialLabel.hidden = true; initialLimit.disabled = true; form.append(initialLabel);
     sourceKind.addEventListener("change", () => {
       regionLabel.hidden = sourceKind.value !== "webpage";
+      checkInitialLabel.hidden = sourceKind.value !== "webpage"; checkInitial.disabled = sourceKind.value !== "webpage";
       const email = sourceKind.value === "mailbox";
       url.parentElement!.hidden = email; url.required = !email;
       mailboxLabel.hidden = !email; mailbox.required = email;
@@ -119,8 +137,9 @@ class FollowupTab {
       folder.required = email;
       url.placeholder = sourceKind.value === "webpage" ? "https://example.com/updates" : "RSS / Atom 地址，或 https://github.com/owner/repo";
     });
-    const interval = field("检查间隔（分钟）", "15") as HTMLInputElement;
-    interval.type = "number"; interval.min = "1"; interval.max = "1440"; interval.value = "15";
+    const interval = field("检查间隔（秒）", "900 秒 = 15 分钟") as HTMLInputElement;
+    interval.type = "number"; interval.min = "10"; interval.max = "86400"; interval.step = "1"; interval.value = "900";
+    interval.parentElement!.append(el("small", "默认 900 秒（15 分钟）。仅来源允许时使用高频检查；最快间隔 10 秒，来源限流时会等待，不保证固定时刻完成。"));
     const modeLabel = el("label", "调查方式"); const mode = el("select");
     mode.setAttribute("aria-label", "调查方式");
     for (const [value, label] of [["each_update", "逐条调查 · 明确跟进的事项"], ["interest", "兴趣筛选后调查 · 宽泛的信息源"]]) {
@@ -140,8 +159,9 @@ class FollowupTab {
       if (!selected.length || selected.length > 6) { this.error(new Error("请选择 1 到 6 条原始对话")); return; }
       submit.disabled = true;
       void this.request<Watch>("", { watch_id: this.pendingId, session_id: session, name: name.value, purpose: purpose.value,
-        url: sourceKind.value === "mailbox" ? null : url.value, anchors: selected, interval_seconds: Number(interval.value) * 60, review_mode: mode.value,
+        url: sourceKind.value === "mailbox" ? null : url.value, anchors: selected, interval_seconds: Number(interval.value), review_mode: mode.value,
         source_kind: sourceKind.value, xpath: sourceKind.value === "webpage" && region.value.trim() ? region.value.trim() : null,
+        check_initial: sourceKind.value === "webpage" && checkInitial.checked,
         mailbox_id: sourceKind.value === "mailbox" ? mailbox.value : null, mail_folder: folder.value || "INBOX",
         mail_initial_limit: sourceKind.value === "mailbox" ? Number(initialLimit.value) : 0,
         mail_sender: sender.value.trim() || null, mail_subject: subject.value.trim() || null }).then(watch => {
@@ -164,6 +184,12 @@ class FollowupTab {
       this.root.querySelector(".followups-timeline")?.remove();
       this.root.querySelector("form")?.remove();
       const pane = el("div", "", "followups-timeline"); pane.append(el("h3", value.watch.spec.name), el("p", value.watch.policy.purpose));
+      if (value.watch.spec.source_kind === "mailbox") pane.append(el("p", mailboxMode(value.watch.mailbox_monitor), "followups-status"));
+      if (value.watch.spec.interval_seconds !== undefined) {
+        const seconds = value.watch.spec.interval_seconds;
+        const title = value.watch.spec.source_kind === "mailbox" && value.watch.mailbox_monitor?.mode === "idle" ? "定时兜底间隔" : "检查间隔";
+        pane.append(el("p", `${title}：${seconds} 秒${seconds % 60 === 0 ? `（${seconds / 60} 分钟）` : ""}`, "followups-note"));
+      }
       const editor = el("form", "", "followups-policy"); const ruleLabel = el("label", "当前关注规则"); const rule = el("textarea");
       rule.value = this.policyDraft?.watch === selected ? this.policyDraft.purpose : value.watch.policy.purpose;
       rule.maxLength = 1000; rule.required = true; ruleLabel.append(rule); editor.append(ruleLabel);
@@ -203,6 +229,8 @@ class FollowupTab {
       }));
       if (!value.events.length) pane.append(el("p", value.watch.spec.source_kind === "mailbox" && value.watch.spec.mail_initial_limit
         ? `首次只读检查 ${value.watch.spec.mail_folder || "INBOX"} 最近 ${value.watch.spec.mail_initial_limit} 封邮件，再持续跟进新邮件。检查、调查与送达分别记录；发现截止日期不等于已经创建提醒。`
+        : value.watch.spec.source_kind === "webpage" && value.watch.spec.check_initial
+        ? "将先读取并调查网页当前状态，再按关注条件决定是否通知；调查、分享决定与确认送达分别记录。"
         : "等待新变化。建立基线时的信息不会触发历史通知。"));
       for (const event of value.events) pane.append(this.event(event, selected, value.watch.policy.revision));
       this.root.append(pane);
@@ -212,6 +240,7 @@ class FollowupTab {
   private event(event: Event, watch: string, currentRule: number): HTMLElement {
     const card = el("article"); const link = event.payload.url ? el("a", event.payload.title || "信息源更新") : el("strong", event.payload.title || "邮件更新");
     if (link instanceof HTMLAnchorElement && event.payload.url) { link.href = event.payload.url; link.target = "_blank"; link.rel = "noopener noreferrer"; } card.append(link);
+    if (event.payload.page_change?.kind === "initial_state") card.append(el("p", "首次现状调查 · 没有历史对照，不代表刚刚发生变化。", "followups-note"));
     if (event.payload.mail) card.append(el("p", `同一邮件线程 · 本次合并 ${event.payload.mail.messages_in_update} 封`, "followups-note"));
     if (event.payload.owner_recheck) card.append(el("p", "按修改后的关注规则复查；原始内容与旧判断保留。", "followups-note"));
     const decision = [...event.decisions].reverse().find(value => value.tool === "skip_content" || value.tool === "share_content");

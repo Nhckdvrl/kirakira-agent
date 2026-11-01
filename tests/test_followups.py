@@ -787,3 +787,247 @@ async def test_watch_baseline_revision_crash_recovery_pause_and_native_history(
             assert len((await service.timeline(spec.watch_id))["events"]) == 2
     finally:
         log.close()
+
+
+@asynccontextmanager
+async def monitoring_service(directory, handler):
+    """Real OwnerState/EventMail with only the remote transport controlled."""
+    directory.mkdir(parents=True, exist_ok=True)
+    log = MessageLog(directory / "ledger.db")
+    log.ensure_session("owner", SessionAttributes())
+    writer = log.writer("owner", author="user", source="conversation", body_types=(Input,),
+                        content={"text": check_text})
+    if log.reader("owner").get("monitor-original") is None:
+        writer.append("monitor-original", Input((ContentPart("text", "请盯着售票，有符合条件的票才告诉我"),)))
+    mail = EventMailStore(directory / "events.db")
+    mail.initialize()
+    sources = _SourceServices(mail, _StoreIO(), lambda: None)
+    root, services = CompositionRoot("monitor-test"), []
+
+    async def mount(ctx):
+        service = Service(ctx, log.owner("followups"), log.catalog(), sources,
+                          SimpleNamespace(recent=lambda **_: ()), None, lambda: None)
+        await service.http.aclose()
+        service.http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        await ctx.effect(lambda: service.http.aclose)
+        services.append(service)
+
+    try:
+        fiber = await root.mount(mount, name="followups")
+        assert fiber.error is None
+        yield services[0]
+    finally:
+        await root.dispose()
+        log.close()
+
+
+def monitoring_spec(index=0, **options):
+    return WatchSpec(watch_id="w_" + format(index, "032x"), session_id="owner",
+                     name="售票关注", purpose="有符合条件的票才告诉我", anchors=("monitor-original",),
+                     url="https://example.test/" + str(index), interval_seconds=3600, **options)
+
+
+async def eventually(condition, timeout=3):
+    async with asyncio.timeout(timeout):
+        while not condition():
+            await asyncio.sleep(0.01)
+
+
+@pytest.mark.asyncio
+async def test_monitor_pump_isolates_slow_sources_bounds_concurrency_and_drains(tmp_path):
+    from plugins.followups.service import MAX_CONCURRENT_POLLS
+
+    gates = [asyncio.Event() for _ in range(6)]
+    started, cancelled, active, peak = set(), set(), set(), 0
+
+    async def handler(request):
+        nonlocal peak
+        index = int(request.url.path.strip("/"))
+        started.add(index)
+        active.add(index)
+        peak = max(peak, len(active))
+        try:
+            await gates[index].wait()
+            return httpx.Response(200, content=atom([]))
+        except asyncio.CancelledError:
+            cancelled.add(index)
+            raise
+        finally:
+            active.discard(index)
+
+    async with monitoring_service(tmp_path, handler) as service:
+        for index in range(6):
+            await service.create(monitoring_spec(index))
+        pump = asyncio.create_task(service.follow())
+        try:
+            await eventually(lambda: len(started) == MAX_CONCURRENT_POLLS)
+            assert len(active) == MAX_CONCURRENT_POLLS
+            assert 0 in active
+            for gate in gates[1:]:
+                gate.set()
+            await eventually(lambda: service.store.read("cursor:" + monitoring_spec(5).watch_id) is not None)
+            assert 0 in active and len(started) == 6
+            assert peak == MAX_CONCURRENT_POLLS
+        finally:
+            pump.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await pump
+        assert cancelled == {0} and not active
+
+
+@pytest.mark.asyncio
+async def test_monitor_signal_during_active_poll_is_coalesced_without_losing_arrival(tmp_path):
+    state = {"calls": 0, "version": 1}
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def handler(request):
+        state["calls"] += 1
+        version = state["version"]
+        if state["calls"] == 2:
+            entered.set()
+            await release.wait()
+        if request.headers.get("if-none-match") == str(version):
+            return httpx.Response(304)
+        return httpx.Response(200, content=atom([] if version == 1 else [("ticket", "有票", "可以购买")]),
+                              headers={"etag": str(version)})
+
+    async with monitoring_service(tmp_path, handler) as service:
+        spec = monitoring_spec()
+        await service.create(spec)
+        assert (await service.poll(spec.watch_id))["status"] == "baseline"
+        pump = asyncio.create_task(service.follow())
+        try:
+            service.request_check(spec.watch_id)
+            await asyncio.wait_for(entered.wait(), 3)
+            state["version"] = 2
+            for _ in range(500):
+                service.request_check(spec.watch_id)
+            release.set()
+            await eventually(lambda: state["calls"] >= 3)
+            async with asyncio.timeout(3):
+                while not (await service.timeline(spec.watch_id))["events"]:
+                    await asyncio.sleep(0.01)
+            assert state["calls"] == 3
+            assert len((await service.timeline(spec.watch_id))["events"]) == 1
+            await service.set_enabled(SetEnabled(watch_id=spec.watch_id, enabled=False))
+            for _ in range(500):
+                service.request_check(spec.watch_id)
+            await asyncio.sleep(0.05)
+            assert state["calls"] == 3
+        finally:
+            pump.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await pump
+
+
+@pytest.mark.asyncio
+async def test_monitor_retry_after_survives_restart_and_forced_hints(tmp_path):
+    from email.utils import format_datetime
+
+    calls = 0
+    retry = datetime.now(UTC).replace(microsecond=0) + timedelta(minutes=5)
+
+    async def handler(request):
+        nonlocal calls
+        calls += 1
+        return httpx.Response(429, headers={"Retry-After": format_datetime(retry, usegmt=True)})
+
+    spec = monitoring_spec()
+    async with monitoring_service(tmp_path, handler) as service:
+        await service.create(spec)
+        assert (await service.poll(spec.watch_id))["status"] == "error"
+        cursor = service.store.read("cursor:" + spec.watch_id).value
+        assert datetime.fromisoformat(cursor["retry_not_before"]) == retry
+        assert datetime.fromisoformat(cursor["next_check"]) >= retry
+    async with monitoring_service(tmp_path, handler) as service:
+        service.request_check(spec.watch_id)
+        pump = asyncio.create_task(service.follow())
+        try:
+            assert (await service.poll(spec.watch_id))["status"] == "deferred"
+            await asyncio.sleep(0.05)
+            assert calls == 1
+        finally:
+            pump.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await pump
+
+
+@pytest.mark.asyncio
+async def test_web_monitor_initial_status_button_only_opening_and_legacy_upgrade(tmp_path):
+    from plugins.followups.feeds import fingerprint
+    from plugins.followups.webpages import snapshot
+
+    page = {"html": '<main><h1>音乐会</h1><button disabled>购买门票</button></main>'}
+
+    async def handler(request):
+        return httpx.Response(200, content=page["html"].encode(), headers={"content-type": "text/html"})
+
+    async with monitoring_service(tmp_path, handler) as service:
+        spec = monitoring_spec(source_kind="webpage", check_initial=True, review_mode="interest")
+        await service.create(spec)
+        first = await service.poll(spec.watch_id)
+        assert first["submitted"] == 1
+        event = (await service.timeline(spec.watch_id))["events"][0]
+        assert event["payload"]["page_change"]["initial"] is True
+        assert event["payload"]["review_policy"] == "owner-requested"
+        assert event["payload"]["published_at"] is None
+        assert (await service.poll(spec.watch_id))["submitted"] == 0
+        before = snapshot(page["html"].encode(), spec.url)
+        page["html"] = page["html"].replace(" disabled", "")
+        after = snapshot(page["html"].encode(), spec.url)
+        assert before["text"] == after["text"] and before["sha256"] != after["sha256"]
+        assert (await service.poll(spec.watch_id))["submitted"] == 1
+        assert len((await service.timeline(spec.watch_id))["events"]) == 2
+
+        legacy = monitoring_spec(1, source_kind="webpage")
+        await service.create(legacy)
+        assert (await service.poll(legacy.watch_id))["status"] == "baseline"
+        cursor = dict(service.store.read("cursor:" + legacy.watch_id).value)
+        cursor["page"] = {key: after[key] for key in ("text", "title", "url")}
+        cursor["page"]["sha256"] = fingerprint(after["text"])
+        await service._save("cursor:" + legacy.watch_id, cursor)
+        # A v1 checkpoint never observed controls: adopt v2 silently, never
+        # invent historical availability from newly added state fields.
+        assert (await service.poll(legacy.watch_id))["submitted"] == 0
+        page["html"] = page["html"].replace("<button>", "<button disabled>")
+        assert (await service.poll(legacy.watch_id))["submitted"] == 1
+
+
+def test_web_monitor_controls_exclude_tokens_scripts_hidden_fields_and_obey_disabled_ancestors():
+    from plugins.followups.webpages import snapshot
+
+    url = "https://example.test/tickets"
+    def page(token, disabled):
+        return (
+            '<html><head><meta charset="utf-8"></head><body><main>'
+            '<fieldset disabled><legend><button>说明</button></legend><button>购买门票</button></fieldset>'
+            f'<section aria-disabled="{disabled}"><a href="/buy?event=42&token={token}&utm_source={token}">选座</a></section>'
+            f'<input type="hidden" role="button" name="csrf" value="{token}"><input type="password" role="button" value="{token}">'
+            f'<input type="text" role="button" value="{token}">'
+            '<a href="javascript:secret()">脚本链接</a><button onclick="secret()">查看</button>'
+            '</main></body></html>'
+        ).encode()
+
+    first = snapshot(page("PRIVATE_TOKEN_A", "true"), url)
+    rotated = snapshot(page("PRIVATE_TOKEN_B", "true"), url)
+    enabled = snapshot(page("PRIVATE_TOKEN_B", "false"), url)
+    assert first["sha256"] == rotated["sha256"] != enabled["sha256"]
+    encoded = json.dumps(first, ensure_ascii=False)
+    assert "PRIVATE_TOKEN" not in encoded and "secret()" not in encoded and "csrf" not in encoded
+    controls = first["interactions"]
+    by_label = {row["label"]: row for row in controls}
+    assert by_label["说明"]["disabled"] is False
+    assert by_label["购买门票"]["disabled"] is True
+    assert by_label["选座"]["aria_disabled"] is True
+    plain = "<main>购买门票</main>"
+    assert snapshot(plain.encode("utf-8"), url)["text"] == "购买门票"
+    assert snapshot(plain.encode("gb18030"), url, encoding="gb18030")["text"] == "购买门票"
+    declared = '<html><head><meta charset="gb18030"></head><body>' + plain + '</body></html>'
+    assert snapshot(declared.encode("gb18030"), url)["text"] == "购买门票"
+    with pytest.raises(ValueError):
+        snapshot(plain.encode(), url, encoding="not-a-charset")
+    from plugins.followups.webpages import safe_url
+
+    assert safe_url("/magic-link/PRIVATE_PATH_TOKEN_A", url) is None
+    assert safe_url("/%256d%2561gic-link/PRIVATE_PATH_TOKEN_A", url) is None
+    assert safe_url("/events/42/buy", url) == "https://example.test/events/42/buy"

@@ -47,12 +47,18 @@ def _mailbox_name(value):
 
 
 class MailboxServer:
-    def __init__(self, directory):
+    def __init__(self, directory, *, idle=False):
         self.directory = Path(directory)
         self.username, self.password = "owner@example.test", uuid4().hex
         self.folders = {"INBOX": MailboxState(uidvalidity=71)}
         self.commands, self.connections, self.handlers = [], set(), set()
         self.cleanup_completed = False
+        self.supports_idle = idle
+        self.idle_connections = {}
+        self.idle_changed = asyncio.Event()
+        self.idle_entered = asyncio.Event()
+        self.idle_hold = asyncio.Event()
+        self.idle_hold.set()
         self.hold, self.fetch_started = asyncio.Event(), asyncio.Event()
         self.hold.set()
 
@@ -122,7 +128,36 @@ class MailboxServer:
         uid = mailbox.uidnext
         mailbox.uidnext += 1
         mailbox.messages[uid] = message.as_bytes()
+        self.notify_idle(folder)
         return uid, identity
+
+    def notify_idle(self, folder="INBOX", *, kind="EXISTS"):
+        folder = "INBOX" if folder.casefold() == "inbox" else folder
+        responses = {
+            "EXISTS": f"* {len(self.folders[folder].messages)} EXISTS\r\n".encode(),
+            "RECENT": b"* 0 RECENT\r\n",
+            "EXPUNGE": b"* 1 EXPUNGE\r\n",
+            "FETCH": b"* 1 FETCH (FLAGS (\\Seen))\r\n",
+        }
+        for writer, selected in tuple(self.idle_connections.items()):
+            if selected == folder and not writer.is_closing():
+                writer.write(responses[kind])
+
+    async def wait_idle(self, folder="INBOX", *, count=1, timeout=5):
+        folder = "INBOX" if folder.casefold() == "inbox" else folder
+        async with asyncio.timeout(timeout):
+            while True:
+                self.idle_changed.clear()
+                if sum(selected == folder for selected in self.idle_connections.values()) >= count:
+                    return
+                await self.idle_changed.wait()
+
+    async def drop_idle(self, folder="INBOX"):
+        folder = "INBOX" if folder.casefold() == "inbox" else folder
+        writers = [writer for writer, selected in self.idle_connections.items() if selected == folder]
+        for writer in writers:
+            writer.close()
+        await asyncio.gather(*(writer.wait_closed() for writer in writers), return_exceptions=True)
 
     def certificate(self):
         self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -176,6 +211,7 @@ class MailboxServer:
 
     async def __aexit__(self, *args):
         self.hold.set()
+        self.idle_hold.set()
         self.server.close()
         writers = tuple(self.connections)
         for writer in writers:
@@ -220,7 +256,8 @@ class MailboxServer:
                 }
                 self.commands.append(observed)
                 if upper == "CAPABILITY":
-                    writer.write(b"* CAPABILITY IMAP4rev1 AUTH=XOAUTH2\r\n")
+                    writer.write(b"* CAPABILITY IMAP4rev1 AUTH=XOAUTH2"
+                                 + (b" IDLE" if self.supports_idle else b"") + b"\r\n")
                 elif upper == "AUTHENTICATE XOAUTH2":
                     writer.write(b"+ \r\n")
                     await writer.drain()
@@ -275,6 +312,19 @@ class MailboxServer:
                         )
                         + b"\r\n"
                     )
+                elif upper == "IDLE" and self.supports_idle:
+                    self.idle_entered.set()
+                    await self.idle_hold.wait()
+                    self.idle_connections[writer] = selected
+                    self.idle_changed.set()
+                    writer.write(b"+ idling\r\n")
+                    await writer.drain()
+                    done = await reader.readline()
+                    if done.strip().upper() != b"DONE":
+                        break
+                    self.commands.append({"command": "DONE", "peek": False, "folder": selected})
+                    self.idle_connections.pop(writer, None)
+                    self.idle_changed.set()
                 elif upper.startswith("UID FETCH "):
                     if selected is None:
                         writer.write(f"{tag} NO Select a mailbox first\r\n".encode())
@@ -315,3 +365,5 @@ class MailboxServer:
             finally:
                 self.connections.discard(writer)
                 self.handlers.discard(task)
+                self.idle_connections.pop(writer, None)
+                self.idle_changed.set()

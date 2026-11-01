@@ -29,8 +29,12 @@ from plugins.ui.contract import PLUGIN_UI
 @asynccontextmanager
 async def source():
     state = {"entries": [], "requests": [], "version": 1, "pages": {}}
+    handlers, connections = set(), set()
 
     async def handle(reader, writer):
+        task = asyncio.current_task()
+        handlers.add(task)
+        connections.add(writer)
         try:
             request = (
                 await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), 10)
@@ -90,7 +94,11 @@ async def source():
             await writer.drain()
         finally:
             writer.close()
-            await writer.wait_closed()
+            try:
+                await writer.wait_closed()
+            finally:
+                handlers.discard(task)
+                connections.discard(writer)
 
     server = await asyncio.start_server(handle, "127.0.0.1", 0)
     state["url"] = "http://127.0.0.1:" + str(server.sockets[0].getsockname()[1])
@@ -98,7 +106,12 @@ async def source():
         yield state
     finally:
         server.close()
+        for writer in tuple(connections):
+            writer.close()
+        if handlers:
+            await asyncio.gather(*tuple(handlers), return_exceptions=True)
         await server.wait_closed()
+        state["cleanup_completed"] = not handlers and not connections
 
 
 async def evaluate(args):
@@ -1157,6 +1170,205 @@ async def evaluate_chat(args):
     return all(row["passed"] for row in report["cases"])
 
 
+async def evaluate_monitoring(args):
+    """Unknown opening time: natural setup, automatic collection, actual decisions.
+
+    Local HTTP is a controlled source. Timings include model investigation and
+    local Delivery receipts; they are not internet-site or Telegram SLAs.
+    """
+    from eval.mail_followups import completed_investigation, failure_facts
+    from eval.native_runtime import text
+    from plugins.followups.webpages import snapshot
+    from plugins.ledger.contract import BINDINGS, Output, ToolCall, ToolResult
+    from plugins.tools.contract import TOOLS
+
+    model = EvaluationModel.read(args.model_config)
+    initialize_workspace(args.workspace)
+    report = {
+        "scope": "Controlled public-page monitoring with real model decisions and native local delivery; no real ticket site, purchase, Telegram or population quality claim.",
+        "implementation": source_identity(), "model_config": model.description(),
+        "cases": [], "observations": [], "manual_source_polls": 0,
+        "tool_names_in_user_request": False, "planned_cases": 6, "passed": False,
+    }
+
+    def save():
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+
+    async def case(name, operation):
+        started = time.monotonic()
+        try:
+            row = {"name": name, "passed": True, "detail": await operation()}
+        except Exception as error:  # noqa: BLE001 - retain failures without provider bodies
+            row = {"name": name, "passed": False, **failure_facts(error)}
+        row["seconds"] = round(time.monotonic() - started, 3)
+        report["cases"].append(row)
+        save()
+        print(json.dumps({k: v for k, v in row.items() if k != "detail"}), flush=True)
+        return row["passed"]
+
+    sid, identity = "akashic:ticket-monitoring", "ticket-request"
+    seen = set()
+    async with source() as site:
+        site["title"] = "星砂音乐会售票"
+        from datetime import timedelta
+
+        show = datetime.now(UTC) + timedelta(days=7)
+        request_started = None
+
+        def page(enabled):
+            return (
+                '<section id="tickets"><h1>星砂音乐会</h1>'
+                f'<p>演出日期{show:%Y年%m月%d日}19:00（北京时间）；票价120元。开售以本区购买按钮是否启用为准。</p>'
+                + ('<button>购买门票</button>' if enabled else '<button disabled>购买门票</button>')
+                + '</section>'
+            )
+
+        site["pages"]["/watched"] = page(False)
+        async with runtime(args.workspace) as core:
+            async def setup():
+                await model.configure(core, args.key_file)
+                await configure_embedding(core, args.embedding_manifest)
+                await submit(core, sid, "inbox-setup", "这个对话接收我的通知，确认即可。")
+                await configure_proactive(core, args.workspace, sid)
+                return {"real_provider": True, "local_delivery_target": True}
+
+            if not await case("configure_monitoring_runtime", setup):
+                return False
+
+            async def create():
+                nonlocal request_started
+                prompt = (
+                    f"请持续帮我盯着星砂音乐会售票页 {site['url']}/watched ，名称叫星砂音乐会。"
+                    "关注规则是：只有票价不超过160元且购买门票按钮已启用才通知，未启用就不要通知。"
+                    "我不知道开票时间，请先检查当前是否已经能购买，之后继续跟进。"
+                    "这个测试网站允许每10秒检查一次，请按这个间隔检查，只关注id为tickets的区域。"
+                )
+                request_started = time.monotonic()
+                answer = await submit(core, sid, identity, prompt)
+                ctx = core.plugin_manager.live_root.context
+                rows = ctx.require(MESSAGE_CATALOG).reader(sid).snapshot()
+                by_id = {row.message_id: row for row in rows}
+                receipts = []
+                for row in rows:
+                    if not isinstance(row.body, ToolResult) or row.body.outcome != "success":
+                        continue
+                    caller = by_id.get(row.body.call_ref.message_id)
+                    if caller is None or not isinstance(caller.body, Output):
+                        continue
+                    call = caller.body.parts[row.body.call_ref.part_index]
+                    if not isinstance(call, ToolCall):
+                        continue
+                    tool = ctx.require(BINDINGS).describe(call.binding_id, TOOLS)["tool"]
+                    if tool["owner"] == "followups" and tool["name"] == "create_followup":
+                        receipts.append(json.loads(text(row)))
+                assert len(receipts) == 1, "natural request did not commit exactly one follow-up"
+                timeline = await rpc(core, "followups/timeline", {
+                    "watch_id": receipts[0]["watch"]["watch_id"],
+                })
+                watch = timeline["watch"]["spec"]
+                assert watch["source_kind"] == "webpage" and watch["check_initial"] is True
+                assert watch["interval_seconds"] == 10 and watch["anchors"] == [identity]
+                from lxml import html
+
+                selected = html.fromstring(page(False)).xpath(watch["xpath"])
+                assert len(selected) == 1 and selected[0].get("id") == "tickets"
+                report["watch_id"] = watch["watch_id"]
+                report["setup_reply_nonempty"] = bool(text(answer).strip())
+                return {"actual_successful_tool_receipt": True, "initial_check": True, "interval_seconds": 10}
+
+            if not await case("natural_unknown_opening_request_creates_initial_check", create):
+                report["metrics"] = metrics(args.workspace, model)
+                save()
+                return False
+
+            async def outcome(expected, *, initial=False, published=None):
+                start = request_started if initial else published
+                assert start is not None
+                wanted_sha = snapshot(page(not initial).encode(), site["url"] + "/watched")["sha256"]
+                first_seen = None
+                async with asyncio.timeout(args.investigation_timeout):
+                    while True:
+                        timeline = await rpc(core, "followups/timeline", {"watch_id": report["watch_id"]})
+                        candidates = [event for event in timeline["events"]
+                                      if (event["item_id"], event["revision"]) not in seen
+                                      and event["payload"].get("page_change", {}).get("current_sha256") == wanted_sha
+                                      and event["payload"]["page_change"].get("initial") is initial]
+                        if candidates:
+                            assert len(candidates) == 1
+                            event = candidates[0]
+                            if first_seen is None:
+                                first_seen = time.monotonic()
+                            completed = await completed_investigation(core, event)
+                            if completed is not None:
+                                seen.add((event["item_id"], event["revision"]))
+                                observation = {
+                                    "decision": completed["decision"],
+                                    "confirmed_deliveries": len(event["deliveries"]),
+                                    "event_observed_seconds": round(first_seen - start, 3),
+                                    "terminal_observed_seconds": round(time.monotonic() - start, 3),
+                                    "initial": event["payload"].get("page_change", {}).get("initial", False),
+                                    "event_revision": event["revision"],
+                                    "source_snapshot_identity_verified": True,
+                                    "latency_origin": "owner_request_submitted" if initial else "source_change_published",
+                                    **{key: completed[key] for key in ("accepted_turn_verified", "phase_complete", "delivery_identity_verified", "domain_status")},
+                                }
+                                report["observations"].append(observation)
+                                save()
+                                assert observation["decision"] == expected
+                                assert observation["confirmed_deliveries"] == (1 if expected == "share_content" else 0)
+                                return observation
+                        await asyncio.sleep(0.1)
+
+            await case("initial_unavailable_status_is_investigated_without_notification", lambda: outcome("skip_content", initial=True))
+
+            async def opens():
+                before = snapshot(page(False).encode(), site["url"] + "/watched")
+                after = snapshot(page(True).encode(), site["url"] + "/watched")
+                assert before["text"] == after["text"] and before["sha256"] != after["sha256"]
+                published = time.monotonic()
+                site["pages"]["/watched"] = page(True)
+                site["version"] += 1
+                result = await outcome("share_content", published=published)
+                result["visible_text_unchanged"] = True
+                return result
+
+            await case("button_only_opening_is_automatically_detected_and_delivered", opens)
+
+            async def quiet():
+                before = await rpc(core, "followups/timeline", {"watch_id": report["watch_id"]})
+                calls = metrics(args.workspace, model)["remote_chat_calls"]
+                # Changes outside the authorized region must not launch work.
+                site["pages"]["/watched"] += '<aside>广告位更新，不影响售票。</aside>'
+                site["version"] += 1
+                async with asyncio.timeout(15):
+                    while True:
+                        after = await rpc(core, "followups/timeline", {"watch_id": report["watch_id"]})
+                        if after["cursor"].get("etag") == '"' + str(site["version"]) + '"':
+                            break
+                        await asyncio.sleep(0.1)
+                assert before["events"] == after["events"]
+                assert metrics(args.workspace, model)["remote_chat_calls"] == calls
+                return {"source_rechecked": True, "checkpoint_committed": True, "extra_events": 0, "extra_model_calls": 0, "duplicate_notifications": 0}
+
+            await case("irrelevant_changes_and_repeated_open_page_stay_quiet", quiet)
+            await rpc(core, "followups/set-enabled", {"watch_id": report["watch_id"], "enabled": False})
+            final = await rpc(core, "followups/timeline", {"watch_id": report["watch_id"]})
+            report["metrics"] = metrics(args.workspace, model)
+
+        async with runtime(args.workspace) as core:
+            async def restored():
+                current = await rpc(core, "followups/timeline", {"watch_id": report["watch_id"]})
+                assert not current["watch"]["enabled"] and current["events"] == final["events"]
+                return {"paused": True, "same_delivery_and_event_receipts": True}
+
+            await case("restart_preserves_monitoring_and_delivery_evidence", restored)
+    report["source_cleanup_completed"] = site["cleanup_completed"]
+    report["passed"] = len(report["cases"]) == report["planned_cases"] and all(row["passed"] for row in report["cases"]) and site["cleanup_completed"]
+    save()
+    return report["passed"]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workspace", type=Path, required=True)
@@ -1168,6 +1380,7 @@ def main():
     parser.add_argument("--isolated", action="store_true")
     parser.add_argument("--long-source", action="store_true")
     parser.add_argument("--webpage", action="store_true")
+    parser.add_argument("--monitoring", action="store_true", help="Unknown ticket opening time, initial check and button-only change, automatic native collection and real-model delivery.")
     parser.add_argument(
         "--chat",
         action="store_true",
@@ -1191,6 +1404,8 @@ def main():
         async with provider_slot(
             EvaluationModel.read(args.model_config), args.key_file
         ):
+            if args.monitoring:
+                return await evaluate_monitoring(args)
             return await (evaluate_chat(args) if args.chat else evaluate(args))
 
     raise SystemExit(0 if asyncio.run(run()) else 1)

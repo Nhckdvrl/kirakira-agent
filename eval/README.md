@@ -145,6 +145,25 @@ uv run --frozen --no-sync python -m eval.prompt_cache --mode mail --attention-ca
 
 `--initial-review-only` 单独检查创建前已存在的邮件：以普通中文交办，按本轮原始输入对应的真实创建工具回执找到关注，核对文件夹、回查数量、原话规则与所属会话，不再额外调用 RPC 创建第二份关注。默认只监听新邮件，明确授权后从指定箱回查最近一封；Junk 中的补材料要求与 INBOX 中的普通推广分别作一次真实模型判断，核对日期、时区、来源 UID、重复 poll 和原生重启后的回执。通知后再用普通中文确认截止前一天的提醒，查真实调度回执、时间与重启状态；不等待未来触发来虚报投递成功。作用已提交而最后确认回复失败时，仍追踪并清理该关注，回复失败保留。两项判断与提醒登记分开计数，全部失败保留，不据此发布垃圾邮件分类准确率。
 
+自动监测另有两条真实模型验收，均使用隔离工作区与本地合成来源：
+
+```sh
+uv run --frozen --no-sync python -m eval.followups --monitoring \
+  --workspace /local-disk/eval/tickets-new --output /private/path/tickets.json \
+  --model-config /private/path/model.json --key-file /private/path/model.key \
+  --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json
+
+uv run --frozen --no-sync python -m eval.mail_followups \
+  --functional-only --live-monitoring --attention-cases \
+  --workspace /local-disk/eval/mail-idle-new --output /private/path/mail-idle.json \
+  --model-config /private/path/model.json --key-file /private/path/model.key \
+  --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json
+```
+
+`--monitoring` 固定六项计划：普通中文交办、显式首次现状检查、未开售时跳过、只改变按钮禁用状态后的自动发现与实际送达、关注区外变化不调查，以及暂停后重启保持。全程不手动触发采集。新事件按快照摘要匹配，调查核对最新原生 Wake 阶段、领域结算与准确通知身份；静默检查等待对应 HTTP 版本的采集检查点提交。开票变化的发现耗时和包含模型调查的送达耗时分别报告，首次检查从用户请求提交前计时。这不是对真实售票站、抢票或 Telegram 的验收。
+
+`--live-monitoring` 必须与 `--functional-only` 一起使用，开启真实本地 TLS IDLE；先用 RPC 配置关注并建立 UID 基线，定时兜底为一小时，发布新业务邮件后不手动调用 poll。每次自动接纳核对实际 UID、Message-ID 和文件夹，再检查完整分享／跳过及投递。UID 身份重建场景仍有两次明确的手动检查，与新邮件自动接纳分开记录；10 次重复／flag 信号必须等采集检查点完成后仍无新事件或模型调用。含 `--attention-cases` 固定十五项工程与模型验收，实际内容判断另有八项分母。模型、采集、投递和真实用户重要性不能合并成一个准确率。
+
 只检查真实本地 TLS 协议与采集游标时，不需要模型、密钥或向量配置：
 
 ```sh
