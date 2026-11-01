@@ -30,6 +30,15 @@ def source_identity():
     names.extend(str(path.relative_to(ROOT)) for path in sorted((ROOT / "plugins/followups").glob("*.py")))
     names.extend(str(path.relative_to(ROOT)) for path in sorted((ROOT / "plugins/drift").glob("*.py")))
     names.extend(str(path.relative_to(ROOT)) for path in sorted((ROOT / "plugins/prompt").glob("*.py")))
+    for directory in ("plugins/web_search_searxng", "plugins/standard_web", "plugins/compaction",
+                      "plugins/context", "plugins/markdown_memory", "plugins/react"):
+        names.extend(str(path.relative_to(ROOT)) for path in sorted((ROOT / directory).glob("*.py")))
+    names.extend(name for name in ("agent/plugin_composition/runtime_lifecycle.py",
+                                  "plugins/models/contract.py", "plugins/models/projection.py",
+                                  "plugins/conversation/plugin.py", "plugins/reply_program/program.py",
+                                  "plugins/tools/plugin.py", "plugins/wake/plugin.py",
+                                  "plugins/reply/plugin.py", "plugins/scheduler/plugin.py",
+                                  "plugins/plugin_update/plugin.py") if (ROOT / name).is_file())
     names.extend(name for name in ("plugins/markdown_memory/store.py", "plugins/prompt/VEDA.md", "plugins/prompt/web_module.js",
                                   "frontend/plugins/prompt/src/index.tsx") if (ROOT / name).is_file())
     names.extend(name for name in ("plugins/drift/web_module.js", "plugins/drift/web_module.css",
@@ -38,6 +47,7 @@ def source_identity():
                   "plugins/wake/runtime.py", "plugins/wake/program.py", "eval/followups.py"])
     names.extend(name for name in ("eval/mail_followups.py", "eval/fixtures/mailbox.py", "eval/runtime_settings.py", "eval/idle_reflection.py", "eval/personality.py", "eval/prompt_cache.py") if (ROOT / name).is_file())
     names.extend(name for name in ("eval/runtime_experience.py", "eval/telegram_latency.py", "eval/native_runtime.py",
+                                  "eval/native_alignment.py", "eval/native_web.py", "plugins/telegram_sender/sender.py",
                                   "plugins/session_reference/plugin.py", "plugins/reply/follow.py",
                                   "plugins/delivery_policy/follow.py", "plugins/delivery_policy/plugin.py",
                                   "plugins/delivery/execution.py", "plugins/ui/contract.py",

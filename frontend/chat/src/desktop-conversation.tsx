@@ -330,7 +330,7 @@ function DaySeparator({ label }: { label: string }) {
 }
 
 /** 展示完整日志，引用只定位原消息，不给工具结果补造助手身份。 */
-export const DesktopTimelineMessages = React.memo(function DesktopTimelineMessages({ messages, activities, replySynced, refresh = 0, status, messageElementsRef, copiedMessageId, onReply, onEditInput, onRetry, onCopied, onError }: {
+export const DesktopTimelineMessages = React.memo(function DesktopTimelineMessages({ messages, activities, replySynced, refresh = 0, status, messageElementsRef, copiedMessageId, onReply, onEditInput, onRetry, onAbandon, onCopied, onError }: {
   messages: TimelineMessage[];
   activities: ReplyActivity[];
   /** 本会话的回复状态已同步（收到 reply.status）：之后没有实时活动的未收尾轮次按已结束显示。 */
@@ -342,6 +342,7 @@ export const DesktopTimelineMessages = React.memo(function DesktopTimelineMessag
   onReply: (reply: TimelineReply) => void;
   onEditInput: (text: string) => void;
   onRetry: (inputId: string) => Promise<void>;
+  onAbandon: () => Promise<void>;
   onCopied: (id: string) => void;
   onError: (error: unknown) => void;
 }) {
@@ -418,6 +419,7 @@ export const DesktopTimelineMessages = React.memo(function DesktopTimelineMessag
         : message.body.kind === "control" && message.body.action === "failure" ? <FailureRetry
           inputId={failures.retryable.get(message.id)} earlier={failures.earlier.get(message.id)}
           disabled={status !== "idle"} onRetry={onRetry} /> : undefined} />
+    {failures.abandonable.has(message.id) ? <TimelineAbandon disabled={status !== "idle"} onAbandon={onAbandon} /> : null}
     {/* 轮次未结束的输出还会接着长，时间与复制等落定后挂在末条上，和实时视图一致。 */}
     {!groups.hiddenBodies.has(message.id) && !groups.moved.has(message.id) && !groups.joined.has(message.id) && !groups.unsettled.has(message.id) ? <div className={`shared-message-meta timeline-meta ${message.body.kind === "input" ? "user" : "assistant"}`}>
       <time dateTime={message.timestamp}>{formatMessageTime(message.timestamp)}</time>
@@ -447,6 +449,7 @@ export const DesktopTimelineMessages = React.memo(function DesktopTimelineMessag
     && previous.onReply === next.onReply
     && previous.onEditInput === next.onEditInput
     && previous.onRetry === next.onRetry
+    && previous.onAbandon === next.onAbandon
     && previous.onCopied === next.onCopied
     && previous.onError === next.onError
     && previous.activities.length === next.activities.length
@@ -459,6 +462,20 @@ export const DesktopTimelineMessages = React.memo(function DesktopTimelineMessag
         && activity.preview?.message_id === other.preview?.message_id;
     });
 });
+
+function TimelineAbandon({ disabled, onAbandon }: {
+  disabled: boolean;
+  onAbandon: () => Promise<void>;
+}) {
+  const [pending, setPending] = useState(false);
+  return <div className="timeline-failure-actions">
+    <button type="button" disabled={disabled || pending} aria-busy={pending || undefined}
+      title="停止后续工作；已经执行的外部操作不会撤销"
+      onClick={() => { setPending(true); void onAbandon().finally(() => setPending(false)); }}>
+      {pending ? "正在放弃…" : "放弃本轮未完成的工作"}
+    </button>
+  </div>;
+}
 
 /** 失败块的收尾：重跑这一轮的文字按钮，以及收起的此前失败。 */
 function FailureRetry({ inputId, earlier = [], disabled, onRetry }: {

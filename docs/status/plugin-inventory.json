@@ -580,6 +580,14 @@
       "pinned_files": 7
     },
     {
+      "id": "web_search_searxng",
+      "directory": "plugins/web_search_searxng",
+      "api_version": 3,
+      "upstream": false,
+      "headless_selected": true,
+      "pinned_files": 0
+    },
+    {
       "id": "working_directory",
       "directory": "plugins/working_directory",
       "api_version": 3,

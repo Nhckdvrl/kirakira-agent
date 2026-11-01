@@ -5192,5 +5192,487 @@
         "bytes": 10991
       }
     }
+  },
+  "continuity_2026_11_01": {
+    "recorded_at": "2026-11-01T09:44:19.147798+00:00",
+    "scope": "Selected personal-assistant runtime continuity, learning recovery and optional search integration; isolated synthetic data, not a public memory-quality benchmark or production latency measurement.",
+    "service_stopped": true,
+    "not_deployed": true,
+    "implementation": {
+      "kirakira_agent/runtime.py": "dd2ccc78a1a0763494a640ec36e9547c8adf99c1c125c66069d75376baaa354e",
+      "kirakira_agent/setup.py": "8952c504d22740df6ebb1a192a00ca4a3fc1db6354852e3f4996b4a82028cb11",
+      "kirakira_agent/environment.py": "d7a2c67bb5c6efb2ef2d2c8ef011c958e012a25e87a19fb7e1cbf3bc31b88c05",
+      "kirakira_agent/client.py": "c60a6613d6d9f507560101c4310e29c8d4bc53914d1398dc5f7c46924b3a8403",
+      "eval/models.py": "f2f8425b6599705a107834310b5c51f0b2abb268701a02a71106c4ab9518f0fc",
+      "plugins/akasha/contract.py": "c6d7d0c7f0969cef4426ea295c58e7045d784471aee66e039be22b9c9d766167",
+      "plugins/akasha/plugin.py": "bacd9cea30302cd955835e22fafcc526fda15cb8d248f6734fa9011966015712",
+      "plugins/akasha/query.py": "031b25033f2126da436a4229bf238a814b5bad5f5cad75cd99c71940feb78554",
+      "plugins/akasha/recalls.py": "029a6fa6b105a9b85cfe4f007a20569d8653751e35e86439876857ebea8ac8b6",
+      "plugins/akasha/recall_tool.py": "a1a38c3b47a92c761c010a78335c2f5e179b5df6becb5e0b0ae89225ee353f3c",
+      "plugins/akasha/runtime.py": "0afa4d9f9edb8c18e8fa630edb2b109ecaad11a67bd81de838cd1f2d22e652a7",
+      "plugins/akasha/excerpts.py": "9a408c9017de5722d68265c7012268bc4801c516137c8cd17b010fdbad19da7d",
+      "plugins/akasha/source_tool.py": "5cd6ba14202ac9a99e36c83e9deccc0c7872998cd67226fd856450a4439cbc41",
+      "plugins/akasha/source_search.py": "87753df2c606ed7a62341630f87f7e130af15a86a90681fbd8fca692ea418843",
+      "plugins/followups/__init__.py": "2f43daa4738a0b465626801fbefd89cd2dff70e5a26f1cf63afa84d7a571472b",
+      "plugins/followups/contract.py": "4e73341fe03c9e35e2ac12882f1094c35d8bb632414ac32d81d62080c7b487ef",
+      "plugins/followups/dashboard.py": "5bdd51774087739ddc6f371023d36a493ab47d0f886139fe4a85ba2045a4f05b",
+      "plugins/followups/feeds.py": "a7da435624fef92a3581a2f0b2cac3a37f5d24a2e88dde6518b62c598299efcf",
+      "plugins/followups/mail_settings.py": "c36df858a76478b450464907cbcc53bd50ef1beab79d49ee0fff6aad0b3dc1a4",
+      "plugins/followups/mailbox.py": "e2584ff0d7a76ca602f1d698a2a25ef07ab7c5552cd5644cb4ca0266a90e5296",
+      "plugins/followups/plugin.py": "274a251c04772f7f541e1959569389341ab7743cbefab728c9894dcd2d0c7ad5",
+      "plugins/followups/service.py": "114b1fde38860cc9deafb1f80519f2292883e2931e266ae8ea333d39d0df2d89",
+      "plugins/followups/tools.py": "1bf79e267d098dddc4cb1a0e06b1e027a3b2ebfc25af7fbe85a4c6a93312f10d",
+      "plugins/followups/webpages.py": "e5bf69c2575b955fec99afb263a443fe1cabfff3f0c3be91eedaceda900e4168",
+      "plugins/drift/__init__.py": "8905bcb66bd1258847589e4b4b0a4eac1f72ea044c09d3b394e98a85d265fa2e",
+      "plugins/drift/contract.py": "2b73654b779b267ec20822193408287a4abeb3426b238d08a04fa5ff2a35e278",
+      "plugins/drift/dashboard.py": "3f793998f1b35c5342298421eb446d79b7d2bf5f7d7baa9fba161c2f562c225e",
+      "plugins/drift/plugin.py": "55ff3b28b05f4fa86fb778430efa2d60ce0af244217f76f4a8350a1cc57d2977",
+      "plugins/drift/producer.py": "281bc2eeb72cd2ad615ca4c868d22aae98de59248cd113b66a86d7920865cfae",
+      "plugins/drift/store.py": "256c225436b0c875f16e3f867b3ff8449cd374198811a5eba7c4114679181d6e",
+      "plugins/prompt/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "plugins/prompt/completion.py": "22df7c364b49c61d44cb71f11530faa213af8c6474cba9d045546608bdc3e1b1",
+      "plugins/prompt/dashboard.py": "32dc7b3cbdb8963d0b90f77cf28d1b18dae6ed400160cfd44d2fb66ddee9c309",
+      "plugins/prompt/persona.py": "979da6581d60524a7b4681dd36e5bb0c3e0d748b5ee31ab5c0980629a0fbb716",
+      "plugins/prompt/personality.py": "a99bfd88e77f79cc7640dc4ed469ee3ed536cb3edb5c834d060103e1f2b76fc9",
+      "plugins/prompt/plugin.py": "3280aa9ed0dafa54301923b27d8d28b2fa3a7a8818a4ef010d5ce2d8a1bb90d2",
+      "plugins/prompt/text.py": "8a0351eb96b95219944d7f05f29320f63c11829acf5f347946a80dbb8bea0fd0",
+      "plugins/web_search_searxng/__init__.py": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "plugins/web_search_searxng/dashboard.py": "51c6c46667dd2cbc924cc52181795554c3c4699f8a377bec986be432715bd7ac",
+      "plugins/web_search_searxng/plugin.py": "60de63bcc819d883155d7f5e5b5decc5c5b7f2d45c99ad6fc33b751c68bc8b1a",
+      "plugins/web_search_searxng/search.py": "1eebaff4f90039d33eda0824ef42ee5c6e43f5327059cf6c8332609f2db1a867",
+      "plugins/standard_web/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "plugins/standard_web/_tool_boundary.py": "5b01ccca99c3ec354df20a557f7d933ac67ee872872b31167476e3e35d573185",
+      "plugins/standard_web/contract.py": "b2572dcf00ad8ac15471e4b22c404b8b66bbc0d9d316a40d6d2a5892f9840535",
+      "plugins/standard_web/dashboard.py": "a1f92124985b537e7a389d78219f7849ddc09da77a3bd89df7bd9255e9ccbccd",
+      "plugins/standard_web/plugin.py": "355ecd1f977b04cef6f0601ae8db7ea51f9ed54b169bed1b345457ed540b5c48",
+      "plugins/standard_web/web.py": "983903662519cd42aaf6a29ddcebfe92f36434b761debfb4db9130fd828291e6",
+      "plugins/compaction/contract.py": "009bb3df6415b724c7d8de92d4f2b9ae69d3aa91c11c00fc5948cb8b4b6deca5",
+      "plugins/compaction/dashboard.py": "10a8a6481a165c0c7d2a982afb50d313adebc8d73492e62998f422409ed52500",
+      "plugins/compaction/message_summary.py": "2c0bc817259399a58572cc1c4d31398b04e715e58aafafa8abf7ae64481403b1",
+      "plugins/compaction/plugin.py": "1d8aa9c9c04e542d773ef84ea2b5cf687e1613b825ebca0541ac2b43db667074",
+      "plugins/compaction/records.py": "0638e027c8f7887c3e170c63fe85b142ba0b08be98a0e1248ddf964e071fafef",
+      "plugins/context/api.py": "d46d67ba0d1f37f28343ec1b785acbaf53a2996f9534965178982d59504de9a9",
+      "plugins/context/contract.py": "eed5457df73f97a99720cd6987e6c98951ae5a436033e1b1120cd443a9ab5101",
+      "plugins/context/materials.py": "c772a925c32c883749c83f79f243334c60b3faaa9e2c84a94707e3dda62440e5",
+      "plugins/context/plugin.py": "e56907e56e783a921ce0586bfe1f8558fddd4954fc29fbb41b1df69180e049c7",
+      "plugins/markdown_memory/__init__.py": "49771ed9f260d2023eaefa2701e2f6a0303dcb1303ce477c024de034a3d00f15",
+      "plugins/markdown_memory/dashboard.py": "8667fe2aab62fbf371ae5ba3df6b88bcd1dc9ffb0906a482e53bc564331bb4fe",
+      "plugins/markdown_memory/documents.py": "fa3affb48e95b52ced2f28aef6f0d6cbdf1ca9815e87b7fe87d229c1d555c1e6",
+      "plugins/markdown_memory/llm_json.py": "7ae8cc183209cdb0cbe6a3d2ce864e0e35e6b69437495c5177173a48919d4197",
+      "plugins/markdown_memory/plugin.py": "1fba93d3efcd67b6f240710504196f202bad997f96bf0b174763e1c38370dda8",
+      "plugins/markdown_memory/store.py": "669c3141dd3e6c04cc64eed21c8399e6c32106a19bc8c921df3d7a3be68be0ca",
+      "plugins/react/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "plugins/react/contract.py": "62064da41636a5ff161d9fef4269686ae3fac31926b350715214894d8be35adf",
+      "plugins/react/plugin.py": "3ac6d924b973f20746433994ccc46f9cb380c00ed18a6b3f81b1b25b11c1c704",
+      "agent/plugin_composition/runtime_lifecycle.py": "6ab1a10185ed1bd6e1f8cde47001ca7eb8c4efa0e43490a2b4a8f3b803ef195a",
+      "plugins/models/contract.py": "62fd0b9f330b22354f9223901593fa957812cca39421189d7c60b025347c1355",
+      "plugins/models/projection.py": "3faac57cb84f05cbc7ae0a846c5c8e7034a8919cbd15d01b5e268f2c9412134e",
+      "plugins/conversation/plugin.py": "3b5e27d6d26dbffc55eac9be4a9eb8f83c9ce7f88d59a4cb06b77953b6e655aa",
+      "plugins/reply_program/program.py": "8982a880ca7b817f965ae64c39398f0556c2904e69ebb95933829a54e66afbe1",
+      "plugins/tools/plugin.py": "4b39a2e572a010dc9dcff445afb529487e8e0a05e75420018258402cf7987d1e",
+      "plugins/wake/plugin.py": "23477eb63dc9106128d62c3fba08fbdcef001ea53c09a4a928a007062453df51",
+      "plugins/reply/plugin.py": "51a33de63d7d62df79a27ab4110dbec4e14622596a8d111f850069ddaa023c65",
+      "plugins/scheduler/plugin.py": "49922f4049d39fa5d1853b1962663529b8cd1aee9ea1c6a71dde90aaf869025b",
+      "plugins/plugin_update/plugin.py": "002534590986bc4b59345896c720deeaa689bd691dd6e421f3cf670103066578",
+      "plugins/prompt/VEDA.md": "f387d558f7cd1ffbf217ea3ff685354af9caee59fc27ac2fa67efb8cee190db4",
+      "plugins/prompt/web_module.js": "3b6bd60494365a50d76fc6320b06ce9953a0247854fbd1bfe8f4f17d3112bf69",
+      "frontend/plugins/prompt/src/index.tsx": "32b66e799d718e573035b5a7af5b8d405425f4b97830086deb00e77469fde76b",
+      "plugins/drift/web_module.js": "87dc03aa145f6e4967498178d7c58f5327767935e6140de0301d8f091b808030",
+      "plugins/drift/web_module.css": "203990074b89d27235fd85b124e8d22b9956b9dd4c2685403ae7fa2fbab37994",
+      "frontend/plugins/drift/src/index.tsx": "739ca8ba40c8b858652efe44bfd2cb94f11ed6ceedd1168e572f3ff0ff5bb3ee",
+      "plugins/eventmail/store.py": "654f6b4c3984e625d7aab3f2b30ed4c9c7f588ce85f0502f9f6e73b0e1c2764f",
+      "plugins/wake/api.py": "c0ee0e1edf5ce0b85fdc45edd887d3c7ff598235dc7e96fb01459d11a3f29a73",
+      "plugins/wake/messages.py": "e88e279f801a95251acef11fbdac3e94b787135b9db7a3a73b8b762abed1ba30",
+      "plugins/wake/runtime.py": "d724742a6cb4d3fd1995f71d638fb7122257f354f587be1c0360c89f4989428c",
+      "plugins/wake/program.py": "53a89048c03a4eeca761a03035f32750e083f99685ea21860650649a6f70b2ab",
+      "eval/followups.py": "3b47bb4ca0cf25adb117e2bb3e5cda4d8c87b5377b67c4000b89f18b0aa01582",
+      "eval/mail_followups.py": "ff185bf9a8b5f6bad0ccf070e38f4b2c6f2165be5c33a6c001c7b9fc9914f0d5",
+      "eval/fixtures/mailbox.py": "ed75ef454a30f214c71d26d237564abd3fc6a85391048080ad9ee09b66210c42",
+      "eval/runtime_settings.py": "c5c85f54158bd265e15d19b48cc50fd938d0a878b49fa6d19694c502fc9b8acb",
+      "eval/idle_reflection.py": "4120504207b889bdcd0e4012c0f2b85d42f23355661a229ac9955be6e55f1758",
+      "eval/personality.py": "eec5f440d38cbaff720357e087355d3c3e75972ff411b5d6a383c3156e2eee8f",
+      "eval/prompt_cache.py": "fe19586d98d72e8e1e7db052e12ea114d4970d542471080874a953db066213e0",
+      "eval/runtime_experience.py": "3154a6fd99692d09e31d11ff58eb3afece02d056c7661e84853668b55a44f4ce",
+      "eval/telegram_latency.py": "5db5bcbef48935990ce541d2ed417864925f4a75047ecf4365c0d1216f430d5f",
+      "eval/native_runtime.py": "fae1e120e24ae16a3b6bb49699225e0afdd30e6d2c1c4a897d951875aea69bbf",
+      "eval/native_alignment.py": "55f116ce6a82ea66525ef2af2800069267aa369bc9c5c28e20623734c205852a",
+      "eval/native_web.py": "46f29f9db5f1efb29ef671b8b077ea8b4d0910a5982695df6db0839d071498ee",
+      "plugins/telegram_sender/sender.py": "a8b18d9be2d25c6d0d6338a79ab5fc80f75a365705f61c350266b77e05329b49",
+      "plugins/session_reference/plugin.py": "89722dafbad145f927f2a9b0718ac0c14d4f8ecef2b7e27fd59dda6d11b55abb",
+      "plugins/reply/follow.py": "106982277788ddc414edd2d789a163ac3e7203af03462889d0cb964f1f129f8c",
+      "plugins/delivery_policy/follow.py": "addce3d9d186a1cc1c790401d6965c5a6b8a0eb25adf9c0cc7161cda71a6f2fc",
+      "plugins/delivery_policy/plugin.py": "33d2e050b273c8f2f64316d432f57976e1a22ad715fd0ea27e7e347286a9b486",
+      "plugins/delivery/execution.py": "ed75e46aff3c90fc93fe8404bbdca59423f982bec8444695c4ea7b7337fea7ab",
+      "plugins/ui/contract.py": "a3e6d35254a5dd149dbc59ffad7486e1bd9c696fc617f5d7683897c8c15c078d",
+      "plugins/gateway/service.py": "916a3e120ef1d21547854f94db757a2524fd4ba96ce693b94ec365354570f7e5",
+      "plugins/gateway/protocol/models.py": "690eee4584ba6187cb48c9104c60bedaf4dbb850deaf9bd8133ccf23679e5f0b",
+      "plugins/models/store.py": "b8462f130709c5efef1503c98fac7b0418fddb85450b575bf54d7686f9147b9e",
+      "plugins/akasha/application/consumer.py": "f37041f64c183331553786231d9f1475ac7bc7ac890b659c1dc9966caba6f380",
+      "plugins/akasha/scopes.py": "069abaf78c7a2fc813238f22a39af912fbf9f33e4e2a36b9766e2794bd0b85ea",
+      "plugins/ledger/log.py": "94a275383d6a7db1cf655e66b79e903925b54aba447818395a81dcaccd31302a",
+      "core/common/file_io.py": "f1f9b795c0463e567d41a6968bbdf3de3e9bc0e35a8c99ae99e9478a76f2cbca",
+      "sdk/python/src/akashic_sdk/client.py": "18aeedd9f754b01c63620f3d4f48fd1976ce95b8f4b0868d2fbf92c450885333",
+      "plugins/subagent/runtime.py": "a66e8b308aa41039eb86a36a398e2714c12208104a7c339839b9ebcad9d5654d",
+      "plugins/subagent/tools.py": "8ec1c1a5b3f015fa629947bf59412e0a39677d78324f8658e6aba7f29129d90c",
+      "plugins/subagent/plugin.py": "d5306f8fb6acc159dcf79b424ada062e9a1bd2e15e23db5020a65d86f9d5c83d",
+      "plugins/jobs/plugin.py": "4aaff9d1452e79b27a94574fda545df812e00e256d176d4d67adbec3b24a9892",
+      "frontend/plugins/followups/src/index.tsx": "2fe89e690a26f17f8a6faabbb0c26e78f78d7c29c5465c675bedc02b64e37c54",
+      "plugins/followups/web_module.js": "ae537bf03e066cce31471b3e7156d4a06f7852b674d9d2716923cd58bfc1d7bb",
+      "third_party/UPSTREAM.json": "ba60908cea06f3e6540d14919a037f551dc0df78cd3c046ce5c9a2f23595a152",
+      "third_party/patches/akasha-empty-rebuild.patch": "acc310c996d2590d54fe89f1147072e0c2fabb909ad17d779c48cd65c95e4230",
+      "third_party/patches/cache-usage-coverage.patch": "8aa98fee2ab5f89a1f6be07322510981987e3525c3161d71435f940abbfe1e4f",
+      "third_party/patches/distribution-branding.patch": "937d24728b8b239719fbb8992073da8f9542661f242ee43e48b048c8f5679fe3",
+      "third_party/patches/followup-investigation.patch": "60820ef58221cc66486119107d737c6ca4d503cddbd95d38d330059d1355214c",
+      "third_party/patches/idle-reflection.patch": "11a2ed5bfde2629b933f1e6454a6ec8596542011cf0155668fda07126ce3433a",
+      "third_party/patches/memory-query-api.patch": "b8084bbee43d653293a7cae981df170c9fb6173aab8ca4c98b6f004a73faac32",
+      "third_party/patches/personal-assistant-experience.patch": "847fdb3212b005eec2a50637da232be91353e7eb34072c07a38d375582c19bc9",
+      "third_party/patches/stage-web-assets.patch": "f23c035cf5897c61ee4dcfade30bafa8dd71c32ebdcf3c21743e31c9800abcc4",
+      "third_party/patches/telegram-latency.patch": "341bd0dfa6446fbf4151b8d7e06e0237d0ead74d132f7b9f54474bc4a966891c",
+      "third_party/patches/tool-io-bounds.patch": "0130aface0820b23479739a696972ac4786ec6dede26b810ead55b73d45d92d8",
+      "third_party/patches/zsh-snapshot-aliases.patch": "a2d4a1cd3635d62edd6ca11a8b2e7ace6b68d0dbec908feeb4bf4a17e1354f55"
+    },
+    "historical_entries_unchanged": true,
+    "regression": {
+      "passed": 225,
+      "seconds": 79.83,
+      "log_sha256": "10b8b913bd9f371a84e7fc2719c7bc74de367899257e48a6ae9b855e903cd890"
+    },
+    "core_final": {
+      "summary": {
+        "passed": 15,
+        "total": 15,
+        "python": "3.14.6",
+        "recorded_business_model_calls": 35,
+        "model_states": {
+          "success": 35
+        },
+        "driver_ids": [
+          "openai-compatible"
+        ],
+        "endpoints": [
+          "https://api.stepfun.com/step_plan/v1"
+        ],
+        "input_tokens": 305528,
+        "output_tokens": 3182,
+        "coverage": "native Models business-call ledger; connection/model setup probes are additional calls"
+      },
+      "cases": [
+        {
+          "name": "native_reply",
+          "passed": true,
+          "seconds": 2.013
+        },
+        {
+          "name": "selected_search_fetch_source_evidence",
+          "passed": true,
+          "seconds": 14.777
+        },
+        {
+          "name": "bound_file_roundtrip",
+          "passed": true,
+          "seconds": 6.33
+        },
+        {
+          "name": "managed_process_mcp",
+          "passed": true,
+          "seconds": 4.562
+        },
+        {
+          "name": "native_shell",
+          "passed": true,
+          "seconds": 5.944
+        },
+        {
+          "name": "tool_error_repair",
+          "passed": true,
+          "seconds": 8.809
+        },
+        {
+          "name": "native_subagent",
+          "passed": true,
+          "seconds": 8.593
+        },
+        {
+          "name": "driver_local_reload",
+          "passed": true,
+          "seconds": 2.042
+        },
+        {
+          "name": "task_bound_steer_withdraw",
+          "passed": true,
+          "seconds": 9.564
+        },
+        {
+          "name": "source_pause_resume_no_effect_replay",
+          "passed": true,
+          "seconds": 11.755
+        },
+        {
+          "name": "new_input_revokes_old_source_task",
+          "passed": true,
+          "seconds": 11.297
+        },
+        {
+          "name": "immutable_attachment_projection",
+          "passed": true,
+          "seconds": 2.796
+        },
+        {
+          "name": "scheduler_native_source_delivery",
+          "passed": true,
+          "seconds": 11.352
+        },
+        {
+          "name": "step_limit_next_input_recovery",
+          "passed": true,
+          "seconds": 4.339
+        },
+        {
+          "name": "restart_reuses_native_history",
+          "passed": true,
+          "seconds": 4.674
+        }
+      ],
+      "search_evidence": {
+        "search_requests": 1,
+        "fetch_requests": 1,
+        "successful_tool_receipts": 2,
+        "search_tool_receipts": 1,
+        "fetch_tool_receipts": 1,
+        "exact_page_facts": true,
+        "scope": "real model and native tools against a local SearXNG protocol fixture; not public engine quality"
+      },
+      "step_limit_evidence": {
+        "closed_by_abandon": true,
+        "fresh_input_answered": true,
+        "original_receipts_preserved": true,
+        "tool_results": 1,
+        "native_probe_receipts": 1,
+        "probe_value_verified": true
+      }
+    },
+    "memory_and_proactive_final": {
+      "summary": {
+        "passed": 8,
+        "total": 8,
+        "median_case_seconds": 3.3705
+      },
+      "models": {
+        "remote_chat_calls": 52,
+        "local_embedding_ledger_calls": 0,
+        "embedding_metering": "native model_calls records chat only; vectors verified separately",
+        "remote_states": {
+          "success": 52
+        },
+        "remote_endpoints": [
+          "https://api.stepfun.com/step_plan/v1"
+        ],
+        "input_tokens": 387995,
+        "output_tokens": 8831
+      },
+      "cases": [
+        {
+          "name": "native_memory_learning",
+          "passed": true,
+          "seconds": 152.181
+        },
+        {
+          "name": "native_runtime_diagnostics",
+          "passed": true,
+          "seconds": 0.0
+        },
+        {
+          "name": "native_alert_delivery_and_duplicate",
+          "passed": true,
+          "seconds": 5.739
+        },
+        {
+          "name": "native_content_insufficient_is_observable",
+          "passed": true,
+          "seconds": 0.265
+        },
+        {
+          "name": "native_context_event",
+          "passed": true,
+          "seconds": 0.004
+        },
+        {
+          "name": "agent_installs_and_activates_real_git_plugin",
+          "passed": true,
+          "seconds": 11.486
+        },
+        {
+          "name": "open_source_compaction_preserves_current_input",
+          "passed": true,
+          "seconds": 16.447
+        },
+        {
+          "name": "restart_retains_vectors_delivery_and_installed_plugin",
+          "passed": true,
+          "seconds": 1.002
+        }
+      ],
+      "learning": {
+        "complete_turns": 12,
+        "published_nodes": 12,
+        "raw_message_ids_bound": 24
+      },
+      "compaction": {
+        "summary_created": true,
+        "summary_version": 3,
+        "closed_history_after_old_open_source_compacted": true,
+        "open_source_excluded_from_summary": true,
+        "old_facts_unchanged": true
+      },
+      "restart": {
+        "duplicate_notifications": 0,
+        "persisted_training_vectors_unchanged": 12
+      },
+      "persisted_training_vectors": 12
+    },
+    "web_final": {
+      "passed": true,
+      "http": {
+        "dashboard": {
+          "status": 200,
+          "bytes": 4075,
+          "authenticated": true
+        },
+        "web-chat": {
+          "status": 200,
+          "bytes": 174,
+          "authenticated": true
+        }
+      },
+      "project_file_verified": true,
+      "importmap_before_modules": true,
+      "optional_search_settings_module": true,
+      "plugin_ui_count": 10
+    },
+    "source_consistency": {
+      "runtime_and_plugin_sources_match_final": true,
+      "alignment_observer_revisions_before_final_receipt_guards": [
+        "eval/models.py",
+        "eval/native_runtime.py"
+      ],
+      "scope": "Alignment runtime and plugin files match final; its observer did not call the subsequently strengthened core search/probe evidence functions."
+    },
+    "source_artifacts": {
+      "core.json": {
+        "source_file": "core.json",
+        "source_sha256": "715851ca945b07ce343c8623661f96a19ec0824a762d3f3e2643508967a5f381"
+      },
+      "core-final.json": {
+        "source_file": "core-final.json",
+        "source_sha256": "9f5cddc93b8f6aac6a284aaaf0cec2d1d33d44f241cefc067af9b408bdf0fdfd"
+      },
+      "alignment.json": {
+        "source_file": "alignment.json",
+        "source_sha256": "3d5251c0bd8d8974eac6fc15f0b065221b45521b59d65fa52c9745c5069d66b1"
+      },
+      "web.json": {
+        "source_file": "web.json",
+        "source_sha256": "373f0a7a386aaccc11e6d9439a9b9fc3e4d9ce4789fcc3a82873a36cd9c865b1"
+      },
+      "web-final.json": {
+        "source_file": "web-final.json",
+        "source_sha256": "1479c123a5f1638637f12a2d44730bf6715c03d6456badabf162f14a976d5b9d"
+      },
+      "package-verification.json": {
+        "source_file": "package-verification.json",
+        "source_sha256": "7cf35d0bc2f0aaa2e322dcba6fc862708c584f65f51e37f725e7f5ea9a18aedb"
+      }
+    },
+    "packaging": {
+      "kirakira_agent-0.1.0-py3-none-any.whl": {
+        "checked": 25,
+        "mismatches": [],
+        "sha256": "e38f76636d54b341311575096b1ae50c98a1c038d28bceeca78ef0baf162c808"
+      },
+      "kirakira_agent-0.1.0.tar.gz": {
+        "checked": 25,
+        "mismatches": [],
+        "sha256": "a556c29246d9103e419bfd72210ea902cdee2e6852058fe88923fbeab58b8328"
+      }
+    },
+    "engineering_checks": {
+      "frontend_build": true,
+      "frontend_typecheck": true,
+      "native_source_files": 969,
+      "distribution_plugins": 76,
+      "changed_python_F_E9_checked_files": 49,
+      "docs_local_links_checked": true,
+      "cli_help": true,
+      "docs_files_checked": 38,
+      "docs_local_links": 265,
+      "docs_anchors": 32
+    },
+    "earlier_attempts": {
+      "core": {
+        "summary": {
+          "passed": 15,
+          "total": 15,
+          "python": "3.14.6",
+          "recorded_business_model_calls": 33,
+          "model_states": {
+            "success": 33
+          },
+          "driver_ids": [
+            "openai-compatible"
+          ],
+          "endpoints": [
+            "https://api.stepfun.com/step_plan/v1"
+          ],
+          "input_tokens": 287688,
+          "output_tokens": 3052,
+          "coverage": "native Models business-call ledger; connection/model setup probes are additional calls"
+        },
+        "scope": "All 15 initial assertions passed; search/probe checks then strengthened to bind exact CallRef, tool identity, arguments and matching receipt. This run does not replace the final rerun."
+      },
+      "regression": {
+        "passed": 209,
+        "seconds": 105.56
+      },
+      "web": {
+        "passed": true,
+        "scope": "Initial project and authenticated HTTP acceptance; final rerun additionally requires the optional search settings module."
+      },
+      "pre_final_package": {
+        "checked_files_each": 25,
+        "later_changed_observer_files": [
+          "eval/native_runtime.py",
+          "eval/native_web.py"
+        ],
+        "final_package_critical_files_match": true
+      }
+    },
+    "deterministic_boundaries": {
+      "scope": "Native composition, ledger and local HTTP/Telegram fixtures with no external messages; not real account credential recovery or user notification quality.",
+      "sparse_summary_lineage_and_legacy_reset": true,
+      "learning_authentication_failure_wait_seconds": 300,
+      "learning_wait_controlled_in_test": true,
+      "failed_learning_cursor_not_advanced": true,
+      "same_source_retried_and_checkpoint_restored": true,
+      "new_cleanup_failure_propagates_after_all_workers_drained": true,
+      "caller_cancellation_preserved": true,
+      "terminal_notice_rendered_with_real_sender_and_mock_http": true,
+      "manual_stop_and_abandon_no_error_notification": true,
+      "test_sources": {
+        "tests/test_plugin_local_lifecycle.py": "c6bfa6719c48e980d4534cbbca300a6d908e030781704a407992a7c538033999",
+        "tests/test_material_execution.py": "323469625a499931842d9d83741eeed71313b538dd61e7f7dad460112485186d",
+        "tests/test_model_projection.py": "097f991761a042decf82ec19e0a7782e3a3866fd382d2b1a7c4778fd09a62e33",
+        "tests/test_conversation_source.py": "ae32cae422b17bc8ca2c8713e79f276ee07a276e74f03c299e7c2b0a3197c377",
+        "tests/test_delivery_policy.py": "44654f2c8d23ffe661fef6bec73b0b64df999ba3fcf7e2d5a12e3da4e5714990",
+        "tests/test_tool_bindings.py": "713cc49553bf8433d8fe477b3dfa33912a1046ece20464ca248ef87ad6333dc1",
+        "tests/test_tool_io.py": "3de8b1ae25475aec939fa8be8d266287590e22e0ad78d9de112a960f0d06d91a"
+      }
+    },
+    "known_limits": [
+      "A single complete Turn larger than the declared Markdown learning window still fails and pauses; retry does not solve that size limit.",
+      "SearXNG HTTP and result-source checks use a local protocol fixture; public search relevance and external instance availability are not evaluated.",
+      "Telegram terminal notices use the real sender with local simulated HTTP; production Telegram and private mailboxes remain untested in this run.",
+      "These functional checks do not resolve earlier production NFS and response-latency issues.",
+      "Only selected reviewed upstream designs are integrated; this is not a claim of complete latest-commit feature equivalence."
+    ]
   }
 }

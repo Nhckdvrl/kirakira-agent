@@ -28,7 +28,7 @@ HEADLESS = frozenset({
     "prompt", "compaction", "markdown_memory", "react", "conversation",
     "reply_program", "reply", "session_reference", "jobs", "eventmail", "delivery", "delivery_policy",
     "message_push", "programmatic", "akashic_sender", "scheduler", "subagent", "drift", "wake",
-    "ledger_invariants", "akasha", "standard_web", "web_fetch_http", "web_search_exa",
+    "ledger_invariants", "akasha", "standard_web", "web_fetch_http", "web_search_exa", "web_search_searxng",
     "openai-compatible", "step-plan",
 })
 
@@ -191,12 +191,14 @@ async def submit(core, session_id, message_id, text, *, timeout=180, metadata=No
     )
 
     async def completed():
+        if isinstance(accepted.body, Control) and accepted.body.action in {"failure", "pause", "abandon"}:
+            raise RuntimeError(f"native reply {accepted.body.action}: {accepted.body.reason}")
         async for _ in reader.follow_heads():
             for message in reader.snapshot(after_seq=accepted.seq):
                 if message.source != "conversation":
                     continue
                 if isinstance(message.body, Output) and message.body.finish != "continue":
                     return message
-                if isinstance(message.body, Control) and message.body.action in {"failure", "pause"}:
+                if isinstance(message.body, Control) and message.body.action in {"failure", "pause", "abandon"}:
                     raise RuntimeError(f"native reply {message.body.action}: {message.body.reason}")
     return await asyncio.wait_for(completed(), timeout)

@@ -7,17 +7,6 @@ import io
 import json
 import socket
 import ssl
-
-import httpx
-from plugins.ledger.contract import detect_supported_image_mime
-from core.common.frozen_json import freeze_json
-from dataclasses import (
-    asdict,
-    field,
-    replace,
-    dataclass,
-)
-from types import MappingProxyType
 from collections.abc import (
     AsyncGenerator,
     Awaitable,
@@ -27,32 +16,45 @@ from collections.abc import (
     Sequence,
 )
 from contextlib import (
-    asynccontextmanager,
     AbstractAsyncContextManager,
+    asynccontextmanager,
 )
+from dataclasses import (
+    asdict,
+    dataclass,
+    field,
+    replace,
+)
+from types import MappingProxyType
 from typing import (
-    cast,
+    Any,
     AsyncContextManager,
     Literal,
-    TypeAlias,
-    Any,
     Protocol,
+    TypeAlias,
+    cast,
 )
-from plugins.ledger.contract import Bindings
+
+import httpx
+
 from agent.plugin_composition import (
     Context,
     Effect,
 )
-from plugins.ledger.contract import ArtifactRead
-from plugins.channels.contract import AttachmentRef
 from agent.plugin_composition.model import ServiceKey
+from core.common.frozen_json import freeze_json
+from plugins.channels.contract import AttachmentRef
 from plugins.ledger.contract import (
+    ArtifactRead,
+    Bindings,
     ContentPart,
     ContentReferences,
     Message,
+    detect_supported_image_mime,
+)
+from plugins.ledger.contract import (
     ToolCall as MessageToolCall,
 )
-
 
 UsageCoverage: TypeAlias = Literal["exact", "partial", "unavailable"]
 
@@ -490,6 +492,7 @@ class ContextModel(Protocol):
         messages: Sequence[Message],
         *,
         after_seq: int,
+        covered_message_ids: frozenset[str] = frozenset(),
         summary_reference: str | None = None,
         fresh: bool = False,
         current_reminder: str | None = None,
@@ -497,7 +500,9 @@ class ContextModel(Protocol):
         current_context: str | None = None,
         reminder_patches: Sequence[Mapping[str, Any]] = (),
     ) -> ModelRequest:
-        """接收完整事实；after_seq 是摘要覆盖末尾，-1 表示没有覆盖。
+        """接收完整事实；after_seq 是首次窗口起点之前的 seq，-1 表示不裁切前缀。
+
+        covered_message_ids 是摘要精确覆盖；未列出的旧消息仍保留。
 
         实现方接受任意 Sequence，包括存储签发的 MessageSnapshot；不得修改输入。
 

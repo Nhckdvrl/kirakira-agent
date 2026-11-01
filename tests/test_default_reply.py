@@ -1,14 +1,18 @@
 import asyncio
+import shutil
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-import shutil
+
 import pytest
-from tests.fixtures.plugin_workspace import initialize_plugin_workspace
+
 from agent.plugin_composition.config_input import save_config
-from plugins.channels.contract import CHANNEL_INPUT_V2 as CHANNEL_INPUT, ChannelInboundMessage
 from agent.plugins.manager import PluginManager
+from plugins.channels.contract import CHANNEL_INPUT_V2 as CHANNEL_INPUT
+from plugins.channels.contract import ChannelInboundMessage
 from plugins.ledger.contract import Input, Output, ToolResult
+from tests.fixtures.plugin_workspace import initialize_plugin_workspace
+
 
 @asynccontextmanager
 async def live_root(host: PluginManager):
@@ -239,6 +243,7 @@ async def test_installed_default_reply_is_an_independent_log_consumer(tmp_path, 
 async def test_default_reply_loads_one_complete_granted_plugin_group(tmp_path):
     """PLG-018: 一个准确插件 ID 只加载该次获授 view 中的一整组 schema。"""
     import json
+
     from agent.plugin_composition import ServiceKey
 
     async with application(tmp_path, replying=True, discovery=True) as (log, host):
@@ -327,13 +332,14 @@ async def test_current_model_facts_follow_the_bound_selection_after_switching(tm
 async def test_reply_projects_images_by_model_capability(tmp_path, vision, attach_image):
     """图片与附件身份沿同一回复链路进入模型，文本模型保留明确能力说明。"""
     import io
+
     from PIL import Image
+
     from agent.plugin_composition import ServiceKey
-    from plugins.ledger.contract import ContentPart, Control
-    from plugins.ledger.attachments import ChannelAttachmentArtifactStore
     from plugins.content.plugin import check_artifact
     from plugins.ledger.artifact_store import ArtifactStore
-    from plugins.ledger.contract import AttachmentKind
+    from plugins.ledger.attachments import ChannelAttachmentArtifactStore
+    from plugins.ledger.contract import AttachmentKind, ContentPart, Control
 
     def vision_provider(sources):
         module = sources / "test_provider/plugin.py"

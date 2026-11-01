@@ -2,51 +2,73 @@ from collections.abc import Callable, Mapping
 from contextlib import ExitStack
 from functools import partial
 from typing import cast
-from core.common.file_io import run_file_io
-from core.common.diagnostic_log import log_timing
 
 from agent.plugin_composition import Context
-from plugins.ui.contract import hidden_part, part_display_key
-from plugins.ledger.contract import ARTIFACT_READ
-from plugins.ledger.contract import BINDINGS
-from plugins.channels.contract import CHANNEL_STEER, ChannelInboundMessage, InputPartRejected, read_input_parts
-from plugins.commands.contract import COMMANDS
-from plugins.ledger.contract import (
-    MESSAGE_CATALOG,
-    MESSAGE_WRITERS,
-    OWNER_STATE,
-    SESSION_ADMISSION,
-    MessageConflict,
-    MessageReader,
-    SessionAttributes,
-)
 from agent.plugin_composition.tasks import (
     RESTART_GATE,
     TASKS,
     Task,
 )
+from core.common.diagnostic_log import log_timing
+from core.common.file_io import run_file_io
+from plugins.channels.contract import (
+    CHANNEL_STEER,
+    ChannelInboundMessage,
+    InputPartRejected,
+    read_input_parts,
+)
+from plugins.commands.contract import (
+    COMMANDS,
+    CommandDefinition,
+    CommandInvocation,
+    CommandResult,
+)
+from plugins.conversation.contract import (
+    CHECK_ORIGIN as CHECK_ORIGIN,
+)
+from plugins.conversation.contract import (
+    CONVERSATION_COMPLETE_V2 as CONVERSATION_COMPLETE,
+)
+from plugins.conversation.contract import (
+    CONVERSATION_STEER,
+    input_part_key,
+)
 from plugins.ledger.contract import (
+    ARTIFACT_READ,
+    BINDINGS,
+    MESSAGE_CATALOG,
+    MESSAGE_WRITERS,
+    OWNER_STATE,
+    SESSION_ADMISSION,
     ContentPart,
     ContentReferences,
     Control,
     Input,
     Message,
+    MessageConflict,
+    MessageReader,
     Output,
-)
-from plugins.conversation.contract import (
-    CHECK_ORIGIN as CHECK_ORIGIN,
-    CONVERSATION_COMPLETE_V2 as CONVERSATION_COMPLETE,
-    CONVERSATION_STEER,
-    input_part_key,
+    SessionAttributes,
 )
 from plugins.sources.contract import (
     SOURCE_CHANGED_V3 as SOURCE_CHANGED,
+)
+from plugins.sources.contract import (
     SOURCE_SESSION_V4 as SOURCE_SESSION,
+)
+from plugins.sources.contract import (
     SOURCES_V5 as SOURCES,
+)
+from plugins.sources.contract import (
     CompletionProgram,
-    SourceChangedV3 as SourceChanged,
+)
+from plugins.sources.contract import (
     GuardedSourceSession as SourceSession,
 )
+from plugins.sources.contract import (
+    SourceChangedV3 as SourceChanged,
+)
+from plugins.ui.contract import hidden_part, part_display_key
 
 from .commands import CONTENT, CONVERSATION_COMMANDS, SOURCE_CHECK, run_commands
 from .steer import Steers
@@ -106,6 +128,33 @@ async def apply(ctx: Context) -> None:
         command = message.content.strip().split(maxsplit=1)
         if command and command[0].split("@", 1)[0].lower() == "/stop":
             return await open(session_id).pause(message_id)
+        if command and command[0].split("@", 1)[0].lower() == ABANDON_COMMAND:
+            reader = ctx.require(MESSAGE_CATALOG).reader(session_id)
+
+            def abandonment(current: MessageReader) -> Control:
+                existing = current.get(message_id)
+                if existing is not None:
+                    if (existing.source != "conversation" or not isinstance(existing.body, Control)
+                            or existing.body.action != "abandon" or existing.body.reason != USER_ABANDON_REASON):
+                        raise MessageConflict("放弃身份已被其他消息使用")
+                    return existing.body
+                head = current.head(source="conversation")
+                latest = current.latest_input("conversation", through_seq=head)
+                if latest is None:
+                    raise MessageConflict("当前来源没有可放弃的消息")
+                finished = current.latest_finished_output_seq("conversation", after_seq=latest.seq, through_seq=head)
+                abandoned = current.scan_controls(
+                    lambda rows: any(body.action == "abandon" and body.through_seq >= latest.seq for _, body in rows),
+                    source="conversation", after_seq=latest.seq, through_seq=head,
+                )
+                if finished is not None or abandoned:
+                    raise MessageConflict("不能放弃已经关闭的前缀")
+                return Control("abandon", head, USER_ABANDON_REASON)
+
+            body = await reader.read_async(abandonment)
+            return await open(session_id).control(
+                message_id, body, expected_head=body.through_seq, handle=None,
+            )
         retry = message.metadata.get("retry_of_client_message_id")
         if retry is not None:
             if not isinstance(retry, str) or not retry:
@@ -166,6 +215,15 @@ async def apply(ctx: Context) -> None:
         return await open(session_id).complete(program)
 
     _ = await ctx.provide(CHECK_ORIGIN, check_origin)
+    async def abandon_command(invocation: CommandInvocation) -> CommandResult:
+        return CommandResult(
+            "error", f"{ABANDON_COMMAND} 只作用于对话来源的未完成工作；当前调用来自 {invocation.channel}。",
+        )
+
+    await ctx.require(COMMANDS).register(ctx, CommandDefinition(
+        name="abandon", description="放弃本会话未完成的工作，并结算没有回执的工具调用",
+        handler=abandon_command,
+    ))
     # 自己写入的内部材料不进聊天正文；宿主不维护按插件列举的隐藏名单。
     for kind in ("channel.origin", "command.result"):
         _ = await ctx.provide(part_display_key(kind), hidden_part)
@@ -185,6 +243,8 @@ async def apply(ctx: Context) -> None:
 
 # 与前端 message-timeline.ts 的 RETRY_LATEST_INPUT 一致。
 RETRY_LATEST_INPUT = "latest"
+ABANDON_COMMAND = "/abandon"
+USER_ABANDON_REASON = "用户放弃本轮未完成工作"
 
 # 渠道来源只记录回传地址，不进入模型正文。
 def origin_part(message: ChannelInboundMessage) -> ContentPart:

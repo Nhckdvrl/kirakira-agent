@@ -8,7 +8,9 @@ import shutil
 import sqlite3
 import sys
 import time
+from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 
 from eval.models import EvaluationModel, source_identity
@@ -32,6 +34,82 @@ from plugins.ledger.contract import (
 def text(message):
     return "\n".join(str(part.value) for part in message.body.parts
                      if isinstance(part, ContentPart) and part.kind == "text")
+
+
+def _successful_tool_calls(reader):
+    """Resolve successful receipts through their actual call and archived tool binding."""
+    rows = reader.snapshot()
+    by_id = {row.message_id: row for row in rows}
+    resolved = []
+    for receipt in rows:
+        if receipt.source != "conversation" or not isinstance(receipt.body, ToolResult) or receipt.body.outcome != "success":
+            continue
+        ref = receipt.body.call_ref
+        caller = by_id.get(ref.message_id)
+        assert caller is not None and caller.source == receipt.source and isinstance(caller.body, Output), "successful tool receipt lacks its actual caller"
+        assert 0 <= ref.part_index < len(caller.body.parts), "tool receipt points outside its actual Output"
+        call = caller.body.parts[ref.part_index]
+        assert isinstance(call, ToolCall), "tool receipt does not point to a ToolCall"
+        page = reader.read_page(after_seq=caller.seq - 1, through_seq=caller.seq, limit=1)
+        name = page.bindings[call.binding_id]["metadata"]["tool"]["name"]
+        resolved.append((receipt, call, name))
+    return tuple(resolved)
+
+
+def _search_evidence(reader, *, page_url, marker):
+    """Require source facts from the successful native calls, not another tool's output."""
+    resolved = _successful_tool_calls(reader)
+    searches = [receipt for receipt, _, name in resolved if name == "web_search" and page_url in text(receipt)]
+    fetches = [receipt for receipt, call, name in resolved
+               if name == "web_fetch" and call.arguments.get("url") == page_url and marker in text(receipt)]
+    assert searches, "missing successful web_search receipt containing the original page URL"
+    assert fetches, "missing successful web_fetch receipt for the original page with its source marker"
+    return {"successful_tool_receipts": len(searches) + len(fetches),
+            "search_tool_receipts": len(searches), "fetch_tool_receipts": len(fetches)}
+
+
+def _probe_evidence(reader, *, value):
+    probe = [receipt for receipt, call, name in _successful_tool_calls(reader)
+             if name == "native_probe" and call.arguments.get("value") == value and value in text(receipt)]
+    assert len(probe) == 1, "missing the one successful native_probe receipt for the original LIMIT token"
+    return len(probe)
+
+
+@asynccontextmanager
+async def search_source(nonce):
+    """A local search protocol fixture; the answer exists only on the fetched page."""
+    requests = {"search": 0, "fetch": 0}
+    page_url = ""
+
+    async def serve(reader, writer):
+        try:
+            header = await reader.readuntil(b"\r\n\r\n")
+            location = urlsplit(header.decode("ascii").split(" ", 2)[1])
+            if location.path == "/nested/search":
+                assert parse_qs(location.query).get("format") == ["json"]
+                requests["search"] += 1
+                body = json.dumps({"results": [{"title": "个人助理研究活动：最新公布的时间",
+                    "url": page_url, "content": "完整页面包含准确时间与来源校验码，请读取原文确认。"}]}).encode()
+                content_type = b"application/json"
+            else:
+                assert location.path == "/announcement"
+                requests["fetch"] += 1
+                body = ("<html><meta charset='utf-8'><h1>活动公告</h1>"
+                        "<p>公布的时间为 2026-11-03 09:20，时区 Asia/Tokyo。</p>"
+                        f"<p>来源校验码 EVIDENCE_{nonce}</p></html>").encode()
+                content_type = b"text/html; charset=utf-8"
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: " + content_type
+                         + b"\r\nContent-Length: " + str(len(body)).encode()
+                         + b"\r\nConnection: close\r\n\r\n" + body)
+            await writer.drain()
+        finally:
+            writer.close()
+            await writer.wait_closed()
+
+    async with await asyncio.start_server(serve, "127.0.0.1", 0) as server:
+        endpoint = f"http://127.0.0.1:{server.sockets[0].getsockname()[1]}/nested"
+        page_url = endpoint.removesuffix("/nested") + "/announcement"
+        yield endpoint, page_url, requests
 
 
 async def evaluate(workspace, key_file, output, *, model_config=None):
@@ -66,7 +144,13 @@ async def evaluate(workspace, key_file, output, *, model_config=None):
                                       "workspace": str(workspace), "cases": results}, indent=2) + "\n")
         print(json.dumps({k: v for k, v in row.items() if k != "detail"}), flush=True)
 
-    async with runtime(workspace, extensions=(extensions,)) as core:
+    async with AsyncExitStack() as stack:
+        from agent.plugin_composition.config_input import save_config
+
+        endpoint, page_url, web_requests = await stack.enter_async_context(search_source(nonce))
+        save_config(workspace / "plugin-data/web_search_searxng-builtin", {"endpoint": endpoint})
+        save_config(workspace / "plugin-data/standard_web-builtin", {"search_provider": "web_search_searxng"})
+        core = await stack.enter_async_context(runtime(workspace, extensions=(extensions,)))
         await model_config.configure(core, key_file)
         root = core.plugin_manager.live_root
         catalog = root.context.require(MESSAGE_CATALOG)
@@ -76,6 +160,22 @@ async def evaluate(workspace, key_file, output, *, model_config=None):
             assert "BASIC_" + nonce in text(answer), text(answer)
             return {"answer": text(answer)}
         await record("native_reply", basic)
+
+        async def sourced_search():
+            session = "akashic:search-source"
+            baseline = dict(web_requests)
+            answer = await submit(core, session, "search-source-1",
+                "请用 web_search 搜索个人助理研究活动最新公布的时间，然后用 web_fetch 读取搜索结果中的原文。"
+                "请报告原文的准确日期、时间、时区、来源校验码，并给出原文链接。不要凭摘要推测，也不要用 shell。")
+            visible = text(answer)
+            assert all(value in visible for value in ("2026-11-03", "09:20", "Asia/Tokyo", "EVIDENCE_" + nonce, page_url))
+            evidence = _search_evidence(catalog.reader(session), page_url=page_url, marker="EVIDENCE_" + nonce)
+            requests = {kind: web_requests[kind] - baseline[kind] for kind in baseline}
+            assert requests["search"] >= 1 and requests["fetch"] >= 1
+            return {"search_requests": requests["search"], "fetch_requests": requests["fetch"],
+                    **evidence, "exact_page_facts": True,
+                    "scope": "real model and native tools against a local SearXNG protocol fixture; not public engine quality"}
+        await record("selected_search_fetch_source_evidence", sourced_search)
 
         async def file_roundtrip():
             path = workspace / "evidence.txt"
@@ -279,6 +379,36 @@ async def evaluate(workspace, key_file, output, *, model_config=None):
             return {"answer": text(ending), "created_jobs": created, "delivered_fires": count,
                     "source": ending.source, "parent_reasoning_effort": "medium" if model_config.reasoning_effort is not None else None}
         await record("scheduler_native_source_delivery", scheduler)
+
+        async def exhaustion_recovery():
+            session = "akashic:exhaustion"
+            save_config(workspace / "plugin-data/reply-builtin", {"max_steps": 1})
+            await core.plugin_manager.reconcile_changed(plugin_ids=frozenset({"reply"}))
+            try:
+                try:
+                    await submit(core, session, "exhaustion-1",
+                        "Call native_probe with value LIMIT_" + nonce
+                        + ". You must actually call it and then report its returned value. Do not simulate tools.", timeout=90)
+                except RuntimeError as error:
+                    assert "abandon" in str(error), type(error).__name__
+                else:
+                    raise AssertionError("the one-step tool turn did not exercise exhaustion")
+                before = catalog.reader(session).snapshot()
+                probe_count = _probe_evidence(catalog.reader(session), value="LIMIT_" + nonce)
+                assert any(isinstance(row.body, Control) and row.body.action == "abandon" for row in before)
+                answer = await submit(core, session, "exhaustion-fresh",
+                    "A fresh question: reply exactly FRESH_" + nonce + ". Do not use tools.")
+                assert "FRESH_" + nonce in text(answer)
+                after = catalog.reader(session).snapshot()
+                assert after[:len(before)] == before
+                assert sum(isinstance(row.body, ToolResult) for row in after) == 1
+                return {"closed_by_abandon": True, "fresh_input_answered": True,
+                        "original_receipts_preserved": True, "tool_results": 1,
+                        "native_probe_receipts": probe_count, "probe_value_verified": True}
+            finally:
+                save_config(workspace / "plugin-data/reply-builtin", {})
+                await core.plugin_manager.reconcile_changed(plugin_ids=frozenset({"reply"}))
+        await record("step_limit_next_input_recovery", exhaustion_recovery)
 
     async with runtime(workspace, extensions=(extensions,)) as core:
         async def restart():

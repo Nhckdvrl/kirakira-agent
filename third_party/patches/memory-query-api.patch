@@ -225,7 +225,7 @@
  from pydantic import BaseModel, ConfigDict, Field, model_validator
  
 -from agent.plugin_composition import RUNTIME_STARTED, RUNTIME_STOPPING, Context, ServiceKey
-+from agent.plugin_composition import RUNTIME_STARTED, RUNTIME_STOPPING, Context
++from agent.plugin_composition import RUNTIME_STARTED, RUNTIME_STOPPING, Context, stop_spawned
  from plugins.akasha.contract import EMBEDDING_MEMORY_PLUGIN
  from plugins.models.contract import EMBEDDINGS
  from plugins.ui.contract import (
@@ -418,6 +418,20 @@
                          changed = pending.get(key)
                          if changed is None:
                              changed = pending[key] = asyncio.Event()
+@@ -704,12 +765,7 @@
+         nonlocal running
+         running = False
+         try:
+-            if watcher is not None:
+-                _ = watcher.cancel()
+-                try:
+-                    await watcher
+-                except asyncio.CancelledError:
+-                    pass
++            await stop_spawned(watcher)
+         finally:
+             await close_memory()
+ 
 --- a/plugins/akasha/recall_tool.py
 +++ b/plugins/akasha/recall_tool.py
 @@ -9,7 +9,7 @@

@@ -11,6 +11,7 @@ from agent.plugin_composition import (
     RUNTIME_STARTED,
     RUNTIME_STOPPING,
     ServiceKey,
+    stop_spawned,
 )
 from agent.plugin_composition.plugin_config import PLUGIN_CONFIG
 from plugins.akasha.contract import AKASHA_RECORDS_VIEW
@@ -173,14 +174,25 @@ async def apply(ctx):
         mail_watcher = await ctx.spawn(mailboxes.follow(service), name="followups.mail-idle")
 
     async def stop(_event):
-        tasks = tuple(task for task in (mail_watcher, watcher) if task is not None)
-        for task in tasks:
-            task.cancel()
-        for task in tasks:
+        # Stop both independently: one new cleanup failure must not interrupt
+        # the other's already-started cleanup or be mistaken for an old failure.
+        stopping = asyncio.gather(
+            *(stop_spawned(task) for task in (mail_watcher, watcher)),
+            return_exceptions=True,
+        )
+        interrupted = False
+        while True:
             try:
-                await task
+                outcomes = await asyncio.shield(stopping)
+                break
             except asyncio.CancelledError:
-                pass
+                interrupted = True
+        failures = [outcome for outcome in outcomes if isinstance(outcome, BaseException)]
+        failure = BaseExceptionGroup("Follow-up watcher cleanup failed", failures) if failures else None
+        if interrupted:
+            raise asyncio.CancelledError from failure
+        if failure is not None:
+            raise failure
 
     await ctx.on(RUNTIME_STARTED, start)
     await ctx.on(RUNTIME_STOPPING, stop)

@@ -18,8 +18,18 @@ from tests.support.material_models import material_models
 async def test_provider_reuses_connections_across_real_executions_without_reusing_credentials(tmp_path):
     """Socket reuse must survive execution disposal, but not provider disposal."""
     import json
-    from plugins.models.contract import MODEL_DRIVERS, CapabilitySources, ModelCapabilities, ModelRequest
-    from plugins.models.settings import AddConnection, AddModel, CreateConnectionWithModel
+
+    from plugins.models.contract import (
+        MODEL_DRIVERS,
+        CapabilitySources,
+        ModelCapabilities,
+        ModelRequest,
+    )
+    from plugins.models.settings import (
+        AddConnection,
+        AddModel,
+        CreateConnectionWithModel,
+    )
     from plugins.openai_compatible.plugin import apply
 
     requests, sockets, tasks = [], [], set()
@@ -118,6 +128,7 @@ async def test_provider_reuses_connections_across_real_executions_without_reusin
 @pytest.mark.parametrize("release", [True, False])
 async def test_slow_context_maintenance_does_not_block_replies_and_drains_on_shutdown(tmp_path, release):
     from datetime import UTC, datetime
+
     from agent.plugin_composition import ServiceKey
     from plugins.channels.contract import CHANNEL_INPUT_V2, ChannelInboundMessage
     from plugins.compaction.contract import COMPACTION_SUMMARIES
@@ -169,7 +180,7 @@ async def test_slow_context_maintenance_does_not_block_replies_and_drains_on_shu
             ready.set()
             await third
             summary = root.require(COMPACTION_SUMMARIES).head(sid)
-            assert summary is not None and summary.version == 2
+            assert summary is not None and summary.version == 3
             assert summary.source_message_ids == tuple(row.message_id for row in original)
             assert len(summary.model_call_ids) == 1
         assert sum("[Source messages]" in str(call.messages) for call in calls) == 1
@@ -181,7 +192,13 @@ async def test_slow_context_maintenance_does_not_block_replies_and_drains_on_shu
 @pytest.mark.asyncio
 async def test_compaction_has_a_real_generation_budget_and_rejects_truncated_facts(tmp_path, monkeypatch):
     from dataclasses import replace
-    from plugins.compaction.message_summary import HEADINGS, SummaryError, _request, _summarize
+
+    from plugins.compaction.message_summary import (
+        HEADINGS,
+        SummaryError,
+        _request,
+        _summarize,
+    )
     from plugins.models.contract import LLMResponse
     from tests.support.material_models import _FixtureChat
 
@@ -213,9 +230,242 @@ async def test_compaction_has_a_real_generation_budget_and_rejects_truncated_fac
 
 
 @pytest.mark.asyncio
-async def test_explicit_new_context_retains_history_and_does_not_replay_old_prompt(tmp_path):
-    from types import SimpleNamespace
+async def test_compaction_skips_open_source_then_covers_its_old_identity_when_closed(tmp_path):
     from datetime import UTC, datetime
+
+    from agent.plugin_composition import ServiceKey
+    from plugins.channels.contract import CHANNEL_INPUT_V2, ChannelInboundMessage
+    from plugins.compaction.contract import COMPACTION_SUMMARIES
+    from plugins.ledger.contract import ContentPart, ContentReferences, Input, Output
+    from tests.test_default_reply import application
+
+    async with application(tmp_path, replying=True, compaction=True) as (log, host):
+        root = host.live_root.context
+        sid = "test:interleaved"
+        content = {"text": lambda _: ContentReferences()}
+        other = log.writer(sid, author="assistant", source="other", body_types=(Input, Output), content=content)
+        other.append("old-open", Input((ContentPart("text", "OPEN_SOURCE_EVIDENCE"),)))
+        history = log.writer(sid, author="user", source="history", body_types=(Input, Output), content=content)
+        history.append("closed-input", Input((ContentPart("text", "remember the project"),)))
+        history.append("closed-output", Output((ContentPart("text", "settled history " * 1500),), "complete"))
+        history.expire()
+        original = log.reader(sid).snapshot()
+        lookup = root.require(COMPACTION_SUMMARIES)
+        calls = root.require(ServiceKey("fixture.calls"))
+
+        async def send(identity):
+            accepted = await root.require(CHANNEL_INPUT_V2)(sid, identity, ChannelInboundMessage(
+                "test", "user", "interleaved", "继续。", datetime.now(UTC), {}))
+            async with asyncio.timeout(5):
+                while not any(row.seq > accepted.seq and row.source == "conversation"
+                              and isinstance(row.body, Output) and row.body.finish == "complete"
+                              for row in log.reader(sid).snapshot()):
+                    await asyncio.sleep(0.01)
+
+        async def generation(number):
+            async with asyncio.timeout(5):
+                while True:
+                    head = lookup.head(sid)
+                    if head is not None and head.generation >= number:
+                        return head
+                    await asyncio.sleep(0.01)
+
+        await send("first-input")
+        first = await generation(1)
+        assert first.version == 3
+        assert first.source_message_ids == ("closed-input", "closed-output")
+        assert "OPEN_SOURCE_EVIDENCE" not in str(calls)
+        other.append("old-completed", Output((ContentPart("text", "LATE_SOURCE_EVIDENCE " * 1400),), "complete"))
+        other.expire()
+        await send("second-input")
+        second = await generation(2)
+        assert second.parent == first.reference
+        assert second.source_message_ids[0] == "old-open"
+        assert "old-completed" in second.summary_message_ids
+        assert tuple(identity for identity in second.source_message_ids
+                     if identity in first.source_message_ids) == first.source_message_ids
+        summaries = [call for call in calls if "[Source messages]" in str(call.messages)]
+        assert "OPEN_SOURCE_EVIDENCE" in str(summaries[-1].messages)
+        assert log.reader(sid).snapshot()[:len(original)] == original
+
+
+@pytest.mark.asyncio
+async def test_summary_versions_preserve_sparse_lineage_and_learn_only_new_complete_turns(tmp_path):
+    from plugins.compaction.plugin import _CompactionReader
+    from plugins.compaction.records import (
+        ManualResetRecord,
+        SummaryLookup,
+        SummaryRecord,
+        SummaryRecords,
+    )
+    from plugins.context.api import settled_prefixes, summary_indexes
+    from plugins.ledger.contract import ContentPart, ContentReferences, Input, Output
+    from plugins.ledger.log import MessageLog
+    from plugins.markdown_memory.plugin import _unapplied_groups
+    from plugins.markdown_memory.store import MarkdownProfileStore
+    from plugins.turn_projection.plugin import TurnProjection
+
+    log = MessageLog(tmp_path / "messages.db")
+    try:
+        content = {"text": lambda _: ContentReferences()}
+        early = log.writer("session", author="user", source="early", body_types=(Input, Output), content=content)
+        later = log.writer("session", author="user", source="later", body_types=(Input, Output), content=content)
+        early.append("early-input", Input((ContentPart("text", "earlier unfinished request"),)))
+        later.append("later-input", Input((ContentPart("text", "later completed request"),)))
+        later.append("later-output", Output((ContentPart("text", "done"),), "complete"))
+        owner, reader = log.owner("summary"), log.reader("session")
+        records = SummaryRecords(owner)
+        first = SummaryRecord(reference="first", session_id="session", generation=1, parent=None,
+            source_message_ids=("later-input", "later-output"),
+            summary_message_ids=("later-input", "later-output"), content="later facts",
+            model_call_ids=("call-first",), trigger="soft_limit", context_window=10000,
+            max_output_tokens=1000, keep_recent_tokens=1000, tokens_before=9000, tokens_after=3000)
+        # v2 retains its old contiguous contract; v3 can grow around a hole.
+        await records.publish(first.model_copy(update={"version": 2}), reader, parent=None, summary_indexes=summary_indexes)
+        assert records.read("first").version == 2
+        early.append("early-output", Output((ContentPart("text", "finished later"),), "complete"))
+        second = first.model_copy(update={"version": 3, "reference": "second", "generation": 2,
+            "parent": "first", "source_message_ids": ("early-input", "later-input", "later-output", "early-output"),
+            "summary_message_ids": ("early-input", "early-output"), "content": "combined facts"})
+        await records.publish(second, reader, parent=records.head("session"), summary_indexes=summary_indexes)
+        lookup = SummaryLookup(records.read, records.head)
+        store = MarkdownProfileStore(tmp_path / "memory", tmp_path / "receipts.db")
+        store.write_draft("first", {"version": 3, "scope": None, "ops": []}, session_key="session", generation=1)
+        store.apply("first")
+        groups = await _unapplied_groups(second, lookup, reader, store, ("early", "later"), TurnProjection(),
+            compaction=_CompactionReader(settled_prefixes=settled_prefixes),
+            post_commit_effect=lambda _: None, summary_indexes=summary_indexes)
+        assert tuple(message.message_id for group in groups for message in group) == ("early-input", "early-output")
+        # Legacy v3 resets remain readable and must never be cast as v3 model summaries.
+        reset = ManualResetRecord(version=3, reference="legacy-reset", session_id="session", generation=3,
+            parent="second", source_message_ids=second.source_message_ids, content="explicit reset")
+        await records.publish(reset, reader, parent=second, summary_indexes=summary_indexes)
+        assert records.head("session") == reset
+        store.write_draft("second", {"version": 3, "scope": None, "ops": []}, session_key="session", generation=2)
+        store.apply("second")
+        assert not await _unapplied_groups(reset, lookup, reader, store, ("early", "later"), TurnProjection(),
+            compaction=_CompactionReader(settled_prefixes=settled_prefixes),
+            post_commit_effect=lambda _: None, summary_indexes=summary_indexes)
+        assert records.read("second").version == 3 and ManualResetRecord.model_fields["version"].default == 4
+    finally:
+        log.close()
+
+
+@pytest.mark.asyncio
+async def test_markdown_model_failure_pauses_same_evidence_and_checkpoints_survive_restart(tmp_path):
+    import json
+    import shutil
+    from datetime import UTC, datetime
+    from pathlib import Path
+
+    from agent.plugin_composition import ServiceKey
+    from agent.plugin_composition.config_input import save_config
+    from agent.plugins.manager import PluginManager
+    from plugins.channels.contract import CHANNEL_INPUT_V2, ChannelInboundMessage
+    from plugins.compaction.contract import COMPACTION_SUMMARIES
+    from plugins.ledger.contract import ContentPart, ContentReferences, Input, Output
+    from plugins.markdown_memory.store import MarkdownProfileStore
+    from tests.test_default_reply import application
+
+    def sources(directory):
+        shutil.copytree(Path(__file__).parents[1] / "plugins/markdown_memory", directory / "markdown_memory",
+                        ignore=shutil.ignore_patterns("__pycache__"))
+        save_config(tmp_path / "workspace/plugin-data/context-builtin", {
+            "summary_source": ["compaction", "compaction"],
+            "prompt_sources": {"markdown_memory": "markdown_memory"}})
+        save_config(tmp_path / "workspace/plugin-data/markdown_memory-builtin", {"consolidate": False})
+        # Gate the real follower's backoff, preserving the production failure,
+        # projection, draft validation, receipt and checkpoint paths.
+        path = directory / "markdown_memory/plugin.py"
+        code = path.read_text().replace('async def apply(ctx: Context) -> None:', '''_project = project
+_testing = {"visited": [], "delays": [], "paused": asyncio.Event(), "release": asyncio.Event()}
+async def project(message, **kwargs):
+    _testing["visited"].append((message.session_id, message.seq))
+    return await _project(message, **kwargs)
+async def _retry_wait(delay):
+    _testing["delays"].append(delay)
+    _testing["paused"].set()
+    await _testing["release"].wait()
+async def apply(ctx: Context) -> None:''').replace('    config = Config.model_validate(ctx.config)',
+            '    config = Config.model_validate(ctx.config)\n    await ctx.provide(ServiceKey("fixture.markdown"), _testing)')
+        path.write_text(code.replace('await asyncio.sleep(delay)', 'await _retry_wait(delay)'))
+        provider = directory / "test_provider/plugin.py"
+        code = provider.read_text().replace('    calls = []', '    calls = []\n    memory = {"failed": True, "attempts": []}')
+        code = code.replace('            calls.append(request)', '''            calls.append(request)
+            if "你维护 Kirakira 的长期 Markdown 记忆。" in str(request.messages):
+                memory["attempts"].append(request)
+                if memory["failed"]:
+                    from plugins.models.contract import AuthenticationError
+                    raise AuthenticationError("synthetic expired credential").exception()
+                return LLMResponse('{"ops":[{"op":"add","doc":"MEMORY.md","section":"## 用户偏好","line":"- 用户偏好证据可追溯的记忆。","message_ids":["memory-original"]}]}')''')
+        code = code.replace('    class Models:', '''    from dataclasses import replace
+    memory_model = _BoundChat(replace(descriptor, capabilities=ModelCapabilities(context_window=64000)), Driver(), store)
+    class Models:''').replace('chat=lambda role: model', 'chat=lambda role: memory_model if role == "default" else model')
+        code = code.replace('    await ctx.provide(ServiceKey("fixture.calls"), calls)',
+            '    await ctx.provide(ServiceKey("fixture.calls"), calls)\n    await ctx.provide(ServiceKey("fixture.memory"), memory)')
+        provider.write_text(code)
+
+    fingerprint = json.dumps({"version": 1, "sources": ["conversation", "legacy-unattributed", "programmatic"]}, separators=(",", ":"))
+    async with application(tmp_path, replying=True, compaction=True, extra_sources=sources) as (log, host):
+        root = host.live_root.context
+        state = root.require(ServiceKey("fixture.markdown"))
+        model = root.require(ServiceKey("fixture.memory"))
+        sid = "test:learning"
+        writer = log.writer(sid, author="user", source="conversation", body_types=(Input, Output),
+                            content={"text": lambda _: ContentReferences()})
+        writer.append("memory-original", Input((ContentPart("text", "我偏好证据可追溯的记忆。"),)))
+        writer.append("memory-answer", Output((ContentPart("text", "settled history " * 1500),), "complete"))
+        writer.expire()
+
+        async def wait_for(predicate):
+            async with asyncio.timeout(8):
+                while not predicate():
+                    await asyncio.sleep(0.01)
+
+        async def send(identity):
+            await root.require(CHANNEL_INPUT_V2)(sid, identity, ChannelInboundMessage(
+                "test", "user", "learning", "继续。", datetime.now(UTC), {}))
+
+        await send("first-learning-input")
+        lookup = root.require(COMPACTION_SUMMARIES)
+        await wait_for(lambda: lookup.head(sid) is not None)
+        record = lookup.head(sid)
+        await send("second-learning-input")
+        await asyncio.wait_for(state["paused"].wait(), 8)
+        store = MarkdownProfileStore(tmp_path / "workspace/memory", tmp_path / "workspace/memory/markdown-profile-writes.db")
+        failed = next(row for row in reversed(log.reader(sid).snapshot()) if isinstance(row.body, Output)
+                      and any(getattr(part, "kind", None) == "context.summary" for part in row.body.parts))
+        assert state["delays"] == [300] and len(model["attempts"]) == 1
+        assert store.read_cursors(fingerprint)[sid] < failed.seq
+        assert store.read_draft(record.reference) is None and not store.is_applied(record.reference)
+        model["failed"] = False
+        state["release"].set()
+        await wait_for(lambda: store.is_applied(record.reference)
+                       and store.read_cursors(fingerprint).get(sid, -1) >= failed.seq)
+        assert len(model["attempts"]) == 2
+        assert model["attempts"][0].messages == model["attempts"][1].messages
+        assert store.read("MEMORY.md").count("用户偏好证据可追溯的记忆") == 1
+        cursor = store.read_cursors(fingerprint)
+        assert store.read_cursors("different-source-policy") == {}
+        await host.terminate_all()
+        restarted = PluginManager([tmp_path / "plugins"], workspace=tmp_path / "workspace",
+                                  installed_cache_root=tmp_path / "home/cache")
+        try:
+            await restarted.load_all()
+            fresh_state = restarted.live_root.context.require(ServiceKey("fixture.markdown"))
+            await asyncio.sleep(0.05)
+            assert fresh_state["visited"] == []
+            assert store.read_cursors(fingerprint) == cursor
+            assert store.read("MEMORY.md").count("用户偏好证据可追溯的记忆") == 1
+        finally:
+            await restarted.terminate_all()
+
+
+@pytest.mark.asyncio
+async def test_explicit_new_context_retains_history_and_does_not_replay_old_prompt(tmp_path):
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+
     from agent.plugin_composition import ServiceKey
     from kirakira_agent.runtime import rpc
     from plugins.channels.contract import CHANNEL_INPUT_V2, ChannelInboundMessage
@@ -248,7 +498,7 @@ async def test_explicit_new_context_retains_history_and_does_not_replay_old_prom
         first = await rpc(core, "compaction/start-new", request)
         assert first == await rpc(core, "compaction/start-new", request)
         lookup = root.require(COMPACTION_SUMMARIES)
-        assert lookup.head(sid).version == 3
+        assert lookup.head(sid).version == 4
         await send("fresh", "CURRENT_CONTEXT_MARKER")
         calls = root.require(ServiceKey("fixture.calls"))
         assert "CURRENT_CONTEXT_MARKER" in str(calls[-1].messages)
@@ -270,6 +520,7 @@ async def test_explicit_new_context_retains_history_and_does_not_replay_old_prom
 async def test_topic_material_is_live_per_input_and_does_not_disappear_on_repeated_questions(tmp_path):
     import shutil
     from pathlib import Path
+
     from agent.plugin_composition.config_input import save_config
     from plugins.context.contract import MATERIALS_V4
     from plugins.ledger.contract import ContentPart, ContentReferences, Input

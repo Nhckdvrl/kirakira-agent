@@ -76,6 +76,7 @@
 | web-auth | 运行组件 | 可选 |
 | web_fetch_http | 运行组件 | 是 |
 | web_search_exa | 运行组件 | 是 |
+| web_search_searxng | 发行扩展 | 是 |
 | working_directory | 运行组件 | 是 |
 | workloads | 运行组件 | 是 |
 | workspace_changes | 运行组件 | 可选 |

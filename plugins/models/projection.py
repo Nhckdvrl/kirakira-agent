@@ -9,13 +9,6 @@ from typing import Any, cast
 
 from agent.plugin_composition import ServiceKey
 from core.common.frozen_json import freeze_json
-from plugins.ledger.contract import MessageSnapshot
-from plugins.models.contract import (
-    LLMResponse,
-    ModelContinuation,
-    ModelRequest,
-)
-from plugins.models.contract import BoundChatModel
 from plugins.ledger.contract import (
     CallRef,
     ContentPart,
@@ -23,18 +16,29 @@ from plugins.ledger.contract import (
     Control,
     Input,
     Message,
+    MessageSnapshot,
     Output,
     ToolCall,
     ToolResult,
     json_value,
 )
 from plugins.models.contract import (
+    MODEL_CALLS as MODEL_CALLS,
+)
+from plugins.models.contract import (
+    MODEL_CHECKS as MODEL_MESSAGE_CHECKS,  # noqa: F401 - 显式再导出给本插件消费者。
+)
+from plugins.models.contract import (
+    MODEL_PROJECTION as MODEL_PROJECTION,
+)
+from plugins.models.contract import (
+    BoundChatModel,
     ContentTransform,
+    LLMResponse,
+    ModelContinuation,
+    ModelRequest,
     PrepareContent,
     RenderedContent,
-    MODEL_CALLS as MODEL_CALLS,
-    MODEL_CHECKS as MODEL_MESSAGE_CHECKS,  # noqa: F401 - 显式再导出给本插件消费者。
-    MODEL_PROJECTION as MODEL_PROJECTION,
 )
 from plugins.ui.contract import ThinkingDisplay
 
@@ -302,6 +306,7 @@ class MessageProjection:
         messages: Sequence[Message],
         *,
         after_seq: int,
+        covered_message_ids: frozenset[str] = frozenset(),
         summary_reference: str | None = None,
         fresh: bool = False,
         current_reminder: str | None = None,
@@ -391,7 +396,7 @@ class MessageProjection:
         # 2. 渲染读面只重编译变化；失败后丢弃未完成的派生状态，下次仍如实校验。
         try:
             rows, content_refs, changed_content = self._render_rows(
-                messages, fold, after_seq=after_seq,
+                messages, fold, after_seq=after_seq, covered_message_ids=covered_message_ids,
                 current_reminder=current_reminder,
                 current_reminder_identity=current_reminder_identity,
                 current_context=current_context,
@@ -409,6 +414,7 @@ class MessageProjection:
 
     def _render_rows(
         self, messages: Sequence[Message], fold: _Fold, *, after_seq: int,
+        covered_message_ids: frozenset[str],
         current_reminder: str | None,
         current_reminder_identity: tuple[str, str] | None,
         current_context: str | None,
@@ -417,8 +423,9 @@ class MessageProjection:
         """维护当前窗口的有序分段；日志变化编译正文，实时材料只在装配时插入。"""
         # 1. 窗口或日志前缀改变时重建同一读面，旧工具结果也重新检查可见调用。
         view = self._view
-        if view is None or view.fold is not fold or view.after_seq != after_seq:
-            view = _RenderView(fold, after_seq)
+        if (view is None or view.fold is not fold or view.after_seq != after_seq
+                or view.covered_message_ids != covered_message_ids):
+            view = _RenderView(fold, after_seq, covered_message_ids)
             self._view = view
         tail = messages[view.count:]
         transform = (None if self._prepare_content is None else self._prepare_content(
@@ -439,7 +446,8 @@ class MessageProjection:
                    for key in sorted(dirty, key=lambda key: view.units[key].index)]
         changed.extend(message for message in tail
                        if isinstance(message.body, (Input, Output))
-                       and (message.seq > after_seq or message.message_id in self._keep_input_ids))
+                       and (message.seq > after_seq and message.message_id not in covered_message_ids
+                            or message.message_id in self._keep_input_ids))
 
         # 2. 冷构建和追加共用编译操作；一份有序单元表拥有冻结行与首个提醒载体。
         for message in changed:
@@ -469,7 +477,8 @@ class MessageProjection:
 
         # 3. 不变窗口中只检查新结果；窗口变化从 count=0 重建，不能漏掉旧结果变孤儿。
         for message in tail:
-            if not isinstance(message.body, ToolResult) or message.seq <= after_seq:
+            if (not isinstance(message.body, ToolResult) or message.seq <= after_seq
+                    or message.message_id in covered_message_ids):
                 continue
             ref = message.body.call_ref
             caller = view.units.get(ref.message_id)
@@ -905,9 +914,10 @@ class _RenderedMessage:
 class _RenderView:
     """当前窗口的有序编译结果；只随追加推进，日志或窗口变化时重建。"""
 
-    def __init__(self, fold: _Fold, after_seq: int):
+    def __init__(self, fold: _Fold, after_seq: int, covered_message_ids: frozenset[str]):
         self.fold = fold
         self.after_seq = after_seq
+        self.covered_message_ids = covered_message_ids
         self.count = 0
         self.units: dict[str, _RenderedMessage] = {}
         self.reminders: dict[tuple[str, str], str] = {}

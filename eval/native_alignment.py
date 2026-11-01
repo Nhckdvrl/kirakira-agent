@@ -21,7 +21,7 @@ from uuid import uuid4
 
 from agent.plugin_composition import ServiceKey
 from core.common.file_io import run_file_io
-from eval.models import EvaluationModel
+from eval.models import EvaluationModel, source_identity
 from eval.native_runtime import text
 from kirakira_agent.runtime import (
     ROOT,
@@ -128,6 +128,7 @@ async def evaluate(
     )
     report = {
         "model_config": model_config.description(),
+        "source_identity": source_identity(),
         "scope": "controlled functional acceptance, not a public-dataset memory benchmark",
         "cases": [],
     }
@@ -413,17 +414,16 @@ async def evaluate(
                 {
                     "session_id": sid,
                     "records": [
+                        {
+                            "kind": "input",
+                            "text": "尚未完成的后台事项 OPEN_SOURCE_" + nonce,
+                            "source": "job:evaluation",
+                        },
                         {"kind": "input", "text": "已完成的受控历史任务。"},
                         {
                             "kind": "output",
                             "text": "history block with completed observations. "
                             * 2200,
-                        },
-                        {
-                            "kind": "output",
-                            "text": "OPEN_SOURCE_" + nonce,
-                            "source": "job:evaluation",
-                            "finish": "continue",
                         },
                     ],
                 },
@@ -439,9 +439,9 @@ async def evaluate(
             assert marker in text(answer)
             summary = root.context.require(COMPACTION_SUMMARIES).head(sid)
             assert summary is not None, "long-history scenario did not compact"
-            assert not any(
-                identity.endswith(":seed:2") for identity in summary.source_message_ids
-            )
+            assert summary.version == 3
+            assert f"{sid}:seed:0" not in summary.source_message_ids
+            assert {f"{sid}:seed:1", f"{sid}:seed:2"}.issubset(summary.source_message_ids)
             after = tuple(
                 (m.message_id, m.seq, encode_body(m.body))
                 for m in catalog.reader(sid).snapshot()
@@ -449,6 +449,8 @@ async def evaluate(
             assert after[: len(before)] == before
             return {
                 "summary_created": True,
+                "summary_version": summary.version,
+                "closed_history_after_old_open_source_compacted": True,
                 "open_source_excluded_from_summary": True,
                 "old_facts_unchanged": True,
             }

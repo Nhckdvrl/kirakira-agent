@@ -11,7 +11,8 @@ uv run --frozen --no-sync kirakira-agent upgrade --workspace /local-disk/workspa
 ```
 
 upgrade 用 prepare/CAS 刷新当前已选内置插件输入，并加入 runtime_diagnostics、plugin_update、
-local-embedding、event-ingress；其余启停选择及市场安装输入保留。
+local-embedding、event-ingress、followups；会话引用与可配置的 SearXNG 搜索设置默认加入，显式关闭仍保留。
+其余启停选择及市场安装输入保留；未填写 SearXNG 地址时不会新增实际搜索提供方。
 原 bundle.patch.toml、plugin-stable.json 与选择切换回执备份到工作区 operator-backups/。
 新建工作区已选中这些提供方。旧格式数据先按[迁移指南](start.md#既有-kirakira-数据)转换，不能直接升级。
 
@@ -32,6 +33,15 @@ uv run --frozen --no-sync kirakira-agent configure-memory \
 Akasha 从原始完整闭段学习；Markdown 档案与图记忆分别拥有自己的派生表示。
 不要用 SQLite 手动插入记忆或改消息正文。已经保存的模型空间不能静默换成另一种维度或权重。
 迁移前的旧闭段是否纳入学习由 cutover/消费规则决定，配置成功不等于历史全量重建。
+
+短期上下文压缩按原始消息身份记录覆盖范围。较早的后台来源没有结束时，后面的已完成交流仍可压缩；
+未被覆盖的原文保留，旧来源以后完成可以补进下一版累计摘要。摘要、长期情景图和 Markdown 档案的进度各自管理，
+压缩不删除原始消息，也不将工具结果拆成无出处的片段。
+
+Markdown 档案在成功处理后保存消费检查点，重启从已经确认的位置追尾。
+模型错误按类型暂停 30 或 300 秒，保留原消息，随后重新尝试；这不代表失败材料已经被学会。
+单个完整 Turn 超出声明模型窗口时仍会失败，需要修正窗口或另行设计有界学习；不会截掉原文冒充成功。
+显式短期重置与模型摘要分开识别，旧重置记录仍可读取，不因升级补写长期档案。
 
 ## 本地主动目标
 

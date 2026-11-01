@@ -111,6 +111,8 @@ async def evaluate(workspace, key_file, *, model_config=None):
                         "/api/chat/web-ui/bootstrap", headers=gate_headers
                     )
                     assert bootstrap.status_code == 200 and bootstrap.json()["modules"]
+                    assert any(module["pluginId"].split("@")[0] == "web_search_searxng"
+                               for module in bootstrap.json()["modules"]), "optional search settings module is absent"
                 statuses[name] = {
                     "status": response.status_code,
                     "bytes": len(response.content),
@@ -125,6 +127,7 @@ async def evaluate(workspace, key_file, *, model_config=None):
             "project_file_verified": True,
             "http": statuses,
             "importmap_before_modules": True,
+            "optional_search_settings_module": True,
             "plugin_ui_count": len(catalog["items"]),
             "fibers": len(root.fibers()),
         }

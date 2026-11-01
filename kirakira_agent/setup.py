@@ -176,8 +176,9 @@ def upgrade_workspace(workspace):
     }
     # New installs select conversation references by default; an explicit
     # opt-out on an existing workspace must survive subsequent upgrades.
-    if plugin_choices(workspace).get("session_reference", True):
-        additions.add("session_reference")
+    for name in ("session_reference", "web_search_searxng"):
+        if plugin_choices(workspace).get(name, True):
+            additions.add(name)
     lock = WorkspaceInstanceLock(workspace)
     lock.acquire()
     try:

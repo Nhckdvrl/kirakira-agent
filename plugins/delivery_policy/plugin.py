@@ -14,22 +14,34 @@ from agent.plugin_composition import (
     RUNTIME_STARTING,
     RUNTIME_STOPPING,
     Context,
+    stop_spawned,
 )
-from core.common.file_io import run_file_io
-from plugins.ledger.contract import BINDINGS
-from plugins.ledger.contract import MESSAGE_CATALOG, MessageReader
 from agent.plugin_composition.tasks import ExternalRootPermit, RestartRejectedError
-from plugins.ledger.contract import ContentPart, Control, Input, Message, Output, ToolCall
+from core.common.file_io import run_file_io
+from plugins.conversation.contract import CHECK_ORIGIN, OriginCheck
+from plugins.delivery.contract import (
+    DELIVERY_GUARDED_START,
+    DELIVERY_SENDERS,
+    FINAL_OUTPUT_DELIVERY,
+    FinalOutputTurn,
+    GuardedDeliveries,
+)
 from plugins.delivery_policy.contract import (
     INPUT_ORIGIN as INPUT_ORIGIN,
 )
-
-from plugins.delivery.contract import (
-    DELIVERY_GUARDED_START, DELIVERY_SENDERS, FINAL_OUTPUT_DELIVERY,
-    FinalOutputTurn, GuardedDeliveries,
+from plugins.ledger.contract import (
+    BINDINGS,
+    MESSAGE_CATALOG,
+    ContentPart,
+    Control,
+    Input,
+    Message,
+    MessageReader,
+    Output,
+    ToolCall,
 )
-from plugins.conversation.contract import CHECK_ORIGIN, OriginCheck
 from plugins.reply.contract import REPLY_COMPLETION
+
 from .follow import follow
 
 logger = logging.getLogger(__name__)
@@ -64,7 +76,10 @@ def origin(
     if reader.attributes.visibility == "internal":
         return None
     body = message.body
-    if message.source in sources and isinstance(body, Control) and body.action == "failure":
+    if message.source in sources and isinstance(body, Control) and (
+        body.action == "failure"
+        or body.action == "abandon" and (body.reason or "").startswith("步数上限放弃")
+    ):
         latest = reader.latest_input(message.source, through_seq=reader.head())
         # A newer input supersedes an old failure. Recovery must not flood a
         # channel with historical errors or redirect them to a later recipient.
@@ -285,12 +300,7 @@ async def apply(ctx: Context) -> None:
 
     async def stop(_event: object) -> None:
         try:
-            if watcher is not None:
-                _ = watcher.cancel()
-                try:
-                    await watcher
-                except asyncio.CancelledError:
-                    pass
+            await stop_spawned(watcher)
         finally:
             close_recovery()
 

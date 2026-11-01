@@ -19,8 +19,18 @@ def test_historical_reminder_projection_preserves_raw_facts_and_tool_protocol():
     import hashlib
     from datetime import UTC, datetime
     from types import SimpleNamespace
-    from plugins.ledger.contract import CallRef, ContentPart, Input, Message, Output, ToolCall, ToolResult
-    from plugins.models.contract import ModelContinuation, ToolCall as ModelToolCall
+
+    from plugins.ledger.contract import (
+        CallRef,
+        ContentPart,
+        Input,
+        Message,
+        Output,
+        ToolCall,
+        ToolResult,
+    )
+    from plugins.models.contract import ModelContinuation
+    from plugins.models.contract import ToolCall as ModelToolCall
     from plugins.models.projection import response_facts
 
     original = "PRESERVE_THIS\nLARGE_AUTO_RECALL\nPRESERVE_THAT"
@@ -59,9 +69,73 @@ def test_historical_reminder_projection_preserves_raw_facts_and_tool_protocol():
         projection.render(rows, after_seq=-1, reminder_patches=(patch, patch))
 
 
+def test_sparse_summary_coverage_preserves_holes_current_input_and_cross_source_tool_facts():
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+
+    from plugins.context.plugin import ContextBuilder
+    from plugins.ledger.contract import (
+        CallRef,
+        ContentPart,
+        Input,
+        Message,
+        Output,
+        ToolCall,
+        ToolResult,
+    )
+    from plugins.models.contract import ToolCall as ModelToolCall
+    from plugins.models.projection import response_facts
+    from plugins.reply_program.program import RequestHistory
+
+    def message(identity, seq, source, body):
+        return Message(identity, "session", seq, datetime.now(UTC), "fixture", source, body)
+
+    model = SimpleNamespace(descriptor=SimpleNamespace(binding_id="fixture", capabilities=SimpleNamespace(context_window=None)),
+        max_tool_schemas=None, estimate_context_tokens=lambda messages, tools: len(str(messages)))
+    def project(source, keep=()):
+        return MessageProjection(model, source=source, keep_input_ids=keep,
+            render_content=lambda part: ({"type": "text", "text": part.value},) if part.kind == "text" else (),
+            tool_name=lambda _: "tool", read_call=lambda _: {"state": "success", "binding": {"binding_id": "fixture"}},
+            check_summary=lambda _: ContentReferences())
+
+    rows = (
+        message("old-hole", 0, "conversation", Input((ContentPart("text", "OLD_RAW_HOLE"),))),
+        message("covered-input", 1, "conversation", Input((ContentPart("text", "COVERED_REQUEST"),))),
+        message("covered-output", 2, "conversation", Output((ContentPart("text", "COVERED_ANSWER"),), "complete")),
+        message("current", 3, "conversation", Input((ContentPart("text", "CURRENT_REQUEST"),))),
+    )
+    projection = project("conversation", ("current",))
+    covered = frozenset(("covered-input", "covered-output"))
+    raw_hole = projection.render(rows, after_seq=-1, covered_message_ids=covered)
+    assert "OLD_RAW_HOLE" in str(raw_hole.messages) and "COVERED_ANSWER" not in str(raw_hole.messages)
+    advanced = projection.render(rows, after_seq=-1, covered_message_ids=covered | {"old-hole", "current"})
+    assert "OLD_RAW_HOLE" not in str(advanced.messages) and "CURRENT_REQUEST" in str(advanced.messages)
+    assert projection.render(rows, after_seq=-1, covered_message_ids=covered).messages == raw_hole.messages
+
+    facts = response_facts(LLMResponse(None, (ModelToolCall("call", "tool", {}),), call_record_id="record"), (0,))
+    cross_source = (
+        message("alpha-input", 0, "alpha", Input((ContentPart("text", "ALPHA_RAW_REQUEST"),))),
+        message("alpha-call", 1, "alpha", Output((ToolCall("binding", {}), facts), "continue")),
+        message("alpha-result", 2, "alpha", ToolResult(CallRef("alpha-call", 0), "success", (ContentPart("text", "ALPHA_RAW_RESULT"),))),
+        message("beta-input", 3, "beta", Input((ContentPart("text", "BETA_CURRENT_REQUEST"),))),
+    )
+    context = ContextBuilder()
+    request_history = RequestHistory(context, "beta", own=False)
+    summary = {"reference": "fixed-summary", "content": "saved facts",
+               "source_message_ids": ("alpha-input", "alpha-call", "alpha-result")}
+    request = request_history.build(cross_source, materials={"summary": summary}, model=project("beta", ("beta-input",)), max_output_tokens=0)
+    assert "BETA_CURRENT_REQUEST" in str(request.messages) and "saved facts" in str(request.messages)
+    assert "ALPHA_RAW" not in str(request.messages)
+    for ids in (("alpha-input", "alpha-call"), ("alpha-input", "alpha-result")):
+        with pytest.raises(ValueError, match="切开工具调用与结果"):
+            context.build(cross_source, materials={"summary": {**summary, "source_message_ids": ids}},
+                          model=project("beta"), max_output_tokens=0)
+
+
 @pytest.mark.parametrize("thinking_format", ["none", "deepseek"])
 def test_internal_request_keeps_effort_unless_connection_can_disable_reasoning(thinking_format):
     from types import SimpleNamespace
+
     from plugins.openai_compatible.driver import _chat_body
 
     # No model-name/provider-name dispatch: the connection's negotiated protocol

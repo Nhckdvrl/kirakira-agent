@@ -13,38 +13,55 @@ from agent.plugin_composition import (
     RUNTIME_STOPPING,
     Context,
     Effect,
+    stop_spawned,
 )
-from plugins.ledger.contract import BINDINGS, Bindings
-from plugins.ledger.contract import (
-    MESSAGE_CATALOG,
-    MESSAGE_WRITERS,
-    OWNER_STATE,
-    MessageReader,
-)
-from agent.plugin_composition.tasks import TASKS, ExternalRootPermit, Task, TaskAdmission
-from plugins.ledger.contract import (
-    CallRef,
-    ContentPart,
-    ContentReferences,
-    ToolResult,
-    Output,
-    ToolCall,
+from agent.plugin_composition.tasks import (
+    TASKS,
+    ExternalRootPermit,
+    Task,
+    TaskAdmission,
 )
 from core.common.frozen_json import freeze_json
 from plugins.content.contract import (
     CONTENT as CONTENT,
 )
+from plugins.ledger.contract import (
+    BINDINGS,
+    MESSAGE_CATALOG,
+    MESSAGE_WRITERS,
+    OWNER_STATE,
+    Bindings,
+    CallRef,
+    MessageReader,
+    Output,
+    ToolCall,
+    ToolResult,
+)
 from plugins.tools.contract import (
     ALL_TOOLS as ALL_TOOLS,
+)
+from plugins.tools.contract import (
     TOOL_BIND_SAVED as TOOL_BIND_SAVED,
+)
+from plugins.tools.contract import (
     TOOL_CLEANUP as TOOL_CLEANUP,
+)
+from plugins.tools.contract import (
     TOOL_DISPLAY as TOOL_DISPLAY,
-    ToolDisplay,
+)
+from plugins.tools.contract import (
     TOOLS as TOOLS,
-    ToolRef as ToolRef,
+)
+from plugins.tools.contract import (
+    ToolDisplay,
     ToolRelease,
-    ToolView as ToolView,
     tool_key,
+)
+from plugins.tools.contract import (
+    ToolRef as ToolRef,
+)
+from plugins.tools.contract import (
+    ToolView as ToolView,
 )
 
 from .abandon import follow_abandon, reject_start
@@ -61,7 +78,6 @@ from .api import (
 )
 from .cleanup import Release, tool_cleanup
 from .execution import ToolExecution
-from .api import CallSource
 from .program import TOOL_PROGRAM, ToolProgramFactory
 
 api_version = 3
@@ -133,6 +149,15 @@ class _Authorization:
     context: Context
     name: str
     authorize: BindingAuthorize
+
+
+def _binding_fields(metadata: Mapping[str, object]) -> set[str]:
+    # 旧 binding 保存的限制已退役；执行时始终使用当前注册。
+    return set(metadata) - {"authorize"}
+
+
+def _expected_fields(registration: _Registration) -> set[str]:
+    return {"tool", "prepare", *(("state",) if registration.capture is not None else ())}
 
 
 class _ToolView:
@@ -306,7 +331,7 @@ class ToolCatalog:
     async def register_authorize(
         self, ctx: Context, *, tool: ToolRef, name: str, authorize: BindingAuthorize
     ) -> Effect:
-        """每个工具的独立限制只有一个 owner，并随 binding 固定。"""
+        """每个工具的独立限制只有一个 owner；执行时读取当前注册。"""
         self._check_context(ctx)
         if not name:
             raise ValueError("工具限制必须有贡献名")
@@ -406,13 +431,11 @@ class ToolCatalog:
         """从真实注册 Context 固定闭包，不让调用者省略准备贡献或重选目标。"""
         registration = self._registration(ref)
         preparation = registration.preparation
-        authorization = registration.authorization
         if configuration is not None and registration.capture is None:
             raise ValueError("该工具未声明 binding 配置入口")
         contributors = (
             registration.context,
             *(() if preparation is None else (preparation.context,)),
-            *(() if authorization is None else (authorization.context,)),
         )
         async with self._ctx.runtime_scope(), AsyncExitStack() as stack:
             # capture 可以挂起；实际贡献者在绑定提交前都不能被排空。
@@ -436,7 +459,6 @@ class ToolCatalog:
                 {
                     "tool": ref.description,
                     "prepare": None if preparation is None else preparation.name,
-                    **({"authorize": authorization.name} if authorization is not None else {}),
                     **({"state": state} if state is not None else {}),
                 },
                 contributors=contributors,
@@ -467,19 +489,10 @@ class ToolCatalog:
         ):
             raise ValueError("工具 binding 与归档注册不一致")
         preparation = registration.preparation
-        authorization = registration.authorization
-        expected = {
-            "tool",
-            "prepare",
-            *(("authorize",) if authorization is not None else ()),
-            *(("state",) if registration.capture is not None else ()),
-        }
-        if set(metadata) != expected or metadata["prepare"] != (
+        if _binding_fields(metadata) != _expected_fields(registration) or metadata["prepare"] != (
             None if preparation is None else preparation.name
         ):
             raise ValueError("工具 binding 参数准备与归档注册不一致")
-        if authorization is not None and metadata["authorize"] != authorization.name:
-            raise ValueError("工具 binding 限制与归档注册不一致")
         return await self.bind_scoped(
             registration.ref,
             bindings,
@@ -502,26 +515,15 @@ class ToolCatalog:
         name = description["name"]
         if not isinstance(name, str):
             raise ValueError("工具 binding 缺少工具名")
-        registration = self._tools[name]
+        registration = self._tools.get(name)
+        if registration is None:
+            raise ValueError(f"工具已撤下，binding 无法打开: {name}")
         preparation = registration.preparation
         if not _matches_saved_description(registration.ref.description, description) or metadata["prepare"] != (
             None if preparation is None else preparation.name
         ):
             raise ValueError("归档工具描述或参数准备与 binding 不一致")
-        expected: set[str] = {"tool", "prepare"}
-        authorization = registration.authorization
-        if "authorize" in metadata:
-            saved_authorization = metadata["authorize"]
-            if not isinstance(saved_authorization, str):
-                raise ValueError("工具 binding 限制字段无效")
-            if authorization is None or saved_authorization != authorization.name:
-                raise ValueError("归档工具限制与 binding 不一致")
-            expected.add("authorize")
-        elif authorization is not None:
-            raise ValueError("归档工具限制与 binding 不一致")
-        if registration.capture is not None:
-            expected.add("state")
-        if set(metadata) != expected:
+        if _binding_fields(metadata) != _expected_fields(registration):
             raise ValueError("工具 binding 字段无效")
         state: Mapping[str, object] = {}
         if registration.capture is not None:
@@ -543,21 +545,16 @@ class ToolCatalog:
     async def authorize(
         self, metadata: Mapping[str, object], arguments: Mapping[str, object]
     ) -> str | None:
-        """只执行 binding 固定的独立限制；无独立限制时返回 None。"""
-        if "authorize" not in metadata:
-            return
+        """限制随当前安装状态生效；撤下限制后旧 binding 与新 binding 行为一致。"""
         description = metadata.get("tool")
         if not isinstance(description, Mapping) or not isinstance(description.get("name"), str):
             raise ValueError("工具 binding 描述无效")
         registration = self._tools.get(cast(str, description["name"]))
-        authorization = (
-            None
-            if registration is None or not _matches_saved_description(
-                registration.ref.description, description
-            ) else registration.authorization
-        )
-        if authorization is None or metadata["authorize"] != authorization.name:
-            raise ValueError("归档工具限制与 binding 不一致")
+        if registration is None or registration.authorization is None:
+            return None
+        if not _matches_saved_description(registration.ref.description, description):
+            raise ValueError("归档工具描述与 binding 不一致")
+        authorization = registration.authorization
         async with self._ctx.runtime_scope():
             async with authorization.context.runtime_scope():
                 return await authorization.authorize(arguments)
@@ -631,12 +628,7 @@ async def apply(ctx: Context) -> None:
         ), name="tools-abandon")
 
     async def stop(_event: object) -> None:
-        if watcher is not None:
-            _ = watcher.cancel()
-            try:
-                await watcher
-            except asyncio.CancelledError:
-                pass
+        await stop_spawned(watcher)
 
     _ = await ctx.on(RUNTIME_STARTED, start)
     _ = await ctx.on(RUNTIME_STOPPING, stop)

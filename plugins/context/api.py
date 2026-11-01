@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from itertools import pairwise
 from types import MappingProxyType
 from typing import cast
 
-from plugins.models.contract import ModelRequest
+from plugins.context.contract import MaterialData
 from plugins.ledger.contract import (
     CallRef,
     ContentPart,
@@ -16,7 +17,7 @@ from plugins.ledger.contract import (
     ToolCall,
     ToolResult,
 )
-from plugins.context.contract import MaterialData
+from plugins.models.contract import ModelRequest
 
 
 def settled_prefixes(messages: Sequence[Message]) -> tuple[int, ...]:
@@ -56,16 +57,15 @@ def check_notice(part: ContentPart) -> ContentReferences:
     return ContentReferences()
 
 
-def summary_range(snapshot: Sequence[Message], source_message_ids: tuple[str, ...]) -> range:
-    """按真实身份定位摘要的连续区间；窗口外旧消息不冒充摘要来源。"""
-    identities = tuple(message.message_id for message in snapshot)
-    if not source_message_ids or source_message_ids[0] not in identities:
+def summary_indexes(snapshot: Sequence[Message], source_message_ids: tuple[str, ...]) -> tuple[int, ...]:
+    """按日志顺序核对摘要精确覆盖的消息身份；未覆盖的旧消息可以留在原处。"""
+    positions = {message.message_id: index for index, message in enumerate(snapshot)}
+    if not source_message_ids or any(identity not in positions for identity in source_message_ids):
         raise ValueError("摘要来源缺少实际消息")
-    start = identities.index(source_message_ids[0])
-    end = start + len(source_message_ids)
-    if identities[start:end] != source_message_ids:
-        raise ValueError("摘要来源不等于实际连续消息范围")
-    return range(start, end)
+    indexes = tuple(positions[identity] for identity in source_message_ids)
+    if any(left >= right for left, right in pairwise(indexes)):
+        raise ValueError("摘要来源必须按实际消息顺序且不能重复")
+    return indexes
 
 
 @dataclass(frozen=True, slots=True)

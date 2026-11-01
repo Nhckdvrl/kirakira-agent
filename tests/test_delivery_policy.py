@@ -14,17 +14,29 @@ from tests.test_default_reply import application, live_root
 
 
 @pytest.mark.asyncio
-async def test_failure_control_wakes_durable_delivery_without_exposing_exception(tmp_path):
+@pytest.mark.parametrize("action,reason,expected", [
+    ("failure", "模型服务拒绝请求（HTTP 451）。", "HTTP 451"),
+    ("failure", "步数上限失败：尚有一个调用没有回执。", "/abandon"),
+    ("abandon", "步数上限放弃：本轮已停止。", "达到本轮执行步数上限"),
+])
+async def test_failure_control_wakes_durable_delivery_without_exposing_exception(tmp_path, action, reason, expected):
     from contextlib import asynccontextmanager
+
     from agent.plugin_composition import CompositionRoot
     from agent.plugin_composition.tasks import Tasks
     from plugins.delivery.api import Receipt
     from plugins.delivery.execution import Deliveries
     from plugins.delivery_policy.follow import follow
     from plugins.delivery_policy.plugin import origin
-    from plugins.ledger.contract import ContentPart, ContentReferences, Control, Input, SessionAttributes
+    from plugins.ledger.contract import (
+        ContentPart,
+        ContentReferences,
+        Control,
+        Input,
+        SessionAttributes,
+    )
     from plugins.ledger.log import MessageLog
-    from plugins.telegram_sender.sender import read_content
+    from plugins.telegram_sender.sender import TelegramSender, read_content
 
     log = MessageLog(tmp_path / "failures.db")
     log.ensure_session("test:room", SessionAttributes())
@@ -32,17 +44,26 @@ async def test_failure_control_wakes_durable_delivery_without_exposing_exception
                         content={"text": lambda _: ContentReferences(), "channel.origin": lambda _: ContentReferences()})
     controls = log.writer("test:room", author="app", source="conversation", body_types=(Control,), content={})
     first = inputs.append("first", Input((ContentPart("text", "hello"), ContentPart(
-        "channel.origin", {"channel": "test", "chat_id": "original"}))))
+        "channel.origin", {"channel": "test", "chat_id": "101"}))))
     root, tasks, sent = CompositionRoot("failure-delivery"), Tasks(), []
+    requests = []
     done = asyncio.Event()
 
+    class LocalTelegram(TelegramSender):
+        async def _post(self, request):
+            # 唯一替换网络边界；正文渲染、sendMessage组装与回执核验都跑真实发送器。
+            requests.append(request)
+            return 200, b'{"ok":true,"result":{"message_id":7}}'
+
+    telegram = LocalTelegram(None, "https://fixture.invalid", "fixture-only", log.catalog(), None)
+
     class Sender:
-        idempotent = True
+        idempotent = False
         async def send(self, key, address, message):
-            parts = await read_content(message, log.catalog(), None)
-            sent.append((message.message_id, address, parts))
+            result = await telegram.send(key, address, message)
+            sent.append((message.message_id, address, tuple(item.fields["text"] for item in requests)))
             done.set()
-            return Receipt(status="delivered")
+            return Receipt(status=result.status, provider_ids=result.provider_ids, error=result.error)
         async def query(self, key, address):
             return None
 
@@ -59,21 +80,30 @@ async def test_failure_control_wakes_durable_delivery_without_exposing_exception
     job = asyncio.create_task(follow(root.context, log.catalog(), lambda: delivery, select))
     try:
         await asyncio.sleep(0)
-        failed = controls.append("failure", Control("failure", first.seq,
-            "模型服务拒绝请求（HTTP 451）。secret-key-fixture raw provider payload"))
+        failed = controls.append("failure", Control(action, first.seq,
+            reason + "secret-key-fixture raw provider payload"))
         await asyncio.wait_for(done.wait(), 3)
         async with asyncio.timeout(3):
             while records.read(failed.message_id, "test")[1].phase != "delivered":
                 await asyncio.sleep(0.01)
-        assert sent[0][0:2] == ("failure", "original")
-        assert "HTTP 451" in sent[0][2][0] and "secret-key-fixture" not in sent[0][2][0]
+        assert sent[0][0:2] == ("failure", "101")
+        assert len(requests) == 1 and requests[0].method == "sendMessage"
+        assert requests[0].fields["chat_id"] == 101
+        assert records.read(failed.message_id, "test")[1].receipt.provider_ids == ("7",)
+        assert expected in sent[0][2][0] and "secret-key-fixture" not in sent[0][2][0]
+        assert "raw provider payload" not in sent[0][2][0]
+        manual = controls.append("manual-abandon", Control("abandon", failed.seq, "用户放弃本轮未完成工作"))
+        paused = controls.append("paused", Control("pause", manual.seq))
+        for quiet in (manual, paused):
+            assert origin(log.reader("test:room"), quiet, ("conversation",)) is None
+            assert await read_content(quiet, log.catalog(), None) == ()
         job.cancel()
         await asyncio.gather(job, return_exceptions=True)
         job = asyncio.create_task(follow(root.context, log.catalog(), lambda: delivery, select))
         await asyncio.sleep(0.05)
         assert len(sent) == 1
         inputs.append("next", Input((ContentPart("text", "new question"), ContentPart(
-            "channel.origin", {"channel": "test", "chat_id": "later"}))))
+            "channel.origin", {"channel": "test", "chat_id": "202"}))))
         assert origin(log.reader("test:room"), failed, ("conversation",)) is None
     finally:
         job.cancel()
@@ -134,7 +164,9 @@ async def test_real_input_reply_and_archived_delivery_are_independent_consumers(
 @pytest.mark.asyncio
 async def test_slow_destination_does_not_delay_next_fast_receipt(tmp_path, monkeypatch):
     """O: real durable selections advance independently, with per-sink order."""
+    import threading
     from contextlib import asynccontextmanager
+    from types import SimpleNamespace
 
     from agent.plugin_composition import CompositionRoot
     from agent.plugin_composition.tasks import Tasks
@@ -145,8 +177,6 @@ async def test_slow_destination_does_not_delay_next_fast_receipt(tmp_path, monke
     from plugins.ledger.log import MessageLog
     from tests.test_akasha_execution import WorkerGate, loop_turn
     from tests.test_message_log import writer
-    import threading
-    from types import SimpleNamespace
 
     log = MessageLog(tmp_path / "sessions.db")
     root = CompositionRoot("delivery-isolation")

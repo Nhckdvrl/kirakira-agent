@@ -1,38 +1,60 @@
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Mapping, Sequence
-from typing import Any, Literal, cast
+import asyncio
 import json
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager, AbstractContextManager
+from functools import partial
+from typing import Any, Literal, cast
+from uuid import uuid4
 
+from agent.plugin_composition import Context
+from agent.plugin_composition.tasks import Task
 from core.common.diagnostic_log import log_timing
 from core.common.file_io import run_file_io
-from functools import partial
-from agent.plugin_composition import Context
-from plugins.ledger.contract import ArtifactRead
-from plugins.ledger.contract import MessageReader, MessageWriters, OwnerState, OwnerTransaction
-from plugins.models.contract import ModelRequest
+from plugins.content.contract import Content
+from plugins.context.contract import (
+    ContextBuilder,
+    MaterialData,
+    MaterialView,
+    ReductionStatus,
+    SummaryData,
+)
+from plugins.ledger.contract import (
+    ArtifactRead,
+    ContentPart,
+    Control,
+    Input,
+    Message,
+    MessageReader,
+    MessageWriters,
+    Output,
+    OwnerState,
+    OwnerTransaction,
+)
 from plugins.models.contract import (
     BoundChatModel,
+    CallReader,
     ChatModels,
+    ContentRenderer,
+    ContextModel,
+    ModelChecks,
+    ModelContent,
+    ModelProjections,
+    ModelRequest,
+    ModelSelection,
+    PrepareContent,
+    StreamCallback,
 )
-from agent.plugin_composition.tasks import Task
-from plugins.context.contract import MaterialView, ReductionStatus
-from plugins.models.contract import PrepareContent
-from plugins.ledger.contract import ContentPart, Control, Input, Message, Output
-
 from plugins.sources.contract import (
     SourceGuard,
 )
-
-from plugins.content.contract import Content
-from plugins.context.contract import ContextBuilder, MaterialData, SummaryData
-from plugins.models.contract import (
-    CallReader, ContentRenderer, ContextModel, ModelChecks, ModelContent,
-    ModelProjections, ModelSelection, StreamCallback,
-)
 from plugins.tools.contract import (
-    OrderedToolProgram, ToolCatalog, ToolCleanup, ToolPresentation, ToolView,
+    OrderedToolProgram,
+    ToolCatalog,
+    ToolCleanup,
+    ToolPresentation,
+    ToolView,
 )
 from plugins.turn_projection.contract import TurnProjection
 
@@ -154,6 +176,21 @@ async def run_reply(
             content={**view.checks, "model.facts": model_checks.check_facts, "model.tool_rejection": model_checks.check_tool_rejection, "context.summary": context.check_summary, "context.notice": context.check_notice}, check_call=menu.check_call,
         )(reader.session_id)
         task.on_close(output.expire)
+        controls = writers.bind(
+            ctx, author="app", source=source, body_types=(Control,), content={},
+        )(reader.session_id)
+        task.on_close(controls.expire)
+
+        async def aborted(reason: str) -> Message:
+            # 来源持有控制写权；新输入撤权后，旧运行不能关闭新任务。
+            if not task.active:
+                raise asyncio.CancelledError
+            check()
+            head = reader.head(source=source)
+            return await controls.append_async(
+                uuid4().hex, Control("abandon", head, reason), expected_source_head=head,
+            )
+
         artifacts: Mapping[str, tuple[Mapping[str, Any], ...]] = {}
         def render(part: ContentPart):
             return model_content.render(part, artifacts=artifacts, read_message=reader.get)
@@ -177,10 +214,10 @@ async def run_reply(
                 result = {key: value for key, value in result.items() if key != "summary"}
             if render_content is None:
                 summary = cast(SummaryData | None, result.get("summary"))
-                start = 0 if summary is None else context.summary_range(messages, cast(tuple[str, ...], summary["source_message_ids"])).stop
+                covered = set() if summary is None else set(summary["source_message_ids"])
                 visible_ids = tuple(
-                    message.message_id for index, message in enumerate(messages)
-                    if index >= start or message.message_id in keep_input_ids
+                    message.message_id for message in messages
+                    if message.message_id not in covered or message.message_id in keep_input_ids
                 )
                 refs = await run_file_io(lambda: reader.attachments_for(visible_ids))
                 if refs:
@@ -203,13 +240,16 @@ async def run_reply(
             model: BoundChatModel, projection: ContextModel, *, source: str, force: bool,
             on_status: ReductionStatus | None = None, summary_limit: int | None = None,
         ) -> SummaryData | None:
-            # 摘要按请求视图估算，当前输入等尾部原文保留；其他来源有未完成轮次时只摘要它之前的前缀，
-            # 该前缀在真实日志和请求视图里相同，摘要范围两边都连续。
+            # 不可见的开放来源不参与摘要；边界换算到过滤后的请求视图，覆盖依靠消息身份核对。
             hidden = hidden_indexes(snapshot, source)
+            summary = cast(SummaryData | None, prepared.get("summary"))
+            if summary is not None:
+                covered = set(summary["source_message_ids"])
+                hidden = {index for index in hidden if snapshot[index].message_id not in covered}
             if hidden:
-                first = min(hidden)
-                summary_limit = first if summary_limit is None else min(summary_limit, first)
-                snapshot = tuple(visible_messages(snapshot, source))
+                if summary_limit is not None:
+                    summary_limit -= sum(index < summary_limit for index in hidden)
+                snapshot = tuple(message for index, message in enumerate(snapshot) if index not in hidden)
             result = await material_view.reduce(snapshot, prepared, request, model, projection,
                                                 source=source, force=force, on_status=on_status,
                                                 summary_limit=summary_limit)
@@ -227,9 +267,11 @@ async def run_reply(
                 state=owner_state.open_scoped(ctx, "generation"),
                 check_start=check,
                 before_step=before_step,
+                aborted=aborted,
             )
         finally:
             output.expire()
+            controls.expire()
 
 
 def own_messages(messages: Sequence[Message], source: str) -> tuple[Message, ...]:
@@ -268,15 +310,24 @@ class RequestHistory:
         self._own = own
         self.check_summary = context.check_summary
         self.check_notice = context.check_notice
-        self.summary_range = context.summary_range
+        self.summary_indexes = context.summary_indexes
         self.settled_prefixes = context.settled_prefixes
         self.reminder_content = context.reminder_content
 
-    def _view(self, snapshot: Sequence[Message]) -> Sequence[Message]:
-        return own_messages(snapshot, self._source) if self._own else visible_messages(snapshot, self._source)
+    def _view(self, snapshot: Sequence[Message], materials: MaterialData) -> Sequence[Message]:
+        if self._own:
+            return own_messages(snapshot, self._source)
+        summary = cast(SummaryData | None, materials.get("summary"))
+        covered = set() if summary is None else set(summary["source_message_ids"])
+        hidden = hidden_indexes(snapshot, self._source)
+        if not hidden:
+            return snapshot
+        # 被摘要覆盖的事实保留给身份/调用账核验；模型投影仍按 covered IDs 排除其原文。
+        return tuple(message for index, message in enumerate(snapshot)
+                     if index not in hidden or message.message_id in covered)
 
     def build(self, snapshot: Sequence[Message], **options: Any) -> ModelRequest:
-        return self._context.build(self._view(snapshot), **options)
+        return self._context.build(self._view(snapshot, options["materials"]), **options)
 
     def build_attempt(self, snapshot: Sequence[Message], **options: Any) -> tuple[ModelRequest, str | None]:
-        return self._context.build_attempt(self._view(snapshot), **options)
+        return self._context.build_attempt(self._view(snapshot, options["materials"]), **options)

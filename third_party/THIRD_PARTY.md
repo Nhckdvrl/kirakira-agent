@@ -13,6 +13,14 @@ Supplemental file digests and selected commits are recorded in `UPSTREAM.json`;
 the runtime baseline remains pinned separately. Original-message windows and SDK
 input-part support extend the imported conversation-reference implementation.
 
+Further selected changes reviewed at `88e69687ce140e2ff14005860c1da6a4b05bb6d3`
+cover cumulative message-identity summaries, durable Markdown learning checkpoints,
+worker shutdown, live tool restrictions, step-limit recovery and the optional
+SearXNG provider. Local integration preserves explicit reset compatibility,
+background context maintenance and safe terminal notices. Source digests,
+supplemental files and complete baseline-to-distribution patches are recorded
+in `UPSTREAM.json`; these selections do not replace the runtime baseline pin.
+
 The episodic memory plugin includes the Akasha v2 engine. Its own source provenance
 is retained in [memory provenance](../plugins/akasha/UPSTREAM.json).
 Kirakira's additions include session-scoped memory queries, dated and bounded

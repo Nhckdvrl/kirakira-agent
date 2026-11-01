@@ -7,15 +7,11 @@ from contextlib import AbstractContextManager
 from typing import Protocol
 
 from agent.plugin_composition import RuntimeScope, ServiceKey
-from plugins.ledger.contract import MessageReader, MessageWriter, OwnerStore
-from plugins.models.contract import StreamCallback
-from plugins.models.contract import BoundChatModel
-from plugins.ledger.contract import Message
 from plugins.content.contract import ContentView
 from plugins.context.contract import ContextBuilder, SummaryReducer
-from plugins.models.contract import MessageProjection
-from plugins.tools.contract import StartCheck
-from plugins.tools.contract import ToolMenu
+from plugins.ledger.contract import Message, MessageReader, MessageWriter, OwnerStore
+from plugins.models.contract import BoundChatModel, MessageProjection, StreamCallback
+from plugins.tools.contract import StartCheck, ToolMenu
 
 Materials = Mapping[str, object]
 Preview = Callable[[str], AbstractContextManager[StreamCallback]]
@@ -44,6 +40,7 @@ class OrderedReact(Protocol):
         check_start: StartCheck,
         max_parallel_calls: int = 1,
         before_step: Callable[[], Awaitable[None]] | None = None,
+        aborted: Callable[[str], Awaitable[Message]] | None = None,
     ) -> Message: ...
 
 

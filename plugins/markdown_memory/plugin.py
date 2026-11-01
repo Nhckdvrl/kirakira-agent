@@ -5,49 +5,61 @@ import asyncio
 import fcntl
 import json
 import logging
-from importlib import import_module
-from datetime import UTC, datetime
-from contextlib import aclosing, asynccontextmanager
-from pathlib import Path
-from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, AsyncGenerator, cast
 from collections.abc import Callable, Mapping
+from contextlib import aclosing, asynccontextmanager
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime
+from importlib import import_module
+from pathlib import Path
+from typing import TYPE_CHECKING, AsyncGenerator, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from agent.plugin_composition import (
     RUNTIME_STARTED,
     RUNTIME_STOPPING,
-    Context,
     CompositionError,
+    Context,
     FiberState,
     ServiceKey,
+    stop_spawned,
 )
-from plugins.models.contract import ModelRequest
-from plugins.models.contract import CHAT_MODELS
-from plugins.ledger.contract import BINDINGS, Bindings
-from plugins.ledger.contract import MESSAGE_CATALOG
-from plugins.models.contract import LLMResponse
-from plugins.models.contract import (
-    ContextLengthError,
-    ModelError,
-)
-from plugins.models.contract import (
-    BoundChatModel,
-    ChatModels,
-)
+from agent.plugin_composition.plugin_config import PLUGIN_CONFIG
 from core.common.file_io import run_file_io
-from plugins.ledger.contract import MessageCatalog
-from plugins.ledger.contract import ContentPart, Control, Input, Message, Output, ToolResult
 from plugins.compaction.contract import (
-    COMPACTION_READER, COMPACTION_SUMMARIES, CompactionReader,
-    PartitionedSummary, StoredSummary, SummaryLookup,
+    COMPACTION_READER,
+    COMPACTION_SUMMARIES,
+    CompactionReader,
+    PartitionedSummary,
+    StoredSummary,
+    SummaryLookup,
 )
 from plugins.content.contract import CONTENT, Content
 from plugins.context.contract import CONTEXT, MATERIALS_V4, ContextBuilder
+from plugins.ledger.contract import (
+    BINDINGS,
+    MESSAGE_CATALOG,
+    Bindings,
+    ContentPart,
+    Control,
+    Input,
+    Message,
+    MessageCatalog,
+    Output,
+    ToolResult,
+)
+from plugins.models.contract import (
+    CHAT_MODELS,
+    BoundChatModel,
+    ChatModels,
+    ContextLengthError,
+    LLMResponse,
+    ModelError,
+    ModelRequest,
+)
 from plugins.turn_projection.contract import TURN_PROJECTION, TurnProjection
-from agent.plugin_composition.plugin_config import PLUGIN_CONFIG
 from plugins.ui.contract import Configuration, ModelSettings, mount_settings
+
 from .llm_json import load_json_object_loose
 
 if TYPE_CHECKING:
@@ -56,8 +68,23 @@ if TYPE_CHECKING:
 from plugins.runtime_inspection.contract import DOCUMENTS, Document
 
 from .documents import (
-    MEMORY, SELF, SELF_HEADINGS, MEMORY_HEADINGS, InvalidDraft, Op, Workspace,
-    SCOPE_FILE, TOPICS, budget_usage, check_budgets, parse_ops, rank, render_memory, section_of, split_frontmatter, surfaceable,
+    MEMORY,
+    MEMORY_HEADINGS,
+    SCOPE_FILE,
+    SELF,
+    SELF_HEADINGS,
+    TOPICS,
+    InvalidDraft,
+    Op,
+    Workspace,
+    budget_usage,
+    check_budgets,
+    parse_ops,
+    rank,
+    render_memory,
+    section_of,
+    split_frontmatter,
+    surfaceable,
 )
 from .store import DEFAULT_SELF_MD, ConcurrentChange, MarkdownProfileStore
 
@@ -521,7 +548,7 @@ async def _unapplied_groups(
     store: MarkdownProfileStore, sources: tuple[str, ...], projection: TurnProjection,
     *, compaction: CompactionReader,
     post_commit_effect: Callable[[Message], str | None],
-    summary_range: Callable[[tuple[Message, ...], tuple[str, ...]], range],
+    summary_indexes: Callable[[tuple[Message, ...], tuple[str, ...]], tuple[int, ...]],
 ) -> tuple[tuple[Message, ...], ...] | None:
     """只取未应用 generation 真正送入摘要模型的完整组原文。"""
     applied_reference: str | None = None
@@ -549,11 +576,11 @@ async def _unapplied_groups(
             {"record_ref": current.parent, "session_id": record.session_id},
             session_id=reader.session_id,
         )
-        if current.version == 3:
+        if getattr(current, "trigger", None) == "manual_reset":
             # An explicit short-term reset is not a model summary or a request
             # to relearn the omitted conversation. Existing memory is retained.
             batches.append(())
-        elif current.version == 2:
+        elif current.version in (2, 3):
             batches.append(cast(PartitionedSummary, current).summary_message_ids)
         else:
             parent_size = 0 if parent is None else len(parent.source_message_ids)
@@ -567,10 +594,10 @@ async def _unapplied_groups(
 
     # 归档 lookup 依赖当前 task 的 lease；只把独立 reader 的解码移出事件循环。
     snapshot = await run_file_io(reader.snapshot)
-    covered = summary_range(snapshot, record.source_message_ids)
+    covered = summary_indexes(snapshot, record.source_message_ids)
     applied_ids = set() if applied_reference is None else set(current.source_message_ids)
     # 历史 suppress 是整个工作单元的资格，不能只删用户行后继续学习其回答。
-    by_id = {message.message_id: message for message in snapshot[:covered.stop]}
+    by_id = {snapshot[index].message_id: snapshot[index] for index in covered}
     excluded: set[str] = set()
     deferred: set[str] = set()
     for source in sources:
@@ -592,8 +619,8 @@ async def _unapplied_groups(
         parent = None if current.parent is None else lookup.resolve(
             {"record_ref": current.parent, "session_id": record.session_id}, session_id=reader.session_id,
         )
-        older = (() if current.version == 3 else
-                 cast(PartitionedSummary, current).summary_message_ids if current.version == 2 else
+        older = (() if getattr(current, "trigger", None) == "manual_reset" else
+                 cast(PartitionedSummary, current).summary_message_ids if current.version in (2, 3) else
                  current.source_message_ids[0 if parent is None else len(parent.source_message_ids):])
         selected_ids.update(deferred.intersection(older))
         deferred.difference_update(older)
@@ -601,10 +628,10 @@ async def _unapplied_groups(
             break
         current = parent
     cuts = (
-        covered.start,
-        *(index for index in compaction.window_starts(snapshot[:covered.stop], projection)
-          if index > covered.start),
-        covered.stop,
+        covered[0],
+        *(index for index in compaction.window_starts(snapshot[:covered[-1] + 1], projection)
+          if index > covered[0]),
+        covered[-1] + 1,
     )
     groups = tuple(snapshot[left:right] for left, right in zip(cuts, cuts[1:]))
     selected = tuple(tuple(message for message in group
@@ -612,7 +639,7 @@ async def _unapplied_groups(
                            and message.message_id not in excluded)
                      for group in groups)
     # 批次切点来自完整前缀；学习资格与迟到结果沿原 source/放弃边界过滤。
-    return compaction.summary_groups(selected, snapshot[:covered.stop])
+    return compaction.summary_groups(selected, snapshot[:covered[-1] + 1])
 
 
 async def project(
@@ -654,7 +681,7 @@ async def project(
         groups = await _unapplied_groups(
             record, summaries, reader, store, sources, projection,
             compaction=compaction, post_commit_effect=post_commit_effect,
-            summary_range=context.summary_range,
+            summary_indexes=context.summary_indexes,
         )
         if not groups:
             return
@@ -743,10 +770,17 @@ async def apply(ctx: Context) -> None:
         return reminders
 
     async def follow(catalog: MessageCatalog) -> None:
-        """模型暂时失败时保留原游标，关闭订阅后延时重读，其他会话继续处理。"""
-        cursor: dict[str, int] = {}
+        """模型失败时保留原游标，关闭订阅后延时重读，其他会话继续处理。"""
+        checkpoints = store
+        assert checkpoints is not None
+        fingerprint = json.dumps({"version": 1, "sources": sorted(config.sources)}, separators=(",", ":"))
+        cursor = await run_file_io(lambda: checkpoints.read_cursors(fingerprint))
         while True:
             retry = False
+            # Classified permanent failures pause learning without discarding
+            # its evidence; replacing the model or credentials can recover it.
+            delay = 30
+            advanced: dict[str, int] = {}
             # 1. 每次重新订阅都先读完整 heads，不依赖失败后恰好出现新消息。
             # 投影按游标读取；只在 Output 或 Control 可能结束 turn 时唤醒。
             async with aclosing(catalog.follow(wake_on=(Output, Control))) as updates:
@@ -759,7 +793,7 @@ async def apply(ctx: Context) -> None:
                                 assert store is not None
                                 reader = catalog.reader(session)
                                 if reader.attributes.learning != "eligible":
-                                    cursor[session] = head
+                                    cursor[session] = advanced[session] = head
                                     continue
                                 messages = await run_file_io(lambda: reader.snapshot(
                                     after_seq=cursor.get(session, -1), through_seq=head,
@@ -775,20 +809,24 @@ async def apply(ctx: Context) -> None:
                                         compaction=compaction)
                                     except (RuntimeError, TimeoutError) as error:
                                         failure = ModelError.read(error)
-                                        if not isinstance(error, ConcurrentChange) and (
-                                                failure is None or not failure.retryable):
+                                        if not isinstance(error, ConcurrentChange) and failure is None:
                                             raise
+                                        delay = max(delay, 30 if failure is None or failure.retryable else 300)
                                         logger.warning(
                                             "Markdown 模型或文件暂时不可用，将重试原消息: session=%s message=%s error=%s",
                                             session, message.message_id, type(error).__name__, exc_info=True,
                                         )
                                         retry = True
                                         break
-                                    cursor[session] = message.seq
+                                    cursor[session] = advanced[session] = message.seq
                         except CompositionError as error:
                             if error.code != "OWNER_UNAVAILABLE" or ctx.fiber.state not in {FiberState.UNLOADING, FiberState.DISPOSED}:
                                 raise
                             return
+                    # Crash can only leave this checkpoint behind. Existing
+                    # source receipts make the resulting replay idempotent.
+                    pending, advanced = advanced, {}
+                    await run_file_io(lambda pending=pending: checkpoints.save_cursors(fingerprint, pending))
                     if retry:
                         break
                     try:
@@ -797,15 +835,16 @@ async def apply(ctx: Context) -> None:
                             await consolidate(store, ctx.require(CHAT_MODELS), lock_path, config)
                     except (RuntimeError, TimeoutError) as error:
                         failure = ModelError.read(error)
-                        if not isinstance(error, ConcurrentChange) and (failure is None or not failure.retryable):
+                        if not isinstance(error, ConcurrentChange) and failure is None:
                             raise
+                        delay = 30 if failure is None or failure.retryable else 300
                         logger.warning("Markdown 整理暂时失败，保留草稿稍后重试: %s", error)
                         retry = True
                         break
             if not retry:
                 return
             # 2. 释放当前 lease 和订阅再等待，取消正常传播，成功写入仍由原 receipt 去重。
-            await asyncio.sleep(30)
+            await asyncio.sleep(delay)
 
     async def start(_event: object) -> None:
         nonlocal store, watcher
@@ -817,12 +856,7 @@ async def apply(ctx: Context) -> None:
         watcher = await ctx.spawn(follow(ctx.require(MESSAGE_CATALOG)), name="markdown-memory")
 
     async def stop(_event: object) -> None:
-        if watcher is not None:
-            _ = watcher.cancel()
-            try:
-                await watcher
-            except asyncio.CancelledError:
-                pass
+        await stop_spawned(watcher)
 
     _ = await ctx.require(MATERIALS_V4).register(ctx, kind="profile", name="markdown_memory", prepare=prepare, prompt=True, priority=200)
     _ = await ctx.on(RUNTIME_STARTED, start)

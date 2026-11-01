@@ -1,11 +1,18 @@
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from typing import cast
+
 import pytest
-from plugins.ledger.contract import Bindings
-from agent.plugin_composition import CompositionRoot, RUNTIME_STARTED, RUNTIME_STARTING, RUNTIME_STOPPING
+
+from agent.plugin_composition import (
+    RUNTIME_STARTED,
+    RUNTIME_STARTING,
+    RUNTIME_STOPPING,
+    CompositionRoot,
+)
 from agent.plugin_composition.model import PluginRuntime, ServiceKey
 from agent.plugin_composition.tasks import TASKS, PluginTasks
+from plugins.ledger.contract import Bindings
 from plugins.tool_search.plugin import LoadTools
 from plugins.tools.plugin import ToolCatalog, ToolRef
 
@@ -14,7 +21,15 @@ TOOLS = ServiceKey("tools.v1")
 @pytest.mark.asyncio
 async def test_relative_reminder_binds_real_input_time_and_keeps_receipt(tmp_path):
     from datetime import UTC, datetime, timedelta
-    from plugins.ledger.contract import CallRef, ContentPart, Input, Message, Output, ToolCall
+
+    from plugins.ledger.contract import (
+        CallRef,
+        ContentPart,
+        Input,
+        Message,
+        Output,
+        ToolCall,
+    )
     from plugins.scheduler.store import JobStore
     from plugins.scheduler.tools import ScheduleTool
     from plugins.tools.contract import CallSource
@@ -53,7 +68,15 @@ async def test_relative_reminder_binds_real_input_time_and_keeps_receipt(tmp_pat
 @pytest.mark.asyncio
 async def test_clock_reminder_keeps_input_date_when_inference_passes_target(tmp_path):
     from datetime import UTC, datetime, timedelta
-    from plugins.ledger.contract import CallRef, ContentPart, Input, Message, Output, ToolCall
+
+    from plugins.ledger.contract import (
+        CallRef,
+        ContentPart,
+        Input,
+        Message,
+        Output,
+        ToolCall,
+    )
     from plugins.scheduler.store import JobStore
     from plugins.scheduler.tools import ScheduleTool
     from plugins.tools.contract import CallSource
@@ -94,6 +117,7 @@ async def test_clock_reminder_keeps_input_date_when_inference_passes_target(tmp_
 def test_reminder_dst_uses_elapsed_duration_and_requires_unique_wall_time():
     from datetime import UTC, datetime
     from zoneinfo import ZoneInfo
+
     from plugins.scheduler.schedule import compute_fire_at, parse_when_at
 
     ny = ZoneInfo("America/New_York")
@@ -149,8 +173,8 @@ async def _mount_local_tools(root, tmp_path, events):
     return fiber, contexts[0], catalogs[0], plugin_tasks, admissions[0]
 
 @pytest.mark.asyncio
-async def test_prepare_and_authorize_follow_exact_registration_identity(tmp_path):
-    """同名新工具不能继承旧注册的参数转换或限制。"""
+async def test_prepare_pins_registration_and_authorize_reads_current(tmp_path):
+    """准备固定原实现；限制随当前注册生效，撤下后旧 binding 仍可打开。"""
     root = CompositionRoot("exact-tool-contributions")
     refs = {}
     contexts = {}
@@ -165,8 +189,7 @@ async def test_prepare_and_authorize_follow_exact_registration_identity(tmp_path
 
     @asynccontextmanager
     async def open_target(_state):
-        raise AssertionError("identity test does not open targets")
-        yield
+        yield SimpleNamespace(idempotent=False)
 
     async def target(ctx, label):
         contexts[label] = ctx
@@ -186,17 +209,20 @@ async def test_prepare_and_authorize_follow_exact_registration_identity(tmp_path
             async def prepare(arguments):
                 return {**arguments, "prepared_by": "first"}
 
-            async def authorize(arguments):
-                _ = arguments
-
             await catalog.register_prepare(
                 ctx, tool=refs["first"], name="first-prepare", prepare=prepare
             )
+
+        async def restrict(ctx):
+            async def authorize(arguments):
+                return "denied" if arguments.get("command") == "danger" else None
+
             await catalog.register_authorize(
                 ctx, tool=refs["first"], name="first-authorize", authorize=authorize
             )
 
         _ = await root.mount(contribute, name="policy", runtime=runtime("policy"))
+        restriction = await root.mount(restrict, name="restriction", runtime=runtime("restriction"))
 
         class CapturingBindings:
             def __init__(self):
@@ -209,10 +235,31 @@ async def test_prepare_and_authorize_follow_exact_registration_identity(tmp_path
         captured = CapturingBindings()
         await catalog.bind(refs["first"], cast(Bindings, captured))
         assert captured.metadata["prepare"] == "first-prepare"
-        assert captured.metadata["authorize"] == "first-authorize"
+        bound = captured.metadata
+        assert bound is not None and "authorize" not in bound
+        assert await catalog.authorize(bound, {"command": "danger"}) == "denied"
+        assert await catalog.authorize(bound, {"command": "safe"}) is None
+        with pytest.raises(ValueError, match="描述与 binding 不一致"):
+            await catalog.authorize({**bound, "tool": {**bound["tool"], "description": "forged"}}, {})
+        await restriction.dispose()
+        assert await catalog.authorize(bound, {"command": "danger"}) is None
+        async with catalog.open(bound) as opened:
+            assert opened.idempotent is False
+
+        # 限制换代同样作用于先前的绑定；旧字段既不恢复旧规则，也不阻断新规则。
+        async def replacement(ctx):
+            async def authorize(_arguments):
+                return "replacement policy"
+            await catalog.register_authorize(ctx, tool=refs["first"], name="next", authorize=authorize)
+        replacement_owner = await root.mount(replacement, name="replacement", runtime=runtime("replacement"))
+        assert await catalog.authorize({**bound, "authorize": "retired"}, {}) == "replacement policy"
+        await replacement_owner.dispose()
 
         stale = refs["first"]
         await first.dispose()
+        with pytest.raises(ValueError, match="工具已撤下"):
+            async with catalog.open(bound):
+                pass
         await root.mount(
             lambda ctx: target(ctx, "second"), name="second", runtime=runtime("second")
         )
@@ -237,10 +284,12 @@ async def test_prepare_and_authorize_follow_exact_registration_identity(tmp_path
                 "search_hint": "legacy display only",
             },
             "prepare": None,
+            "authorize": "retired-authorize",
             "state": {},
         }
         async with catalog.open(legacy) as opened:
             assert opened.idempotent is False
+        assert await catalog.authorize(legacy, {}) is None
         await catalog.bind_saved(legacy, cast(Bindings, captured), configuration={})
         assert captured.metadata == {
             "tool": resumable.description,

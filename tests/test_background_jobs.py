@@ -169,29 +169,58 @@ def test_board_wake_only_takes_unclaimed_notices_within_budget():
 @pytest.mark.parametrize("action", ["pause", "abandon"])
 async def test_control_ending_keeps_job_notice_for_next_user_without_rewaking(tmp_path, action):
     from types import SimpleNamespace
+    from agent.plugin_composition.tasks import Tasks
     from plugins.jobs.plugin import Jobs, Config, CONVERSATION_COMPLETE, MESSAGE_CATALOG, REPLY_PROGRAM
     from plugins.ledger.contract import Control
     from plugins.ledger.log import MessageLog
+    from plugins.sources.session import SourceSession
 
-    log = MessageLog(tmp_path / "messages.db")
+    log, tasks = MessageLog(tmp_path / "messages.db"), Tasks()
+    wake = None
     try:
-        log.writer("s", author="user", source="conversation", body_types=(Input,), content={}).append("user", Input(()))
-        calls = []
-        async def program(_task, _reader, source, _reminders, **_options):
+        def writer(body, *, source="conversation"):
+            return log.writer("s", author="fixture", source=source, body_types=(body,), content={})
+        conversation = SourceSession(reader=log.reader("s"), inputs=writer(Input),
+                                     controls=writer(Control), tasks=tasks)
+        await conversation.accept("user", Input(()))
+        original = writer(Output).append("original-result", Output((), "complete"))
+        calls, delivered = [], []
+        entered = asyncio.Event()
+        async def program(_task, current, source, _reminders, *, check_admission):
             calls.append(source)
-            return log.writer("s", author="agent", source=source, body_types=(Control,), content={}).append(
-                "stop-" + action, Control(action, 0, "用户停止" if action == "pause" else "步数耗尽"))
+            entered.set()
+            if action == "pause":
+                await asyncio.Event().wait()
+            check_admission()
+            return writer(Control, source=source).append(
+                "stop-" + action, Control(action, current.head(), "步数耗尽"))
         async def complete(_session, report):
-            return await report(None, log.reader("s"), lambda **_options: None)
+            return await conversation.complete(report)
         services = {MESSAGE_CATALOG: log.catalog(), CONVERSATION_COMPLETE: complete, REPLY_PROGRAM: program}
         jobs = Jobs(SimpleNamespace(require=services.__getitem__), Config())
+        async def deliver(message):
+            delivered.append(message)
+        jobs._deliver = deliver
         notice = jobs._board.settle(_job("finished"), JobOutcome("completed", "exit_code=0"))
-        await jobs._wake(notice)
-        await asyncio.sleep(0)
+        wake = asyncio.create_task(jobs._wake(notice))
+        await asyncio.wait_for(entered.wait(), 3)
+        if action == "pause":
+            stopped = await conversation.pause("user-stop")
+            assert stopped.source == "conversation"
+        await asyncio.wait_for(wake, 3)
         assert calls == ["job:finished"]
-        assert jobs._board.claim("s", "conversation", "next-user") == (notice,)
-        assert log.reader("s").head() == 1
+        assert not delivered
+        assert notice.claimed_by is None
+        await conversation.accept("next-user", Input(()))
+        materials = await jobs.materials(log.reader("s").snapshot(), "conversation")
+        assert "[status: completed，exit_code=0]" in materials["reminders"][0]["text"]
+        assert log.reader("s").get(original.message_id) == original
     finally:
+        if wake is not None:
+            if not wake.done():
+                wake.cancel()
+            await asyncio.gather(wake, return_exceptions=True)
+        await tasks.close()
         log.close()
 
 

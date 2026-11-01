@@ -1,35 +1,53 @@
-from plugins.context.api import check_summary as _model_summary_check
 import asyncio
 from collections.abc import Mapping
 from contextlib import asynccontextmanager, nullcontext
 from typing import Any
-from plugins.models.contract import ToolCall as ModelToolCall
+from uuid import uuid4
+
+from agent.plugin_composition.tasks import Task, Tasks
+from plugins.content.plugin import _decode_text, check_text
+from plugins.context.api import Materials, check_summary, material_data
+from plugins.context.api import check_summary as _model_summary_check
+from plugins.context.plugin import ContextBuilder
+from plugins.ledger.contract import (
+    CallRef,
+    ContentPart,
+    ContentReferences,
+    Control,
+    Input,
+    Message,
+    Output,
+    OwnerTransaction,
+    ToolCall,
+    ToolResult,
+)
+from plugins.ledger.log import MessageLog
+from plugins.models.content import render_content
 from plugins.models.contract import (
     BoundModelDescriptor,
     CapabilitySources,
     ModelCapabilities,
 )
-from agent.plugin_composition.tasks import Task, Tasks
-from plugins.content.plugin import _decode_text, check_text
-from plugins.context.api import Materials, check_summary, material_data
-from plugins.context.plugin import ContextBuilder
-from plugins.sources.session import SourceSession as Conversation
-from plugins.models.content import render_content
-from plugins.models.projection import MessageProjection, check_facts, check_tool_rejection
+from plugins.models.contract import ToolCall as ModelToolCall
+from plugins.models.projection import (
+    MessageProjection,
+    check_facts,
+    check_tool_rejection,
+)
 from plugins.models.state import _BoundChat
 from plugins.models.store import ModelsStore
 from plugins.react.plugin import react
-from plugins.tools.execution import ToolExecution, MessageReply, Result
+from plugins.sources.session import SourceSession as Conversation
 from plugins.tools.abandon import follow_abandon, reject_start
-from plugins.tools.menu import NativePresentation, ToolMenu, ToolCallDecode
-from plugins.ledger.log import MessageLog
-from plugins.ledger.contract import ContentReferences, OwnerTransaction
-from plugins.ledger.contract import CallRef, Control, Input, Output, ToolCall, ToolResult
+from plugins.tools.execution import MessageReply, Result, ToolExecution
+from plugins.tools.menu import NativePresentation, ToolCallDecode, ToolMenu
+
 
 @asynccontextmanager
 async def runtime(tmp_path, complete, invoke, *, max_steps=4, authorize_hook=None,
                   reducer=None, material_source=None, estimate=None, preview_state=None, terminal_tools=frozenset(),
-                  state_owner=None, model_max_attempts=1, parallel_ids=frozenset(), max_parallel_calls=1, tool_schemas=None, tool_choice=None):
+                  state_owner=None, model_max_attempts=1, parallel_ids=frozenset(), max_parallel_calls=1, tool_schemas=None, tool_choice=None,
+                  without_abort=False, drop_receipt=None):
     log = MessageLog(tmp_path / "sessions.db")
     store = ModelsStore(tmp_path / "models.db", tmp_path / "backups")
     store.initialize()
@@ -106,6 +124,8 @@ async def runtime(tmp_path, complete, invoke, *, max_steps=4, authorize_hook=Non
             return binding_id in parallel_ids
 
         async def execute(self, call: CallRef, *, commit_after=None) -> Result:
+            if drop_receipt is not None and drop_receipt(call):
+                return Result("success", (ContentPart("text", "synthetic tool result"),))
             return await execution.execute_call(MessageReply(
                 "result:" + call.message_id + ":" + str(call.part_index), call,
                 log.reader("s"), writer(ToolResult, call), self.check_start,
@@ -162,13 +182,26 @@ async def runtime(tmp_path, complete, invoke, *, max_steps=4, authorize_hook=Non
             keep_input_ids=() if current_input is None else (current_input,),
         )
         menu = Menu(task)
+        controls = writer(Control)
+        task.on_close(controls.expire)
+
+        async def aborted(reason: str) -> Message:
+            if not task.active:
+                raise asyncio.CancelledError
+            menu.check_start(None)
+            head = reader.head(source=source)
+            return await controls.append_async(
+                uuid4().hex, Control("abandon", head, reason), expected_source_head=head,
+            )
+
         with preview_state.open(task, reader.session_id, source) if preview_state is not None else nullcontext(None) as preview:
             return await react(reader, output, model=model, context=ContextBuilder(),
                                projection=projection, materials=materials, content=Content(), tools=menu,
                                max_output_tokens=100, max_steps=max_steps, reduce=reducer, preview=preview, terminal_tools=terminal_tools,
                                tool_choice=tool_choice,
                                state=None if state_owner is None else log.owner(state_owner),
-                               max_parallel_calls=max_parallel_calls, check_start=menu.check_start)
+                               max_parallel_calls=max_parallel_calls, check_start=menu.check_start,
+                               aborted=None if without_abort else aborted)
     conversation = Conversation(reader=log.reader("s"), inputs=writer(Input), controls=writer(Control),
                                 tasks=tasks)
     @asynccontextmanager

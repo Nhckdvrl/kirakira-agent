@@ -5,13 +5,23 @@ import json
 import logging
 import sqlite3
 import time
+from collections.abc import Mapping
 from contextlib import closing
 from pathlib import Path
 from typing import Any, cast
 
 from infra.persistence.json_store import atomic_write_text
 
-from .documents import MEMORY, MEMORY_TEMPLATE, SCOPE_FILE, SELF, TOPICS, Workspace, parse_ops, split_frontmatter
+from .documents import (
+    MEMORY,
+    MEMORY_TEMPLATE,
+    SCOPE_FILE,
+    SELF,
+    TOPICS,
+    Workspace,
+    parse_ops,
+    split_frontmatter,
+)
 
 logger = logging.getLogger(__name__)
 _APPLY_ATTEMPTS = 3
@@ -233,6 +243,30 @@ class MarkdownProfileStore:
                     done_at TEXT NOT NULL,
                     PRIMARY KEY (source_ref, kind)
                 )""")
+            _ = conn.execute("""CREATE TABLE IF NOT EXISTS follow_cursors (
+                    session_key TEXT PRIMARY KEY,
+                    seq INTEGER NOT NULL,
+                    fingerprint TEXT NOT NULL
+                )""")
+            conn.commit()
+
+    def read_cursors(self, fingerprint: str) -> dict[str, int]:
+        """Only restore positions processed under the same source policy."""
+        with closing(sqlite3.connect(str(self.receipts_path), timeout=30.0)) as conn:
+            rows = conn.execute(
+                "SELECT session_key, seq FROM follow_cursors WHERE fingerprint=?", (fingerprint,),
+            ).fetchall()
+        return {str(session_key): int(seq) for session_key, seq in rows}
+
+    def save_cursors(self, fingerprint: str, cursors: Mapping[str, int]) -> None:
+        if not cursors:
+            return
+        with closing(sqlite3.connect(str(self.receipts_path), timeout=30.0)) as conn, conn:
+            _ = conn.executemany(
+                "INSERT INTO follow_cursors (session_key, seq, fingerprint) VALUES (?, ?, ?) "
+                "ON CONFLICT(session_key) DO UPDATE SET seq=excluded.seq, fingerprint=excluded.fingerprint",
+                [(session_key, seq, fingerprint) for session_key, seq in cursors.items()],
+            )
 
     def _read_receipt(self, source_ref: str, kind: str) -> dict[str, object] | None:
         with closing(sqlite3.connect(str(self.receipts_path), timeout=30.0)) as conn:

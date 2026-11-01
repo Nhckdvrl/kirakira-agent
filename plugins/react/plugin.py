@@ -8,46 +8,44 @@ from functools import partial
 from typing import Any, cast
 from uuid import uuid4
 
-from core.common.diagnostic_log import log_timing
 from agent.plugin_composition import Context, RuntimeScope
 from agent.plugin_composition.tasks import interrupt_requested
-from plugins.ledger.contract import (
-    MessageConflict,
-    MessageReader,
-    MessageSnapshot,
-    MessageWriter,
-    OwnerStore,
-    OwnerTransaction,
+from core.common.diagnostic_log import log_timing
+from plugins.content.contract import (
+    ContentView as ContentView,
 )
-from plugins.models.contract import (
-    LLMResponse,
-    ModelRequest,
-    StreamCallback,
+from plugins.context.contract import (
+    ContextBuilder as ContextBuilder,
 )
-from plugins.models.contract import (
-    ContextLengthError,
-    EmptyResponseError,
-    OutputLengthError,
-    ModelError,
+from plugins.context.contract import (
+    SummaryReducer as SummaryReducer,
 )
-from plugins.models.contract import BoundChatModel
 from plugins.ledger.contract import (
     CallRef,
     ContentPart,
     Control,
     Input,
     Message,
+    MessageConflict,
+    MessageReader,
+    MessageSnapshot,
+    MessageWriter,
     Output,
+    OwnerStore,
+    OwnerTransaction,
     Part,
     ToolCall,
     ToolResult,
 )
-from plugins.content.contract import (
-    ContentView as ContentView,
-)
-from plugins.context.contract import (
-    ContextBuilder as ContextBuilder,
-    SummaryReducer as SummaryReducer,
+from plugins.models.contract import (
+    BoundChatModel,
+    ContextLengthError,
+    EmptyResponseError,
+    LLMResponse,
+    ModelError,
+    ModelRequest,
+    OutputLengthError,
+    StreamCallback,
 )
 from plugins.models.contract import (
     MessageProjection as MessageProjection,
@@ -57,6 +55,8 @@ from plugins.react.contract import (
 )
 from plugins.tools.contract import (
     DecodedCall as DecodedCall,
+)
+from plugins.tools.contract import (
     StartCheck,
 )
 from plugins.tools.contract import ToolMenu as ToolMenu
@@ -78,7 +78,27 @@ _REQUIRED_DECISION_NOTICE = "本流程要求通过获授工具提交决定；普
 
 @dataclass(frozen=True, slots=True)
 class StepLimit(ModelError):
-    """本次程序达到明确的模型请求上限，保留日志供来源继续控制。"""
+    """达到模型请求上限；未回执调用的真实效果仍由来源与工具结算。"""
+
+
+STEP_LIMIT_ABANDON = "步数上限放弃"
+STEP_LIMIT_FAILURE = "步数上限失败"
+
+
+def step_limit_abandon_reason(max_steps: int) -> str:
+    return (
+        f"{STEP_LIMIT_ABANDON}：本轮连续 {max_steps} 次模型请求都没有收尾，"
+        "这些工作已经作废；接下来的一句话将重新开始计数。"
+    )
+
+
+def step_limit_failure_reason(max_steps: int, unfinished: int) -> str:
+    return (
+        f"{STEP_LIMIT_FAILURE}：本轮连续 {max_steps} 次模型请求都没有收尾，已经停下。"
+        f"其中 {unfinished} 个工具调用没有拿到回执，状态未知（可能已部分执行），"
+        "所以没有自动作废。请先检查当前状态；重试不会生效，计数不会自愈。"
+        "确实要丢掉这一轮，请点「放弃本轮未完成的工作」或发送 /abandon。"
+    )
 
 
 class _Superseded(Exception):
@@ -499,6 +519,7 @@ async def react(
     max_parallel_calls: int = 1,
     check_start: StartCheck | None = None,
     before_step: Callable[[], Awaitable[None]] | None = None,
+    aborted: Callable[[str], Awaitable[Message]] | None = None,
 ) -> Message:
     """先结算已提交调用，再读日志推理并逐条提交；没有 Turn、Attempt 或历史副本。"""
     if type(max_steps) is not int or max_steps < 0:
@@ -588,6 +609,11 @@ async def react(
         except _Superseded:
             raise asyncio.CancelledError from None
         if max_steps > 0 and history.steps >= max_steps:
+            unfinished, _ = history.open_calls()
+            if unfinished:
+                raise StepLimit(step_limit_failure_reason(max_steps, len(unfinished))).exception()
+            if aborted is not None:
+                return await aborted(step_limit_abandon_reason(max_steps))
             raise StepLimit(f"本来源未完成工作已达到 {max_steps} 个模型输出").exception()
 
         # 2. 重启和显式重试都用当前材料发新请求，不恢复旧请求身份。

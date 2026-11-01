@@ -84,9 +84,16 @@ def _strip_chunk(
 async def read_content(message: Message, catalog: MessageCatalog, artifacts: ArtifactRead) -> tuple[str | File, ...]:
     """先读完全部附件，避免发送正文后才发现文件损坏。"""
     if isinstance(message.body, Control):
+        reason = message.body.reason or ""
+        if message.body.action == "abandon" and reason.startswith("步数上限放弃"):
+            return ("这项任务达到本轮执行步数上限，已经停止。原始消息和已完成的操作仍保留，"
+                    "已经执行的外部操作不会撤销。你可以继续提新问题；若要接着原任务，请先核对已保存的结果再决定下一步。",)
         if message.body.action != "failure":
             return ()
-        reason = message.body.reason or ""
+        if reason.startswith("步数上限失败"):
+            return ("这项任务达到本轮执行步数上限，已经停止。部分工具调用没有取得回执，外部操作状态未知；"
+                    "请先核对工作台和实际结果，不要直接重试。确认要放弃本轮未完成工作时可发送 /abandon；"
+                    "已完成的操作不会因此撤销，原始消息和操作记录仍保留。",)
         status = re.search(r"HTTP[ :]*(\d{3})\b", reason)
         if status is not None:
             code = status.group(1)

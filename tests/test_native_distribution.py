@@ -182,7 +182,7 @@ def test_migration_refuses_loss_or_live_workspace(tmp_path, failure):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("opt_out", [False, True])
-async def test_workspace_upgrade_adds_conversation_references_and_preserves_opt_out(tmp_path, opt_out):
+async def test_workspace_upgrade_adds_optional_providers_and_preserves_opt_out(tmp_path, opt_out):
     from agent.plugins.bundles import set_plugin_choice
     from agent.plugins.selection import PluginSelection
     from kirakira_agent.runtime import initialize_workspace, runtime
@@ -194,15 +194,17 @@ async def test_workspace_upgrade_adds_conversation_references_and_preserves_opt_
         pass
     selection = PluginSelection(workspace)
     previous = selection.read()
+    additions = {"session_reference", "web_search_searxng"}
     components = tuple(ref for ref in selection.components(previous)
-                       if selection.read_input(ref)["plugin_id"] != "session_reference")
+                       if selection.read_input(ref)["plugin_id"] not in additions)
     selection.commit(components, expected_ref=previous)
-    set_plugin_choice(workspace, "session_reference", enabled=False if opt_out else None)
+    for name in additions:
+        set_plugin_choice(workspace, name, enabled=False if opt_out else None)
     before = (workspace / "sessions.db").read_bytes()
     upgrade_workspace(workspace)
     current = selection.read()
     installed = {selection.read_input(ref)["plugin_id"] for ref in selection.components(current)}
-    assert ("session_reference" in installed) is not opt_out
+    assert additions.intersection(installed) == (set() if opt_out else additions)
     assert (workspace / "sessions.db").read_bytes() == before
 
 

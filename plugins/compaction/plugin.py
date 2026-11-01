@@ -1,17 +1,15 @@
 """原生上下文压缩：后台整理旧前缀，硬容量不足时由前台缩减。"""
 from __future__ import annotations
 
-from importlib import import_module
 import asyncio
-from contextlib import aclosing
-from dataclasses import dataclass
-from collections.abc import Awaitable, Callable, Mapping, Sequence
-import logging
 import hashlib
 import json
+import logging
+from collections.abc import Awaitable, Callable, Mapping, Sequence
+from contextlib import aclosing
+from dataclasses import dataclass
+from importlib import import_module
 from uuid import uuid4
-
-from core.common.file_io import run_file_io
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -19,35 +17,71 @@ from agent.plugin_composition import (
     RUNTIME_STARTED,
     RUNTIME_STOPPING,
     Context,
+    stop_spawned,
+)
+from agent.plugin_composition.model import ServiceKey
+from agent.plugin_composition.plugin_config import PLUGIN_CONFIG
+from core.common.file_io import run_file_io
+from plugins.commands.contract import COMMANDS, CommandDefinition, CommandResult
+from plugins.compaction.contract import COMPACTION_READER, COMPACTION_SUMMARIES
+from plugins.context.contract import (
+    CONTEXT,
+    MATERIALS_V4,
+    MaterialData,
+    ReductionStatus,
+    output_reserve,
+)
+from plugins.gateway.contract import RpcMethod
+from plugins.ledger.contract import (
+    BINDINGS,
+    MESSAGE_CATALOG,
+    OWNER_STATE,
+    Control,
+    Input,
+    Message,
+    MessageConflict,
+    Output,
 )
 from plugins.models.contract import (
-    CHAT_MODELS, BoundChatModel, BoundModelDescriptor, ContextModel, ModelError, ModelRequest,
+    CHAT_MODELS,
+    BoundChatModel,
+    BoundModelDescriptor,
     ContextLengthError,
+    ContextModel,
+    ModelError,
+    ModelRequest,
     ModelTimeoutError,
     RateLimitError,
     TransportError,
 )
-from plugins.context.contract import CONTEXT, MATERIALS_V4, MaterialData, ReductionStatus, output_reserve
-from plugins.ledger.contract import BINDINGS
-from plugins.ledger.contract import MESSAGE_CATALOG, OWNER_STATE
-from plugins.ledger.contract import Control, Input, Message, MessageConflict, Output
-
-from .records import ManualResetRecord, StoredSummary, SummaryLookup, SummaryRecord, SummaryRecords
-from .message_summary import MAX_OUTPUT_TOKENS, SummaryError, clip_summary, closed_groups, recoverable, source_text, summarize, summary_groups, window_starts
-from plugins.compaction.contract import COMPACTION_READER, COMPACTION_SUMMARIES
 from plugins.turn_projection.contract import TURN_PROJECTION, TurnProjection
-from agent.plugin_composition.plugin_config import PLUGIN_CONFIG
-from agent.plugin_composition.model import ServiceKey
 from plugins.ui.contract import Configuration, ModelSettings, mount_settings
-from plugins.commands.contract import COMMANDS, CommandDefinition, CommandResult
-from plugins.gateway.contract import RpcMethod
+
+from .message_summary import (
+    MAX_OUTPUT_TOKENS,
+    SummaryError,
+    clip_summary,
+    closed_groups,
+    recoverable,
+    source_text,
+    summarize,
+    summary_groups,
+    window_starts,
+)
+from .records import (
+    ManualResetRecord,
+    StoredSummary,
+    SummaryLookup,
+    SummaryRecord,
+    SummaryRecords,
+)
 
 logger = logging.getLogger(__name__)
 
 api_version = 3
 name = "compaction"
 version = "4.1.0"
-desc = "按不可变消息前缀发布摘要，并为已使用的摘要保留原始读取口"
+desc = "按不可变消息身份发布摘要，并为已使用的摘要保留原始读取口"
 inject = (PLUGIN_CONFIG, MATERIALS_V4, CONTEXT, OWNER_STATE, BINDINGS, MESSAGE_CATALOG, CHAT_MODELS, TURN_PROJECTION)
 
 
@@ -73,7 +107,7 @@ class _FrozenProjection:
 
     model: BoundChatModel
     tail: ModelRequest
-    cutoff: int
+    covered_message_ids: frozenset[str]
 
     @property
     def context_window(self) -> int | None:
@@ -87,8 +121,9 @@ class _FrozenProjection:
         return self.model.estimate_context_tokens(request.messages, request.tools)
 
     def render(self, messages: Sequence[Message], *, after_seq: int,
+               covered_message_ids: frozenset[str] = frozenset(),
                summary_reference: str | None = None, **kwargs: object) -> ModelRequest:
-        if after_seq != self.cutoff or summary_reference is None:
+        if after_seq != -1 or covered_message_ids != self.covered_message_ids or summary_reference is None:
             raise ValueError("后台摘要只能使用已冻结的完整尾部投影")
         return self.tail
 
@@ -101,7 +136,7 @@ class _Maintenance:
     finish: Callable[[BoundChatModel, ContextModel], Awaitable[MaterialData]]
     descriptor: BoundModelDescriptor
     tail: ModelRequest
-    cutoff: int
+    covered_message_ids: frozenset[str]
     result: asyncio.Future[MaterialData | None]
     running: bool = False
 
@@ -179,7 +214,7 @@ async def apply(ctx: Context) -> None:
                                 # Model execution binds the provider's caller;
                                 # publication must return to the summary owner.
                                 async with ctx.runtime_scope():
-                                    value = await job.finish(model, _FrozenProjection(model, job.tail, job.cutoff))
+                                    value = await job.finish(model, _FrozenProjection(model, job.tail, job.covered_message_ids))
                         except MessageConflict:
                             # A foreground compaction or explicit /new won the CAS.
                             logger.info("后台摘要的父记录已更新，丢弃旧候选: session=%s", session_id)
@@ -212,16 +247,16 @@ async def apply(ctx: Context) -> None:
 
     async def stop(_event: object) -> None:
         nonlocal read_current, read_record, worker
-        if worker is not None:
-            worker.cancel()
-            await asyncio.gather(worker, return_exceptions=True)
-        worker = None
-        for job in maintenance.values():
-            if not job.result.done():
-                job.result.set_result(None)
-        maintenance.clear()
-        read_record = None
-        read_current = None
+        try:
+            await stop_spawned(worker)
+        finally:
+            worker = None
+            for job in maintenance.values():
+                if not job.result.done():
+                    job.result.set_result(None)
+            maintenance.clear()
+            read_record = None
+            read_current = None
 
     _ = await ctx.on(RUNTIME_STARTED, start)
     _ = await ctx.on(RUNTIME_STOPPING, stop)
@@ -258,7 +293,7 @@ async def apply(ctx: Context) -> None:
             source_message_ids=tuple(row.message_id for row in snapshot),
             content="用户已明确开始新的短期对话。此前的聊天原文与长期记忆保留；这不是此前内容的语义摘要。",
         )
-        await state.publish(record, reader, parent=parent, summary_range=context.summary_range)
+        await state.publish(record, reader, parent=parent, summary_indexes=context.summary_indexes)
         return {"reference": reference, "retained_messages": len(snapshot)}
 
     await ctx.provide(RpcMethod.key("compaction/start-new"), RpcMethod(StartNew, ctx.entrypoint(start_new)))
@@ -321,7 +356,7 @@ async def apply(ctx: Context) -> None:
                       model: BoundChatModel, projection: ContextModel, *, source: str, force: bool,
                       on_status: ReductionStatus | None = None,
                       summary_limit: int | None = None, defer: bool = False) -> MaterialData | None:
-        """按已结算工具批次选旧前缀，再原子发布一份真实摘要。"""
+        """按已结算工具批次选未覆盖消息，再原子发布一份真实摘要。"""
         # 1. 容量与近期保留均按当前已固定的业务模型判断。
         reminder = context.reminder_content(materials)
         reminder_input_id = (
@@ -348,17 +383,13 @@ async def apply(ctx: Context) -> None:
         if (None if parent is None else material(parent)) != current_summary:
             raise ValueError("本次已取得摘要与当前 Session head 不一致")
         turns = ctx.require(TURN_PROJECTION)
-        if parent is None:
-            # 摘要模型仍只取一个近期窗口；退出请求的更早资料写入 omitted 分区。
-            origin = start = 0
-        else:
-            covered = context.summary_range(snapshot, parent.source_message_ids)
-            origin, start = covered.start, covered.stop
-        # 摘要候选只取 summary_limit 之前的前缀；容量估算与原文尾部仍用完整请求视图。
-        groups = closed_groups(
-            snapshot if summary_limit is None else snapshot[:summary_limit],
-            turns, settled_prefixes=context.settled_prefixes, after=start,
-        )
+        parent_ids = frozenset() if parent is None else frozenset(parent.source_message_ids)
+        if parent is not None:
+            _ = context.summary_indexes(snapshot, parent.source_message_ids)
+        # 未覆盖的旧空洞可能刚变为可见；与新尾部一起候选，不按上代末尾跳过。
+        pending = tuple(message for message in (snapshot if summary_limit is None else snapshot[:summary_limit])
+                        if message.message_id not in parent_ids)
+        groups = closed_groups(pending, turns, settled_prefixes=context.settled_prefixes)
         if defer and not groups:
             return None
         # 没有新的已结算批次时，0 表示只重写父摘要本身。
@@ -370,19 +401,19 @@ async def apply(ctx: Context) -> None:
         planned_tokens: dict[int, int] = {}
         # 原文保留量来自实际 Model 投影，包含尚未闭合的尾部与当前输入。
         for size in sizes:
-            after_seq = groups[size - 1][-1].seq if size else snapshot[start - 1].seq
+            added = tuple(message for group in groups[:size] for message in group)
+            covered = parent_ids | frozenset(message.message_id for message in added)
             tail = projection.render(
                 snapshot,
-                after_seq=after_seq,
+                after_seq=-1, covered_message_ids=covered,
                 fresh=True,
                 current_reminder=reminder if reminder_input_id is not None else None,
                 current_reminder_input_id=reminder_input_id,
             )
             # 先用占位摘要核对完整输入；真实摘要生成后还会再次核对硬容量。
-            count = start + sum(len(group) for group in groups[:size])
             planned = {**materials, "summary": {
                 "reference": "compaction-plan", "content": "待生成摘要",
-                "source_message_ids": tuple(message.message_id for message in snapshot[origin:count]),
+                "source_message_ids": tuple(message.message_id for message in snapshot if message.message_id in covered),
             }}
             candidate, error = context.build_attempt(
                 snapshot, materials=planned, model=projection, tools=request.tools,
@@ -416,8 +447,8 @@ async def apply(ctx: Context) -> None:
         # 2. 摘要必须放进剩余空间：模型生成 → 模型缩写 → 按比例截断各节正文，取第一个放得下的。
         reserve = output_reserve(request.max_output_tokens, window)
         room = window - reserve - planned_tokens[selected]
-        count = start + sum(len(group) for group in groups[:selected])
-        added = snapshot[start:count]
+        added = tuple(message for group in groups[:selected] for message in group)
+        covered = parent_ids | frozenset(message.message_id for message in added)
 
         async def finish(model: BoundChatModel, projection: ContextModel,
                          reporter: ReductionStatus | None = None) -> MaterialData:
@@ -429,7 +460,7 @@ async def apply(ctx: Context) -> None:
                     reference=uuid4().hex, session_id=snapshot[0].session_id,
                     generation=1 if parent is None else parent.generation + 1,
                     parent=None if parent is None else parent.reference,
-                    source_message_ids=tuple(message.message_id for message in snapshot[origin:count]),
+                    source_message_ids=tuple(message.message_id for message in snapshot if message.message_id in covered),
                     summary_message_ids=summary_ids,
                     omitted_message_ids=tuple(message.message_id for message in added if message.message_id not in kept),
                     content=text, model_call_ids=calls, trigger="context_overflow" if force else "soft_limit",
@@ -485,7 +516,7 @@ async def apply(ctx: Context) -> None:
             # 3. binding 可以先固定，但读者只有在摘要事务成功后才取得此引用。
             reader = ctx.require(MESSAGE_CATALOG).reader(record.session_id)
             _ = await records().publish(
-                record, reader, parent=parent, summary_range=context.summary_range,
+                record, reader, parent=parent, summary_indexes=context.summary_indexes,
             )
             return summary
 
@@ -504,7 +535,7 @@ async def apply(ctx: Context) -> None:
             context_window=projection.context_window, max_tool_schemas=projection.max_tool_schemas)
         _ = context.build_attempt(snapshot, materials={**materials, "summary": {
             "reference": "compaction-plan", "content": "待生成摘要",
-            "source_message_ids": tuple(message.message_id for message in snapshot[origin:count]),
+            "source_message_ids": tuple(message.message_id for message in snapshot if message.message_id in covered),
         }}, model=captured, tools=request.tools, max_output_tokens=request.max_output_tokens,
             current_reminder_input_id=reminder_input_id)
         if len(tails) != 1 or tails[0].continuation is not None:
@@ -517,7 +548,7 @@ async def apply(ctx: Context) -> None:
             previous.result.set_result(None)
         maintenance[session_id] = _Maintenance(source, snapshot[-1].seq,
             None if parent is None else parent.reference, finish, model.descriptor,
-            tails[0], snapshot[count - 1].seq, asyncio.get_running_loop().create_future())
+            tails[0], covered, asyncio.get_running_loop().create_future())
         return None
 
     async def reduce(snapshot: tuple[Message, ...], materials: MaterialData, request: ModelRequest,

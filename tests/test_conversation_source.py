@@ -1,13 +1,99 @@
-from plugins.ledger.contract import ContentReferences
 import asyncio
 from collections.abc import Awaitable
-from typing import cast
 from contextlib import asynccontextmanager
+from typing import cast
+
 import pytest
+
 from agent.plugin_composition.tasks import Tasks
-from plugins.sources.session import SourceSession as Conversation
+from plugins.ledger.contract import (
+    ContentPart,
+    ContentReferences,
+    Control,
+    Input,
+    Output,
+)
 from plugins.ledger.log import MessageLog, WriterExpired
-from plugins.ledger.contract import ContentPart, Control, Input, Output
+from plugins.sources.session import SourceSession as Conversation
+
+
+@pytest.mark.asyncio
+async def test_abandon_command_is_explicit_idempotent_and_keeps_history(tmp_path):
+    from datetime import UTC, datetime
+
+    from plugins.channels.contract import CHANNEL_INPUT_V2, ChannelInboundMessage
+    from plugins.ledger.contract import MessageConflict
+    from tests.test_default_reply import application
+
+    async with application(tmp_path, replying=False) as (log, host):
+        accept = host.live_root.context.require(CHANNEL_INPUT_V2)
+
+        async def send(identity, text):
+            return await accept("test:abandon", identity, ChannelInboundMessage(
+                "test", "user", "abandon", text, datetime.now(UTC), {}))
+
+        original = await send("original", "keep the original task and its history")
+        ended = await send("stop-old-work", "/abandon@fixture_bot")
+        assert isinstance(ended.body, Control) and ended.body.action == "abandon"
+        assert ended.body.through_seq == original.seq
+        assert await send("stop-old-work", "/abandon@fixture_bot") == ended
+        with pytest.raises(MessageConflict, match="已经关闭"):
+            await send("stop-again", "/abandon")
+        assert log.reader("test:abandon").snapshot() == (original, ended)
+        fresh = await send("fresh", "a new question")
+        assert isinstance(fresh.body, Input)
+        assert log.reader("test:abandon").snapshot() == (original, ended, fresh)
+
+
+@pytest.mark.asyncio
+async def test_installed_reply_exhaustion_closes_its_source_and_answers_next_input(tmp_path):
+    from types import SimpleNamespace
+
+    from agent.plugin_composition.config_input import save_config
+    from kirakira_agent.runtime import submit
+    from plugins.react.plugin import STEP_LIMIT_ABANDON
+    from tests.test_default_reply import application
+
+    def configure(sources):
+        save_config(sources.parent / "workspace/plugin-data/reply-builtin", {
+            "max_steps": 1, "max_output_tokens": 4096,
+        })
+
+    async with application(tmp_path, replying=True, extra_sources=configure) as (log, host):
+        core = SimpleNamespace(plugin_manager=host)
+        with pytest.raises(RuntimeError, match="native reply abandon"):
+            await submit(core, "akashic:exhaustion", "original", "finish this task", timeout=5)
+        stopped = log.reader("akashic:exhaustion").snapshot()[-1]
+        assert stopped.body.reason.startswith(STEP_LIMIT_ABANDON)
+        prefix = log.reader("akashic:exhaustion").snapshot()
+        answered = await submit(core, "akashic:exhaustion", "fresh", "a fresh question", timeout=5)
+        assert isinstance(answered.body, Output) and answered.body.finish == "complete"
+        assert answered.seq > stopped.seq
+        assert (tmp_path / "effect.txt").read_text() == "once\n"
+        rows = log.reader("akashic:exhaustion").snapshot()
+        assert rows[:len(prefix)] == prefix
+        assert not any(isinstance(row.body, Control) and row.body.action == "failure" for row in rows)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("command,action", [("/stop", "pause"), ("/abandon", "abandon")])
+async def test_submit_control_receipt_ends_wait_without_an_assistant_output(tmp_path, command, action):
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+
+    from kirakira_agent.runtime import submit
+    from plugins.channels.contract import CHANNEL_INPUT_V2, ChannelInboundMessage
+    from tests.test_default_reply import application
+
+    async with application(tmp_path, replying=False) as (log, host):
+        first = await host.live_root.context.require(CHANNEL_INPUT_V2)(
+            "akashic:control", "first", ChannelInboundMessage(
+                "akashic", "user", "control", "original task", datetime.now(UTC), {}))
+        with pytest.raises(RuntimeError, match="native reply " + action):
+            await submit(SimpleNamespace(plugin_manager=host), "akashic:control", "control", command, timeout=1)
+        rows = log.reader("akashic:control").snapshot()
+        assert rows[0] == first and len(rows) == 2
+        assert isinstance(rows[-1].body, Control) and rows[-1].body.action == action
 
 
 @pytest.mark.asyncio
@@ -15,11 +101,12 @@ async def test_session_links_admit_coordinates_and_read_live_bounded_pages(tmp_p
     import json
     import shutil
     from pathlib import Path
+
     from plugins.channels.contract import CHANNEL_INPUT_V2, InputPartRejected
-    from plugins.ledger.contract import CallRef, json_value
-    from plugins.gateway.service import ControlService
     from plugins.gateway.protocol.models import MessageSendParams
-    from plugins.session_reference.plugin import ReadSession, MAX_PAGE_CHARS
+    from plugins.gateway.service import ControlService
+    from plugins.ledger.contract import CallRef, json_value
+    from plugins.session_reference.plugin import MAX_PAGE_CHARS, ReadSession
     from plugins.tools.contract import CallSource
     from tests.test_default_reply import application
 
@@ -139,6 +226,7 @@ async def test_source_commit_drains_before_cancel_and_rejects_late_start(tmp_pat
     """C3/C4/C5：取消不丢提交收据，新输入先提交时旧 intent 不能启动效果。"""
     import sqlite3
     from contextlib import closing as close_connection
+
     from agent.plugin_composition.tasks import TaskServiceClosed
     from plugins.sources.session import check_source
     from tests.test_akasha_execution import WorkerGate, loop_turn

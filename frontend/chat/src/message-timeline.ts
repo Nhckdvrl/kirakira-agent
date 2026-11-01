@@ -496,13 +496,16 @@ export interface TimelineFailureRetries {
   superseded: Set<string>;
   /** 来源停在失败上：失败 id → 可以重跑的原用户输入 id。 */
   retryable: Map<string, string>;
+  /** 未知效果使这一段无法安全重试，需主人显式放弃。 */
+  abandonable: Set<string>;
 }
 
 // input 为 undefined 表示这一段的输入在已加载页之前（长回合只读了末尾一页）。
-type FailureRun = { input: TimelineMessage | null | undefined; failures: TimelineMessage[]; tail: TimelineMessage };
+type FailureRun = { input: TimelineMessage | null | undefined; failures: TimelineMessage[]; tail: TimelineMessage; stuck: boolean };
 
 // 输入不在已加载页时，重试引用来源的最新输入；服务端解析，重试本来也只允许最新输入。
 export const RETRY_LATEST_INPUT = "latest";
+export const STEP_LIMIT_FAILURE_REASON = "步数上限失败";
 
 // 同一条输入反复失败时只留最后一次，答出来后连这一次也收起；来源末尾停在失败上时，它指向可以重跑的原输入。
 export function timelineFailureRetries(messages: TimelineMessage[]): TimelineFailureRetries {
@@ -511,16 +514,16 @@ export function timelineFailureRetries(messages: TimelineMessage[]): TimelineFai
   const runs = new Map<string, FailureRun>();
   for (const message of messages) {
     const key = timelineSourceKey(message), body = message.body;
-    const run = runs.get(key) ?? { input: undefined, failures: [], tail: message };
+    const run = runs.get(key) ?? { input: undefined, failures: [], tail: message, stuck: false };
     runs.set(key, run);
     run.tail = message;
     // 1. 新输入或放弃开始新的一段；自动输入不能由用户重跑。
-    if (body.kind === "input") Object.assign(run, { input: message.author === "user" ? message : null, failures: [] });
-    else if (body.kind === "control" && body.action === "abandon") run.failures = [];
+    if (body.kind === "input") Object.assign(run, { input: message.author === "user" ? message : null, failures: [], stuck: false });
+    else if (body.kind === "control" && body.action === "abandon") Object.assign(run, { failures: [], stuck: false });
     // 2. 重试最终答出来了：回答替换掉这一轮的失败。
     else if (body.kind === "output" && body.finish !== "continue") {
       for (const item of run.failures) superseded.add(item.id);
-      run.failures = [];
+      Object.assign(run, { failures: [], stuck: false });
     } else if (body.kind === "control" && body.action === "resume") {
       // 3. 失败之后的恢复就是重试本身，失败块已说明，不再单独成行。
       if (run.failures.length) superseded.add(message.id);
@@ -531,16 +534,23 @@ export function timelineFailureRetries(messages: TimelineMessage[]): TimelineFai
         earlier.set(message.id, [...run.failures]);
       }
       run.failures.push(message);
+      if ((body.reason ?? "").startsWith(STEP_LIMIT_FAILURE_REASON)) run.stuck = true;
     }
   }
   // 5. 只有来源最后一条仍是失败时才可重试；正在恢复或已有新输入都不再提供。
   const retryable = new Map<string, string>();
+  const abandonable = new Set<string>();
   for (const run of runs.values()) {
     if (run.tail.body.kind !== "control" || run.tail.body.action !== "failure") continue;
+    if (run.stuck) {
+      // /abandon 控制 conversation，不能拿别的来源失败去关闭用户的任务。
+      if (run.tail.source === "conversation") abandonable.add(run.tail.id);
+      continue;
+    }
     if (run.input) retryable.set(run.tail.id, run.input.id);
     else if (run.input === undefined && run.tail.source === "conversation") retryable.set(run.tail.id, RETRY_LATEST_INPUT);
   }
-  return { earlier, superseded, retryable };
+  return { earlier, superseded, retryable, abandonable };
 }
 
 /** 从已提交消息识别图文回复；不依赖插件是否启用，也不改写消息顺序。 */

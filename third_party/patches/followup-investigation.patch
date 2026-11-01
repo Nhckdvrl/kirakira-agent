@@ -182,7 +182,26 @@
      @staticmethod
 --- a/plugins/react/contract.py
 +++ b/plugins/react/contract.py
-@@ -38,6 +38,7 @@
+@@ -7,15 +7,11 @@
+ from typing import Protocol
+ 
+ from agent.plugin_composition import RuntimeScope, ServiceKey
+-from plugins.ledger.contract import MessageReader, MessageWriter, OwnerStore
+-from plugins.models.contract import StreamCallback
+-from plugins.models.contract import BoundChatModel
+-from plugins.ledger.contract import Message
+ from plugins.content.contract import ContentView
+ from plugins.context.contract import ContextBuilder, SummaryReducer
+-from plugins.models.contract import MessageProjection
+-from plugins.tools.contract import StartCheck
+-from plugins.tools.contract import ToolMenu
++from plugins.ledger.contract import Message, MessageReader, MessageWriter, OwnerStore
++from plugins.models.contract import BoundChatModel, MessageProjection, StreamCallback
++from plugins.tools.contract import StartCheck, ToolMenu
+ 
+ Materials = Mapping[str, object]
+ Preview = Callable[[str], AbstractContextManager[StreamCallback]]
+@@ -38,11 +34,13 @@
          reduce: SummaryReducer | None = None,
          preview: Preview | None = None,
          terminal_tools: frozenset[str] = frozenset(),
@@ -190,9 +209,96 @@
          capture_scope: Callable[[], RuntimeScope] | None = None,
          state: OwnerStore,
          check_start: StartCheck,
+         max_parallel_calls: int = 1,
+         before_step: Callable[[], Awaitable[None]] | None = None,
++        aborted: Callable[[str], Awaitable[Message]] | None = None,
+     ) -> Message: ...
+ 
+ 
 --- a/plugins/react/plugin.py
 +++ b/plugins/react/plugin.py
-@@ -66,12 +66,14 @@
+@@ -8,46 +8,44 @@
+ from typing import Any, cast
+ from uuid import uuid4
+ 
+-from core.common.diagnostic_log import log_timing
+ from agent.plugin_composition import Context, RuntimeScope
+ from agent.plugin_composition.tasks import interrupt_requested
+-from plugins.ledger.contract import (
+-    MessageConflict,
+-    MessageReader,
+-    MessageSnapshot,
+-    MessageWriter,
+-    OwnerStore,
+-    OwnerTransaction,
+-)
+-from plugins.models.contract import (
+-    LLMResponse,
+-    ModelRequest,
+-    StreamCallback,
+-)
+-from plugins.models.contract import (
+-    ContextLengthError,
+-    EmptyResponseError,
+-    OutputLengthError,
+-    ModelError,
+-)
+-from plugins.models.contract import BoundChatModel
++from core.common.diagnostic_log import log_timing
++from plugins.content.contract import (
++    ContentView as ContentView,
++)
++from plugins.context.contract import (
++    ContextBuilder as ContextBuilder,
++)
++from plugins.context.contract import (
++    SummaryReducer as SummaryReducer,
++)
+ from plugins.ledger.contract import (
+     CallRef,
+     ContentPart,
+     Control,
+     Input,
+     Message,
++    MessageConflict,
++    MessageReader,
++    MessageSnapshot,
++    MessageWriter,
+     Output,
++    OwnerStore,
++    OwnerTransaction,
+     Part,
+     ToolCall,
+     ToolResult,
+ )
+-from plugins.content.contract import (
+-    ContentView as ContentView,
+-)
+-from plugins.context.contract import (
+-    ContextBuilder as ContextBuilder,
+-    SummaryReducer as SummaryReducer,
++from plugins.models.contract import (
++    BoundChatModel,
++    ContextLengthError,
++    EmptyResponseError,
++    LLMResponse,
++    ModelError,
++    ModelRequest,
++    OutputLengthError,
++    StreamCallback,
+ )
+ from plugins.models.contract import (
+     MessageProjection as MessageProjection,
+@@ -57,6 +55,8 @@
+ )
+ from plugins.tools.contract import (
+     DecodedCall as DecodedCall,
++)
++from plugins.tools.contract import (
+     StartCheck,
+ )
+ from plugins.tools.contract import ToolMenu as ToolMenu
+@@ -66,17 +66,39 @@
  
  api_version = 3
  name = "react"
@@ -203,12 +309,38 @@
  
  
  Preview = Callable[[str], AbstractContextManager[StreamCallback]]
-+
-+_REQUIRED_DECISION_NOTICE = "本流程要求通过获授工具提交决定；普通文字没有完成本次任务。"
  
++_REQUIRED_DECISION_NOTICE = "本流程要求通过获授工具提交决定；普通文字没有完成本次任务。"
++
  
  @dataclass(frozen=True, slots=True)
-@@ -386,6 +388,7 @@
+ class StepLimit(ModelError):
+-    """本次程序达到明确的模型请求上限，保留日志供来源继续控制。"""
++    """达到模型请求上限；未回执调用的真实效果仍由来源与工具结算。"""
++
++
++STEP_LIMIT_ABANDON = "步数上限放弃"
++STEP_LIMIT_FAILURE = "步数上限失败"
++
++
++def step_limit_abandon_reason(max_steps: int) -> str:
++    return (
++        f"{STEP_LIMIT_ABANDON}：本轮连续 {max_steps} 次模型请求都没有收尾，"
++        "这些工作已经作废；接下来的一句话将重新开始计数。"
++    )
++
++
++def step_limit_failure_reason(max_steps: int, unfinished: int) -> str:
++    return (
++        f"{STEP_LIMIT_FAILURE}：本轮连续 {max_steps} 次模型请求都没有收尾，已经停下。"
++        f"其中 {unfinished} 个工具调用没有拿到回执，状态未知（可能已部分执行），"
++        "所以没有自动作废。请先检查当前状态；重试不会生效，计数不会自愈。"
++        "确实要丢掉这一轮，请点「放弃本轮未完成的工作」或发送 /abandon。"
++    )
+ 
+ 
+ class _Superseded(Exception):
+@@ -386,6 +408,7 @@
      preview: Preview | None,
      reminder_input_id: str | None,
      operation_id: str = "",
@@ -216,7 +348,7 @@
  ) -> AsyncGenerator[tuple[LLMResponse, Materials, str, ModelRequest]]:
      """缩减只更新已取得材料中的摘要；provider 容量拒绝最多重试一次。"""
      mark = partial(log_timing, session_id=snapshot[-1].session_id if snapshot else "",
-@@ -397,7 +400,8 @@
+@@ -397,7 +420,8 @@
                                       tools=tools.schemas, max_output_tokens=max_output_tokens,
                                       current_reminder_input_id=reminder_input_id)
          mark("context.build.end")
@@ -226,7 +358,7 @@
  
      async def reduce_request(mats: Materials, request: ModelRequest, *, force: bool) -> tuple[Materials, Mapping[str, object] | None]:
          """压缩预览只显示状态；可见诊断随冻结材料进入最终 Output。"""
-@@ -489,6 +493,7 @@
+@@ -489,11 +513,13 @@
      reduce: SummaryReducer | None = None,
      preview: Preview | None = None,
      terminal_tools: frozenset[str] = frozenset(),
@@ -234,7 +366,23 @@
      capture_scope: Callable[[], RuntimeScope] | None = None,
      state: OwnerStore | None = None,
      max_parallel_calls: int = 1,
-@@ -588,12 +593,22 @@
+     check_start: StartCheck | None = None,
+     before_step: Callable[[], Awaitable[None]] | None = None,
++    aborted: Callable[[str], Awaitable[Message]] | None = None,
+ ) -> Message:
+     """先结算已提交调用，再读日志推理并逐条提交；没有 Turn、Attempt 或历史副本。"""
+     if type(max_steps) is not int or max_steps < 0:
+@@ -583,17 +609,32 @@
+         except _Superseded:
+             raise asyncio.CancelledError from None
+         if max_steps > 0 and history.steps >= max_steps:
++            unfinished, _ = history.open_calls()
++            if unfinished:
++                raise StepLimit(step_limit_failure_reason(max_steps, len(unfinished))).exception()
++            if aborted is not None:
++                return await aborted(step_limit_abandon_reason(max_steps))
+             raise StepLimit(f"本来源未完成工作已达到 {max_steps} 个模型输出").exception()
+ 
          # 2. 重启和显式重试都用当前材料发新请求，不恢复旧请求身份。
          mark("preparation.begin")
          prepared = await materials(tuple(snapshot))
@@ -257,7 +405,7 @@
          ) as (response, prepared, message_id, request):
              # 先检查完整性：即使截断参数恰好是合法 JSON，也不能执行该批工具。
              if response.finish_reason == "length":
-@@ -642,18 +657,21 @@
+@@ -642,18 +683,21 @@
                  parts.append(ContentPart("context.summary", {"reference": summary["reference"]}))
              parts.extend(ContentPart("context.notice", notice)
                           for notice in cast(Sequence[str], prepared.get("notices", ())))
@@ -478,7 +626,15 @@
  def finished(reader: MessageReader, request: Request, stage: Stage) -> Message | None:
 --- a/plugins/wake/plugin.py
 +++ b/plugins/wake/plugin.py
-@@ -43,6 +43,7 @@
+@@ -7,6 +7,7 @@
+ from importlib import import_module
+ 
+ from agent.plugin_composition import (
++    stop_spawned,
+     RUNTIME_STARTED,
+     RUNTIME_STOPPING,
+     Context,
+@@ -43,6 +44,7 @@
      EVENTMAIL_WAKE,
      Config,
  )
@@ -486,7 +642,7 @@
  from .program import REPLY_EXECUTE, SOURCE_CHECK, run
  from .request import WAKE_PROGRAM, WAKE_TOOLS_VIEW, check_phase, check_request
  from .runtime import DashboardView, Runtime
-@@ -50,7 +51,7 @@
+@@ -50,7 +52,7 @@
  
  api_version = 3
  name = "wake"
@@ -495,7 +651,38 @@
  desc = "内部消息完成初筛、调查与告警，真实送达后确认原职责"
  function_inject = (
      MODEL_SELECTION, MODEL_CONTENT, MODEL_CATALOG,
-@@ -157,6 +158,7 @@
+@@ -76,20 +78,6 @@
+ )
+ 
+ WAKE_DASHBOARD = ServiceKey[Callable[[], DashboardView | None]]("wake.dashboard.v1")
+-
+-
+-async def _stop_watcher(watcher: asyncio.Task[None]) -> None:
+-    """Drain a watcher without replaying a completed business failure as stop failure."""
+-
+-    cancel_requested = watcher.cancel() if not watcher.done() else False
+-    try:
+-        await watcher
+-    except asyncio.CancelledError:
+-        if asyncio.current_task().cancelling():
+-            raise
+-    except Exception:
+-        if cancel_requested:
+-            raise
+ 
+ 
+ async def start_function(ctx: Context) -> None:
+@@ -146,8 +134,7 @@
+ 
+     async def stop(_event: object) -> None:
+         nonlocal runtime
+-        if watcher is not None:
+-            await _stop_watcher(watcher)
++        await stop_spawned(watcher)
+         runtime = None
+ 
+     def changed(_event: object) -> None:
+@@ -157,6 +144,7 @@
      _ = await ctx.on(RUNTIME_STARTED, start)
      _ = await ctx.on(RUNTIME_STOPPING, stop)
      _ = await ctx.on(EVENTMAIL_CHANGED, changed)

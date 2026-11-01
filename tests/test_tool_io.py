@@ -4,17 +4,111 @@ import asyncio
 import gzip
 import json
 import os
-from pathlib import Path
 import sys
 import tracemalloc
+from pathlib import Path
 
 import httpx
 import pytest
 
 from core.net.http import HttpRequester, RequestBudget, RetryPolicy
 from plugins.host_execution.bridge.filesystem import ReadFileOperation
-from plugins.standard_web.contract import FetchRequest
+from plugins.standard_web.contract import FetchRequest, SearchRequest
 from plugins.web_fetch_http.fetch import FetchConfig, HttpFetch
+from plugins.web_search_searxng.search import SearxngConfig, SearxngSearch
+
+
+@pytest.mark.parametrize("scenario", [
+    "valid", "shell-as-search", "shell-as-fetch", "missing-search", "missing-fetch",
+    "error-search", "error-fetch", "wrong-url", "marker-on-other", "search-missing-url",
+])
+def test_search_acceptance_requires_receipts_for_the_exact_native_tools(tmp_path, scenario):
+    from eval.native_runtime import _search_evidence
+    from plugins.ledger.contract import (
+        CallRef,
+        ContentPart,
+        ContentReferences,
+        Output,
+        ToolCall,
+        ToolResult,
+    )
+    from plugins.ledger.log import MessageLog
+
+    page_url, marker = "https://example.org/announcement", "EVIDENCE_FIXTURE"
+    log = MessageLog(tmp_path / "evidence.db")
+    try:
+        for name in ("web_search", "web_fetch", "shell"):
+            log.save_binding(name, {"metadata": {"tool": {"name": name}}})
+        output = log.writer("fixture", author="assistant", source="conversation", body_types=(Output,),
+                            content={}, check_call=lambda _: None)
+        caller = output.append("calls", Output((
+            ToolCall("shell" if scenario == "shell-as-search" else "web_search", {"query": "fixture"}),
+            ToolCall("shell" if scenario == "shell-as-fetch" else "web_fetch",
+                     {"url": page_url + "/other" if scenario == "wrong-url" else page_url}),
+            ToolCall("shell", {}),
+        ), "continue"))
+        for index, kind in enumerate(("search", "fetch", "other")):
+            if scenario == "missing-" + kind:
+                continue
+            ref = CallRef(caller.message_id, index)
+            content = ("no source URL" if scenario == "search-missing-url" else page_url) if kind == "search" else marker
+            if kind == "fetch" and scenario == "marker-on-other":
+                content = "page without its source marker"
+            writer = log.writer("fixture", author="tools", source="conversation", body_types=(ToolResult,),
+                                call_ref=ref, content={"text": lambda _: ContentReferences()})
+            writer.append(kind, ToolResult(ref, "error" if scenario == "error-" + kind else "success",
+                                          (ContentPart("text", content),)))
+        if scenario == "valid":
+            evidence = _search_evidence(log.reader("fixture"), page_url=page_url, marker=marker)
+            assert evidence == {"successful_tool_receipts": 2, "search_tool_receipts": 1, "fetch_tool_receipts": 1}
+        else:
+            with pytest.raises(AssertionError):
+                _search_evidence(log.reader("fixture"), page_url=page_url, marker=marker)
+    finally:
+        log.close()
+
+
+@pytest.mark.parametrize("scenario", ["valid", "other-tool", "wrong-value", "missing", "error", "token-on-other"])
+def test_exhaustion_acceptance_requires_the_original_native_probe_receipt(tmp_path, scenario):
+    from eval.native_runtime import _probe_evidence
+    from plugins.ledger.contract import (
+        CallRef,
+        ContentPart,
+        ContentReferences,
+        Output,
+        ToolCall,
+        ToolResult,
+    )
+    from plugins.ledger.log import MessageLog
+
+    value = "LIMIT_FIXTURE"
+    log = MessageLog(tmp_path / "probe.db")
+    try:
+        for name in ("native_probe", "shell"):
+            log.save_binding(name, {"metadata": {"tool": {"name": name}}})
+        output = log.writer("fixture", author="assistant", source="conversation", body_types=(Output,),
+                            content={}, check_call=lambda _: None)
+        caller = output.append("calls", Output((
+            ToolCall("shell" if scenario == "other-tool" else "native_probe",
+                     {"value": "DIFFERENT" if scenario == "wrong-value" else value}),
+            ToolCall("shell", {}),
+        ), "continue"))
+        for index in range(2):
+            if index == 0 and scenario == "missing":
+                continue
+            ref = CallRef(caller.message_id, index)
+            writer = log.writer("fixture", author="tools", source="conversation", body_types=(ToolResult,),
+                                call_ref=ref, content={"text": lambda _: ContentReferences()})
+            writer.append("receipt-" + str(index), ToolResult(ref,
+                "error" if index == 0 and scenario == "error" else "success", (ContentPart("text",
+                "no original token" if index == 0 and scenario == "token-on-other" else value),)))
+        if scenario == "valid":
+            assert _probe_evidence(log.reader("fixture"), value=value) == 1
+        else:
+            with pytest.raises(AssertionError):
+                _probe_evidence(log.reader("fixture"), value=value)
+    finally:
+        log.close()
 
 
 def test_large_file_retains_bounded_output_and_preserves_deep_pagination(tmp_path):
@@ -103,6 +197,123 @@ async def test_http_stream_does_not_retry_after_handing_a_response_to_its_consum
                 await response.aread()
     assert len(attempts) == 2  # Connect retry is allowed; an exposed body is not replayed.
     assert streams[0].closed
+
+
+@pytest.mark.asyncio
+async def test_searxng_distinguishes_empty_partial_and_invalid_results_and_bounds_io(monkeypatch):
+    from pydantic import ValidationError
+
+    for endpoint in ("https://name:password@example.org/", "https://example.org/?token=secret",
+                     "https://example.org/#fragment"):
+        with pytest.raises(ValidationError):
+            SearxngConfig(endpoint=endpoint)
+    config = SearxngConfig(endpoint="https://example.org/nested/")
+    client_type = httpx.AsyncClient
+    replies = [
+        {"results": [{"title": "one", "url": "https://example.org/1"},
+                     {"title": "two", "url": "https://example.org/2"}],
+         "unresponsive_engines": [["fixture", "timeout"]]},
+        {"results": []},
+        {"results": [], "unresponsive_engines": [["fixture", "timeout"]]},
+        {"message": "missing required results"},
+        b"<html>JSON format is disabled</html>",
+    ]
+    streams = []
+    requests = []
+
+    def handle(request):
+        requests.append(request)
+        if replies:
+            body = replies.pop(0)
+            return httpx.Response(200, content=body if isinstance(body, bytes) else json.dumps(body).encode())
+        stream = Body()
+        streams.append(stream)
+        return httpx.Response(200, stream=stream)
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: client_type(
+        transport=httpx.MockTransport(handle), **kwargs))
+    provider = SearxngSearch(config.endpoint, config.timeout_seconds)
+    partial = await provider.search(SearchRequest("紧急邮件与票务", 1))
+    assert len(partial["results"]) == 1 and "error" not in partial
+    assert partial["unresponsive_engines"] == [["fixture", "timeout"]]
+    assert await provider.search(SearchRequest("empty", 1)) == {"query": "empty", "results": []}
+    failed_engines = await provider.search(SearchRequest("engines", 1))
+    assert failed_engines["results"] == [] and "error" in failed_engines
+    for query in ("missing", "html"):
+        assert "响应无效" in (await provider.search(SearchRequest(query, 1)))["error"]
+    assert "超过 1MB" in (await provider.search(SearchRequest("oversize", 1)))["error"]
+    assert streams[0].closed and streams[0].consumed <= 1024 * 1024 + 65536
+    assert requests[0].url.path == "/nested/search"
+    assert dict(requests[0].url.params) == {"q": "紧急邮件与票务", "format": "json"}
+    assert requests[0].headers["accept"] == "application/json"
+
+
+@pytest.mark.asyncio
+async def test_searxng_total_deadline_cancels_slow_stream_and_redacts_http_errors(monkeypatch):
+    client_type = httpx.AsyncClient
+    stream = Body(chunks=2, slow=True)
+
+    def handle(request):
+        if request.url.params["q"] == "reject":
+            return httpx.Response(403, content=b"private response must never enter diagnostics")
+        return httpx.Response(200, stream=stream)
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: client_type(
+        transport=httpx.MockTransport(handle), **kwargs))
+    provider = SearxngSearch(SearxngConfig(endpoint="https://example.org").endpoint, 0.01)
+    assert "TimeoutError" in (await provider.search(SearchRequest("slow", 1)))["error"]
+    assert stream.closed
+    failed = await provider.search(SearchRequest("reject", 1))
+    assert "403" in failed["error"] and "private response" not in failed["error"]
+    assert "?q=" not in failed["error"]
+
+
+@pytest.mark.asyncio
+async def test_native_search_provider_configuration_reload_and_unavailable_selection(tmp_path):
+    from agent.plugin_composition.config_input import save_config
+    from kirakira_agent.runtime import initialize_workspace, runtime
+    from plugins.standard_web.contract import WEB_PROVIDERS
+    from plugins.web_search_searxng.plugin import SETTINGS
+
+    requests = []
+
+    async def serve(reader, writer):
+        try:
+            request = await reader.readuntil(b"\r\n\r\n")
+            requests.append(request.decode("ascii").splitlines()[0])
+            body = json.dumps({"results": [{"title": "fixture", "url": "https://example.org/verified",
+                                             "content": "SOURCE_VERIFIED"}]}).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: "
+                         + str(len(body)).encode() + b"\r\nConnection: close\r\n\r\n" + body)
+            await writer.drain()
+        finally:
+            writer.close()
+            await writer.wait_closed()
+
+    workspace = initialize_workspace(tmp_path / "workspace")
+    async with await asyncio.start_server(serve, "127.0.0.1", 0) as server:
+        port = server.sockets[0].getsockname()[1]
+        async with runtime(workspace) as core:
+            def providers():
+                return core.plugin_manager.live_root.context.require(WEB_PROVIDERS)
+
+            assert providers().choices("search") == [{"value": "web_search_exa", "label": "Exa"}]
+            assert core.plugin_manager.live_root.context.require(SETTINGS) is not None
+            save_config(workspace / "plugin-data/web_search_searxng-builtin",
+                        {"endpoint": f"http://127.0.0.1:{port}/nested"})
+            await core.plugin_manager.reconcile_changed(plugin_ids=frozenset({"web_search_searxng"}))
+            assert len(providers().choices("search")) == 2
+            assert "多个" in (await providers().search(SearchRequest("ambiguous", 1)))["error"]
+            assert not requests
+            save_config(workspace / "plugin-data/standard_web-builtin", {"search_provider": "web_search_searxng"})
+            await core.plugin_manager.reconcile_changed(plugin_ids=frozenset({"standard_web"}))
+            found = await providers().search(SearchRequest("source", 1))
+            assert found["results"][0]["content"] == "SOURCE_VERIFIED"
+            assert requests == ["GET /nested/search?q=source&format=json HTTP/1.1"]
+            save_config(workspace / "plugin-data/web_search_searxng-builtin", {})
+            await core.plugin_manager.reconcile_changed(plugin_ids=frozenset({"web_search_searxng"}))
+            unavailable = await providers().search(SearchRequest("must not fall back", 1))
+            assert "没有启用" in unavailable["error"] and len(requests) == 1
 
 
 @pytest.mark.asyncio

@@ -18,6 +18,198 @@ import pytest
 from agent.plugin_composition import CompositionError, CompositionRoot, Context, RuntimeScope, ServiceKey
 from agent.plugin_composition.model import FiberState, PluginRuntime
 
+
+@pytest.mark.asyncio
+async def test_spawned_business_failure_is_reported_once_and_does_not_fail_runtime_stop():
+    from agent.plugin_composition import RUNTIME_STOPPING, stop_spawned
+
+    root = CompositionRoot("reported-task-failure")
+    release = asyncio.Event()
+    workers = []
+    closed = []
+
+    async def apply(ctx):
+        async def work():
+            await release.wait()
+            raise RuntimeError("business failure already reported")
+
+        worker = await ctx.spawn(work(), name="failed-worker")
+        workers.append(worker)
+        await ctx.on(RUNTIME_STOPPING, lambda _event: stop_spawned(worker))
+        await ctx.effect(lambda: lambda: closed.append("closed"))
+
+    fiber = await root.mount(apply, name="worker")
+    try:
+        release.set()
+        with pytest.raises(RuntimeError, match="business failure already reported"):
+            await workers[0]
+        incidents = root.receipt().incidents
+        assert [incident.kind for incident in incidents] == ["task_failure"]
+        await fiber.dispose()
+        assert fiber.state == FiberState.DISPOSED
+        assert closed == ["closed"]
+        assert root.receipt().incidents == incidents
+        await stop_spawned(None)
+    finally:
+        await root.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ending", ["cancelled", "cleanup_failure", "caller_cancelled"])
+async def test_stop_spawned_drains_cleanup_and_preserves_new_failures_and_caller_cancellation(ending):
+    from agent.plugin_composition import stop_spawned
+
+    root = CompositionRoot("stopping-task")
+    entered, cleaning, drained = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    workers = []
+
+    async def apply(ctx):
+        async def work():
+            entered.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cleaning.set()
+                try:
+                    if ending == "cleanup_failure":
+                        raise ValueError("new cleanup failure")
+                    if ending == "caller_cancelled":
+                        await asyncio.Event().wait()
+                finally:
+                    drained.set()
+
+        workers.append(await ctx.spawn(work(), name="stopping-worker"))
+
+    await root.mount(apply, name="worker")
+    stopper = None
+    try:
+        await asyncio.wait_for(entered.wait(), 3)
+        stopper = asyncio.create_task(stop_spawned(workers[0]))
+        if ending == "caller_cancelled":
+            await asyncio.wait_for(cleaning.wait(), 3)
+            stopper.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await stopper
+        elif ending == "cleanup_failure":
+            with pytest.raises(ValueError, match="new cleanup failure"):
+                await stopper
+        else:
+            await stopper
+        assert drained.is_set() and workers[0].done()
+    finally:
+        if stopper is not None:
+            if not stopper.done():
+                stopper.cancel()
+            await asyncio.gather(stopper, return_exceptions=True)
+        await root.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ending", ["old_failure", "cleanup_failure", "caller_cancelled"])
+async def test_followup_stop_drains_each_started_cleanup_before_raising(tmp_path, monkeypatch, ending):
+    from types import SimpleNamespace
+
+    from agent.plugin_composition import RUNTIME_STOPPING
+    from plugins.followups import plugin
+
+    root = CompositionRoot("followup-shutdown")
+    entered = {name: asyncio.Event() for name in ("poll", "mail")}
+    cleaning, release, drained = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    first_stopped = asyncio.Event()
+    calls = []
+
+    async def noop(*_args, **_options):
+        pass
+
+    class Service:
+        def __init__(self, *_args, **_options):
+            self.http = SimpleNamespace(aclose=noop)
+
+        def __getattr__(self, _name):
+            return noop
+
+        async def follow(self):
+            entered["poll"].set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cleaning.set()
+                try:
+                    await release.wait()
+                    calls.append("poll-cleaned")
+                finally:
+                    drained.set()
+
+    class Mailboxes:
+        def __init__(self, *_args):
+            pass
+
+        async def follow(self, _service):
+            entered["mail"].set()
+            if ending == "old_failure":
+                raise ValueError("already-reported mailbox failure")
+            try:
+                await asyncio.Event().wait()
+            finally:
+                if ending == "cleanup_failure":
+                    await cleaning.wait()
+                    raise ValueError("new mailbox cleanup failure")
+
+    monkeypatch.setattr(plugin, "Service", Service)
+    monkeypatch.setattr(plugin, "Mailboxes", Mailboxes)
+    monkeypatch.setattr(plugin, "Settings", lambda _ctx: SimpleNamespace(read=noop, save=noop, receipt=noop))
+    stop_spawned = plugin.stop_spawned
+    async def observed_stop(task):
+        try:
+            await stop_spawned(task)
+        finally:
+            if task is not None and task.get_name().endswith("followups.mail-idle"):
+                first_stopped.set()
+    monkeypatch.setattr(plugin, "stop_spawned", observed_stop)
+
+    async def provide(ctx):
+        for key in plugin.inject:
+            await ctx.provide(key, SimpleNamespace(bind=lambda *_args, **_kwargs: None, open=lambda _ctx: None))
+
+    await root.mount(provide, name="dependencies")
+    fiber = await root.mount(plugin.apply, name="followups", inject=plugin.inject,
+                             runtime=PluginRuntime("followups", "test", tmp_path, tmp_path, tmp_path, {}))
+    stopping = None
+    try:
+        assert fiber.error is None
+        await asyncio.wait_for(entered["poll"].wait(), 3)
+        await asyncio.wait_for(entered["mail"].wait(), 3)
+        # Call the real registered lifecycle listener without disposing the
+        # Fiber: cancellation of the caller must not abort the other cleanup.
+        stopping = asyncio.create_task(fiber.context.serial(RUNTIME_STOPPING, None))
+        await asyncio.wait_for(cleaning.wait(), 3)
+        await asyncio.wait_for(first_stopped.wait(), 3)
+        # Let the scheduler process the failed helper's completion callbacks
+        # before releasing the second worker's necessary cleanup.
+        barrier = asyncio.get_running_loop().create_future()
+        asyncio.get_running_loop().call_soon(barrier.set_result, None)
+        await barrier
+        if ending == "caller_cancelled":
+            stopping.cancel()
+        # A mailbox failure/caller cancellation must wait for the poll cleanup.
+        assert not stopping.done() and not drained.is_set()
+        release.set()
+        if ending == "cleanup_failure":
+            with pytest.raises(ExceptionGroup, match="Follow-up watcher cleanup failed") as failed:
+                await stopping
+            assert any(isinstance(error, ValueError) for error in failed.value.exceptions)
+        elif ending == "caller_cancelled":
+            with pytest.raises(asyncio.CancelledError):
+                await stopping
+        else:
+            await stopping
+        assert calls == ["poll-cleaned"] and drained.is_set()
+    finally:
+        release.set()
+        if stopping is not None:
+            await asyncio.gather(stopping, return_exceptions=True)
+        await root.dispose()
+
 SVC = ServiceKey[str]("test.local.svc")
 
 SVC_A = ServiceKey[str]("test.local.svc-a")

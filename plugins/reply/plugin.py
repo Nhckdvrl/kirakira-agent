@@ -11,6 +11,7 @@ from functools import partial
 from pydantic import BaseModel, ConfigDict, Field
 
 from agent.plugin_composition import (
+    stop_spawned,
     RUNTIME_STARTED,
     RUNTIME_STARTING,
     RUNTIME_STOPPING,
@@ -260,12 +261,7 @@ async def apply(ctx: Context) -> None:
 
     async def stop(_event: object) -> None:
         try:
-            if watcher is not None:
-                _ = watcher.cancel()
-                try:
-                    await watcher
-                except asyncio.CancelledError:
-                    pass
+            await stop_spawned(watcher)
         finally:
             close_pending()
 

@@ -15,7 +15,7 @@ from typing import Literal, Self, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from agent.plugin_composition import RUNTIME_STARTED, RUNTIME_STOPPING, Context
+from agent.plugin_composition import RUNTIME_STARTED, RUNTIME_STOPPING, Context, stop_spawned
 from plugins.akasha.contract import EMBEDDING_MEMORY_PLUGIN
 from plugins.models.contract import EMBEDDINGS
 from plugins.ui.contract import (
@@ -765,12 +765,7 @@ async def run(ctx: Context, interest: Interest) -> None:
         nonlocal running
         running = False
         try:
-            if watcher is not None:
-                _ = watcher.cancel()
-                try:
-                    await watcher
-                except asyncio.CancelledError:
-                    pass
+            await stop_spawned(watcher)
         finally:
             await close_memory()
 

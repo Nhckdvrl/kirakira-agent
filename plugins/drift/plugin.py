@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Mapping
 from datetime import datetime
 from importlib import import_module
@@ -13,6 +12,7 @@ from agent.plugin_composition import (
     RUNTIME_STOPPING,
     Context,
     ServiceKey,
+    stop_spawned,
 )
 from agent.plugin_composition.plugin_config import PLUGIN_CONFIG
 from core.common.file_io import run_file_io
@@ -126,12 +126,7 @@ async def apply(ctx: Context) -> None:
             watcher = await child.spawn(producer.follow(), name="drift.reflect")
 
         async def stop(_event):
-            if watcher is not None:
-                watcher.cancel()
-                try:
-                    await watcher
-                except asyncio.CancelledError:
-                    pass
+            await stop_spawned(watcher)
 
         await child.on(RUNTIME_STARTED, start)
         await child.on(RUNTIME_STOPPING, stop)

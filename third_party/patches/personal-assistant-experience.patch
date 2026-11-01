@@ -1,3 +1,53 @@
+--- a/agent/plugin_composition/__init__.py
++++ b/agent/plugin_composition/__init__.py
+@@ -48,6 +48,7 @@
+     RuntimeStarting,
+     RuntimeStarted,
+     RuntimeStopping,
++    stop_spawned,
+ )
+ 
+ 
+@@ -93,6 +94,7 @@
+     "RuntimeStarting",
+     "RuntimeStarted",
+     "RuntimeStopping",
++    "stop_spawned",
+     "RuntimeScope",
+     "SerialEventKey",
+     "SyncTask",
+--- a/agent/plugin_composition/runtime_lifecycle.py
++++ b/agent/plugin_composition/runtime_lifecycle.py
+@@ -1,8 +1,9 @@
+ from __future__ import annotations
+ 
++import asyncio
+ from dataclasses import dataclass
+ 
+-from agent.plugin_composition.events import EmitEventKey, SerialEventKey
++from agent.plugin_composition.events import SerialEventKey
+ 
+ 
+ @dataclass(frozen=True, slots=True)
+@@ -32,3 +33,18 @@
+ RUNTIME_STARTING = SerialEventKey[RuntimeStarting, object]("runtime.starting")
+ RUNTIME_STARTED = SerialEventKey[RuntimeStarted, object]("runtime.started")
+ RUNTIME_STOPPING = SerialEventKey[RuntimeStopping, object]("runtime.stopping")
++
++async def stop_spawned[T](task: asyncio.Task[T] | None) -> None:
++    """Drain a ctx.spawn task without reclassifying its reported failure as cleanup failure."""
++    if task is None:
++        return
++    cancel_requested = task.cancel() if not task.done() else False
++    try:
++        await task
++    except asyncio.CancelledError:
++        current = asyncio.current_task()
++        if current is not None and current.cancelling():
++            raise
++    except Exception:
++        if cancel_requested:
++            raise
 --- a/bundles/base.toml
 +++ b/bundles/base.toml
 @@ -159,6 +159,9 @@
@@ -218,6 +268,62 @@
 +    disabled={!stopMode && (stopPending || disabled || (!input.trim() && attachments.files.length === 0 && !hasReferences))}
    />;
  }
+--- a/frontend/chat/src/desktop-conversation.tsx
++++ b/frontend/chat/src/desktop-conversation.tsx
+@@ -330,7 +330,7 @@
+ }
+ 
+ /** 展示完整日志，引用只定位原消息，不给工具结果补造助手身份。 */
+-export const DesktopTimelineMessages = React.memo(function DesktopTimelineMessages({ messages, activities, replySynced, refresh = 0, status, messageElementsRef, copiedMessageId, onReply, onEditInput, onRetry, onCopied, onError }: {
++export const DesktopTimelineMessages = React.memo(function DesktopTimelineMessages({ messages, activities, replySynced, refresh = 0, status, messageElementsRef, copiedMessageId, onReply, onEditInput, onRetry, onAbandon, onCopied, onError }: {
+   messages: TimelineMessage[];
+   activities: ReplyActivity[];
+   /** 本会话的回复状态已同步（收到 reply.status）：之后没有实时活动的未收尾轮次按已结束显示。 */
+@@ -342,6 +342,7 @@
+   onReply: (reply: TimelineReply) => void;
+   onEditInput: (text: string) => void;
+   onRetry: (inputId: string) => Promise<void>;
++  onAbandon: () => Promise<void>;
+   onCopied: (id: string) => void;
+   onError: (error: unknown) => void;
+ }) {
+@@ -418,6 +419,7 @@
+         : message.body.kind === "control" && message.body.action === "failure" ? <FailureRetry
+           inputId={failures.retryable.get(message.id)} earlier={failures.earlier.get(message.id)}
+           disabled={status !== "idle"} onRetry={onRetry} /> : undefined} />
++    {failures.abandonable.has(message.id) ? <TimelineAbandon disabled={status !== "idle"} onAbandon={onAbandon} /> : null}
+     {/* 轮次未结束的输出还会接着长，时间与复制等落定后挂在末条上，和实时视图一致。 */}
+     {!groups.hiddenBodies.has(message.id) && !groups.moved.has(message.id) && !groups.joined.has(message.id) && !groups.unsettled.has(message.id) ? <div className={`shared-message-meta timeline-meta ${message.body.kind === "input" ? "user" : "assistant"}`}>
+       <time dateTime={message.timestamp}>{formatMessageTime(message.timestamp)}</time>
+@@ -447,6 +449,7 @@
+     && previous.onReply === next.onReply
+     && previous.onEditInput === next.onEditInput
+     && previous.onRetry === next.onRetry
++    && previous.onAbandon === next.onAbandon
+     && previous.onCopied === next.onCopied
+     && previous.onError === next.onError
+     && previous.activities.length === next.activities.length
+@@ -459,6 +462,20 @@
+         && activity.preview?.message_id === other.preview?.message_id;
+     });
+ });
++
++function TimelineAbandon({ disabled, onAbandon }: {
++  disabled: boolean;
++  onAbandon: () => Promise<void>;
++}) {
++  const [pending, setPending] = useState(false);
++  return <div className="timeline-failure-actions">
++    <button type="button" disabled={disabled || pending} aria-busy={pending || undefined}
++      title="停止后续工作；已经执行的外部操作不会撤销"
++      onClick={() => { setPending(true); void onAbandon().finally(() => setPending(false)); }}>
++      {pending ? "正在放弃…" : "放弃本轮未完成的工作"}
++    </button>
++  </div>;
++}
+ 
+ /** 失败块的收尾：重跑这一轮的文字按钮，以及收起的此前失败。 */
+ function FailureRetry({ inputId, earlier = [], disabled, onRetry }: {
 --- a/frontend/chat/src/message-timeline.ts
 +++ b/frontend/chat/src/message-timeline.ts
 @@ -9,8 +9,11 @@
@@ -247,6 +353,70 @@
      case "tool_call": return nonempty(part.binding_id) && nonempty(part.name) && object(part.arguments) !== null
        && (part.owner === undefined || nonempty(part.owner));
      case "context.notice": return nonempty(object(part.value)?.text);
+@@ -485,13 +496,16 @@
+   superseded: Set<string>;
+   /** 来源停在失败上：失败 id → 可以重跑的原用户输入 id。 */
+   retryable: Map<string, string>;
++  /** 未知效果使这一段无法安全重试，需主人显式放弃。 */
++  abandonable: Set<string>;
+ }
+ 
+ // input 为 undefined 表示这一段的输入在已加载页之前（长回合只读了末尾一页）。
+-type FailureRun = { input: TimelineMessage | null | undefined; failures: TimelineMessage[]; tail: TimelineMessage };
++type FailureRun = { input: TimelineMessage | null | undefined; failures: TimelineMessage[]; tail: TimelineMessage; stuck: boolean };
+ 
+ // 输入不在已加载页时，重试引用来源的最新输入；服务端解析，重试本来也只允许最新输入。
+ export const RETRY_LATEST_INPUT = "latest";
++export const STEP_LIMIT_FAILURE_REASON = "步数上限失败";
+ 
+ // 同一条输入反复失败时只留最后一次，答出来后连这一次也收起；来源末尾停在失败上时，它指向可以重跑的原输入。
+ export function timelineFailureRetries(messages: TimelineMessage[]): TimelineFailureRetries {
+@@ -500,16 +514,16 @@
+   const runs = new Map<string, FailureRun>();
+   for (const message of messages) {
+     const key = timelineSourceKey(message), body = message.body;
+-    const run = runs.get(key) ?? { input: undefined, failures: [], tail: message };
++    const run = runs.get(key) ?? { input: undefined, failures: [], tail: message, stuck: false };
+     runs.set(key, run);
+     run.tail = message;
+     // 1. 新输入或放弃开始新的一段；自动输入不能由用户重跑。
+-    if (body.kind === "input") Object.assign(run, { input: message.author === "user" ? message : null, failures: [] });
+-    else if (body.kind === "control" && body.action === "abandon") run.failures = [];
++    if (body.kind === "input") Object.assign(run, { input: message.author === "user" ? message : null, failures: [], stuck: false });
++    else if (body.kind === "control" && body.action === "abandon") Object.assign(run, { failures: [], stuck: false });
+     // 2. 重试最终答出来了：回答替换掉这一轮的失败。
+     else if (body.kind === "output" && body.finish !== "continue") {
+       for (const item of run.failures) superseded.add(item.id);
+-      run.failures = [];
++      Object.assign(run, { failures: [], stuck: false });
+     } else if (body.kind === "control" && body.action === "resume") {
+       // 3. 失败之后的恢复就是重试本身，失败块已说明，不再单独成行。
+       if (run.failures.length) superseded.add(message.id);
+@@ -520,16 +534,23 @@
+         earlier.set(message.id, [...run.failures]);
+       }
+       run.failures.push(message);
++      if ((body.reason ?? "").startsWith(STEP_LIMIT_FAILURE_REASON)) run.stuck = true;
+     }
+   }
+   // 5. 只有来源最后一条仍是失败时才可重试；正在恢复或已有新输入都不再提供。
+   const retryable = new Map<string, string>();
++  const abandonable = new Set<string>();
+   for (const run of runs.values()) {
+     if (run.tail.body.kind !== "control" || run.tail.body.action !== "failure") continue;
++    if (run.stuck) {
++      // /abandon 控制 conversation，不能拿别的来源失败去关闭用户的任务。
++      if (run.tail.source === "conversation") abandonable.add(run.tail.id);
++      continue;
++    }
+     if (run.input) retryable.set(run.tail.id, run.input.id);
+     else if (run.input === undefined && run.tail.source === "conversation") retryable.set(run.tail.id, RETRY_LATEST_INPUT);
+   }
+-  return { earlier, superseded, retryable };
++  return { earlier, superseded, retryable, abandonable };
+ }
+ 
+ /** 从已提交消息识别图文回复；不依赖插件是否启用，也不改写消息顺序。 */
 --- a/frontend/chat/src/message-view.css
 +++ b/frontend/chat/src/message-view.css
 @@ -2360,3 +2360,86 @@
@@ -562,7 +732,36 @@
        const markDelivery = (delivery: ChatMessage["delivery"]) => setMessages((current) => current.map((item) => item.id === clientMessageId ? { ...item, delivery } : item));
        await deliverMessage(clientMessageId, payload, controller.signal, () => markDelivery("retrying"));
        controller.signal.throwIfAborted();
-@@ -1035,7 +1063,13 @@
+@@ -928,6 +956,28 @@
+       await deliverMessage(requestId, {
+         type: "message.send", request_id: requestId, session_id: sessionId, text: "", media: [], retry_of: inputId,
+       }, controller.signal, () => undefined);
++    } catch (error) {
++      if (sendRequestRef.current === controller) setStatusLive("idle");
++      if (!isAbortError(error)) reportError(error, "error");
++    } finally {
++      if (sendRequestRef.current === controller) sendRequestRef.current = null;
++    }
++  }, [canSend, deliverMessage, reportError, setStatusLive]);
++
++  // 与手工发送 /abandon 相同，只有服务端提交控制后才恢复输入状态。
++  const abandonTurn = useCallback(async () => {
++    const sessionId = activeSessionRef.current;
++    if (!sessionId || !canSend || sendRequestRef.current) return;
++    setError("");
++    const controller = new AbortController();
++    sendRequestRef.current = controller;
++    setStatusLive("submitted");
++    const requestId = createUuidV7();
++    try {
++      await deliverMessage(requestId, {
++        type: "message.send", request_id: requestId, session_id: sessionId, text: "/abandon", media: [],
++      }, controller.signal, () => undefined);
++      if (sendRequestRef.current === controller) setStatusLive("idle");
+     } catch (error) {
+       if (sendRequestRef.current === controller) setStatusLive("idle");
+       if (!isAbortError(error)) reportError(error, "error");
+@@ -1035,7 +1085,13 @@
      setSurface("chat");
      clearChatRoute();
      // 空白页只订阅目录，没有旧正文跟随；首次进入会话可以复用已有连接。
@@ -577,7 +776,7 @@
      activeSessionRef.current = sessionId;
      sendRequestRef.current?.abort();
      stopRequestRef.current?.abort();
-@@ -1069,7 +1103,7 @@
+@@ -1069,7 +1125,7 @@
        });
      // 新鲜快照跳过了分页拉取，仍需恢复 WebSocket 增量跟随。
      if (cachedFresh) followSession(socketRef.current ?? connectRef.current?.() ?? null, sessionId, cached.throughSeq);
@@ -586,6 +785,15 @@
  
    useEffect(() => {
      if (!chatReady || !requestedSessionId) return;
+@@ -1205,7 +1261,7 @@
+     // 发送失败时"重试"（重连并重新加载）不会重新发送，反而误导；发送钮就是重试入口，横幅不再给按钮。
+     errorRetry: !error || !errorFromSend,
+     activateSession, prefetchSessionTail, startNewChat, handleReplyMessage, handleCopiedMessage,
+-    reportError, cancelReply, sendMessage, retryTurn, stopTurn, retry,
++    reportError, cancelReply, sendMessage, retryTurn, abandonTurn, stopTurn, retry,
+ 
+     steers: steers.items, steerMessage: steers.steer, withdrawSteer: steers.withdraw, reclaimSteers: steers.reclaim,
+     navigationGroups, navigationPins,
 --- a/plugins/akasha/application/consumer.py
 +++ b/plugins/akasha/application/consumer.py
 @@ -122,13 +122,17 @@
@@ -680,6 +888,47 @@
          if reply_to_message_id is not None:
              if not isinstance(reply_to_message_id, str) or not reply_to_message_id.strip():
                  await self._send_error(
+--- a/plugins/compaction/contract.py
++++ b/plugins/compaction/contract.py
+@@ -34,10 +34,10 @@
+ 
+ 
+ class PartitionedSummary(StoredSummary, Protocol):
+-    """compaction v2 的结构化分区；不依赖 compaction 的 class identity。"""
++    """compaction v2/v3 的结构化分区；不依赖 compaction 的 class identity。"""
+ 
+     @property
+-    def version(self) -> Literal[2]: ...
++    def version(self) -> Literal[2, 3]: ...
+ 
+     @property
+     def summary_message_ids(self) -> tuple[str, ...]: ...
+--- a/plugins/context/contract.py
++++ b/plugins/context/contract.py
+@@ -7,10 +7,8 @@
+ from typing import Any, Literal, Protocol
+ 
+ from agent.plugin_composition import Context, Effect, ServiceKey
+-from plugins.models.contract import ModelRequest
+-from plugins.models.contract import BoundChatModel
+ from plugins.ledger.contract import ContentPart, ContentReferences, Message
+-from plugins.models.contract import ContextModel
++from plugins.models.contract import BoundChatModel, ContextModel, ModelRequest
+ 
+ MaterialKind = Literal["context", "recall", "profile"]
+ MaterialData = Mapping[str, object]
+@@ -44,9 +42,9 @@
+ class ContextBuilder(Protocol):
+     def check_summary(self, part: ContentPart) -> ContentReferences: ...
+     def check_notice(self, part: ContentPart) -> ContentReferences: ...
+-    def summary_range(
++    def summary_indexes(
+         self, snapshot: tuple[Message, ...], source_message_ids: tuple[str, ...]
+-    ) -> range: ...
++    ) -> tuple[int, ...]: ...
+     def settled_prefixes(self, messages: tuple[Message, ...]) -> tuple[int, ...]: ...
+     def reminder_content(self, materials: MaterialData) -> str | None: ...
+     def build(
 --- a/plugins/delivery/execution.py
 +++ b/plugins/delivery/execution.py
 @@ -81,6 +81,9 @@
@@ -952,6 +1201,31 @@
          descriptor = self._host_lock_file
          self._host_lock_file = None
          if descriptor is None:
+--- a/plugins/plugin_update/plugin.py
++++ b/plugins/plugin_update/plugin.py
+@@ -6,7 +6,7 @@
+ from contextlib import asynccontextmanager
+ from typing import cast
+ 
+-from agent.plugin_composition import Context, RUNTIME_STARTED, RUNTIME_STOPPING
++from agent.plugin_composition import Context, RUNTIME_STARTED, RUNTIME_STOPPING, stop_spawned
+ from plugins.assets.contract import INSTALLED_ASSETS
+ from plugins.ledger.contract import BINDINGS
+ from plugins.ledger.contract import MESSAGE_CATALOG, MESSAGE_WRITERS, OWNER_STATE
+@@ -145,12 +145,7 @@
+         watcher = await ctx.spawn(follow(), name="plugin-updates")
+ 
+     async def stop(_event: object) -> None:
+-        if watcher is not None:
+-            _ = watcher.cancel()
+-            try:
+-                await watcher
+-            except asyncio.CancelledError:
+-                pass
++        await stop_spawned(watcher)
+ 
+     _ = await ctx.on(RUNTIME_STARTED, start)
+     _ = await ctx.on(RUNTIME_STOPPING, stop)
 --- a/plugins/reply/follow.py
 +++ b/plugins/reply/follow.py
 @@ -274,7 +274,7 @@
@@ -1063,6 +1337,54 @@
          restart_after_cleanup = False
          try:
              await self._start(state, session_id, source)
+--- a/plugins/reply/plugin.py
++++ b/plugins/reply/plugin.py
+@@ -11,6 +11,7 @@
+ from pydantic import BaseModel, ConfigDict, Field
+ 
+ from agent.plugin_composition import (
++    stop_spawned,
+     RUNTIME_STARTED,
+     RUNTIME_STARTING,
+     RUNTIME_STOPPING,
+@@ -260,12 +261,7 @@
+ 
+     async def stop(_event: object) -> None:
+         try:
+-            if watcher is not None:
+-                _ = watcher.cancel()
+-                try:
+-                    await watcher
+-                except asyncio.CancelledError:
+-                    pass
++            await stop_spawned(watcher)
+         finally:
+             close_pending()
+ 
+--- a/plugins/scheduler/plugin.py
++++ b/plugins/scheduler/plugin.py
+@@ -9,6 +9,7 @@
+ from pydantic import BaseModel, ConfigDict, Field
+ 
+ from agent.plugin_composition import (
++    stop_spawned,
+     RUNTIME_STARTED,
+     RUNTIME_STOPPING,
+     Context,
+@@ -177,12 +178,7 @@
+         watcher = await ctx.spawn(runtime.follow(), name="scheduler")
+ 
+     async def stop(_event: object) -> None:
+-        if watcher is not None:
+-            _ = watcher.cancel()
+-            try:
+-                await watcher
+-            except asyncio.CancelledError:
+-                pass
++        await stop_spawned(watcher)
+ 
+     _ = await ctx.on(RUNTIME_STARTED, start)
+     _ = await ctx.on(RUNTIME_STOPPING, stop)
 --- a/plugins/subagent/plugin.py
 +++ b/plugins/subagent/plugin.py
 @@ -54,7 +54,7 @@
@@ -1567,6 +1889,229 @@
          return Result("success", (ContentPart("text", json.dumps(value, ensure_ascii=False)),))
  
      async def query(self, key: str) -> Result | None:
+--- a/plugins/tools/plugin.py
++++ b/plugins/tools/plugin.py
+@@ -13,38 +13,55 @@
+     RUNTIME_STOPPING,
+     Context,
+     Effect,
+-)
+-from plugins.ledger.contract import BINDINGS, Bindings
++    stop_spawned,
++)
++from agent.plugin_composition.tasks import (
++    TASKS,
++    ExternalRootPermit,
++    Task,
++    TaskAdmission,
++)
++from core.common.frozen_json import freeze_json
++from plugins.content.contract import (
++    CONTENT as CONTENT,
++)
+ from plugins.ledger.contract import (
++    BINDINGS,
+     MESSAGE_CATALOG,
+     MESSAGE_WRITERS,
+     OWNER_STATE,
++    Bindings,
++    CallRef,
+     MessageReader,
+-)
+-from agent.plugin_composition.tasks import TASKS, ExternalRootPermit, Task, TaskAdmission
+-from plugins.ledger.contract import (
+-    CallRef,
+-    ContentPart,
+-    ContentReferences,
+-    ToolResult,
+     Output,
+     ToolCall,
+-)
+-from core.common.frozen_json import freeze_json
+-from plugins.content.contract import (
+-    CONTENT as CONTENT,
++    ToolResult,
+ )
+ from plugins.tools.contract import (
+     ALL_TOOLS as ALL_TOOLS,
++)
++from plugins.tools.contract import (
+     TOOL_BIND_SAVED as TOOL_BIND_SAVED,
++)
++from plugins.tools.contract import (
+     TOOL_CLEANUP as TOOL_CLEANUP,
++)
++from plugins.tools.contract import (
+     TOOL_DISPLAY as TOOL_DISPLAY,
++)
++from plugins.tools.contract import (
++    TOOLS as TOOLS,
++)
++from plugins.tools.contract import (
+     ToolDisplay,
+-    TOOLS as TOOLS,
++    ToolRelease,
++    tool_key,
++)
++from plugins.tools.contract import (
+     ToolRef as ToolRef,
+-    ToolRelease,
++)
++from plugins.tools.contract import (
+     ToolView as ToolView,
+-    tool_key,
+ )
+ 
+ from .abandon import follow_abandon, reject_start
+@@ -61,7 +78,6 @@
+ )
+ from .cleanup import Release, tool_cleanup
+ from .execution import ToolExecution
+-from .api import CallSource
+ from .program import TOOL_PROGRAM, ToolProgramFactory
+ 
+ api_version = 3
+@@ -133,6 +149,15 @@
+     context: Context
+     name: str
+     authorize: BindingAuthorize
++
++
++def _binding_fields(metadata: Mapping[str, object]) -> set[str]:
++    # 旧 binding 保存的限制已退役；执行时始终使用当前注册。
++    return set(metadata) - {"authorize"}
++
++
++def _expected_fields(registration: _Registration) -> set[str]:
++    return {"tool", "prepare", *(("state",) if registration.capture is not None else ())}
+ 
+ 
+ class _ToolView:
+@@ -306,7 +331,7 @@
+     async def register_authorize(
+         self, ctx: Context, *, tool: ToolRef, name: str, authorize: BindingAuthorize
+     ) -> Effect:
+-        """每个工具的独立限制只有一个 owner，并随 binding 固定。"""
++        """每个工具的独立限制只有一个 owner；执行时读取当前注册。"""
+         self._check_context(ctx)
+         if not name:
+             raise ValueError("工具限制必须有贡献名")
+@@ -406,13 +431,11 @@
+         """从真实注册 Context 固定闭包，不让调用者省略准备贡献或重选目标。"""
+         registration = self._registration(ref)
+         preparation = registration.preparation
+-        authorization = registration.authorization
+         if configuration is not None and registration.capture is None:
+             raise ValueError("该工具未声明 binding 配置入口")
+         contributors = (
+             registration.context,
+             *(() if preparation is None else (preparation.context,)),
+-            *(() if authorization is None else (authorization.context,)),
+         )
+         async with self._ctx.runtime_scope(), AsyncExitStack() as stack:
+             # capture 可以挂起；实际贡献者在绑定提交前都不能被排空。
+@@ -436,7 +459,6 @@
+                 {
+                     "tool": ref.description,
+                     "prepare": None if preparation is None else preparation.name,
+-                    **({"authorize": authorization.name} if authorization is not None else {}),
+                     **({"state": state} if state is not None else {}),
+                 },
+                 contributors=contributors,
+@@ -467,19 +489,10 @@
+         ):
+             raise ValueError("工具 binding 与归档注册不一致")
+         preparation = registration.preparation
+-        authorization = registration.authorization
+-        expected = {
+-            "tool",
+-            "prepare",
+-            *(("authorize",) if authorization is not None else ()),
+-            *(("state",) if registration.capture is not None else ()),
+-        }
+-        if set(metadata) != expected or metadata["prepare"] != (
++        if _binding_fields(metadata) != _expected_fields(registration) or metadata["prepare"] != (
+             None if preparation is None else preparation.name
+         ):
+             raise ValueError("工具 binding 参数准备与归档注册不一致")
+-        if authorization is not None and metadata["authorize"] != authorization.name:
+-            raise ValueError("工具 binding 限制与归档注册不一致")
+         return await self.bind_scoped(
+             registration.ref,
+             bindings,
+@@ -502,26 +515,15 @@
+         name = description["name"]
+         if not isinstance(name, str):
+             raise ValueError("工具 binding 缺少工具名")
+-        registration = self._tools[name]
++        registration = self._tools.get(name)
++        if registration is None:
++            raise ValueError(f"工具已撤下，binding 无法打开: {name}")
+         preparation = registration.preparation
+         if not _matches_saved_description(registration.ref.description, description) or metadata["prepare"] != (
+             None if preparation is None else preparation.name
+         ):
+             raise ValueError("归档工具描述或参数准备与 binding 不一致")
+-        expected: set[str] = {"tool", "prepare"}
+-        authorization = registration.authorization
+-        if "authorize" in metadata:
+-            saved_authorization = metadata["authorize"]
+-            if not isinstance(saved_authorization, str):
+-                raise ValueError("工具 binding 限制字段无效")
+-            if authorization is None or saved_authorization != authorization.name:
+-                raise ValueError("归档工具限制与 binding 不一致")
+-            expected.add("authorize")
+-        elif authorization is not None:
+-            raise ValueError("归档工具限制与 binding 不一致")
+-        if registration.capture is not None:
+-            expected.add("state")
+-        if set(metadata) != expected:
++        if _binding_fields(metadata) != _expected_fields(registration):
+             raise ValueError("工具 binding 字段无效")
+         state: Mapping[str, object] = {}
+         if registration.capture is not None:
+@@ -543,21 +545,16 @@
+     async def authorize(
+         self, metadata: Mapping[str, object], arguments: Mapping[str, object]
+     ) -> str | None:
+-        """只执行 binding 固定的独立限制；无独立限制时返回 None。"""
+-        if "authorize" not in metadata:
+-            return
++        """限制随当前安装状态生效；撤下限制后旧 binding 与新 binding 行为一致。"""
+         description = metadata.get("tool")
+         if not isinstance(description, Mapping) or not isinstance(description.get("name"), str):
+             raise ValueError("工具 binding 描述无效")
+         registration = self._tools.get(cast(str, description["name"]))
+-        authorization = (
+-            None
+-            if registration is None or not _matches_saved_description(
+-                registration.ref.description, description
+-            ) else registration.authorization
+-        )
+-        if authorization is None or metadata["authorize"] != authorization.name:
+-            raise ValueError("归档工具限制与 binding 不一致")
++        if registration is None or registration.authorization is None:
++            return None
++        if not _matches_saved_description(registration.ref.description, description):
++            raise ValueError("归档工具描述与 binding 不一致")
++        authorization = registration.authorization
+         async with self._ctx.runtime_scope():
+             async with authorization.context.runtime_scope():
+                 return await authorization.authorize(arguments)
+@@ -631,12 +628,7 @@
+         ), name="tools-abandon")
+ 
+     async def stop(_event: object) -> None:
+-        if watcher is not None:
+-            _ = watcher.cancel()
+-            try:
+-                await watcher
+-            except asyncio.CancelledError:
+-                pass
++        await stop_spawned(watcher)
+ 
+     _ = await ctx.on(RUNTIME_STARTED, start)
+     _ = await ctx.on(RUNTIME_STOPPING, stop)
 --- a/plugins/ui/contract.py
 +++ b/plugins/ui/contract.py
 @@ -384,7 +384,7 @@

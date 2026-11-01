@@ -7,10 +7,8 @@ from contextlib import AbstractAsyncContextManager
 from typing import Any, Literal, Protocol
 
 from agent.plugin_composition import Context, Effect, ServiceKey
-from plugins.models.contract import ModelRequest
-from plugins.models.contract import BoundChatModel
 from plugins.ledger.contract import ContentPart, ContentReferences, Message
-from plugins.models.contract import ContextModel
+from plugins.models.contract import BoundChatModel, ContextModel, ModelRequest
 
 MaterialKind = Literal["context", "recall", "profile"]
 MaterialData = Mapping[str, object]
@@ -44,9 +42,9 @@ class SummaryReducer(Protocol):
 class ContextBuilder(Protocol):
     def check_summary(self, part: ContentPart) -> ContentReferences: ...
     def check_notice(self, part: ContentPart) -> ContentReferences: ...
-    def summary_range(
+    def summary_indexes(
         self, snapshot: tuple[Message, ...], source_message_ids: tuple[str, ...]
-    ) -> range: ...
+    ) -> tuple[int, ...]: ...
     def settled_prefixes(self, messages: tuple[Message, ...]) -> tuple[int, ...]: ...
     def reminder_content(self, materials: MaterialData) -> str | None: ...
     def build(

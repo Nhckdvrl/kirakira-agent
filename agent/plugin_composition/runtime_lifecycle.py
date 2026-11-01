@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 
-from agent.plugin_composition.events import EmitEventKey, SerialEventKey
+from agent.plugin_composition.events import SerialEventKey
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,3 +33,18 @@ class RuntimeStopping:
 RUNTIME_STARTING = SerialEventKey[RuntimeStarting, object]("runtime.starting")
 RUNTIME_STARTED = SerialEventKey[RuntimeStarted, object]("runtime.started")
 RUNTIME_STOPPING = SerialEventKey[RuntimeStopping, object]("runtime.stopping")
+
+async def stop_spawned[T](task: asyncio.Task[T] | None) -> None:
+    """Drain a ctx.spawn task without reclassifying its reported failure as cleanup failure."""
+    if task is None:
+        return
+    cancel_requested = task.cancel() if not task.done() else False
+    try:
+        await task
+    except asyncio.CancelledError:
+        current = asyncio.current_task()
+        if current is not None and current.cancelling():
+            raise
+    except Exception:
+        if cancel_requested:
+            raise
