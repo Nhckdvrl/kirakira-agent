@@ -49,6 +49,66 @@ async def test_relative_reminder_binds_real_input_time_and_keeps_receipt(tmp_pat
     assert await restored.invoke(source.effect_key, prepared) == first
     assert len(store.load()) == 1 and store.load()[0].fire_at == fire_at
 
+
+@pytest.mark.asyncio
+async def test_clock_reminder_keeps_input_date_when_inference_passes_target(tmp_path):
+    from datetime import UTC, datetime, timedelta
+    from plugins.ledger.contract import CallRef, ContentPart, Input, Message, Output, ToolCall
+    from plugins.scheduler.store import JobStore
+    from plugins.scheduler.tools import ScheduleTool
+    from plugins.tools.contract import CallSource
+
+    async def target(_source):
+        return "chat", "local", "fixture"
+
+    store = JobStore(tmp_path / "schedules.json")
+    for index, (received, when, expected) in enumerate((
+        (datetime(2026, 11, 1, 14, 29, tzinfo=UTC), "14:30", datetime(2026, 11, 1, 14, 30, tzinfo=UTC)),
+        (datetime(2026, 11, 1, 23, 59, tzinfo=UTC), "00:01", datetime(2026, 11, 2, 0, 1, tzinfo=UTC)),
+    )):
+        actual = received + timedelta(minutes=4)
+        request = Message("request", "chat", 1, received, "user", "conversation",
+                          Input((ContentPart("text", f"{when} 提醒我提交材料"),)))
+        caller = Message("call", "chat", 2, actual, "assistant", "conversation",
+                         Output((ToolCall("schedule", {}),), "continue"))
+        source = CallSource(CallRef("call", 0), (request, caller))
+        tool = ScheduleTool(store, None, "schedule", target, now=lambda: actual)
+        prepared = await tool.prepare({"action": "notify", "trigger": "at", "when": when,
+                                       "text": "提交材料", "timezone": "UTC",
+                                       "request_time": "2030-01-01T00:00:00Z"}, source)
+        assert isinstance(prepared, dict)
+        assert datetime.fromisoformat(prepared["job"]["fire_at"]) == expected
+        receipt = await tool.invoke(f"clock-{index}", prepared)
+        restored = ScheduleTool(JobStore(store.path), None, "schedule", target,
+                                now=lambda: actual + timedelta(days=3))
+        assert await restored.query(f"clock-{index}") == receipt
+        assert await restored.invoke(f"clock-{index}", prepared) == receipt
+        assert len(store.load()) == index + 1
+
+    # An actual call without its input cannot accept a model-invented time anchor.
+    assert isinstance(await tool.prepare({"action": "notify", "trigger": "at", "when": "14:30",
+                                          "text": "提交材料", "timezone": "UTC"},
+                                         CallSource(CallRef("call", 0), (caller,))), str)
+
+
+def test_reminder_dst_uses_elapsed_duration_and_requires_unique_wall_time():
+    from datetime import UTC, datetime
+    from zoneinfo import ZoneInfo
+    from plugins.scheduler.schedule import compute_fire_at, parse_when_at
+
+    ny = ZoneInfo("America/New_York")
+    for base in (datetime(2026, 11, 1, 0, 30, tzinfo=ny), datetime(2027, 3, 14, 1, 30, tzinfo=ny)):
+        for trigger in ("after", "every"):
+            fire = compute_fire_at(trigger, "2h", ny.key, _now_fn=lambda: base)
+            assert (fire.astimezone(UTC) - base.astimezone(UTC)).total_seconds() == 7200
+    for text in ("2026-11-01T01:30:00", "2027-03-14T02:30:00"):
+        with pytest.raises(ValueError, match="带 UTC 偏移"):
+            parse_when_at(text, ny.key)
+    first = parse_when_at("2026-11-01T01:30:00-04:00", ny.key)
+    second = parse_when_at("2026-11-01T01:30:00-05:00", ny.key)
+    assert (second.astimezone(UTC) - first.astimezone(UTC)).total_seconds() == 3600
+
+
 def _runtime(tmp_path, plugin_id):
     return PluginRuntime(
         plugin_id,

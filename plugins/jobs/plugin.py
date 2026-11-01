@@ -91,7 +91,11 @@ class Jobs:
             return False
         self._stopped_by_user.add(job_id)
         try:
-            return await job.stop()
+            accepted = await job.stop()
+            if not accepted:
+                self._stopped_by_user.discard(job_id)
+                _ = self._mirror.set_stopping(session_id, job_id, False)
+            return accepted
         except Exception:
             logger.warning("用户停止后台任务失败 job=%s", job_id, exc_info=True)
             self._stopped_by_user.discard(job_id)

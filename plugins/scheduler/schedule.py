@@ -28,6 +28,24 @@ SCHEDULE_MAX_ACTIVE_JOBS = 10
 _DURATION_RE = re.compile(r"^(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$")
 
 
+def _local_time(value: datetime, tzinfo: ZoneInfo) -> datetime:
+    """A wall time must identify one real instant before accepting a reminder."""
+    naive = value.replace(tzinfo=None)
+    candidates: dict[datetime, datetime] = {}
+    for fold in (0, 1):
+        local = naive.replace(tzinfo=tzinfo, fold=fold)
+        instant = local.astimezone(timezone.utc)
+        if instant.astimezone(tzinfo).replace(tzinfo=None) == naive:
+            candidates[instant] = local
+    if len(candidates) != 1:
+        problem = "不存在" if not candidates else "出现两次"
+        raise ValueError(
+            f"当地时间 {naive.isoformat()} 在 {tzinfo.key} 中{problem}；"
+            "请确认时间并提供带 UTC 偏移的 ISO 时间"
+        )
+    return next(iter(candidates.values()))
+
+
 def parse_duration(s: str) -> timedelta:
     """解析时长字符串，如 '30s', '5m', '2h', '1h30m', '1d2h'。"""
     s = s.strip()
@@ -59,18 +77,18 @@ def parse_when_at(
         dt = now.replace(hour=t.hour, minute=t.minute, second=0, microsecond=0)
         if dt <= now:
             dt += timedelta(days=1)
-        return dt
+        return _local_time(dt, tzinfo)
 
     # ISO datetime 格式
     try:
         dt = datetime.fromisoformat(s)
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=tzinfo)
+            dt = _local_time(dt, tzinfo)
         return dt
-    except ValueError:
-        pass
-
-    raise ValueError(f"无法解析时间: {s!r}，示例: '14:30', '2025-06-01T09:00'")
+    except ValueError as error:
+        raise ValueError(
+            f"无法解析时间: {s!r}，示例: '14:30', '2025-06-01T09:00'；{error}"
+        ) from error
 
 
 def is_cron_expr(s: str) -> bool:
@@ -131,30 +149,31 @@ def compute_fire_at(
     """
     计算首次触发时间。
 
-    after 模式：以 request_time（用户消息到达时间）为基准，
-                补偿 AI 推理延迟，确保 fire_at 从用户视角算起。
+    after 和无日期的 at 以 request_time（用户消息到达时间）为基准，
+    不因推理跨过目标时刻而挪到第二天；时长按实际经过的秒数计算。
     """
     tzinfo = ZoneInfo(tz)
     now_fn = _now_fn or (lambda: datetime.now(tzinfo))
 
+    def request_anchor() -> datetime:
+        base = datetime.fromisoformat(request_time) if request_time else now_fn()
+        return _local_time(base, tzinfo) if base.tzinfo is None else base
+
     if trigger == "at":
-        return parse_when_at(when, tz, _now_fn)
+        return parse_when_at(when, tz, request_anchor)
 
     if trigger == "after":
         duration = parse_duration(when)
-        if request_time:
-            base = datetime.fromisoformat(request_time)
-            if base.tzinfo is None:
-                base = base.replace(tzinfo=tzinfo)
-        else:
-            base = now_fn()
-        return base + duration
+        return request_anchor().astimezone(timezone.utc) + duration
 
     if trigger == "every":
         if is_cron_expr(when):
             return next_cron_fire(when, tz, now_fn())
         interval = parse_duration(when)
-        return now_fn() + interval
+        base = now_fn()
+        if base.tzinfo is None:
+            base = _local_time(base, tzinfo)
+        return base.astimezone(timezone.utc) + interval
 
     raise ValueError(f"未知触发类型: {trigger!r}，须为 at/after/every")
 
@@ -183,5 +202,4 @@ class ScheduledJob:
     run_count: int = 0
     enabled: bool = True
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
-
 

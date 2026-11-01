@@ -26,6 +26,34 @@ _SCREENSHOT_EXTENSIONS = {
 _MAX_SCREENSHOT_FILES = 32
 
 
+def plain_text(text: str) -> str:
+    """Replace isolated UTF-16 surrogates without losing readable page text."""
+
+    if not any("\ud800" <= character <= "\udfff" for character in text):
+        return text
+    return "".join(
+        "\ufffd" if "\ud800" <= character <= "\udfff" else character for character in text
+    )
+
+
+def plain_value(value: Any) -> Any:
+    """Preserve JSON structure while making string values valid UTF-8."""
+
+    if isinstance(value, str):
+        return plain_text(value)
+    if isinstance(value, dict):
+        return {key: plain_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [plain_value(item) for item in value]
+    return value
+
+
+def json_line(payload: object) -> bytes:
+    """Encode one control receipt or JSON-RPC response as a UTF-8 line."""
+
+    return json.dumps(plain_value(payload), ensure_ascii=False).encode("utf-8") + b"\n"
+
+
 def save_screenshot(raw: bytes, media_type: str) -> str:
     """Save one screenshot inside this plugin's data root and return its path."""
 
@@ -125,6 +153,8 @@ def driver_content(value: dict[str, Any]) -> dict[str, object]:
             content.append({"type": "text", "text": f"Screenshot: {path}"})
             # 同一调用可能超过 32 张；附件导入使用原字节，不依赖可能被缓存淘汰的路径。
             content.append(item)
+        elif isinstance(item.get("text"), str):
+            content.append({**item, "text": plain_text(item["text"])})
         else:
             content.append(item)
     return {"content": content, "call_id": value["call_id"]}
@@ -196,7 +226,7 @@ async def control_connection(
                 result = {"cancelled": True, "released": True, "effects": "may_remain"}
             else:
                 result = driver_content(await task)
-        writer.write(json.dumps(result, ensure_ascii=False).encode() + b"\n")
+        writer.write(json_line(result))
         await writer.drain()
     except (
         ValueError,
@@ -207,10 +237,10 @@ async def control_connection(
         httpx.HTTPError,
     ) as error:
         if not writer.is_closing():
-            writer.write(json.dumps({
+            writer.write(json_line({
                 "error": str(error),
                 "kind": "driver_error" if isinstance(error, DriverResponseError) else "control_error",
-            }).encode() + b"\n")
+            }))
             try:
                 await writer.drain()
             except (ConnectionError, BrokenPipeError):
@@ -282,10 +312,8 @@ async def serve() -> None:
                     "error": {"code": -32603, "message": str(error)},
                 }
             if response is not None:
-                print(
-                    json.dumps(response, ensure_ascii=False, separators=(",", ":")),
-                    flush=True,
-                )
+                sys.stdout.write(json_line(response).decode("utf-8"))
+                sys.stdout.flush()
     finally:
         transport.close()
         if control is not None:

@@ -5,7 +5,9 @@ import base64
 import ipaddress
 import os
 import re
+import shlex
 import ssl
+from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from email import policy
@@ -49,7 +51,8 @@ class MailboxServer:
         self.directory = Path(directory)
         self.username, self.password = "owner@example.test", uuid4().hex
         self.folders = {"INBOX": MailboxState(uidvalidity=71)}
-        self.commands, self.connections = [], set()
+        self.commands, self.connections, self.handlers = [], set(), set()
+        self.cleanup_completed = False
         self.hold, self.fetch_started = asyncio.Event(), asyncio.Event()
         self.hold.set()
 
@@ -164,6 +167,7 @@ class MailboxServer:
         return context
 
     async def __aenter__(self):
+        self.cleanup_completed = False
         self.server = await asyncio.start_server(
             self.handle, "127.0.0.1", 0, ssl=self.certificate()
         )
@@ -173,13 +177,17 @@ class MailboxServer:
     async def __aexit__(self, *args):
         self.hold.set()
         self.server.close()
-        await self.server.wait_closed()
         writers = tuple(self.connections)
         for writer in writers:
             writer.close()
         await asyncio.gather(
             *(writer.wait_closed() for writer in writers), return_exceptions=True
         )
+        pending = tuple(self.handlers)
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+        await self.server.wait_closed()
+        self.cleanup_completed = not self.handlers and not self.connections
 
     def config(self):
         return {
@@ -192,6 +200,8 @@ class MailboxServer:
         }
 
     async def handle(self, reader, writer):
+        task = asyncio.current_task()
+        self.handlers.add(task)
         self.connections.add(writer)
         authenticated = False
         selected = None
@@ -224,7 +234,7 @@ class MailboxServer:
                         continue
                     authenticated = True
                 elif upper.startswith("LOGIN "):
-                    if self.username not in command or self.password not in command:
+                    if shlex.split(command)[1:] != [self.username, self.password]:
                         writer.write(f"{tag} NO Invalid credentials\r\n".encode())
                         await writer.drain()
                         continue
@@ -298,5 +308,10 @@ class MailboxServer:
         except ConnectionError, ssl.SSLError, ValueError:
             pass
         finally:
-            self.connections.discard(writer)
-            writer.close()
+            try:
+                writer.close()
+                with suppress(OSError, TimeoutError):
+                    await asyncio.wait_for(writer.wait_closed(), 2)
+            finally:
+                self.connections.discard(writer)
+                self.handlers.discard(task)

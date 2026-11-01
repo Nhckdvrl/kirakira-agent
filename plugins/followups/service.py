@@ -428,7 +428,7 @@ class Service:
     async def recheck(self, request: Recheck):
         async with self.locks.setdefault(request.watch_id, asyncio.Lock()):
             source = await self._source(request.watch_id)
-            await self._recover(request.watch_id, source)
+            await self._recover(request.watch_id, source, submit_pending=True)
             watch = await run_file_io(lambda: self._watch(request.watch_id))
             spec = WatchSpec.model_validate(watch["spec"])
             self._session(spec.session_id)
@@ -531,22 +531,6 @@ class Service:
             "observed_at": now.isoformat(),
             "review_policy": REQUESTED_REVIEW if requested_review or spec.review_mode == "each_update" else None,
         }
-
-        def stage(tx):
-            key = "intent:" + spec.watch_id
-            current = tx.read(key)
-            if current is not None and current.value:
-                original = dict(json_value(current.value))
-                if original["batch_id"] == intent["batch_id"] and "review_policy" in original:
-                    if original["review_policy"] not in {None, REQUESTED_REVIEW}:
-                        raise ValueError("跟进调查意图无效")
-                    return original
-            tx.save(key, intent, expected_version=None if current is None else current.version)
-            return intent
-
-        # The admitted batch owns this choice across failed submission/restart.
-        # It requests an investigation, never a share decision or an interest score.
-        intent = await self.store.transact_async(stage)
         items = [
             {
                 "item_id": entry.item_id,
@@ -566,6 +550,35 @@ class Service:
             }
             for entry in fresh
         ]
+        # Preserve the collected facts and admitted rule, not only transport
+        # watermarks. A server can expunge or move mail before a failed submit
+        # is retried; recovery must not depend on reading that body again.
+        intent["items"] = items
+
+        def stage(tx):
+            key = "intent:" + spec.watch_id
+            current = tx.read(key)
+            if current is not None and current.value:
+                original = dict(json_value(current.value))
+                if original["batch_id"] == intent["batch_id"] and "review_policy" in original:
+                    if original["review_policy"] not in {None, REQUESTED_REVIEW}:
+                        raise ValueError("跟进调查意图无效")
+                    return original
+            tx.save(key, intent, expected_version=None if current is None else current.version)
+            return intent
+
+        # The admitted batch owns this choice across failed submission/restart.
+        # It requests an investigation, never a share decision or an interest score.
+        intent = await self.store.transact_async(stage)
+        # Pre-existing intents did not store bodies. Retain their original
+        # policy when re-reading is still possible; never invent lost content.
+        if "items" not in intent:
+            for item in items:
+                item["payload"].pop("review_policy", None)
+                if intent["review_policy"] is not None:
+                    item["payload"]["review_policy"] = intent["review_policy"]
+        else:
+            items = intent["items"]
         await source.submit(intent["batch_id"], items)
         await self._finish(spec.watch_id, intent)
         return {"status": "submitted", "submitted": len(items), "refs": intent["refs"]}
@@ -662,18 +675,26 @@ class Service:
 
         await self.store.transact_async(commit)
 
-    async def _recover(self, watch_id, source):
+    async def _recover(self, watch_id, source, *, submit_pending=False):
         pending = await run_file_io(lambda: self.store.read("intent:" + watch_id))
         if pending and pending.value:
             intent = dict(json_value(pending.value))
-            if await source.inspect_submission(intent["batch_id"]) is not None:
-                await self._finish(watch_id, intent)
+            receipt = await source.inspect_submission(intent["batch_id"])
+            if receipt is None:
+                if not submit_pending or "items" not in intent:
+                    # Legacy pending intents can only retry from their source.
+                    # Merely reading a timeline never starts a new submission.
+                    return
+                await source.submit(intent["batch_id"], intent["items"])
+            await self._finish(watch_id, intent)
 
     async def poll(self, watch_id):
         async with self.locks.setdefault(watch_id, asyncio.Lock()):
             watch = await run_file_io(lambda: self._watch(watch_id))
             source = await self._source(watch_id)
-            await self._recover(watch_id, source)
+            # A pause still reconciles accepted receipts, but holds any batch
+            # that has not yet reached EventMail until the owner resumes it.
+            await self._recover(watch_id, source, submit_pending=watch["enabled"])
             if not watch["enabled"]:
                 return {"status": "paused", "submitted": 0}
             spec = WatchSpec.model_validate(watch["spec"])

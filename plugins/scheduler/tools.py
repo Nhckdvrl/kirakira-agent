@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 from typing import Literal, Self, cast
@@ -24,13 +25,15 @@ class ScheduleInput(BaseModel):
         "notify：到点把 text 原文推送给用户，不调用模型；run：到点在当前会话里按 text 执行一轮任务，"
         "可以使用工具，最后一条回复作为通知推送"))
     trigger: Literal["at", "after", "every"]
-    when: str = Field(min_length=1, description="at: 14:30 或 ISO 时间；after: 5m；every: 1h 或 cron")
+    when: str = Field(min_length=1, description=(
+        "at: 14:30 或 ISO 时间；HH:MM 按本轮输入时间判断今天/明天，具体期限应填写完整日期；"
+        "after: 5m；every: 1h 或 cron。夏令时重叠或不存在的当地时间须先确认并用带偏移的 ISO 时间"))
     text: str = Field(min_length=1, description="notify 的推送原文，或 run 的任务指令")
     context: Literal["none", "session"] = Field(default="none", description=(
         "run 是否带上本会话的聊天历史；天气、新闻这类独立任务用 none，需要参考之前对话时用 session"))
     timezone: str = Field(default_factory=lambda: os.environ.get("TZ", ""))
     name: str | None = None
-    request_time: str | None = Field(default=None, description="无调用来源的程序接入可填 ISO 起算时间；聊天自动使用实际输入时间，不需要填写")
+    request_time: str | None = Field(default=None, description="无调用来源的程序接入可填 ISO 起算时间；聊天的 after 和 HH:MM 自动使用实际输入时间，不需要填写")
 
 
 # 调用所在会话及其投递渠道：(session_id, channel, address)。
@@ -106,16 +109,21 @@ class ScheduleTool:
             request = ScheduleInput.model_validate(dict(arguments))
             _ = ZoneInfo(request.timezone)
             request_time = request.request_time
-            if request.trigger == "after" and source is not None:
+            relative = request.trigger == "after" or (
+                request.trigger == "at" and re.fullmatch(r"\d{1,2}:\d{2}", request.when.strip())
+            )
+            if relative and source is not None:
                 caller = next((row for row in source.messages
                                if row.message_id == source.call_ref.message_id), None)
                 inputs = [row for row in source.messages if caller is not None
                           and row.session_id == caller.session_id and row.source == caller.source
                           and row.seq < caller.seq and isinstance(row.body, Input)]
-                # Relative time belongs to the immutable input, not a model's clock
-                # conversion or the later moment at which inference finishes.
+                # Relative dates belong to the immutable input, even if inference
+                # crosses midnight or the requested HH:MM before this call.
                 latest = max(inputs, key=lambda row: row.seq, default=None)
-                request_time = latest.recorded_at.isoformat() if latest else None
+                if latest is None:
+                    return "无法核对本次调用的原始输入时间，请重新确认提醒时间"
+                request_time = latest.recorded_at.isoformat()
             fire_at = compute_fire_at(request.trigger, request.when, request.timezone,
                                       request_time, self._now)
             interval, cron = None, None

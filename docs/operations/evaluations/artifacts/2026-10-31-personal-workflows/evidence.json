@@ -3343,5 +3343,1366 @@
       "blocker": "configuration HTTP 429"
     },
     "scope": "Protocol/native regression and posthoc committed-tool evidence do not replace an end-to-end workflow pass. No claim of memory superiority, user notification precision or latency improvement."
+  },
+  "followup_2026_11_01": {
+    "date": "2026-11-01",
+    "recorded_at": "2026-11-01T05:32:21.992716+00:00",
+    "status": "frozen_ready_for_dated_evidence_append",
+    "service_stopped": true,
+    "service_state_at_review": {
+      "active_state": "inactive",
+      "sub_state": "dead"
+    },
+    "not_deployed": true,
+    "final_version_validation_pending": false,
+    "scope": "Final frozen-source local acceptance: background 6, controlled core 13 and mail engineering 8, plus regression and package checks. Supplementary cache observations do not establish acceptable production latency. Service remains stopped and this build is not deployed.",
+    "history_handling": "Append this dated follow-up only; retain earlier failures and original historical fields.",
+    "provider_availability_probe": {
+      "accepted": true,
+      "attempts": 1,
+      "elapsed_seconds": 10.229,
+      "service_stopped": true,
+      "prompt_tokens": 14,
+      "completion_tokens": 80,
+      "total_tokens": 94,
+      "scope": "One minimal subscription-provider availability request. This is not an Agent workflow, task success rate, latency benchmark or capacity guarantee."
+    },
+    "background_workflow_intermediate": {
+      "source_artifact": "background-first.json",
+      "source_sha256": "e7b26ad32de2ddbd14c9814ea6f6f717e2261a31dac240304e5f5cc38f8fd592",
+      "planned_cases": 6,
+      "passed_cases": 6,
+      "failed_cases": 0,
+      "not_run_cases": 0,
+      "setup_passed": true,
+      "restart_completed": true,
+      "shutdown_completed": true,
+      "fixture_cleanup_completed": true,
+      "fixture_gate_timeouts": 0,
+      "source_requests": 2,
+      "source_responses": 2,
+      "source_gate_wait_ms": 1972.576,
+      "source_not_refetched_after_restart": true,
+      "one_confirmed_completion_notice": true,
+      "expected_deadline": "2026-11-08T18:00:00+09:00",
+      "measured_parent_turns": [
+        {
+          "case": "background-admission",
+          "ack_ms": 3.821481019258499,
+          "first_visible_ms": 3354.7956869006157,
+          "total_ms": 14049.897029995918
+        },
+        {
+          "case": "ordinary-chat-during-research",
+          "ack_ms": 4.417039453983307,
+          "first_visible_ms": 1921.706460416317,
+          "total_ms": 1959.8920308053493
+        },
+        {
+          "case": "query-completed-result",
+          "ack_ms": 4.762731492519379,
+          "first_visible_ms": 6752.054009586573,
+          "total_ms": 10456.711564213037
+        },
+        {
+          "case": "result-after-restart",
+          "ack_ms": 3.513868898153305,
+          "first_visible_ms": 4302.406806498766,
+          "total_ms": 7204.707257449627
+        }
+      ],
+      "measured_parent_model_calls": 8,
+      "measured_parent_model_call_states": {
+        "success": 8
+      },
+      "measured_parent_model_duration_ms": 33309.072,
+      "measured_parent_input_tokens": 89322,
+      "measured_parent_output_tokens": 1565,
+      "implementation_files": 91,
+      "implementation_snapshot_sha256": "e8cce4da9b34ace42c32fd3a461551111b595b133c5c476ef368cae61f60e151",
+      "implementation_mismatches_at_original_review": 0,
+      "version_scope": "Intermediate version passed; the final completion-handoff race repair has not been revalidated by this run.",
+      "quality_scope": "Six planned scenarios in one controlled natural-language workflow; actual loopback source and local committed notification. No Telegram or public benchmark claim.",
+      "model_call_coverage": "The eight successful model calls and token totals cover four parent turns only; child research, completion callback and provider setup are excluded.",
+      "latency_scope": "SDK ack_ms confirms original Input admission. It does not measure completed background-task registration. Four single parent turns are not a population latency estimate."
+    },
+    "reminder_mechanisms": {
+      "passed": true,
+      "planned_cases": 8,
+      "observed_cases": 8,
+      "external_chat_calls": 0,
+      "scope": "Eight deterministic counterexamples before and after the schedule calculation repair. These are mechanism checks, not model task scores.",
+      "baseline_commit": "59b139815e8439659339ae2021e00c947151bd10",
+      "before_source_sha256": "017e883ac0eb01d69fd83906244d6669170496bf17ab912cc6fe432f7c30d5a4",
+      "after_source_sha256": "a2f9d60c91200edf584d0ef3c1e3fbcd0b4ff217be3616421f46d8600df4cbe2",
+      "cases": [
+        {
+          "kind": "inference_crosses_clock",
+          "before_drift_seconds": 86400.0,
+          "after_drift_seconds": 0.0
+        },
+        {
+          "kind": "inference_crosses_clock",
+          "before_drift_seconds": 86400.0,
+          "after_drift_seconds": 0.0
+        },
+        {
+          "kind": "dst_elapsed_duration",
+          "trigger": "after",
+          "expected_seconds": 7200,
+          "before_elapsed_seconds": 10800.0,
+          "after_elapsed_seconds": 7200.0
+        },
+        {
+          "kind": "dst_elapsed_duration",
+          "trigger": "every",
+          "expected_seconds": 7200,
+          "before_elapsed_seconds": 10800.0,
+          "after_elapsed_seconds": 7200.0
+        },
+        {
+          "kind": "dst_elapsed_duration",
+          "trigger": "after",
+          "expected_seconds": 7200,
+          "before_elapsed_seconds": 3600.0,
+          "after_elapsed_seconds": 7200.0
+        },
+        {
+          "kind": "dst_elapsed_duration",
+          "trigger": "every",
+          "expected_seconds": 7200,
+          "before_elapsed_seconds": 3600.0,
+          "after_elapsed_seconds": 7200.0
+        },
+        {
+          "kind": "non_unique_wall_time",
+          "before_silently_accepted": true,
+          "after_requires_confirmation": true
+        },
+        {
+          "kind": "non_unique_wall_time",
+          "before_silently_accepted": true,
+          "after_requires_confirmation": true
+        }
+      ]
+    },
+    "regression_intermediate": {
+      "passed": 175,
+      "failed": 0,
+      "duration_seconds": 57.42,
+      "scope": "One intermediate pytest regression run. The log does not contain an implementation snapshot, so these results are not assigned to the later final handoff-race repair.",
+      "implementation_snapshot_recorded_in_log": false
+    },
+    "no_api_evaluation_checks": {
+      "protocol": {
+        "passed": true,
+        "planned_cases": 9,
+        "observed_cases": 9,
+        "external_chat_calls": 0,
+        "fixture_cleanup_completed": true,
+        "scope": "Actual loopback TLS collector and serialized cursor checks; not a full Runtime restart or notification-quality result."
+      },
+      "observers": {
+        "passed": true,
+        "checks": 32,
+        "external_chat_calls": 0,
+        "scope": "AST-isolated date, privacy and original-result observer assertions with native Message and ToolResult values; not a real-model workflow."
+      },
+      "lifecycle": {
+        "passed": true,
+        "checks": 4,
+        "external_chat_calls": 0,
+        "cleanup_response_count": 1,
+        "scope": "Actual loopback TLS credential matching and pending-fetch cleanup, plus gated HTTP cleanup. Releasing the gate during exit may finish one response before draining; no zero-response-on-exit claim."
+      }
+    },
+    "artifacts": [
+      {
+        "artifact": "background-first.json",
+        "sha256": "e7b26ad32de2ddbd14c9814ea6f6f717e2261a31dac240304e5f5cc38f8fd592",
+        "bytes": 17743
+      },
+      {
+        "artifact": "background-first-reviewed.json",
+        "sha256": "22a66d2d8d569014723fe9378f0633efbfe2fe9a967d6347844a0556cf7d85a9",
+        "bytes": 2127
+      },
+      {
+        "artifact": "provider-probe.json",
+        "sha256": "1cb86b49b7e78b1ca5b8d9fcac962c7e71e2b08848514ca9ea71bcc7500a31ac",
+        "bytes": 671
+      },
+      {
+        "artifact": "reminder-mechanisms.json",
+        "sha256": "499b1ac3fd717af3de2f6f40271947bf9b0d337b94d57e21a12343a3b98c5de4",
+        "bytes": 1669
+      },
+      {
+        "artifact": "regression.log",
+        "sha256": "199e09743704a20db492faf33cc0a00c42470c7d0e5212ed7ad97c30dab13952",
+        "bytes": 261
+      },
+      {
+        "artifact": "workflow-polish-20261101/protocol.json",
+        "sha256": "8bf62e574c200f691e4dec84f178cfddb2e2f528817af4df569556c4ea71de43",
+        "bytes": 18229
+      },
+      {
+        "artifact": "workflow-polish-20261101/observers.json",
+        "sha256": "c57fae85eca72feb1900492dbc27e5d938d21b5d5fb2a9c9650ca0d0bc08cb4c",
+        "bytes": 177
+      },
+      {
+        "artifact": "workflow-polish-20261101/lifecycle.json",
+        "sha256": "8759210ede23a008abcb106850db25a9055c9f5664a8238df0b6565977e96afc",
+        "bytes": 293
+      },
+      {
+        "artifact": "background-final.json",
+        "sha256": "e6a8f7a981bf8e1999efc1b2bf265ac1fc7b0b7498109c23f8c25e43f71de893",
+        "bytes": 17758
+      },
+      {
+        "artifact": "background-final-reviewed.json",
+        "sha256": "d52ca0c9e133ebe6b3f92e0771c6afdf4d50e28b709ac0dfa11bea6b035558a4",
+        "bytes": 3886
+      },
+      {
+        "artifact": "regression-final.log",
+        "sha256": "7181ecabeb3a66d2c2a0d45797d308fc7054fcee55d3b1efc42d86c11ad5f4f2",
+        "bytes": 261
+      },
+      {
+        "artifact": "package-verified.json",
+        "sha256": "a75377097cb03f76771b945662c99d7859c2e058e4a1ee81439802a9c3245bde",
+        "bytes": 1769
+      },
+      {
+        "artifact": "background-cache-diagnostic.json",
+        "sha256": "606c6066177713c0d10f92f90176011a3a1a9f97faa818253e3bb550012527dc",
+        "bytes": 30390
+      },
+      {
+        "artifact": "core-final.json",
+        "sha256": "1f732a077267cd25a6abde2f710100442138125e2085e588bad0f0fa9bb36dbf",
+        "bytes": 14895
+      },
+      {
+        "artifact": "core-final.log",
+        "sha256": "8f15321507f4613d9177ee66d49658245b587435004e32ac831a20359ed554d9",
+        "bytes": 953
+      },
+      {
+        "artifact": "core-final-reviewed.json",
+        "sha256": "b11cc70e44ab71e0511873cdc3c952fd0a0be0b381c2714f0ad5a02a9c19698a",
+        "bytes": 4459
+      },
+      {
+        "artifact": "mail-final.json",
+        "sha256": "3e86f161eeef2faece0282abc0e3e4052d4864a25a2f2b659288f67416698308",
+        "bytes": 138451
+      },
+      {
+        "artifact": "mail-final-reviewed.json",
+        "sha256": "ff4b4aa30c57c61847f3c21ae5cafbea429055940acbb7148a11c9963e304224",
+        "bytes": 4808
+      },
+      {
+        "artifact": "native-cache-probe-attempts.json",
+        "sha256": "6f61e13e951f2e4526e0ddb16a77f68ce1a63855730e39e35eaec0448f5af4d1",
+        "bytes": 188
+      },
+      {
+        "artifact": "native-cache-probe.json",
+        "sha256": "40de93cf612fb042174411da3ff67c80734d135429549154cec26bbc179353fc",
+        "bytes": 21007
+      },
+      {
+        "artifact": "native-cache-timed.json",
+        "sha256": "2037d806c8e2dc13b0657212e11bf2f6e006c07ab5f77abb80d73e1997e57f01",
+        "bytes": 18366
+      },
+      {
+        "artifact": "native-cache-timing-events.json",
+        "sha256": "61f440f15adc17651c18ff967fa714f14c286c7cf6f5bbff719e56bf01d99711",
+        "bytes": 18213
+      },
+      {
+        "artifact": "native-cache-timing-segments.json",
+        "sha256": "c9ebaf81ccbde9df135e685c8abfd4901136cc2d5db0a80a5eb0d5ab7bbc0b99",
+        "bytes": 585
+      },
+      {
+        "artifact": "native-cache-answer-checks.json",
+        "sha256": "b92e377b2cb7c53a64178bc1b440ab5dbc579cf9702fdce463eeda1c288ead37",
+        "bytes": 1247
+      },
+      {
+        "artifact": "workspace-cleanup.json",
+        "sha256": "a7952a508db83230c936735b58a9a352c34d2611b0bc153e1fee8747f980cdc0",
+        "bytes": 747
+      }
+    ],
+    "updated_at": "2026-11-01T06:01:59.533519+00:00",
+    "pending_workflows": [],
+    "background_workflow_final": {
+      "source_artifact": "background-final.json",
+      "source_sha256": "e6a8f7a981bf8e1999efc1b2bf265ac1fc7b0b7498109c23f8c25e43f71de893",
+      "version_scope": "Final frozen source background workflow; complete mail acceptance is not included in this report.",
+      "scope": "One controlled natural-language background workflow, real loopback source and local committed delivery; not Telegram or a public task benchmark.",
+      "planned_cases": 6,
+      "passed_cases": 6,
+      "failed_cases": 0,
+      "not_run_cases": 0,
+      "setup_passed": true,
+      "restart_completed": true,
+      "shutdown_completed": true,
+      "fixture_cleanup_completed": true,
+      "fixture_gate_timeouts": 0,
+      "source_requests": 1,
+      "source_responses": 1,
+      "source_gate_wait_ms": 22699.48,
+      "source_not_refetched_after_restart": true,
+      "one_confirmed_completion_notice": true,
+      "original_result_preserved": true,
+      "ordinary_chat_while_research_pending": true,
+      "source_result_fact_coverage": {
+        "source_nonce": true,
+        "deadline_date": true,
+        "deadline_time": true,
+        "deadline_timezone": true,
+        "required_material": true
+      },
+      "notice_fact_coverage": {
+        "source_nonce": true,
+        "deadline_date": true,
+        "deadline_time": true,
+        "deadline_timezone": true,
+        "required_material": true
+      },
+      "expected_deadline": "2026-11-08T18:00:00+09:00",
+      "measured_parent_turns": [
+        {
+          "case": "background-admission",
+          "ack_ms": 3.9544589817523956,
+          "first_visible_ms": 43847.54728153348,
+          "total_ms": 45022.316079586744,
+          "model_calls": 3,
+          "model_duration_sum_ms": 44870.833,
+          "model_first_token_ms": [
+            11939.024764,
+            11385.599693,
+            6950.78335
+          ]
+        },
+        {
+          "case": "ordinary-chat-during-research",
+          "ack_ms": 4.370633512735367,
+          "first_visible_ms": 16859.267629683018,
+          "total_ms": 16896.68459817767,
+          "model_calls": 1,
+          "model_duration_sum_ms": 16842.533,
+          "model_first_token_ms": [
+            16814.164034
+          ]
+        },
+        {
+          "case": "query-completed-result",
+          "ack_ms": 4.67410683631897,
+          "first_visible_ms": 18681.799460202456,
+          "total_ms": 21779.477301985025,
+          "model_calls": 2,
+          "model_duration_sum_ms": 21689.193,
+          "model_first_token_ms": [
+            3446.008195,
+            11529.253747
+          ]
+        },
+        {
+          "case": "result-after-restart",
+          "ack_ms": 3.2728388905525208,
+          "first_visible_ms": 16322.60163128376,
+          "total_ms": 19843.0153504014,
+          "model_calls": 2,
+          "model_duration_sum_ms": 19759.511,
+          "model_first_token_ms": [
+            5361.445729,
+            8322.928165
+          ]
+        }
+      ],
+      "measured_parent_model_calls": 8,
+      "measured_parent_model_call_states": {
+        "success": 8
+      },
+      "measured_parent_model_duration_ms": 103162.07,
+      "measured_parent_input_tokens": 93658,
+      "measured_parent_output_tokens": 2143,
+      "model_coverage": "Eight successful calls and token totals cover four parent turns only; child research, completion callback and provider setup are excluded. Eight is not the workflow total.",
+      "latency_scope": "Single observed turns. SDK ack_ms means original Input admission, not durable background-task registration. Completion callback and child total latency are not measured here.",
+      "latency_result": "Functional acceptance passed, but this run does not demonstrate acceptable latency: ordinary conversation took 16.897 seconds and background handoff confirmation 45.022 seconds. Do not substitute the faster intermediate run or infer a performance gain.",
+      "latency_attribution_scope": "Most measured parent-turn time appears inside model-call durations in this run; this does not identify all production, network or hardware causes.",
+      "implementation_files": 91,
+      "implementation_snapshot_sha256": "42e2fae1ad0642ce524569436e0eaa3cd7defeba0a6b9d8fbde0c3b04979bdb7",
+      "implementation_mismatches_at_review": []
+    },
+    "regression_final": {
+      "passed": 177,
+      "failed": 0,
+      "duration_seconds": 57.7,
+      "scope": "Final full pytest run reported for the frozen implementation. The log itself has no embedded implementation snapshot.",
+      "implementation_snapshot_recorded_in_log": false
+    },
+    "package_final": {
+      "all_match": true,
+      "critical_files_matched": 14,
+      "same_project_environment": true,
+      "sdist_upstream_matches": true,
+      "tests_excluded": true,
+      "wheel_sha256": "7210e4f3727ba714f4c35ba00289be2ddc84133bc84713c7fb509d74514c1b3a",
+      "sdist_sha256": "a5eefa27fd2b068d11728df9307b99c082299ad51cd6bc0dc3075cc5b3693689",
+      "source_snapshot_sha256": "d17966032f75568929505d2e3d4c95f278ad1f01155c10e1bda671a04c7cc544",
+      "source_files": 14,
+      "current_source_mismatches": 0,
+      "scope": "Fourteen selected runtime/evaluation files match the built wheel; sdist upstream metadata matches. This is package content verification, not a functional model score."
+    },
+    "background_cache_diagnostic": {
+      "artifact": "background-cache-diagnostic.json",
+      "source_sha256": "606c6066177713c0d10f92f90176011a3a1a9f97faa818253e3bb550012527dc",
+      "external_chat_calls_added": 0,
+      "configurations_equal": true,
+      "turns": [
+        {
+          "version": "intermediate",
+          "source_artifact": "background-first.json",
+          "turn_ack_ms": 4.417039453983307,
+          "turn_first_visible_ms": 1921.706460416317,
+          "turn_total_ms": 1959.8920308053493,
+          "measured_model_calls": 1,
+          "model_call_state": "success",
+          "model_duration_ms": 1909.012303,
+          "model_first_delta_ms": 1878.730661,
+          "model_after_first_delta_ms": 30.281642,
+          "turn_minus_recorded_model_duration_ms": 50.879728,
+          "input_tokens": 9867,
+          "provider_reported_cached_input_tokens": 7936,
+          "reported_cached_input_ratio": 0.804297,
+          "input_minus_reported_cached_tokens": 1931,
+          "output_tokens": 3,
+          "provider_reported_reasoning_output_tokens": 0,
+          "cache_write_input_tokens": null,
+          "input_output_usage_coverage": "exact",
+          "covered_request_count": 1,
+          "queue_timing_recorded": false
+        },
+        {
+          "version": "final",
+          "source_artifact": "background-final.json",
+          "turn_ack_ms": 4.370633512735367,
+          "turn_first_visible_ms": 16859.267629683018,
+          "turn_total_ms": 16896.68459817767,
+          "measured_model_calls": 1,
+          "model_call_state": "success",
+          "model_duration_ms": 16842.532724,
+          "model_first_delta_ms": 16814.164034,
+          "model_after_first_delta_ms": 28.36869,
+          "turn_minus_recorded_model_duration_ms": 54.151874,
+          "input_tokens": 10431,
+          "provider_reported_cached_input_tokens": 0,
+          "reported_cached_input_ratio": 0.0,
+          "input_minus_reported_cached_tokens": 10431,
+          "output_tokens": 3,
+          "provider_reported_reasoning_output_tokens": 0,
+          "cache_write_input_tokens": null,
+          "input_output_usage_coverage": "exact",
+          "covered_request_count": 1,
+          "queue_timing_recorded": false
+        }
+      ],
+      "timing_scope": "Model duration includes the whole local driver attempt and HTTP/stream processing, not remote generation alone; no queue/prefill/network split.",
+      "cache_observation": "Reported cached/input tokens are 7936/9867 in the intermediate sample and 0/10431 in the final sample. Both have output3 and reported reasoning0.",
+      "causal_cache_speedup_proven": false,
+      "prefix_difference_localized": false,
+      "limits": "Different implementations and requests, one sample each. No payload-prefix fingerprint or phase-level queue/network/prefill timings. Do not blame only the provider or claim cache optimization.",
+      "parent_call_series": [
+        {
+          "version": "intermediate",
+          "case": "background-admission",
+          "ordinal_in_case": 1,
+          "parent_sequence_ordinal": 1,
+          "role": "agent",
+          "state": "success",
+          "input_tokens": 8375,
+          "provider_reported_cached_input_tokens": 0,
+          "output_tokens": 183,
+          "provider_reported_reasoning_output_tokens": 0,
+          "cache_write_input_tokens": null,
+          "first_delta_ms": 1379.893098,
+          "duration_ms": 3642.636512,
+          "reported_cached_input_ratio": 0.0
+        },
+        {
+          "version": "intermediate",
+          "case": "background-admission",
+          "ordinal_in_case": 2,
+          "parent_sequence_ordinal": 2,
+          "role": "agent",
+          "state": "success",
+          "input_tokens": 9251,
+          "provider_reported_cached_input_tokens": 8192,
+          "output_tokens": 368,
+          "provider_reported_reasoning_output_tokens": 0,
+          "cache_write_input_tokens": null,
+          "first_delta_ms": null,
+          "duration_ms": 6974.062631,
+          "reported_cached_input_ratio": 0.885526
+        },
+        {
+          "version": "intermediate",
+          "case": "background-admission",
+          "ordinal_in_case": 3,
+          "parent_sequence_ordinal": 3,
+          "role": "agent",
+          "state": "success",
+          "input_tokens": 9681,
+          "provider_reported_cached_input_tokens": 8960,
+          "output_tokens": 106,
+          "provider_reported_reasoning_output_tokens": 0,
+          "cache_write_input_tokens": null,
+          "first_delta_ms": 1650.375573,
+          "duration_ms": 3294.403052,
+          "reported_cached_input_ratio": 0.925524
+        },
+        {
+          "version": "intermediate",
+          "case": "ordinary-chat-during-research",
+          "ordinal_in_case": 1,
+          "parent_sequence_ordinal": 4,
+          "role": "agent",
+          "state": "success",
+          "input_tokens": 9867,
+          "provider_reported_cached_input_tokens": 7936,
+          "output_tokens": 3,
+          "provider_reported_reasoning_output_tokens": 0,
+          "cache_write_input_tokens": null,
+          "first_delta_ms": 1878.730661,
+          "duration_ms": 1909.012303,
+          "reported_cached_input_ratio": 0.804297
+        },
+        {
+          "version": "intermediate",
+          "case": "query-completed-result",
+          "ordinal_in_case": 1,
+          "parent_sequence_ordinal": 5,
+          "role": "agent",
+          "state": "success",
+          "input_tokens": 11163,
+          "provider_reported_cached_input_tokens": 9472,
+          "output_tokens": 193,
+          "provider_reported_reasoning_output_tokens": 0,
+          "cache_write_input_tokens": null,
+          "first_delta_ms": 2520.687458,
+          "duration_ms": 4435.832992,
+          "reported_cached_input_ratio": 0.848517
+        },
+        {
+          "version": "intermediate",
+          "case": "query-completed-result",
+          "ordinal_in_case": 2,
+          "parent_sequence_ordinal": 6,
+          "role": "agent",
+          "state": "success",
+          "input_tokens": 12963,
+          "provider_reported_cached_input_tokens": 11008,
+          "output_tokens": 327,
+          "provider_reported_reasoning_output_tokens": 0,
+          "cache_write_input_tokens": null,
+          "first_delta_ms": 2238.125541,
+          "duration_ms": 5932.639696,
+          "reported_cached_input_ratio": 0.849186
+        },
+        {
+          "version": "intermediate",
+          "case": "result-after-restart",
+          "ordinal_in_case": 1,
+          "parent_sequence_ordinal": 7,
+          "role": "agent",
+          "state": "success",
+          "input_tokens": 13378,
+          "provider_reported_cached_input_tokens": 10752,
+          "output_tokens": 127,
+          "provider_reported_reasoning_output_tokens": 0,
+          "cache_write_input_tokens": null,
+          "first_delta_ms": 1354.860603,
+          "duration_ms": 2675.073893,
+          "reported_cached_input_ratio": 0.803708
+        },
+        {
+          "version": "intermediate",
+          "case": "result-after-restart",
+          "ordinal_in_case": 2,
+          "parent_sequence_ordinal": 8,
+          "role": "agent",
+          "state": "success",
+          "input_tokens": 14644,
+          "provider_reported_cached_input_tokens": 13312,
+          "output_tokens": 258,
+          "provider_reported_reasoning_output_tokens": 0,
+          "cache_write_input_tokens": null,
+          "first_delta_ms": 1552.211708,
+          "duration_ms": 4445.411287,
+          "reported_cached_input_ratio": 0.909041
+        },
+        {
+          "version": "final",
+          "case": "background-admission",
+          "ordinal_in_case": 1,
+          "parent_sequence_ordinal": 1,
+          "role": "agent",
+          "state": "success",
+          "input_tokens": 8565,
+          "provider_reported_cached_input_tokens": 0,
+          "output_tokens": 572,
+          "provider_reported_reasoning_output_tokens": 0,
+          "cache_write_input_tokens": null,
+          "first_delta_ms": 11939.024764,
+          "duration_ms": 19606.652995,
+          "reported_cached_input_ratio": 0.0
+        },
+        {
+          "version": "final",
+          "case": "background-admission",
+          "ordinal_in_case": 2,
+          "parent_sequence_ordinal": 2,
+          "role": "agent",
+          "state": "success",
+          "input_tokens": 9830,
+          "provider_reported_cached_input_tokens": 8448,
+          "output_tokens": 354,
+          "provider_reported_reasoning_output_tokens": 0,
+          "cache_write_input_tokens": null,
+          "first_delta_ms": 11385.599693,
+          "duration_ms": 16564.145228,
+          "reported_cached_input_ratio": 0.85941
+        },
+        {
+          "version": "final",
+          "case": "background-admission",
+          "ordinal_in_case": 3,
+          "parent_sequence_ordinal": 3,
+          "role": "agent",
+          "state": "success",
+          "input_tokens": 10236,
+          "provider_reported_cached_input_tokens": 9728,
+          "output_tokens": 115,
+          "provider_reported_reasoning_output_tokens": 0,
+          "cache_write_input_tokens": null,
+          "first_delta_ms": 6950.78335,
+          "duration_ms": 8700.035211,
+          "reported_cached_input_ratio": 0.950371
+        },
+        {
+          "version": "final",
+          "case": "ordinary-chat-during-research",
+          "ordinal_in_case": 1,
+          "parent_sequence_ordinal": 4,
+          "role": "agent",
+          "state": "success",
+          "input_tokens": 10431,
+          "provider_reported_cached_input_tokens": 0,
+          "output_tokens": 3,
+          "provider_reported_reasoning_output_tokens": 0,
+          "cache_write_input_tokens": null,
+          "first_delta_ms": 16814.164034,
+          "duration_ms": 16842.532724,
+          "reported_cached_input_ratio": 0.0
+        },
+        {
+          "version": "final",
+          "case": "query-completed-result",
+          "ordinal_in_case": 1,
+          "parent_sequence_ordinal": 5,
+          "role": "agent",
+          "state": "success",
+          "input_tokens": 11963,
+          "provider_reported_cached_input_tokens": 9984,
+          "output_tokens": 204,
+          "provider_reported_reasoning_output_tokens": 0,
+          "cache_write_input_tokens": null,
+          "first_delta_ms": 3446.008195,
+          "duration_ms": 5562.227721,
+          "reported_cached_input_ratio": 0.834573
+        },
+        {
+          "version": "final",
+          "case": "query-completed-result",
+          "ordinal_in_case": 2,
+          "parent_sequence_ordinal": 6,
+          "role": "agent",
+          "state": "success",
+          "input_tokens": 13531,
+          "provider_reported_cached_input_tokens": 11776,
+          "output_tokens": 369,
+          "provider_reported_reasoning_output_tokens": 0,
+          "cache_write_input_tokens": null,
+          "first_delta_ms": 11529.253747,
+          "duration_ms": 16126.964865,
+          "reported_cached_input_ratio": 0.870298
+        },
+        {
+          "version": "final",
+          "case": "result-after-restart",
+          "ordinal_in_case": 1,
+          "parent_sequence_ordinal": 7,
+          "role": "agent",
+          "state": "success",
+          "input_tokens": 13990,
+          "provider_reported_cached_input_tokens": 11520,
+          "output_tokens": 211,
+          "provider_reported_reasoning_output_tokens": 0,
+          "cache_write_input_tokens": null,
+          "first_delta_ms": 5361.445729,
+          "duration_ms": 7925.500313,
+          "reported_cached_input_ratio": 0.823445
+        },
+        {
+          "version": "final",
+          "case": "result-after-restart",
+          "ordinal_in_case": 2,
+          "parent_sequence_ordinal": 8,
+          "role": "agent",
+          "state": "success",
+          "input_tokens": 15112,
+          "provider_reported_cached_input_tokens": 13824,
+          "output_tokens": 315,
+          "provider_reported_reasoning_output_tokens": 0,
+          "cache_write_input_tokens": null,
+          "first_delta_ms": 8322.928165,
+          "duration_ms": 11834.011127,
+          "reported_cached_input_ratio": 0.91477
+        }
+      ],
+      "measured_parent_aggregates": [
+        {
+          "version": "intermediate",
+          "measured_parent_calls": 8,
+          "positive_cache_count_calls": 7,
+          "zero_cache_count_calls": 1,
+          "cached_input_token_sequence": [
+            0,
+            8192,
+            8960,
+            7936,
+            9472,
+            11008,
+            10752,
+            13312
+          ],
+          "total_measured_parent_input_tokens": 89322,
+          "total_reported_parent_cached_input_tokens": 69632,
+          "weighted_cached_input_fraction": 0.779562
+        },
+        {
+          "version": "final",
+          "measured_parent_calls": 8,
+          "positive_cache_count_calls": 6,
+          "zero_cache_count_calls": 2,
+          "cached_input_token_sequence": [
+            0,
+            8448,
+            9728,
+            0,
+            9984,
+            11776,
+            11520,
+            13824
+          ],
+          "total_measured_parent_input_tokens": 93658,
+          "total_reported_parent_cached_input_tokens": 65280,
+          "weighted_cached_input_fraction": 0.697004
+        }
+      ],
+      "role_association_unique_matches": 16,
+      "roles": [
+        "agent"
+      ],
+      "final_run_was_not_all_cache_zero": true,
+      "final_ordinary_cache_relation": "Provider-reported zero cached tokens and long first delta occur in the same ordinary-chat call. This is an association, not a controlled KV-cache causal result or an optimization gain.",
+      "cache_progression_findings": [
+        "Final background admission reports cached counts 0, 8448 and 9728 across its three parent calls.",
+        "The following ordinary conversation call reports zero, while both later result-query calls and both restart-query calls report positive cached counts. Zero is not a property of the whole final run.",
+        "The final result-query second call reports 11776 cached tokens out of 13531 inputs, yet its first delta takes 11529.254 milliseconds. A positive cache count alone does not guarantee low latency.",
+        "The intermediate admission second call has no recorded first-delta timestamp; null must not be treated as zero or replaced with its full duration.",
+        "The final ordinary-chat zero-cache report and long first-delta delay are associated observations, not an identical-request comparison or proof of a KV-cache optimization benefit."
+      ],
+      "native_same_environment_followup_ref": "native_same_environment_cache_followup"
+    },
+    "controlled_core_final": {
+      "source_artifact": "core-final.json",
+      "source_sha256": "1f732a077267cd25a6abde2f710100442138125e2085e588bad0f0fa9bb36dbf",
+      "source_log_artifact": "core-final.log",
+      "source_log_sha256": "8f15321507f4613d9177ee66d49658245b587435004e32ac831a20359ed554d9",
+      "version_scope": "Final frozen implementation, controlled core acceptance.",
+      "scope": "Thirteen predefined controlled native Runtime scenarios with explicit fixture instructions. This is neither the separate natural-language personal-assistant workflow nor a public task-success benchmark.",
+      "planned_cases": 13,
+      "observed_cases": 13,
+      "passed_cases": 13,
+      "failed_cases": 0,
+      "not_run_cases": 0,
+      "cases": [
+        {
+          "case": "native_reply",
+          "passed": true,
+          "duration_seconds": 5.707,
+          "observed_scalar_facts": {}
+        },
+        {
+          "case": "bound_file_roundtrip",
+          "passed": true,
+          "duration_seconds": 15.393,
+          "observed_scalar_facts": {
+            "facts": 6
+          }
+        },
+        {
+          "case": "managed_process_mcp",
+          "passed": true,
+          "duration_seconds": 4.066,
+          "observed_scalar_facts": {
+            "results": 1
+          }
+        },
+        {
+          "case": "native_shell",
+          "passed": true,
+          "duration_seconds": 6.251,
+          "observed_scalar_facts": {}
+        },
+        {
+          "case": "tool_error_repair",
+          "passed": true,
+          "duration_seconds": 7.806,
+          "observed_scalar_facts": {}
+        },
+        {
+          "case": "native_subagent",
+          "passed": true,
+          "duration_seconds": 8.714,
+          "observed_scalar_facts": {
+            "child_session_count": 1
+          }
+        },
+        {
+          "case": "driver_local_reload",
+          "passed": true,
+          "duration_seconds": 3.424,
+          "observed_scalar_facts": {
+            "same_root": true
+          }
+        },
+        {
+          "case": "task_bound_steer_withdraw",
+          "passed": true,
+          "duration_seconds": 13.321,
+          "observed_scalar_facts": {
+            "accepted_inputs": 2
+          }
+        },
+        {
+          "case": "source_pause_resume_no_effect_replay",
+          "passed": true,
+          "duration_seconds": 7.071,
+          "observed_scalar_facts": {
+            "tool_results": 1,
+            "write_effects": 1
+          }
+        },
+        {
+          "case": "new_input_revokes_old_source_task",
+          "passed": true,
+          "duration_seconds": 9.027,
+          "observed_scalar_facts": {
+            "effect_results": 1
+          }
+        },
+        {
+          "case": "immutable_attachment_projection",
+          "passed": true,
+          "duration_seconds": 4.546,
+          "observed_scalar_facts": {}
+        },
+        {
+          "case": "scheduler_native_source_delivery",
+          "passed": true,
+          "duration_seconds": 14.632,
+          "observed_scalar_facts": {
+            "created_jobs": 1,
+            "delivered_fires": 1
+          }
+        },
+        {
+          "case": "restart_reuses_native_history",
+          "passed": true,
+          "duration_seconds": 5.225,
+          "observed_scalar_facts": {}
+        }
+      ],
+      "recorded_business_model_calls": 29,
+      "model_states": {
+        "success": 29
+      },
+      "input_tokens": 253006,
+      "output_tokens": 2608,
+      "call_coverage": "Native Models business-call ledger for this isolated suite. Connection/model setup probes are additional calls.",
+      "python_version": "3.14.6",
+      "model_setup_completed_before_cases": true,
+      "separate_setup_case_recorded": false,
+      "shutdown_scope": "Evaluation returned after its two Runtime contexts exited. The artifact has no separate shutdown or resource-cleanup flag.",
+      "implementation_files": 91,
+      "implementation_snapshot_sha256": "42e2fae1ad0642ce524569436e0eaa3cd7defeba0a6b9d8fbde0c3b04979bdb7",
+      "implementation_mismatches_at_review": [],
+      "same_implementation_as_background_final": true,
+      "timing_observation": {
+        "timing_requested_by_runner": true,
+        "json_log_records": 13,
+        "non_json_log_lines": 0,
+        "phase_counts": {
+          "model.driver.begin": 0,
+          "model.http.credential": 0,
+          "model.http.headers": 0,
+          "model.first_delta": 0,
+          "model.driver.end": 0
+        },
+        "uniquely_associated_phase_intervals": [],
+        "phase_breakdown_available": false,
+        "limitation": "The captured log contains thirteen case summaries and no runtime.timing events. No credential, HTTP-header, first-delta or driver interval may be inferred from a timing environment switch alone.",
+        "entrypoint_note": "The native eval entrypoint does not initialize diagnostic logging itself. The timing helper emits INFO events; the logging handler/level used by this run was not captured in the report."
+      }
+    },
+    "functional_validation_complete": true,
+    "latency_target_met": false,
+    "production_latency_verified": false,
+    "mail_workflow_final": {
+      "source_artifact": "mail-final.json",
+      "source_sha256": "3e86f161eeef2faece0282abc0e3e4052d4864a25a2f2b659288f67416698308",
+      "independent_review_artifact": "mail-final-reviewed.json",
+      "independent_review_sha256": "ff4b4aa30c57c61847f3c21ae5cafbea429055940acbb7148a11c9963e304224",
+      "scope": "Eight engineering acceptance cases for controlled local TLS mailboxes. Two independent content decisions and two deadline steps; not eight mail-quality judgments, a private email provider test or a public benchmark.",
+      "engineering_cases": {
+        "planned": 8,
+        "passed": 8,
+        "independent_mail_decisions": 2,
+        "deadline_steps": 2,
+        "not_eight_content_judgments": true
+      },
+      "cases": [
+        {
+          "case": "configure_real_provider",
+          "passed": true,
+          "duration_seconds": 6.068
+        },
+        {
+          "case": "prepare_notification_and_memory",
+          "passed": true,
+          "duration_seconds": 7.95
+        },
+        {
+          "case": "default_watch_does_not_read_old_mail",
+          "passed": true,
+          "duration_seconds": 36.87
+        },
+        {
+          "case": "existing_junk_action",
+          "passed": true,
+          "duration_seconds": 48.546
+        },
+        {
+          "case": "existing_inbox_advert",
+          "passed": true,
+          "duration_seconds": 46.632
+        },
+        {
+          "case": "important_mail_owner_confirmation_registers_exact_reminder",
+          "passed": true,
+          "duration_seconds": 12.784
+        },
+        {
+          "case": "native_restart_does_not_repeat_initial_review_or_notification",
+          "passed": true,
+          "duration_seconds": 0.054
+        },
+        {
+          "case": "restart_preserves_mail_deadline_reminder",
+          "passed": true,
+          "duration_seconds": 0.005
+        }
+      ],
+      "mail_decisions": [
+        {
+          "case": "existing_junk_action",
+          "decision": "share_content",
+          "accepted_turn_verified": true,
+          "phase_complete": true,
+          "domain_status": "settled",
+          "confirmed_deliveries": 1,
+          "duplicate_poll_submitted": 0
+        },
+        {
+          "case": "existing_inbox_advert",
+          "decision": "skip_content",
+          "accepted_turn_verified": true,
+          "phase_complete": true,
+          "domain_status": "released",
+          "confirmed_deliveries": 0,
+          "duplicate_poll_submitted": 0
+        }
+      ],
+      "natural_watch_registration": {
+        "count": 3,
+        "effects_passed": 3,
+        "final_ack_passed": 3,
+        "native_receipts": [
+          {
+            "effect_receipt_verified": true,
+            "same_original_input": true,
+            "successful_tool_result": true,
+            "final_ack_before_next_input": true
+          },
+          {
+            "effect_receipt_verified": true,
+            "same_original_input": true,
+            "successful_tool_result": true,
+            "final_ack_before_next_input": true
+          },
+          {
+            "effect_receipt_verified": true,
+            "same_original_input": true,
+            "successful_tool_result": true,
+            "final_ack_before_next_input": true
+          }
+        ]
+      },
+      "deadline_registration": {
+        "effect_passed": true,
+        "final_ack_passed": true,
+        "native_tool_receipt": {
+          "operation_matches_report": true,
+          "successful_tool_result": true,
+          "final_ack_before_next_input": true
+        },
+        "jobstore_exact_record_matches": true,
+        "operation_success": true,
+        "registered_jobs": 1,
+        "fires": 0,
+        "timezone": "Asia/Shanghai",
+        "deadline": "2026-11-04T18:00:00+08:00",
+        "reminder_local": "2026-11-03T18:00:00+08:00",
+        "reminder_utc": "2026-11-03T10:00:00+00:00",
+        "exactly_24_hours_before": true,
+        "automatic_jobs_before_confirmation": 0
+      },
+      "restart": {
+        "baseline_before_runtime_entry": true,
+        "includes_startup_recovery": true,
+        "watches": 3,
+        "new_submissions": 0,
+        "new_remote_model_calls": 0,
+        "new_fetches": 0,
+        "prior_delivery_receipts_unchanged": true,
+        "exact_job_and_operation_preserved": true
+      },
+      "fixture_cleanup": {
+        "direct_completed_flag_recorded": false,
+        "final_save_after_context_manager_exit": true,
+        "exit_closes_and_drains_connections_and_handlers": true,
+        "evaluation_process_running_at_review": false,
+        "fixture_port_listening_at_review": false,
+        "all_natural_watches_paused": true,
+        "qualification": "The initial-review report does not persist cleanup_completed; successful context exit and later process/listener checks are distinct evidence."
+      },
+      "protocol": {
+        "read_only": true,
+        "fetch_uses_peek": true
+      },
+      "native_evidence": {
+        "sessions_db_sha256": "aff5c97c6d3c3698e01f9d75a24836ef75f4d710e6c70c2873b89fbe9ef84a00",
+        "schedules_sha256": "1913d566e366c8ec535dc315e02ab6585231bae9a1df668c01476bd7c5afcce1"
+      },
+      "recorded_native_model_calls": {
+        "total": 28,
+        "success": 28
+      },
+      "future_reminder_firing_tested": false,
+      "independent_native_review": "The separate review checked successful ToolResults against their original Inputs and persisted JobStore operations, not only final model wording.",
+      "implementation_files": 91,
+      "implementation_snapshot_sha256": "42e2fae1ad0642ce524569436e0eaa3cd7defeba0a6b9d8fbde0c3b04979bdb7",
+      "implementation_mismatches_at_review": [],
+      "limits": [
+        "The future reminder is registered and survives restart; this run does not fire that future reminder.",
+        "The initial-review artifact has no persisted cleanup_completed flag. Successful context exit, stopped-process/listener checks and paused-watch checks are distinct evidence.",
+        "No actual Telegram notification or private mailbox access was tested by this fixture."
+      ]
+    },
+    "native_same_environment_cache_followup": {
+      "scope": "Five later native ordinary-request completions in the same configured synthetic workspace, using Trace without changing prompts or routing. These are supplementary observations, not an optimization intervention or before/after A/B.",
+      "source_scope": "Three untimed follow-up turns plus two later turns with an explicit INFO timing handler. Separate from the original background six cases and controlled core thirteen cases.",
+      "completed_turns": 5,
+      "observed_trace_calls": 5,
+      "shutdown_completed_in_both_runs": true,
+      "response_semantic_quality_scored": true,
+      "observations": [
+        {
+          "group": "three_followup_turns",
+          "observation_ordinal": 1,
+          "completed": true,
+          "input_ack_ms": 3.2864175736904144,
+          "first_visible_ms": 3709.1841213405132,
+          "turn_total_ms": 3747.9552291333675,
+          "trace_first_delta_ms": 3645.662,
+          "trace_duration_ms": 3675.996,
+          "input_tokens": 15503,
+          "provider_reported_cached_input_tokens": 0,
+          "output_tokens": 3,
+          "provider_reported_reasoning_output_tokens": 0,
+          "cache_write_input_tokens": null,
+          "common_complete_messages": 0,
+          "common_complete_message_chars": 0,
+          "common_message_prefix_chars": 0,
+          "explicit_prompt_cache_key_sent": false
+        },
+        {
+          "group": "three_followup_turns",
+          "observation_ordinal": 2,
+          "completed": true,
+          "input_ack_ms": 5.12242317199707,
+          "first_visible_ms": 3219.003766775131,
+          "turn_total_ms": 3254.04879078269,
+          "trace_first_delta_ms": 3173.161,
+          "trace_duration_ms": 3199.679,
+          "input_tokens": 15577,
+          "provider_reported_cached_input_tokens": 14848,
+          "output_tokens": 3,
+          "provider_reported_reasoning_output_tokens": 0,
+          "cache_write_input_tokens": null,
+          "common_complete_messages": 21,
+          "common_complete_message_chars": 29178,
+          "common_message_prefix_chars": 29190,
+          "explicit_prompt_cache_key_sent": false
+        },
+        {
+          "group": "three_followup_turns",
+          "observation_ordinal": 3,
+          "completed": true,
+          "input_ack_ms": 5.031809210777283,
+          "first_visible_ms": 2882.7365711331367,
+          "turn_total_ms": 2919.0107211470604,
+          "trace_first_delta_ms": 2844.81,
+          "trace_duration_ms": 2872.562,
+          "input_tokens": 15653,
+          "provider_reported_cached_input_tokens": 14848,
+          "output_tokens": 3,
+          "provider_reported_reasoning_output_tokens": 0,
+          "cache_write_input_tokens": null,
+          "common_complete_messages": 23,
+          "common_complete_message_chars": 29505,
+          "common_message_prefix_chars": 29517,
+          "explicit_prompt_cache_key_sent": false
+        },
+        {
+          "group": "two_timed_followup_turns",
+          "observation_ordinal": 1,
+          "completed": true,
+          "input_ack_ms": 3.3296532928943634,
+          "first_visible_ms": 2443.2267993688583,
+          "turn_total_ms": 2466.3545563817024,
+          "trace_first_delta_ms": 2098.026,
+          "trace_duration_ms": 2394.123,
+          "input_tokens": 15726,
+          "provider_reported_cached_input_tokens": 14848,
+          "output_tokens": 26,
+          "provider_reported_reasoning_output_tokens": 0,
+          "cache_write_input_tokens": null,
+          "common_complete_messages": 0,
+          "common_complete_message_chars": 0,
+          "common_message_prefix_chars": 0,
+          "explicit_prompt_cache_key_sent": false
+        },
+        {
+          "group": "two_timed_followup_turns",
+          "observation_ordinal": 2,
+          "completed": true,
+          "input_ack_ms": 6.128370761871338,
+          "first_visible_ms": 1595.5556705594063,
+          "turn_total_ms": 1637.161485850811,
+          "trace_first_delta_ms": 1546.26,
+          "trace_duration_ms": 1578.519,
+          "input_tokens": 15823,
+          "provider_reported_cached_input_tokens": 15104,
+          "output_tokens": 3,
+          "provider_reported_reasoning_output_tokens": 0,
+          "cache_write_input_tokens": null,
+          "common_complete_messages": 27,
+          "common_complete_message_chars": 30159,
+          "common_message_prefix_chars": 30171,
+          "explicit_prompt_cache_key_sent": false
+        }
+      ],
+      "settings_tools_and_system_hashes_constant_across_all_five": true,
+      "stable_hashes": {
+        "settings_sha256": "f377bf2a0628c7959e2fab7905b4bb8d3f853e9c5098a9f72eff519c1b0eea5d",
+        "tools_sha256": "96ffda7e0357720addb7a93a77c63d7fd3bd0e9612379d24a0ffd82bbda950af",
+        "system_sha256": "b77d78636f4423e551944c7c02e50214445d11975a5d8a8a73eb2fa02f477254"
+      },
+      "implementation_files": 91,
+      "implementation_snapshot_sha256": "42e2fae1ad0642ce524569436e0eaa3cd7defeba0a6b9d8fbde0c3b04979bdb7",
+      "implementation_mismatches_at_review": [],
+      "initial_setup_failure": {
+        "type": "ImportError",
+        "provider_calls": 0,
+        "script_sha256": "bb0807c41855981039da860e274dcd33bbc8fbeb8bce9a79ea2923773ce777c8"
+      },
+      "timing": {
+        "source_events": 92,
+        "selected_phase_counts": {
+          "model.driver.begin": 2,
+          "model.http.credential": 2,
+          "model.http.headers": 2,
+          "model.first_delta": 2,
+          "model.driver.end": 2
+        },
+        "uniquely_associated_segments": 2,
+        "segments_ms": [
+          {
+            "observation_ordinal": 1,
+            "begin_to_credential": 2.47,
+            "credential_to_headers": 2095.12,
+            "headers_to_first_delta": 0.471,
+            "first_delta_to_end": 296.109,
+            "driver_total": 2394.17
+          },
+          {
+            "observation_ordinal": 2,
+            "begin_to_credential": 4.803,
+            "credential_to_headers": 1506.617,
+            "headers_to_first_delta": 34.91,
+            "first_delta_to_end": 32.259,
+            "driver_total": 1578.589
+          }
+        ],
+        "root_segments_independently_recomputed": true,
+        "association": "Each retained segment has one begin/end with matching operation identity and one credential/header/first-delta event in the same task interval. Identities and absolute timestamps are not exported.",
+        "credential_to_headers_scope": "Includes HTTP-client construction, pool waiting, DNS/connect/TLS/network/proxy work and remote service time before response headers when incurred. It is not a server-only queue measurement."
+      },
+      "limits": [
+        "The sixteen-second ordinary-chat slow sample was not reproduced by these five observations, and remains valid evidence.",
+        "The user instruction may repeat, but history and live context grow; complete requests are not identical.",
+        "Common-prefix counts refer to canonicalized serialized message characters, not tokenizer prefix lengths or direct KV-cache measurements. The Trace compares prior requests with matching settings.",
+        "A zero prefix count in the first row of each Trace instance means no prior request in that observer, not proof of no reusable prefix at the provider.",
+        "No unchanged-request randomized cold/warm control, provider queue attribution, production latency distribution or optimization gain is established.",
+        "The first timed turn reports 26 output tokens while its independently checked visible answer has two characters and the expected strict numeric form. Provider usage counts must not be treated as visible character counts or evidence of a formatting failure."
+      ],
+      "trace_itself_scores_response_quality": false,
+      "independent_native_answer_check": {
+        "source_artifact": "native-cache-answer-checks.json",
+        "source_sha256": "b92e377b2cb7c53a64178bc1b440ab5dbc579cf9702fdce463eeda1c288ead37",
+        "scope": "Read-only native Input/complete-Output pairing of the same five repeated arithmetic observations, checked against the expected numeric answer. No response text exported; this does not measure general arithmetic quality.",
+        "completed_outputs": 5,
+        "strict_numeric_format_passes": 5,
+        "external_chat_calls_added": 0,
+        "rows": [
+          {
+            "observation_ordinal": 1,
+            "strict_numeric_answer": true,
+            "visible_characters": 2,
+            "answer_contains_85": true,
+            "output_sha256": "b4944c6ff08dc6f43da2e9c824669b7d927dd1fa976fadc7b456881f51bf5ccc"
+          },
+          {
+            "observation_ordinal": 2,
+            "strict_numeric_answer": true,
+            "visible_characters": 2,
+            "answer_contains_85": true,
+            "output_sha256": "b4944c6ff08dc6f43da2e9c824669b7d927dd1fa976fadc7b456881f51bf5ccc"
+          },
+          {
+            "observation_ordinal": 3,
+            "strict_numeric_answer": true,
+            "visible_characters": 2,
+            "answer_contains_85": true,
+            "output_sha256": "b4944c6ff08dc6f43da2e9c824669b7d927dd1fa976fadc7b456881f51bf5ccc"
+          },
+          {
+            "observation_ordinal": 4,
+            "strict_numeric_answer": true,
+            "visible_characters": 2,
+            "answer_contains_85": true,
+            "output_sha256": "b4944c6ff08dc6f43da2e9c824669b7d927dd1fa976fadc7b456881f51bf5ccc"
+          },
+          {
+            "observation_ordinal": 5,
+            "strict_numeric_answer": true,
+            "visible_characters": 2,
+            "answer_contains_85": true,
+            "output_sha256": "b4944c6ff08dc6f43da2e9c824669b7d927dd1fa976fadc7b456881f51bf5ccc"
+          }
+        ]
+      }
+    },
+    "source_scope": {
+      "final_implementation_files": 91,
+      "final_implementation_snapshot_sha256": "42e2fae1ad0642ce524569436e0eaa3cd7defeba0a6b9d8fbde0c3b04979bdb7",
+      "matching_final_runs": [
+        "background-final.json",
+        "core-final.json",
+        "mail-final.json",
+        "native-cache-probe.json",
+        "native-cache-timed.json"
+      ],
+      "package_selected_source_files": 14,
+      "package_selected_source_snapshot_sha256": "d17966032f75568929505d2e3d4c95f278ad1f01155c10e1bda671a04c7cc544",
+      "scope": "All five final reports match the current frozen implementation; package verification covers fourteen selected exact source files. Intermediate reports retain their earlier source attribution."
+    },
+    "evidence_frozen": true,
+    "engineering_cleanup": {
+      "source_artifact": "workspace-cleanup.json",
+      "source_sha256": "a7952a508db83230c936735b58a9a352c34d2611b0bc153e1fee8747f980cdc0",
+      "dry_run": false,
+      "removed_paths": 20,
+      "removed_bytes": 138014664,
+      "failures": 0,
+      "busy_paths": 0,
+      "empty_directories": 1,
+      "project_environment_retained": true,
+      "scope": "Completed local build/cache cleanup. Paths are omitted; the single project environment remains."
+    },
+    "background_counterexample_logs": {
+      "scope": "Memory-only restoration of previous follower/capacity logic; no runtime source modifications during counterexample checks. These are expected regression failures, not failures of the final version.",
+      "artifacts": [
+        {
+          "artifact": "prior-follower.log",
+          "sha256": "debb89b4d17c010487331df6ae9f8b21c166d2c1cc5ffbe4d89d27d3ed92258a",
+          "size": 3609,
+          "failure_summary": [
+            [
+              "3",
+              "18",
+              "16.23"
+            ]
+          ]
+        },
+        {
+          "artifact": "prior-capacity.log",
+          "sha256": "e15ec5d2de119feadfb0777048fc44fb5982d52d9f5e0a42811630cccebad7f1",
+          "size": 2328,
+          "failure_summary": [
+            [
+              "1",
+              "20",
+              "2.09"
+            ]
+          ]
+        }
+      ]
+    }
   }
 }

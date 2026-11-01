@@ -196,6 +196,95 @@ async def test_control_ending_keeps_job_notice_for_next_user_without_rewaking(tm
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["declined", "exception"])
+async def test_declined_job_stop_restores_running_status_without_claiming_user_stopped_it(failure):
+    from dataclasses import replace
+    from types import SimpleNamespace
+    from plugins.jobs.plugin import Jobs, Config
+
+    async def stop():
+        if failure == "exception":
+            raise RuntimeError("fixture stop rejected")
+        return False
+
+    jobs = Jobs(SimpleNamespace(), Config(completion_delivery="quiet"))
+    watched = replace(_job("declined"), stop=stop)
+    jobs.watch(watched)
+    assert not await jobs.stop_job("other", watched.job_id)
+    assert jobs._mirror.snapshot(watched.session_id)[0].status == "running"
+    assert not await jobs.stop_job(watched.session_id, watched.job_id)
+    snapshot = jobs._mirror.snapshot(watched.session_id)[0]
+    assert snapshot.status == "running" and snapshot.stoppable
+    assert watched.job_id not in jobs._stopped_by_user
+    # 生产方稍后移走任务，不能因先前未接纳的停止请求虚构 killed 终态。
+    await jobs._follow(watched)
+    assert jobs._mirror.snapshot(watched.session_id) == ()
+    assert jobs._board.pending(watched.session_id) == ()
+
+
+@pytest.mark.asyncio
+async def test_subagent_capacity_counts_unfinished_work_and_reuses_admitted_effect(tmp_path):
+    from plugins.subagent.runtime import SubagentBusy
+
+    def sources(directory):
+        fixture = directory / "capacity_fixture"
+        fixture.mkdir()
+        (fixture / "plugin.py").write_text('''
+from agent.plugin_composition import ServiceKey
+from agent.plugin_composition.tasks import TASKS
+from plugins.ledger.contract import BINDINGS, MESSAGE_CATALOG, MESSAGE_WRITERS, OWNER_STATE, SESSION_ADMISSION
+from plugins.subagent.inputs import CONTENT, CHECK_ORIGIN
+from plugins.subagent.request import PROFILE_TOOLS, Request
+from plugins.subagent.runtime import SUBAGENT_PROGRAM, Subagents
+api_version = 3
+name = "capacity_fixture"
+version = "1.0.0"
+inject = (CONTENT, CHECK_ORIGIN, TASKS, BINDINGS, MESSAGE_CATALOG, MESSAGE_WRITERS, OWNER_STATE, SESSION_ADMISSION)
+workspace_roots = ("subagent-runs",)
+workspace_files = ("memory/spawn_trace.jsonl",)
+async def apply(ctx):
+    async def unused_program(*_):
+        raise AssertionError("admission must not execute a model")
+    await ctx.provide(SUBAGENT_PROGRAM, unused_program)
+    binding = ctx.require(BINDINGS).bind(SUBAGENT_PROGRAM, {})
+    def request(number):
+        return Request(job_id=f"{number:032x}", label="资料研究", profile="research", background=True, retry_count=0,
+            parent_session_id="parent", parent_message_id="parent-call", parent_part_index=0,
+            origin={"channel": "test", "chat_id": "room", "sender": "user"},
+            sink={"name": "test", "binding_id": binding, "address": "room"},
+            program_binding=binding, tools={name: binding for name in PROFILE_TOOLS["research"]})
+    jobs = Subagents(ctx, max_active=1)
+    @ctx.entrypoint
+    async def accept(key, request, text):
+        await jobs.accept(key, request, text)
+    @ctx.entrypoint
+    async def read(key):
+        return jobs.read(key)
+    await ctx.provide(ServiceKey("fixture.subagents"), (accept, read, request(1), request(2), request(3)))
+''')
+
+    async with application(tmp_path, replying=False, extra_sources=sources) as (log, host):
+        accept, read, first, second, third = host.live_root.context.require(ServiceKey("fixture.subagents"))
+        await accept("first", first, "调查资料一")
+        await accept("first", first, "调查资料一")
+        assert len(log.reader(first.session_id).snapshot()) == 1
+        with pytest.raises(SubagentBusy):
+            await accept("second", second, "调查资料二")
+        assert await read("second") is None and not log.catalog().exists(second.session_id)
+        # 原工作已经完成，但通知尚未生成/送达，settled 仍为 False。
+        log.writer(first.session_id, author="subagent", source="subagent", body_types=(Output,), content={}).append(
+            "first-completed", Output((), "complete"))
+        assert (await read("first"))[0].value["settled"] is False
+        await accept("second", second, "调查资料二")
+        await accept("first", first, "调查资料一")
+        assert len(log.reader(first.session_id).snapshot()) == 2
+        assert len(log.reader(second.session_id).snapshot()) == 1
+        with pytest.raises(SubagentBusy):
+            await accept("third", third, "调查资料三")
+        assert await read("third") is None and not log.catalog().exists(third.session_id)
+
+
+@pytest.mark.asyncio
 async def test_native_subagent_status_and_original_result_remain_scoped_after_restart(tmp_path):
     from types import SimpleNamespace
     from plugins.delivery.api import Receipt
@@ -219,7 +308,7 @@ async def test_native_subagent_status_and_original_result_remain_scoped_after_re
                     DELIVERY: SimpleNamespace(open=lambda _ctx: delivery)}
         return Subagents(SimpleNamespace(require=services.__getitem__)), state, records, delivery
 
-    def seed(number, parent, *, text=None, control=None, settled=False):
+    def seed(number, parent, *, text=None, control=None, reason="原始取消原因", settled=False):
         job_id = f"{number:032x}"
         request = Request(job_id=job_id, label="资料研究", profile="research", background=True,
             retry_count=0, parent_session_id=parent, parent_message_id="parent-call", parent_part_index=0,
@@ -238,7 +327,7 @@ async def test_native_subagent_status_and_original_result_remain_scoped_after_re
                     Output((ContentPart("text", text),), "complete"))
         if control:
             log.writer(request.session_id, author="subagent", source="subagent", body_types=(Control,), content={}).append(
-                "control-" + job_id, Control(control, 0, "原始取消原因"))
+                "control-" + job_id, Control(control, 0, reason))
         return request
 
     try:
@@ -283,6 +372,20 @@ async def test_native_subagent_status_and_original_result_remain_scoped_after_re
             assert outcome == "error" and "不属于当前会话" in payload and "SECRET" not in payload
         assert isinstance(await manage.prepare({"action": "list", "parent_session_id": "other"}, source), str)
         assert isinstance(await manage.prepare({"action": "list"}), str)
+        exhausted = seed(5, "parent", control="abandon", reason="执行步数耗尽")
+        exhausted_reader = log.reader(exhausted.session_id)
+        assert await jobs.outcome(exhausted_reader, through_seq=0) is None
+        assert await jobs.outcome(exhausted_reader) == ("failed", "执行步数耗尽")
+        phases = []
+        async def trace(request, phase):
+            phases.append((request.job_id, phase))
+        jobs._trace = trace
+        # 恢复时只读取已保存的 abandon；上下文没有程序绑定，任何重复模型执行都会失败。
+        await jobs._run(SimpleNamespace(active=True), "job-" + exhausted.job_id)
+        assert phases == [(exhausted.job_id, "failed")]
+        exhausted_status = await jobs.inspect("parent", job_id=exhausted.job_id, result=True)
+        assert exhausted_status["work_status"] == "failed"
+        assert exhausted_status["result"]["text"] == "执行步数耗尽"
         before = log.reader(done.session_id).snapshot()
         log.close()
         log = MessageLog(path)
@@ -291,8 +394,190 @@ async def test_native_subagent_status_and_original_result_remain_scoped_after_re
         assert restored["result"]["text"] == original[22:6022]
         assert restored["notification"]["status"] == "failed"
         assert log.reader(done.session_id).snapshot() == before
+        assert await jobs.outcome(log.reader(exhausted.session_id)) == ("failed", "执行步数耗尽")
     finally:
         log.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ending", ["pause", "abandon", "exception"])
+async def test_subagent_callback_waits_for_real_user_after_stop_or_failure_across_restart(tmp_path, ending):
+    from contextlib import aclosing, asynccontextmanager
+    from types import SimpleNamespace
+    from agent.plugin_composition.tasks import TASKS, Tasks
+    from plugins.delivery.api import Receipt
+    from plugins.delivery.execution import Deliveries
+    from plugins.delivery.records import Delivery, DeliveryRecords
+    from plugins.ledger.contract import ContentPart, ContentReferences, Control
+    from plugins.ledger.log import MessageLog
+    from plugins.sources.session import SourceSession
+    from plugins.subagent.inputs import CONVERSATION_COMPLETE, DELIVERY, REPLY_PROGRAM
+    from plugins.subagent.request import PROFILE_TOOLS, Request, check_request
+    from plugins.subagent.runtime import MESSAGE_CATALOG, MESSAGE_WRITERS, OWNER_STATE, Subagents, _notice_state
+
+    path, calls = tmp_path / "messages.db", []
+    request = Request(job_id="f" * 32, label="后台资料", profile="research", background=True, retry_count=0,
+        parent_session_id="parent", parent_message_id="parent-answer", parent_part_index=0,
+        origin={"channel": "test", "chat_id": "room", "sender": "user"},
+        sink={"name": "test", "binding_id": "sender", "address": "room"},
+        program_binding="program", tools={name: name for name in PROFILE_TOOLS["research"]})
+    mode = ending
+    entered = asyncio.Event()
+
+    @asynccontextmanager
+    async def running():
+        log, tasks = MessageLog(path), Tasks()
+        def writer(session, body, *, source="conversation"):
+            return log.writer(session, author="fixture", source=source, body_types=(body,),
+                              content={"text": lambda _part: ContentReferences()})
+        conversation = SourceSession(reader=log.reader("parent"), inputs=writer("parent", Input),
+                                     controls=writer("parent", Control), tasks=tasks)
+        state = log.owner("subagent")
+        records = DeliveryRecords(log.owner("delivery"), "subagent")
+        class RecordedDelivery(Deliveries):
+            async def send(self, message_id, sink):
+                message = log.reader("parent").get(message_id)
+                assert isinstance(message.body, Output) and message.body.finish == "complete"
+                row, prepared = records.read(message_id, sink)
+                receipt = Receipt(status="delivered")
+                await records.save_async(message_id, row, Delivery(sink=prepared.sink, phase="delivered", receipt=receipt))
+                return receipt
+        delivery = RecordedDelivery(records, log.catalog(), tasks, None, task_key="fixture")
+        async def complete(_session, report):
+            return await conversation.complete(report)
+        async def program(task, current, source, _extra, *, check_admission):
+            calls.append(mode)
+            entered.set()
+            if mode == "pause":
+                await asyncio.Event().wait()
+            if mode == "exception":
+                raise RuntimeError("PRIVATE PROVIDER BODY MUST NEVER BE STORED")
+            body_type = Control if mode == "abandon" else Output
+            output = writer("parent", body_type, source=source)
+            task.on_close(output.expire)
+            check_admission()
+            body = (Control("abandon", current.head(), "回访步数耗尽") if mode == "abandon"
+                    else Output((ContentPart("text", "调查完成，原始结果仍然可读。"),), "complete"))
+            return await output.append_async("callback-" + mode, body)
+        def bind(_ctx, **kwargs):
+            return lambda session: log.writer(session, **kwargs)
+        @asynccontextmanager
+        async def scope():
+            yield
+        services = {MESSAGE_CATALOG: log.catalog(), MESSAGE_WRITERS: SimpleNamespace(bind=bind),
+                    OWNER_STATE: SimpleNamespace(open=lambda _ctx: state), DELIVERY: SimpleNamespace(open=lambda _ctx: delivery),
+                    TASKS: SimpleNamespace(open=lambda _ctx: tasks), CONVERSATION_COMPLETE: complete, REPLY_PROGRAM: program}
+        ctx = SimpleNamespace(require=services.__getitem__, runtime_scope=scope,
+                              workspace_file=lambda relative: tmp_path / relative,
+                              workspace_root=lambda relative: tmp_path / relative)
+        jobs = Subagents(ctx)
+        try:
+            yield log, state, conversation, jobs, lambda: asyncio.create_task(jobs.follow()), delivery
+        finally:
+            # Tests own the native follower and all Tasks; no daemon is left alive between restarts.
+            await tasks.close()
+            log.close()
+
+    async def status_until(jobs, predicate):
+        async with asyncio.timeout(5):
+            while True:
+                status = await jobs.inspect("parent", job_id=request.job_id)
+                if predicate(status):
+                    return status
+                await asyncio.sleep(0.01)
+
+    async with running() as (log, state, conversation, jobs, start, delivery):
+        for binding in ("program", "sender", *PROFILE_TOOLS["research"]):
+            log.save_binding(binding, {"fixture": binding})
+        await conversation.accept("user-original", Input(()))
+        log.writer("parent", author="agent", source="conversation", body_types=(Output,), content={}).append(
+            "parent-answer", Output((), "complete"))
+        log.writer(request.session_id, author="subagent", source="subagent", body_types=(Input,),
+            content={"subagent.request": lambda part: check_request(part, check_origin=lambda _part: ContentReferences())}).append(
+                request.input_id, Input((ContentPart("subagent.request", request.model_dump(mode="json")),)))
+        state.transact(lambda tx: tx.save("effect", {"session_id": request.session_id,
+            "input_id": request.input_id, "settled": False}, expected_version=None))
+        log.writer(request.session_id, author="subagent", source="subagent", body_types=(Output,),
+            content={"text": lambda _part: ContentReferences()}).append("original-result", Output((ContentPart("text", "完整原始结果"),), "complete"))
+        original = log.reader(request.session_id).snapshot()
+        watcher = start()
+        try:
+            await asyncio.wait_for(entered.wait(), 5)
+            if ending == "pause":
+                await conversation.pause("user-stop")
+            blocked = await status_until(jobs, lambda item: item["notification"]["stage"] == "waiting_for_user")
+            assert blocked["work_status"] == "completed" and not blocked["settled"]
+            assert blocked["notification"]["status"] == ("paused" if ending == "pause" else "blocked")
+            controls = [row for row in log.reader("parent").snapshot()
+                        if row.source == request.session_id and isinstance(row.body, Control)]
+            assert [row.body.action for row in controls] == ([] if ending == "pause" else ["abandon" if ending == "abandon" else "failure"])
+            log.writer("parent", author="agent", source="unrelated", body_types=(Output,), content={}).append(
+                "unrelated-output", Output((), "complete"))
+            log.writer("other", author="user", source="conversation", body_types=(Input,), content={}).append(
+                "other-user", Input(()))
+            await asyncio.sleep(0.1)
+            assert calls == [ending] and delivery.pending() == ()
+            assert "PRIVATE PROVIDER BODY" not in str(log.reader("parent").snapshot())
+        finally:
+            watcher.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await watcher
+    async with running() as (log, _state, conversation, jobs, start, delivery):
+        # 重启后将首次回访停在已读到旧控制、尚未退出 active 的边界。
+        # Input 及其正常回复的目录事件都先被消费，再放行退出；不能靠第三条消息唤醒。
+        observed, release, consumed = asyncio.Event(), asyncio.Event(), asyncio.Event()
+        catalog = jobs.ctx.require(MESSAGE_CATALOG)
+        target = None
+        class ObservedCatalog:
+            def __getattr__(self, name):
+                return getattr(catalog, name)
+            async def follow(self):
+                async with aclosing(catalog.follow()) as changes:
+                    async for heads in changes:
+                        yield heads
+                        if target is not None and heads.get("parent", -1) >= target:
+                            consumed.set()
+        require = jobs.ctx.require
+        wrapped_catalog = ObservedCatalog()
+        jobs.ctx.require = lambda key: wrapped_catalog if key == MESSAGE_CATALOG else require(key)
+        announce = jobs._announce
+        async def gated_announce(*args):
+            if not observed.is_set():
+                _, blocked = await catalog.reader("parent").read_async(
+                    lambda reader: _notice_state(reader, request.session_id))
+                assert blocked is not None
+                observed.set()
+                await release.wait()
+                return False
+            return await announce(*args)
+        jobs._announce = gated_announce
+        watcher = start()
+        try:
+            await asyncio.wait_for(observed.wait(), 5)
+            await status_until(jobs, lambda item: item["notification"]["stage"] == "waiting_for_user")
+            await asyncio.sleep(0.1)
+            assert calls == [ending] and delivery.pending() == ()
+            mode = "success"
+            await conversation.accept("user-followup", Input(()))
+            target = log.reader("parent").head() + 1
+            async def reply(task, reader, source):
+                output = log.writer("parent", author="agent", source=source, body_types=(Output,), content={})
+                task.on_close(output.expire)
+                return await output.append_async("followup-answer", Output((), "complete"))
+            task = await conversation.start(reply)
+            assert task is not None
+            answer = await task.join()
+            assert answer.seq == target
+            await asyncio.wait_for(consumed.wait(), 5)
+            release.set()
+            completed = await status_until(jobs, lambda item: item["settled"])
+            assert calls == [ending, "success"]
+            assert completed["notification"]["status"] == "delivered"
+            assert log.reader(request.session_id).snapshot() == original
+        finally:
+            watcher.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await watcher
 
 
 def _shell_sources(sources: Path) -> None:

@@ -2,6 +2,10 @@
 
 import asyncio
 import gzip
+import json
+import os
+from pathlib import Path
+import sys
 import tracemalloc
 
 import httpx
@@ -99,3 +103,102 @@ async def test_http_stream_does_not_retry_after_handing_a_response_to_its_consum
                 await response.aread()
     assert len(attempts) == 2  # Connect retry is allowed; an exposed body is not replayed.
     assert streams[0].closed
+
+
+@pytest.mark.asyncio
+async def test_computer_control_and_jsonrpc_keep_page_text_with_isolated_surrogates(tmp_path):
+    from plugins.computer.control import endpoint_name
+
+    calls = []
+    normal = "中文与完整 emoji 🌟🚀"
+    page = "标题 \ud83c 中段 \udfff 结尾 " + normal
+
+    async def driver(reader, writer):
+        try:
+            headers = (await reader.readuntil(b"\r\n\r\n")).decode("ascii")
+            path = headers.split(" ", 2)[1]
+            length = next((int(row.split(":", 1)[1]) for row in headers.split("\r\n")
+                           if row.lower().startswith("content-length:")), 0)
+            body = json.loads(await reader.readexactly(length)) if length else {}
+            calls.append((path, body))
+            if path == "/driver/status":
+                value = {"version": 3, "source": True, "ready": True}
+            else:
+                assert path == "/driver/run"
+                content = ([{"type": "image", "data": "eA==", "mimeType": "不支持\udfff🚀"}]
+                           if body["code"] == "bad-mime" else [
+                               {"type": "text", "text": page, "metadata": {"notes": ["嵌套\ud800", normal]}},
+                               {"type": "text", "text": normal},
+                           ])
+                value = {"content": content, "call_id": body["context"]["call_id"]}
+            payload = json.dumps(value).encode("ascii")
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: "
+                         + str(len(payload)).encode("ascii") + b"\r\nConnection: close\r\n\r\n" + payload)
+            await writer.drain()
+        finally:
+            writer.close()
+            await writer.wait_closed()
+
+    server = await asyncio.start_server(driver, "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    scope = "unicode-fixture"
+    process = None
+    try:
+        process = await asyncio.create_subprocess_exec(
+            sys.executable, "-B", str(Path(__file__).resolve().parents[1] / "plugins/computer/mcp_server.py"),
+            env={**os.environ, "COMPUTER_URL": f"http://127.0.0.1:{port}",
+                 "AKA_PLUGIN_DATA_DIR": str(tmp_path), "AKASHIC_MCP_SCOPE_ID": scope,
+                 "PYTHONIOENCODING": "utf-8"},
+            stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+
+        async def rpc(payload):
+            process.stdin.write(json.dumps(payload).encode("ascii") + b"\n")
+            await process.stdin.drain()
+            raw = await asyncio.wait_for(process.stdout.readline(), 5)
+            return raw, json.loads(raw.decode("utf-8"))
+
+        _, initialized = await rpc({"jsonrpc": "2.0", "id": 1, "method": "initialize"})
+        assert initialized["result"]["protocolVersion"] == "2025-11-25"
+
+        async def control(code):
+            reader, writer = await asyncio.open_unix_connection("\0" + endpoint_name(tmp_path, scope))
+            try:
+                writer.write(json.dumps({"op": "run", "code": code,
+                    "context": {"session_id": "fixture", "call_id": code}}).encode("ascii") + b"\n")
+                await writer.drain()
+                raw = await asyncio.wait_for(reader.readline(), 5)
+                expected = normal if code == "page" else "🚀"
+                assert expected.encode("utf-8") in raw
+                return json.loads(raw.decode("utf-8"))
+            finally:
+                writer.close()
+                await writer.wait_closed()
+
+        value = await control("page")
+        assert value["call_id"] == "page" and "error" not in value
+        assert value["content"][0]["text"] == "标题 � 中段 � 结尾 " + normal
+        assert value["content"][0]["metadata"]["notes"] == ["嵌套�", normal]
+        assert value["content"][1]["text"] == normal
+        failed = await control("bad-mime")
+        assert failed["kind"] == "control_error"
+        assert failed["error"] == "Computer returned an unsupported screenshot type: 不支持�🚀"
+        raw, invalid = await rpc({"jsonrpc": "2.0", "id": "请求🚀\ud83c", "method": "未知\udfff🌟"})
+        assert "请求🚀�".encode("utf-8") in raw
+        assert invalid["id"] == "请求🚀�" and invalid["error"]["code"] == -32601
+        assert invalid["error"]["message"] == "method not found: 未知�🌟"
+        _, listed = await rpc({"jsonrpc": "2.0", "id": 3, "method": "tools/list"})
+        assert listed == {"jsonrpc": "2.0", "id": 3, "result": {"tools": []}}
+        assert [path for path, _ in calls] == ["/driver/status", "/driver/run", "/driver/run"]
+    finally:
+        if process is not None:
+            process.stdin.close()
+            try:
+                await asyncio.wait_for(process.wait(), 5)
+            except TimeoutError:
+                process.kill()
+                await process.wait()
+        server.close()
+        await server.wait_closed()
+    assert process.returncode == 0
+    assert await process.stderr.read() == b""

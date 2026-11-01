@@ -26,6 +26,7 @@ from plugins.ledger.contract import (
     SessionAttributes,
     ToolCall,
     ToolResult,
+    json_value,
 )
 from plugins.ledger.log import MessageLog
 from plugins.wake.pool import requests_review
@@ -735,6 +736,12 @@ async def test_watch_baseline_revision_crash_recovery_pause_and_native_history(
             with pytest.raises(RuntimeError, match="crash"):
                 await service.poll(spec.watch_id)
             assert len(mail.snapshot(datetime.now(UTC))["items"]) == 1
+            # Older versions recorded only the identities/checkpoint. Their
+            # already committed receipt must still recover without rewriting
+            # the accepted source body or requiring a new fetch of it.
+            pending = dict(json_value(service.store.read("intent:" + spec.watch_id).value))
+            pending.pop("items")
+            await service._save("intent:" + spec.watch_id, pending)
             service._finish = finish
         # The committed item has disappeared upstream: recover from its source receipt.
         feed.update(etag='"3"', data=atom([("old", "Existing", "History")]))

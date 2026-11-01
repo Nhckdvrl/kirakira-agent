@@ -19,12 +19,13 @@ from plugins.followups.contract import (
     MailboxConfig,
     Recheck,
     Revise,
+    SetEnabled,
     WatchSpec,
     check_policy_record,
 )
 from plugins.followups.mailbox import MailboxError, collect, mailbox_name
 from plugins.followups.service import Service
-from plugins.ledger.contract import ContentPart, Input, SessionAttributes
+from plugins.ledger.contract import ContentPart, Input, SessionAttributes, json_value
 from plugins.ledger.log import MessageLog
 
 
@@ -182,6 +183,9 @@ async def test_recent_junk_plan_survives_cancel_restart_and_native_commit(tmp_pa
                         SimpleNamespace(recent=lambda **_: ()), None, lambda: None,
                         mailbox=SimpleNamespace(
                             available=lambda: [{"account_id": cfg.account_id}], read=read_mailbox),
+                        writers=lambda session: log.writer(
+                            session, author="user", source="followups", body_types=(Input,),
+                            content={"text": check_text, "followups.policy": check_policy_record}),
                     )
                     await ctx.effect(lambda: service.http.aclose)
                     mounted.append(service)
@@ -231,10 +235,32 @@ async def test_recent_junk_plan_survives_cancel_restart_and_native_commit(tmp_pa
                     await service.poll(spec.watch_id)
                 original_intent = service.store.read("intent:" + spec.watch_id).value
                 assert original_intent["review_policy"] == REQUESTED_REVIEW
+                frozen_items = json_value(original_intent["items"])
+                assert len(frozen_items) == 10
                 assert not native.snapshot(datetime.now(UTC))["items"]
+                # A timeline is observational: it cannot retry a submission or
+                # quietly start proactive work while the owner checks status.
+                assert not (await service.timeline(spec.watch_id))["events"]
+                await service.set_enabled(SetEnabled(watch_id=spec.watch_id, enabled=False))
+                assert (await service.poll(spec.watch_id))["status"] == "paused"
+                assert not native.snapshot(datetime.now(UTC))["items"]
+                assert service.store.read("intent:" + spec.watch_id).value == original_intent
+                await service.revise(Revise(
+                    watch_id=spec.watch_id, request_id="new-rule-after-collection",
+                    expected_revision=0, purpose="之后只关注临近截止的事项"))
+                # Mail may be moved by the owner's client between collection
+                # and native admission. Recovery owns the facts already read.
+                for uid in range(50, 60):
+                    del junk.messages[uid]
+                fetches_before_recovery = [row for row in server.commands
+                    if row["command"] == "UID FETCH"]
 
             # Restart must retain the original window even after a new arrival.
             async with opened() as service:
+                assert (await service.poll(spec.watch_id))["status"] == "paused"
+                assert not native.snapshot(datetime.now(UTC))["items"]
+                assert service.store.read("intent:" + spec.watch_id).value == original_intent
+                await service.set_enabled(SetEnabled(watch_id=spec.watch_id, enabled=True))
                 async def crash(*_):
                     intended = service.store.read("intent:" + spec.watch_id).value
                     assert intended == original_intent
@@ -244,11 +270,24 @@ async def test_recent_junk_plan_survives_cancel_restart_and_native_commit(tmp_pa
                 with pytest.raises(RuntimeError, match="native mail commit"):
                     await service.poll(spec.watch_id)
                 assert len(native.snapshot(datetime.now(UTC))["items"]) == 10
-                for uid in range(50, 60):
-                    del junk.messages[uid]
+                assert fetches_before_recovery == [row for row in server.commands
+                    if row["command"] == "UID FETCH"]
+                for item in frozen_items:
+                    accepted = await (await service._source(spec.watch_id)).inspect_revision(
+                        item["item_id"], item["revision"])
+                    assert accepted["payload"] == item["payload"]
+                    assert accepted["payload"]["follow_up"]["policy_revision"] == 0
+                    assert accepted["payload"]["follow_up"]["purpose"] == spec.purpose
+                await service.set_enabled(SetEnabled(watch_id=spec.watch_id, enabled=False))
 
             # Accepted native receipts recover even when those messages vanish.
             async with opened() as service:
+                assert (await service.poll(spec.watch_id))["status"] == "paused"
+                assert not service.store.read("intent:" + spec.watch_id).value
+                assert list(service.store.read("cursor:" + spec.watch_id).value[
+                    "mailbox"]["initial_uids"]) == [60, 61]
+                assert len(native.snapshot(datetime.now(UTC))["items"]) == 10
+                await service.set_enabled(SetEnabled(watch_id=spec.watch_id, enabled=True))
                 second = await service.poll(spec.watch_id)
                 assert second["scanned"] == 2 and second["pending"] == 1
                 assert len(native.snapshot(datetime.now(UTC))["items"]) == 12
@@ -257,6 +296,9 @@ async def test_recent_junk_plan_survives_cancel_restart_and_native_commit(tmp_pa
                 assert len(events) == 13
                 assert all(event["payload"]["mail"]["folder"] == "Junk" for event in events)
                 for event in events:
+                    if min(event["payload"]["mail"]["uids"]) >= 60:
+                        assert event["payload"]["follow_up"]["policy_revision"] == 1
+                        assert event["payload"]["follow_up"]["purpose"] == "之后只关注临近截止的事项"
                     if max(event["payload"]["mail"]["uids"]) <= 61:
                         assert event["payload"]["review_policy"] == REQUESTED_REVIEW
                     else:

@@ -84,6 +84,87 @@
                      raise
                  attempt += 1
  
+--- a/plugins/computer/mcp_server.py
++++ b/plugins/computer/mcp_server.py
+@@ -24,6 +24,34 @@
+     "image/webp": ".webp",
+ }
+ _MAX_SCREENSHOT_FILES = 32
++
++
++def plain_text(text: str) -> str:
++    """Replace isolated UTF-16 surrogates without losing readable page text."""
++
++    if not any("\ud800" <= character <= "\udfff" for character in text):
++        return text
++    return "".join(
++        "\ufffd" if "\ud800" <= character <= "\udfff" else character for character in text
++    )
++
++
++def plain_value(value: Any) -> Any:
++    """Preserve JSON structure while making string values valid UTF-8."""
++
++    if isinstance(value, str):
++        return plain_text(value)
++    if isinstance(value, dict):
++        return {key: plain_value(item) for key, item in value.items()}
++    if isinstance(value, (list, tuple)):
++        return [plain_value(item) for item in value]
++    return value
++
++
++def json_line(payload: object) -> bytes:
++    """Encode one control receipt or JSON-RPC response as a UTF-8 line."""
++
++    return json.dumps(plain_value(payload), ensure_ascii=False).encode("utf-8") + b"\n"
+ 
+ 
+ def save_screenshot(raw: bytes, media_type: str) -> str:
+@@ -125,6 +153,8 @@
+             content.append({"type": "text", "text": f"Screenshot: {path}"})
+             # 同一调用可能超过 32 张；附件导入使用原字节，不依赖可能被缓存淘汰的路径。
+             content.append(item)
++        elif isinstance(item.get("text"), str):
++            content.append({**item, "text": plain_text(item["text"])})
+         else:
+             content.append(item)
+     return {"content": content, "call_id": value["call_id"]}
+@@ -196,7 +226,7 @@
+                 result = {"cancelled": True, "released": True, "effects": "may_remain"}
+             else:
+                 result = driver_content(await task)
+-        writer.write(json.dumps(result, ensure_ascii=False).encode() + b"\n")
++        writer.write(json_line(result))
+         await writer.drain()
+     except (
+         ValueError,
+@@ -207,10 +237,10 @@
+         httpx.HTTPError,
+     ) as error:
+         if not writer.is_closing():
+-            writer.write(json.dumps({
++            writer.write(json_line({
+                 "error": str(error),
+                 "kind": "driver_error" if isinstance(error, DriverResponseError) else "control_error",
+-            }).encode() + b"\n")
++            }))
+             try:
+                 await writer.drain()
+             except (ConnectionError, BrokenPipeError):
+@@ -282,10 +312,8 @@
+                     "error": {"code": -32603, "message": str(error)},
+                 }
+             if response is not None:
+-                print(
+-                    json.dumps(response, ensure_ascii=False, separators=(",", ":")),
+-                    flush=True,
+-                )
++                sys.stdout.write(json_line(response).decode("utf-8"))
++                sys.stdout.flush()
+     finally:
+         transport.close()
+         if control is not None:
 --- a/plugins/files/filesystem.py
 +++ b/plugins/files/filesystem.py
 @@ -59,7 +59,7 @@
@@ -120,9 +201,117 @@
  
      return sliced_lines, total_lines, total_bytes, had_decode_errors
  
+--- a/plugins/scheduler/schedule.py
++++ b/plugins/scheduler/schedule.py
+@@ -26,6 +26,24 @@
+ # ── 时间解析 ─────────────────────────────────────────────────
+ 
+ _DURATION_RE = re.compile(r"^(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$")
++
++
++def _local_time(value: datetime, tzinfo: ZoneInfo) -> datetime:
++    """A wall time must identify one real instant before accepting a reminder."""
++    naive = value.replace(tzinfo=None)
++    candidates: dict[datetime, datetime] = {}
++    for fold in (0, 1):
++        local = naive.replace(tzinfo=tzinfo, fold=fold)
++        instant = local.astimezone(timezone.utc)
++        if instant.astimezone(tzinfo).replace(tzinfo=None) == naive:
++            candidates[instant] = local
++    if len(candidates) != 1:
++        problem = "不存在" if not candidates else "出现两次"
++        raise ValueError(
++            f"当地时间 {naive.isoformat()} 在 {tzinfo.key} 中{problem}；"
++            "请确认时间并提供带 UTC 偏移的 ISO 时间"
++        )
++    return next(iter(candidates.values()))
+ 
+ 
+ def parse_duration(s: str) -> timedelta:
+@@ -59,18 +77,18 @@
+         dt = now.replace(hour=t.hour, minute=t.minute, second=0, microsecond=0)
+         if dt <= now:
+             dt += timedelta(days=1)
+-        return dt
++        return _local_time(dt, tzinfo)
+ 
+     # ISO datetime 格式
+     try:
+         dt = datetime.fromisoformat(s)
+         if dt.tzinfo is None:
+-            dt = dt.replace(tzinfo=tzinfo)
++            dt = _local_time(dt, tzinfo)
+         return dt
+-    except ValueError:
+-        pass
+-
+-    raise ValueError(f"无法解析时间: {s!r}，示例: '14:30', '2025-06-01T09:00'")
++    except ValueError as error:
++        raise ValueError(
++            f"无法解析时间: {s!r}，示例: '14:30', '2025-06-01T09:00'；{error}"
++        ) from error
+ 
+ 
+ def is_cron_expr(s: str) -> bool:
+@@ -131,30 +149,31 @@
+     """
+     计算首次触发时间。
+ 
+-    after 模式：以 request_time（用户消息到达时间）为基准，
+-                补偿 AI 推理延迟，确保 fire_at 从用户视角算起。
++    after 和无日期的 at 以 request_time（用户消息到达时间）为基准，
++    不因推理跨过目标时刻而挪到第二天；时长按实际经过的秒数计算。
+     """
+     tzinfo = ZoneInfo(tz)
+     now_fn = _now_fn or (lambda: datetime.now(tzinfo))
+ 
++    def request_anchor() -> datetime:
++        base = datetime.fromisoformat(request_time) if request_time else now_fn()
++        return _local_time(base, tzinfo) if base.tzinfo is None else base
++
+     if trigger == "at":
+-        return parse_when_at(when, tz, _now_fn)
++        return parse_when_at(when, tz, request_anchor)
+ 
+     if trigger == "after":
+         duration = parse_duration(when)
+-        if request_time:
+-            base = datetime.fromisoformat(request_time)
+-            if base.tzinfo is None:
+-                base = base.replace(tzinfo=tzinfo)
+-        else:
+-            base = now_fn()
+-        return base + duration
++        return request_anchor().astimezone(timezone.utc) + duration
+ 
+     if trigger == "every":
+         if is_cron_expr(when):
+             return next_cron_fire(when, tz, now_fn())
+         interval = parse_duration(when)
+-        return now_fn() + interval
++        base = now_fn()
++        if base.tzinfo is None:
++            base = _local_time(base, tzinfo)
++        return base.astimezone(timezone.utc) + interval
+ 
+     raise ValueError(f"未知触发类型: {trigger!r}，须为 at/after/every")
+ 
+@@ -184,4 +203,3 @@
+     enabled: bool = True
+     id: str = field(default_factory=lambda: str(uuid.uuid4()))
+ 
+-
 --- a/plugins/scheduler/tools.py
 +++ b/plugins/scheduler/tools.py
-@@ -11,7 +11,7 @@
+@@ -2,6 +2,7 @@
+ 
+ import asyncio
+ import os
++import re
+ from collections.abc import Awaitable, Callable, Mapping
+ from datetime import UTC, datetime
+ from typing import Literal, Self, cast
+@@ -11,7 +12,7 @@
  
  from agent.plugin_composition.tasks import Task, TaskAdmission, TaskSlot
  from .inputs import CallSource, Result
@@ -131,37 +320,51 @@
  
  from .schedule import ScheduledJob, compute_fire_at, is_cron_expr, parse_duration
  from .store import JobStore, Operation
-@@ -30,7 +30,7 @@
+@@ -24,13 +25,15 @@
+         "notify：到点把 text 原文推送给用户，不调用模型；run：到点在当前会话里按 text 执行一轮任务，"
+         "可以使用工具，最后一条回复作为通知推送"))
+     trigger: Literal["at", "after", "every"]
+-    when: str = Field(min_length=1, description="at: 14:30 或 ISO 时间；after: 5m；every: 1h 或 cron")
++    when: str = Field(min_length=1, description=(
++        "at: 14:30 或 ISO 时间；HH:MM 按本轮输入时间判断今天/明天，具体期限应填写完整日期；"
++        "after: 5m；every: 1h 或 cron。夏令时重叠或不存在的当地时间须先确认并用带偏移的 ISO 时间"))
+     text: str = Field(min_length=1, description="notify 的推送原文，或 run 的任务指令")
+     context: Literal["none", "session"] = Field(default="none", description=(
          "run 是否带上本会话的聊天历史；天气、新闻这类独立任务用 none，需要参考之前对话时用 session"))
      timezone: str = Field(default_factory=lambda: os.environ.get("TZ", ""))
      name: str | None = None
 -    request_time: str | None = Field(default=None, description="原消息接收的 ISO 时间；after 从此刻计算延迟")
-+    request_time: str | None = Field(default=None, description="无调用来源的程序接入可填 ISO 起算时间；聊天自动使用实际输入时间，不需要填写")
++    request_time: str | None = Field(default=None, description="无调用来源的程序接入可填 ISO 起算时间；聊天的 after 和 HH:MM 自动使用实际输入时间，不需要填写")
  
  
  # 调用所在会话及其投递渠道：(session_id, channel, address)。
-@@ -105,8 +105,19 @@
+@@ -105,8 +108,24 @@
          try:
              request = ScheduleInput.model_validate(dict(arguments))
              _ = ZoneInfo(request.timezone)
 +            request_time = request.request_time
-+            if request.trigger == "after" and source is not None:
++            relative = request.trigger == "after" or (
++                request.trigger == "at" and re.fullmatch(r"\d{1,2}:\d{2}", request.when.strip())
++            )
++            if relative and source is not None:
 +                caller = next((row for row in source.messages
 +                               if row.message_id == source.call_ref.message_id), None)
 +                inputs = [row for row in source.messages if caller is not None
 +                          and row.session_id == caller.session_id and row.source == caller.source
 +                          and row.seq < caller.seq and isinstance(row.body, Input)]
-+                # Relative time belongs to the immutable input, not a model's clock
-+                # conversion or the later moment at which inference finishes.
++                # Relative dates belong to the immutable input, even if inference
++                # crosses midnight or the requested HH:MM before this call.
 +                latest = max(inputs, key=lambda row: row.seq, default=None)
-+                request_time = latest.recorded_at.isoformat() if latest else None
++                if latest is None:
++                    return "无法核对本次调用的原始输入时间，请重新确认提醒时间"
++                request_time = latest.recorded_at.isoformat()
              fire_at = compute_fire_at(request.trigger, request.when, request.timezone,
 -                                      request.request_time, self._now)
 +                                      request_time, self._now)
              interval, cron = None, None
              if request.trigger == "every":
                  if is_cron_expr(request.when):
-@@ -123,7 +134,8 @@
+@@ -123,7 +142,8 @@
          except (ValidationError, ValueError, TypeError, OverflowError, ZoneInfoNotFoundError) as error:
              return str(error)
          label = f"「{job.name}」" if job.name else job.id[:8]

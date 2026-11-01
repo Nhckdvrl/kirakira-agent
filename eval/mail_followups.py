@@ -61,7 +61,7 @@ FAMILIES = (
             "只参加周末的讲座，工作日不参加，合适的新邀请要提醒。",
         ],
         "subject": "星砂研究讲座邀请",
-        "body": "讲座安排在2026年10月24日星期六14:00，线上举行，请在周五前报名。",
+        "body": "讲座安排在未来的星期六14:00，线上举行，请在前一天周五18:00前报名。",
     },
     {
         "id": "job",
@@ -96,6 +96,52 @@ FAMILIES = (
 )
 
 
+def failure_facts(error):
+    """Keep failure classification without copying a provider body or secret."""
+    return {
+        "error_type": type(error).__name__,
+        "failure_http_statuses": sorted(
+            {int(v) for v in re.findall(r"\bHTTP\s*([1-5]\d{2})\b", str(error))}
+        ),
+    }
+
+
+def evaluation_families(now):
+    """Keep the weekend preference experiment actionable on every run date."""
+    saturday = (now + timedelta(days=(5 - now.weekday()) % 7 + 7)).replace(
+        hour=14, minute=0, second=0, microsecond=0
+    )
+    friday = (saturday - timedelta(days=1)).replace(hour=18)
+    return tuple(
+        {**family, "body": (
+            f"讲座安排在{saturday:%Y年%m月%d日}星期六14:00（北京时间，UTC+8），"
+            f"线上举行，请在{friday:%Y年%m月%d日}星期五18:00（北京时间，UTC+8）前报名。"
+        )} if family["id"] == "lecture" else family
+        for family in FAMILIES
+    )
+
+
+def deadline_facts(value, deadline):
+    """Check this fixture's date, clock and zone without accepting partial times."""
+    dates = re.finditer(
+        r"(?<![\d年./-])(?:(\d{4})\s*(?:年|[-/.])\s*)?"
+        r"(\d{1,2})\s*(?:月|[-/.])\s*(\d{1,2})(?!\d)", value
+    )
+    return {
+        "date": any(
+            (year is None or int(year) == deadline.year)
+            and int(month) == deadline.month and int(day) == deadline.day
+            for year, month, day in (match.groups() for match in dates)
+        ),
+        "time": bool(re.search(
+            r"(?<!\d)18\s*(?:(?:[:：]\s*00)(?:[:：]\s*00)?(?![\d:：])|"
+            r"(?:点|時|时)(?:整|00分)?(?!\s*(?:\d|半|一刻|三刻)))", value)),
+        "timezone": bool(re.search(
+            r"北京时间|Asia/Shanghai|UTC\s*\+\s*0?8(?![\d:：])|东八区|中国标准时间",
+            value, re.IGNORECASE)),
+    }
+
+
 async def initial_review_protocol(args):
     """Exercise real TLS collection and saved cursors without a model or account."""
     from agent.plugin_composition import CredentialRef
@@ -104,6 +150,7 @@ async def initial_review_protocol(args):
         "implementation": source_identity(),
         "scope": "Controlled local TLS IMAP and actual collector, no external email or model API. Serialized collector cursors are checked; this mode does not claim native Runtime restart or notification quality.",
         "external_chat_calls": 0,
+        "planned_cases": 9,
         "cases": [],
     }
 
@@ -127,10 +174,9 @@ async def initial_review_protocol(args):
             )
         )
 
+    server = MailboxServer(args.workspace.parent / (args.workspace.name + "-tls"))
     try:
-        async with MailboxServer(
-            args.workspace.parent / (args.workspace.name + "-tls")
-        ) as server:
+        async with server:
             date = datetime(2026, 10, 30, 9, 0, tzinfo=UTC)
             server.deliver(
                 "澄湾申请 广告", "INBOX 中的广告，不能出现在 Junk 查询结果。", date=date
@@ -308,11 +354,14 @@ async def initial_review_protocol(args):
             {
                 "name": "protocol_failure",
                 "passed": False,
-                "error_type": type(error).__name__,
-                "error": str(error)[:1000],
+                **failure_facts(error),
             }
         )
-    report["passed"] = all(c["passed"] for c in report["cases"])
+    report["fixture_cleanup_completed"] = server.cleanup_completed
+    report["passed"] = (
+        report["fixture_cleanup_completed"] and len(report["cases"]) == report["planned_cases"]
+        and all(c["passed"] for c in report["cases"])
+    )
     save()
     return report["passed"]
 
@@ -327,6 +376,7 @@ async def evaluate(args):
     old_deadline = (local_started + timedelta(days=1)).replace(
         hour=10, minute=0, second=0, microsecond=0
     )
+    families = evaluation_families(local_started)
     model = EvaluationModel.read(args.model_config)
     initialize_workspace(args.workspace, profile="web")
     report = {
@@ -334,7 +384,7 @@ async def evaluate(args):
         "started_at": started_at.isoformat(),
         "model_config": model.description(),
         "scope": "controlled paired history intervention and functional acceptance; not population quality",
-        "families": FAMILIES,
+        "families": families,
         "cases": [],
         "observations": [],
         "passed": False,
@@ -361,16 +411,10 @@ async def evaluate(args):
         try:
             row = {"name": name, "passed": True, "detail": await action()}
         except Exception as error:  # noqa: BLE001 - retain actual independent failures
-            import traceback
-
-            traceback.print_exc()
             row = {
                 "name": name,
                 "passed": False,
-                "error": type(error).__name__ + ": " + str(error)[:1500],
-                "failure_http_statuses": sorted(
-                    {int(v) for v in re.findall(r"\bHTTP\s*([1-5]\d{2})\b", str(error))}
-                ),
+                **failure_facts(error),
             }
         row["seconds"] = round(time.monotonic() - start, 3)
         report["cases"].append(row)
@@ -402,14 +446,20 @@ async def evaluate(args):
 
             if not await record("configure_real_provider", configure):
                 return False
-            await configure_embedding(core, args.embedding_manifest)
-            await submit(
-                core,
-                "akashic:mail-inbox",
-                "inbox-setup",
-                "此对话用于收通知，请只回复已准备好。",
-            )
-            await configure_proactive(core, args.workspace, "akashic:mail-inbox")
+
+            async def prepare_notification_and_memory():
+                await configure_embedding(core, args.embedding_manifest)
+                await submit(
+                    core,
+                    "akashic:mail-inbox",
+                    "inbox-setup",
+                    "此对话用于收通知，请只回复已准备好。",
+                )
+                await configure_proactive(core, args.workspace, "akashic:mail-inbox")
+                return {"notification_target_configured": True, "embedding_configured": True}
+
+            if not await record("prepare_notification_and_memory", prepare_notification_and_memory):
+                return False
             ctx = core.plugin_manager.live_root.context
             slots, catalog = ctx.require(PLUGIN_UI), ctx.require(MESSAGE_CATALOG)
             catalog_entries = {
@@ -943,14 +993,9 @@ async def evaluate(args):
                             )
                             if expected == "share_content":
                                 assert len(event["deliveries"]) == 1
-                                assert re.search(
-                                    rf"(?<!\d)(?:{deadline.year}[-年/.])?0?{deadline.month}[-月/.]0?{deadline.day}(?!\d)",
-                                    delivered,
-                                )
-                                assert re.search(r"18[：:]00|18点|18时", delivered)
-                                assert re.search(
-                                    r"北京时间|UTC\+0?8|东八区|中国标准时间", delivered
-                                )
+                                facts = deadline_facts(delivered, deadline)
+                                observation["deadline_fact_coverage"] = facts
+                                assert all(facts.values())
                                 assert (
                                     "作品集" in delivered
                                     and old_deadline.strftime("%Y-%m-%d")
@@ -1169,7 +1214,7 @@ async def evaluate(args):
                 )
 
             if not args.functional_only and not args.initial_review_only:
-                for family in FAMILIES[args.family_start : args.family_end]:
+                for family in families[args.family_start : args.family_end]:
                     for history in ("present", "withheld"):
                         for index, profile in enumerate(family["profiles"]):
                             name = family["id"] + "_" + history + "_" + str(index)
@@ -1673,9 +1718,8 @@ async def recheck_existing(args):
                 metrics=metrics(args.workspace, model),
             )
     except Exception as error:  # noqa: BLE001 - preserve the actual failed intervention
-        report.update(
-            passed=False, error=type(error).__name__ + ": " + str(error)[:1500]
-        )
+        report.update(passed=False, **failure_facts(error))
+    args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
     print(json.dumps({"owner_clarification_and_recheck": report["passed"]}), flush=True)
     return report["passed"]

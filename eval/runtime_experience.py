@@ -19,12 +19,13 @@ import tempfile
 import threading
 import time
 from contextlib import asynccontextmanager, closing, suppress
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlsplit
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -286,7 +287,7 @@ async def references(args) -> dict:
 
 
 @asynccontextmanager
-async def background_source(nonce):
+async def background_source(nonce, deadline):
     """A real HTTP document withheld until ordinary conversation is checked."""
     gate, requested = asyncio.Event(), asyncio.Event()
     state = {"requests": 0, "served": 0, "gate": gate, "requested": requested,
@@ -314,7 +315,7 @@ async def background_source(nonce):
                 finally:
                     state["longest_wait_ms"] = max(state["longest_wait_ms"], (time.monotonic() - begin) * 1000)
                 body = ("<html><head><meta charset='utf-8'></head><body><h1>青禾项目公告</h1>"
-                        f"<p>资料核验码：{nonce}。申请截止：2026年11月18日18:00（Asia/Tokyo）。"
+                        f"<p>资料核验码：{nonce}。申请截止：{deadline:%Y年%m月%d日%H:%M}（Asia/Tokyo）。"
                         "已报名者还需要提交成绩单，否则申请材料不完整。</p></body></html>").encode()
                 status = "200 OK"
             else:
@@ -350,13 +351,20 @@ async def background_source(nonce):
         state["cleanup_completed"] = not handlers
 
 
-def background_facts(value: str, nonce: str) -> dict[str, bool]:
+def background_facts(value: str, nonce: str, deadline) -> dict[str, bool]:
     """Controlled fixture coverage checks, without exporting answer text."""
+    dates = re.finditer(
+        r"(?<![\d年./-])(\d{4})\s*(?:年|[-/.])\s*"
+        r"(\d{1,2})\s*(?:月|[-/.])\s*(\d{1,2})(?!\d)", value
+    )
     return {
         "source_nonce": nonce in value,
-        "deadline_date": bool(re.search(r"2026\s*(?:年|[-/.])\s*11\s*(?:月|[-/.])\s*18(?:\s*日|\b)", value)),
-        "deadline_time": bool(re.search(r"(?<!\d)18\s*(?:(?:[:：]\s*00)(?!\d)|(?:点|時|时)(?:整|00分)?(?!\s*(?:\d|半|一刻|三刻)))", value)),
-        "deadline_timezone": bool(re.search(r"Asia/Tokyo|JST|(?:UTC|GMT)\s*\+\s*0?9\b|\+09:00|东京|東京|日本(?:时间|時間)", value, re.IGNORECASE)),
+        "deadline_date": any(
+            tuple(map(int, match.groups())) == (deadline.year, deadline.month, deadline.day)
+            for match in dates
+        ),
+        "deadline_time": bool(re.search(r"(?<!\d)18\s*(?:(?:[:：]\s*00)(?:[:：]\s*00)?(?![\d:：])|(?:点|時|时)(?:整|00分)?(?!\s*(?:\d|半|一刻|三刻)))", value)),
+        "deadline_timezone": bool(re.search(r"Asia/Tokyo|JST|(?:UTC|GMT)\s*\+\s*0?9(?![\d:：])|\+09:00(?![\d:：])|东京|東京|日本(?:时间|時間)", value, re.IGNORECASE)),
         "required_material": "成绩单" in value or "成績証明" in value or "transcript" in value.lower(),
     }
 
@@ -386,12 +394,15 @@ async def background(args) -> dict:
     plan = ("background-admission", "ordinary-chat-during-research", "actual-source-result",
             "completion-notification", "query-completed-result", "result-after-restart")
     nonce = uuid4().hex[:16]
+    deadline = (datetime.now(UTC).astimezone(ZoneInfo("Asia/Tokyo")) + timedelta(days=7)).replace(
+        hour=18, minute=0, second=0, microsecond=0)
     session = "akashic:background-" + uuid4().hex
     report = {"scope": "Controlled real-model ordinary-language URL delegation through native tools. Gated synthetic HTTP document, no tool names in user prompts. Local delivery means a committed message, not a read receipt or Telegram measurement.",
               "cases": [{"case": label, "status": "not_run", "passed": False} for label in plan],
               "planned_cases": len(plan), "passed": False, "setup_passed": False, "shutdown_completed": False,
               "fixture_configuration": {"standard_web.default_fetch_timeout_seconds": 120,
                   "document_gate_budget_seconds": 120, "parent_admission_timeout_seconds": 60,
+                  "expected_deadline": deadline.isoformat(), "expected_timezone": "Asia/Tokyo",
                   "quality_scope": "single controlled task, fact coverage; not a public benchmark"}}
     active_case, source = None, None
     saved_environment = {key: os.environ.get(key) for key in ("AKASHIC_PLUGIN_HOME", "NO_PROXY", "no_proxy")}
@@ -435,7 +446,7 @@ async def background(args) -> dict:
             isinstance(message.body, Output) and message.body.finish in {"complete", "quiet"}
             or isinstance(message.body, Control) and message.body.action in {"failure", "pause", "abandon"})), None)
 
-    def original_result_proof(messages, calls, job_id, terminal, notice_id):
+    def original_result_proof(messages, calls, job_id, terminal, notice):
         results = successful_results(messages)
         original = text(terminal)
         for name, call, ref in calls:
@@ -447,6 +458,7 @@ async def background(args) -> dict:
                 window = value["result"]
                 provenance = window["source"]
                 offset, end = window["offset"], window["end_offset"]
+                requested_offset, requested_length = call.arguments.get("offset", 0), call.arguments.get("length", 2000)
                 notification = value["notification"]
                 if (value["job_id"] == job_id and value["work_status"] == "completed"
                     and provenance["session_id"] == terminal.session_id
@@ -454,9 +466,13 @@ async def background(args) -> dict:
                     and provenance["recorded_at"] == terminal.recorded_at.isoformat()
                     and provenance["body_kind"] == "output"
                     and type(offset) is int and type(end) is int and 0 <= offset <= end <= len(original)
+                    and offset == requested_offset and end == min(len(original), requested_offset + requested_length)
                     and window["source_chars"] == len(original) and window["text"] == original[offset:end]
+                    and window["next_offset"] == (end if end < len(original) else None)
                     and nonce in window["text"] and notification["status"] == "delivered"
-                    and notification["message"]["message_id"] == notice_id):
+                    and notification["message"] == {"session_id": notice.session_id,
+                        "message_id": notice.message_id, "seq": notice.seq,
+                        "recorded_at": notice.recorded_at.isoformat(), "body_kind": "output"}):
                     return True
             except (ValueError, KeyError, TypeError):
                 continue
@@ -502,7 +518,7 @@ async def background(args) -> dict:
         shutil.copytree(ROOT / "eval/fixtures/alignment", extension / "alignment", ignore=shutil.ignore_patterns("__pycache__"))
         model = EvaluationModel.read(args.model_config)
         report.update(implementation=source_identity(), model_config=model.description())
-        async with background_source(nonce) as source:
+        async with background_source(nonce, deadline) as source:
             async with runtime(args.workspace, extensions=(extension,)) as core:
                 await model.configure(core, args.key_file)
                 report["setup_passed"] = True
@@ -564,7 +580,7 @@ async def background(args) -> dict:
                     read_nonce = any(name == "web_fetch" and call.arguments.get("url") == source["url"]
                         and ref in child_results and nonce in text(child_results[ref])
                         for name, call, ref in named_calls(child_rows, context.require(BINDINGS)))
-                    facts = background_facts(raw, nonce)
+                    facts = background_facts(raw, nonce, deadline)
                     finish_case(actual, isinstance(terminal.body, Output) and read_nonce and all(facts.values()),
                         source_read_by_tool=read_nonce, fact_coverage=facts, result_chars=len(raw),
                         work_completed=isinstance(terminal.body, Output))
@@ -584,16 +600,16 @@ async def background(args) -> dict:
                         return None
 
                     notices, receipt = await wait_read(notified)
-                    notice_facts = background_facts(text(notices[0]), nonce)
+                    notice_facts = background_facts(text(notices[0]), nonce, deadline)
                     finish_case(notification_case, len(notices) == 1 and receipt["status"] == "delivered" and all(notice_facts.values()),
                         final_notices=len(notices), delivery_state=receipt["status"],
                         source_nonce_in_notice=notice_facts["source_nonce"], fact_coverage=notice_facts)
                     if not notification_case["passed"]:
                         raise RuntimeError("completion notification prerequisite failed")
-                    notice_id = notices[0].message_id
+                    notice = notices[0]
                     queried, terminal_ok, answer, messages, calls = await exercise_turn(core, client, "query-completed-result",
                         "刚才交给你的后台任务现在完成了吗？请核对任务记录，读出它保存的原始结果，并说明完成通知是否已经送达。")
-                    proven = original_result_proof(messages, calls, job_id, terminal, notice_id)
+                    proven = original_result_proof(messages, calls, job_id, terminal, notice)
                     finish_case(queried, terminal_ok and proven and nonce in answer,
                         queried_durable_status=proven, read_original_result=proven, source_nonce_in_answer=nonce in answer)
                 requests_before_restart = source["requests"]
@@ -602,7 +618,7 @@ async def background(args) -> dict:
                         await AsyncClient.for_workspace(args.workspace) as client):
                 restarted, terminal_ok, answer, messages, calls = await exercise_turn(core, client, "result-after-restart",
                     "请重新核对刚才后台任务保存的原始结果，我要它的核验码和来源记录；不要只凭聊天中的概括回答。")
-                proven = original_result_proof(messages, calls, job_id, terminal, notice_id)
+                proven = original_result_proof(messages, calls, job_id, terminal, notice)
                 current = core.plugin_manager.live_root.context.require(MESSAGE_CATALOG).reader(child.session_id)
                 unchanged = await run_file_io(lambda: current.get(terminal.message_id)) == terminal
                 finish_case(restarted, terminal_ok and proven and nonce in answer and unchanged and source["requests"] == requests_before_restart,
