@@ -209,7 +209,68 @@
 +MEMORY_SOURCE_SEARCH = ServiceKey[Callable[[MemorySourceSearchQuery], Awaitable[MemorySourceSearchReadout]]]("memory.source-search.v1")
 --- a/plugins/akasha/inspector.py
 +++ b/plugins/akasha/inspector.py
-@@ -224,11 +224,30 @@
+@@ -3,6 +3,7 @@
+ from __future__ import annotations
+ 
+ import json
++from collections import OrderedDict
+ from collections.abc import Callable, Iterable, Iterator
+ from dataclasses import dataclass
+ from datetime import datetime
+@@ -35,6 +36,11 @@
+     messages: tuple[_MessageRef, ...]
+ 
+ 
++# 每轮的召回徽标挂载即查询；只留一个会话时，来回切换会反复整段投影大会话。
++# 实测 12k 条消息的会话约 2.2 MB，8 份约 18 MB；删掉的会话留到被挤出为止。
++_CACHED_SOURCES = 8
++
++
+ class RecallInspector:
+     """只读查询事实与原消息，不把学习读出重算成实际召回。"""
+ 
+@@ -44,7 +50,7 @@
+         self._read = read
+         self._legacy_page = legacy_page
+         self._catalog = catalog
+-        self._turns: _SourceTurns | None = None
++        self._turns: OrderedDict[tuple[str, str], _SourceTurns] = OrderedDict()
+         self._lock = Lock()
+         self._legacy_before: str | None = "g"
+         self._legacy: dict[tuple[str, str], list[tuple[datetime, str, int]]] = {}
+@@ -55,12 +61,14 @@
+         with self._lock:
+             head = reader.head(source=source)
+             key = (session_id, source, head)
+-            cached = self._turns
++            cached = self._turns.get(key[:2])
++            if cached is not None:
++                self._turns.move_to_end(key[:2])
+             if cached is not None and cached.key == key:
+                 return cached
+             closed: tuple[Turn, ...] = ()
+             prefix: tuple[_MessageRef, ...] = ()
+-            if cached is not None and cached.key[:2] == key[:2] and cached.key[2] < head:
++            if cached is not None and cached.key[2] < head:
+                 closed = tuple(turn for turn in cached.turns if turn.status != "open")
+                 if closed:
+                     prefix = tuple(item for item in cached.messages if item.seq <= closed[-1].through_seq)
+@@ -80,8 +88,12 @@
+                         yield message
+                 turns = projection.project(observed(), source, after_seq=boundary)
+                 return _SourceTurns(key, closed + turns, prefix + tuple(refs))
+-            self._turns = reader.scan(project, after_seq=boundary, through_seq=head, source=source)
+-            return self._turns
++            turns = reader.scan(project, after_seq=boundary, through_seq=head, source=source)
++            self._turns[key[:2]] = turns
++            self._turns.move_to_end(key[:2])
++            while len(self._turns) > _CACHED_SOURCES:
++                _ = self._turns.popitem(last=False)
++            return turns
+ 
+     def _legacy_automatic(self, session_id: str, source: str, after: int, through: int) -> tuple[str | None, bool]:
+         """Advance at most 64 retired rows per RPC, retaining references only.
+@@ -224,11 +236,30 @@
          origin = source.model_dump(mode="json", exclude={"query"})
          return {"query_id": identity, "query_text": title[:180], "query_text_truncated": len(title) > 180,
                  "ts": recall.timestamp.isoformat(), "source": origin, "graph_version": recall.graph_version,
@@ -241,7 +302,7 @@
          for hit in recall.hits:
              messages: list[dict[str, object]] = []
              for message_id in hit.message_ids:
-@@ -237,11 +256,17 @@
+@@ -237,11 +268,17 @@
                      raise ValueError(f"召回出处消息缺失: {message_id}")
                  if not isinstance(message.body, (Input, Output)):
                      raise ValueError(f"召回成员不是输入或输出: {message_id}")
@@ -395,7 +456,40 @@
                      )
          except (EmbeddingSpaceMismatchError, MemoryRebuildRequiredError) as error:
              set_graph_error(key, str(error))
-@@ -511,6 +538,47 @@
+@@ -482,6 +509,22 @@
+         return RecallBinding(embedding_binding=identity, unavailable=None).model_dump()
+ 
+     @asynccontextmanager
++    # 显式召回优先查询运行中的图：副本完整恢复要重新解码全部已学原消息。
++    @asynccontextmanager
++    async def live_graph(session_id, space):
++        key = DEFAULT_GRAPH if session_id is None else policies.route(session_id).read
++        # 重建期间不排队等待活图，照旧读已发布副本。
++        if not running or not graphs_ready.is_set() or key is None or key not in memories:
++            yield None
++            return
++        async with graph_access(key):
++            memory = memories.get(key)
++            if memory is None:
++                yield None
++                return
++            async with memory.view(space) as view:
++                yield view
++
+     async def open_recall(captured: Mapping[str, object]) -> AsyncGenerator[RecallTool]:
+         selected = RecallBinding.model_validate(dict(captured))
+         bindings = ctx.require(BINDINGS)
+@@ -498,7 +541,8 @@
+             memory=read_path, config=settings.memory_config(),
+             catalog=ctx.require(MESSAGE_CATALOG), embeddings=ctx.require(MESSAGE_EMBEDDINGS),
+             bindings=bindings, select_learning=select, records=records(),
+-            open_embedding=partial(SavedEmbedding.open, bindings), max_chars=settings.inject_max_chars,
++            open_embedding=partial(SavedEmbedding.open, bindings), live=live_graph,
++            max_chars=settings.inject_max_chars,
+         )
+ 
+     await catalog.register(
+@@ -511,6 +555,47 @@
          idempotent=True,
          parallel=True,
      )
@@ -443,7 +537,7 @@
      # 只读账本按声明的 workspace root 解析学习图；不暴露 writer 或任意路径。
  
  
-@@ -535,8 +603,9 @@
+@@ -535,8 +620,9 @@
          starting_rules[key] = rule
          try:
              try:
@@ -454,7 +548,7 @@
                      embeddings=ctx.require(MESSAGE_EMBEDDINGS), bindings=ctx.require(BINDINGS),
                      config=settings.memory_config(), cutover=key == DEFAULT_GRAPH,
                      restore_embeddings=restore_embeddings,
-@@ -550,6 +619,7 @@
+@@ -550,6 +636,7 @@
                  bindings=ctx.require(BINDINGS), learning_binding=identity, records=runtime_records,
                  embed_batch=embedder(rule, model_id), limit=settings.context_recall_limit,
                  max_chars=settings.inject_max_chars, member=member(key),
@@ -462,7 +556,7 @@
              )
              # 2. 新选择必须与已有图一致；失败先归还 writer，绝不自动重建。
              try:
-@@ -588,8 +658,8 @@
+@@ -588,8 +675,8 @@
                      await close_memory()
                      memory_rule = None
                      reports: list[str] = []
@@ -473,7 +567,7 @@
                          backup_root = rebuild_backup_root if key == DEFAULT_GRAPH else (
                              rebuild_backup_root / "graphs" / path.parent.name
                          )
-@@ -664,8 +734,13 @@
+@@ -664,8 +751,13 @@
                  await changed.wait()
                  changed.clear()
                  async with ctx.runtime_scope(), graph_access(key):
@@ -487,7 +581,7 @@
                      try:
                          _ = await memories[key].consume()
                      except (EmbeddingSpaceMismatchError, MemoryRebuildRequiredError) as error:
-@@ -676,10 +751,11 @@
+@@ -676,10 +768,11 @@
                          health.degrade(str(error))
  
          async with asyncio.TaskGroup() as group:
@@ -501,7 +595,7 @@
                          changed = pending.get(key)
                          if changed is None:
                              changed = pending[key] = asyncio.Event()
-@@ -704,12 +780,7 @@
+@@ -704,12 +797,7 @@
          nonlocal running
          running = False
          try:
@@ -586,7 +680,20 @@
              marker = RecallReference.model_validate_json(json.dumps(json_value(part.value)))
              recall = records.read(marker.retrieval_ref)
              if (recall is None or not isinstance(recall.source, ToolSource)
-@@ -124,21 +129,23 @@
+@@ -108,6 +113,7 @@
+         catalog: MessageCatalog, embeddings: MessageEmbeddings, bindings: Bindings,
+         select_learning: Callable[[], tuple[str, str]], records: RecallRecords,
+         open_embedding: Callable[[str], AbstractAsyncContextManager[BoundEmbeddingModel]],
++        live: Callable[[str | None, tuple[str, int]], AbstractAsyncContextManager[tuple[object, object] | None]] | None = None,
+         max_chars: int = 12000,
+     ):
+         if max_chars <= 0:
+@@ -120,25 +126,28 @@
+         self._select_learning = select_learning
+         self._records = records
+         self._open_embedding = open_embedding
++        self._live = live
+         self._max_chars = max_chars
  
      async def prepare(
          self, arguments: Mapping[str, object], source: CallSource | None = None,
@@ -612,7 +719,7 @@
                                learning_binding=binding,
                                embedding_binding=model_id,
                                max_chars=self._max_chars).model_dump(mode="json")
-@@ -150,7 +157,7 @@
+@@ -150,48 +159,63 @@
              return existing
          request = PreparedRecall.model_validate_json(json.dumps(json_value(arguments)))
          identity = "tool:" + key
@@ -621,23 +728,79 @@
          # 1. 打开工具实际固定的学习规则；读副本也校验图的 embedding 空间。
          async with self._bindings.open(request.learning_binding, AKASHA_LEARNING) as (learning, metadata):
              rule = LearningConfig.model_validate(dict(metadata))
-@@ -161,7 +168,7 @@
-                     return [list(vector) for vector in (await model.embed(texts)).vectors]
-             # 调用所在 Session 决定读取哪张图；显式程序没有 Session 时读 default 图。
-             async with read_memory(
--                self._memory(None if request.source is None else request.source.session_id), catalog=self._catalog,
-+                self._memory(request.program_session if request.source is None else request.source.session_id), catalog=self._catalog,
-                 embeddings=self._embeddings, bindings=self._bindings, config=self._config,
-                 embedding_space=(rule.embedding_model, rule.dimension),
-                 restore_embeddings=restore_embeddings,
-@@ -183,15 +190,15 @@
-                 recall = await run_memory_job(lambda: query_memory(
-                     cycle, state, learning_binding=request.learning_binding, text=request.query,
-                     dense=dense, stamp=stamp, source=source, limit=request.limit,
++            space = (rule.embedding_model, rule.dimension)
++            # 1a. 查询向量在取图之前算完，不持串行锁等待模型。
++            async with self._open_embedding(request.embedding_binding) as model:
++                if model.descriptor.identity != rule.embedding_model:
++                    raise ValueError("实际 embedding 模型不匹配已准备的学习 binding")
++                values = (await model.embed([request.query])).vectors
++            if len(values) != 1 or len(values[0]) != rule.dimension:
++                raise ValueError("召回 embedding 数量或维度不匹配")
++            dense = np.asarray(values[0], dtype=np.float32)
++            if not np.isfinite(dense).all():
++                raise ValueError("召回 embedding 必须是有限向量")
++            norm = float(np.linalg.norm(dense))
++            if not np.isfinite(norm) or norm <= 0.0:
++                raise ValueError("召回 embedding 必须具有有限正模长")
++            dense = dense / norm
++            stamp = datetime.now(UTC)
++            session_id = request.program_session if request.source is None else request.source.session_id
++
++            def search(cycle: object, state: object) -> Recall:
++                return query_memory(
++                    cycle, state, learning_binding=request.learning_binding, text=request.query,
++                    dense=dense, stamp=stamp, source=source, limit=request.limit,
 +                    time_start=request.time_start, time_end=request.time_end,
 +                    selection=request.selection,
 +                    presentation=request.presentation,
-                 ))
++                )
++
+             async def restore_embeddings(original: LearningConfig, texts: list[str]) -> list[list[float]]:
+                 async with self._open_embedding(request.embedding_binding) as model:
+                     if (model.descriptor.identity, model.descriptor.dimensions) != (original.embedding_model, original.dimension):
+                         raise ValueError("补算向量不属于原学习模型空间")
+                     return [list(vector) for vector in (await model.embed(texts)).vectors]
+-            # 调用所在 Session 决定读取哪张图；显式程序没有 Session 时读 default 图。
+-            async with read_memory(
+-                self._memory(None if request.source is None else request.source.session_id), catalog=self._catalog,
+-                embeddings=self._embeddings, bindings=self._bindings, config=self._config,
+-                embedding_space=(rule.embedding_model, rule.dimension),
+-                restore_embeddings=restore_embeddings,
+-            ) as (cycle, state):
+-                async with self._open_embedding(request.embedding_binding) as model:
+-                    if model.descriptor.identity != rule.embedding_model:
+-                        raise ValueError("实际 embedding 模型不匹配已准备的学习 binding")
+-                    values = (await model.embed([request.query])).vectors
+-                if len(values) != 1 or len(values[0]) != rule.dimension:
+-                    raise ValueError("召回 embedding 数量或维度不匹配")
+-                dense = np.asarray(values[0], dtype=np.float32)
+-                if not np.isfinite(dense).all():
+-                    raise ValueError("召回 embedding 必须是有限向量")
+-                norm = float(np.linalg.norm(dense))
+-                if not np.isfinite(norm) or norm <= 0.0:
+-                    raise ValueError("召回 embedding 必须具有有限正模长")
+-                dense = dense / norm
+-                stamp = datetime.now(UTC)
+-                recall = await run_memory_job(lambda: query_memory(
+-                    cycle, state, learning_binding=request.learning_binding, text=request.query,
+-                    dense=dense, stamp=stamp, source=source, limit=request.limit,
+-                ))
++
++            # 1b. 运行中的图在串行锁内直接检索；图未运行或正在重建时才完整恢复已发布副本，
++            #     那条路要重新解码全部已学原消息。调用所在 Session 决定读取哪张图；
++            #     显式程序没有 Session 时读 default 图。
++            recall: Recall | None = None
++            if self._live is not None:
++                async with self._live(session_id, space) as live:
++                    if live is not None:
++                        recall = await run_memory_job(lambda: search(*live))
++            if recall is None:
++                async with read_memory(
++                    self._memory(session_id), catalog=self._catalog,
++                    embeddings=self._embeddings, bindings=self._bindings, config=self._config,
++                    embedding_space=space, restore_embeddings=restore_embeddings,
++                ) as (cycle, state):
++                    recall = await run_memory_job(lambda: search(cycle, state))
              # 2. 材料和呈现出处固定后一次发布；失败不能暴露成功 Result。
              material = await run_memory_job(lambda: render_materials(
                  identity, recall, learning, self._catalog, max_chars=request.max_chars,
@@ -650,7 +813,7 @@
              _ = await run_memory_job(lambda: self._records.save(identity, recall))
              return self._result(identity, recall, tuple(ContentPart("text", part["text"]) for part in cast(tuple[Mapping[str, str], ...], material["reminders"])))
  
-@@ -207,6 +214,8 @@
+@@ -207,6 +231,8 @@
              ))
          if tuple(dict.fromkeys(ref["ref"] for ref in cast(tuple[Mapping[str, str], ...], material["references"]))) != recall.presented_message_ids:
              raise ValueError("原查询呈现的材料发生变化，不能用当前结果冒充恢复")
@@ -911,7 +1074,7 @@
 +    return Recall.model_validate_json(result.model_dump_json())
 --- a/plugins/akasha/runtime.py
 +++ b/plugins/akasha/runtime.py
-@@ -2,6 +2,9 @@
+@@ -2,26 +2,105 @@
  from __future__ import annotations
  
  import asyncio
@@ -919,9 +1082,11 @@
 +from html import escape
 +import json
  import logging
- from collections.abc import Awaitable, Callable, Mapping
+-from collections.abc import Awaitable, Callable, Mapping
++from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
++from contextlib import asynccontextmanager
  from datetime import UTC, datetime
-@@ -9,19 +12,94 @@
+ from typing import cast
  
  from plugins.ledger.contract import Bindings
  from plugins.ledger.contract import MessageCatalog, MessageEmbeddings
@@ -1019,7 +1184,7 @@
  
  
  def _reference_rows(material: MaterialData) -> tuple[Mapping[str, object], ...]:
-@@ -47,11 +125,15 @@
+@@ -47,11 +126,15 @@
          records: RecallRecords, embed_batch: Callable[[list[str]], Awaitable[list[list[float]]]],
          limit: int = 40, max_chars: int = 12000,
          member: Callable[[str], bool] | None = None,
@@ -1035,7 +1200,7 @@
          self._catalog = catalog
          self._embeddings = embeddings
          self._bindings = bindings
-@@ -62,6 +144,7 @@
+@@ -62,6 +145,7 @@
          self._max_chars = max_chars
          self._lock = asyncio.Lock()
          self._closing = False
@@ -1043,7 +1208,22 @@
  
      def _check_open(self) -> None:
          if self._closing:
-@@ -116,6 +199,8 @@
+@@ -101,6 +185,14 @@
+                 member=self._member,
+             )
+ 
++    # 显式召回与 Context 查询共用串行锁和空间核对；视图只在 with 内有效，查询不推进学习图。
++    @asynccontextmanager
++    async def view(self, space: tuple[str, int]) -> AsyncGenerator[tuple[MemoryCycle, Consumption]]:
++        async with self._lock:
++            self._check_open()
++            await run_memory_job(lambda: self._consumer.check_embedding_space(*space, self._bindings))
++            yield self._consumer.cycle, self._consumer.state
++
+     async def prepare(self, snapshot: tuple[Message, ...], source: str) -> MaterialData:
+         """Context 查询与学习、关闭共用串行锁；查询本身不推进学习图。"""
+         async with self._lock:
+@@ -116,6 +208,8 @@
                      learning_binding=self._learning_binding, learning=learning, rule=rule,
                      records=self._records, embed_batch=self._embed_batch,
                      limit=self._limit, max_chars=self._max_chars,
@@ -1052,7 +1232,7 @@
                  )
  
  
-@@ -124,13 +209,18 @@
+@@ -124,13 +218,18 @@
      catalog: MessageCatalog, embeddings: MessageEmbeddings, bindings: Bindings,
      learning_binding: str, learning: Learning, rule: LearningConfig, records: RecallRecords,
      embed_batch: Callable[[list[str]], Awaitable[list[list[float]]]], limit: int, max_chars: int,
@@ -1072,7 +1252,7 @@
      if actual != snapshot:
          raise ValueError("召回材料需要完整且真实的 Message 前缀")
      projected = await run_memory_job(lambda: learning.projection.project(snapshot, source))
-@@ -147,32 +237,47 @@
+@@ -147,32 +246,47 @@
          recall = await run_memory_job(lambda: records.read(identity))
          if recall is None:
              # 升级前的随机身份仍是实际查询证据；复用同一用户输入后的首次记录。
@@ -1122,7 +1302,7 @@
      return result
  
  
-@@ -182,6 +287,7 @@
+@@ -182,6 +296,7 @@
      embeddings: MessageEmbeddings, learning_binding: str, learning: Learning,
      rule: LearningConfig, records: RecallRecords,
      embed_batch: Callable[[list[str]], Awaitable[list[list[float]]]], limit: int, max_chars: int,
@@ -1130,12 +1310,12 @@
  ) -> MaterialData:
      """真实用户输入首次准备时检索并保存结果，包括未命中。"""
      session_id = snapshot[0].session_id
-@@ -209,17 +315,37 @@
+@@ -209,17 +324,37 @@
      recall = await run_memory_job(lambda: query_memory(
          cycle, state, learning_binding=learning_binding,
          text=text, dense=dense, stamp=stamp, source=origin, limit=limit,
 +        selection="fused", presentation="excerpts",
-     ))
++    ))
 +    # 3. Candidates this request already quotes verbatim cost one index line
 +    #    rather than a body. The choice is made once, here, and frozen into the
 +    #    receipt, so every later render withholds and indexes the same ones.
@@ -1145,7 +1325,7 @@
 +    withheld = tuple(dict.fromkeys(
 +        message_id for hit in recall.hits for message_id in hit.message_ids
 +        if message_id in replayed
-+    ))
+     ))
 +    index_chars = 0
 +    if withheld:
 +        recall = Recall.model_validate(

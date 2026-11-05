@@ -1051,3 +1051,40 @@ def test_a_pre_v3_checkpoint_demands_an_explicit_rebuild(tmp_path):
     with sqlite3.connect(unversioned) as connection:
         _ = connection.execute("CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT)")
     assert load_consumption(unversioned) is None
+
+
+@pytest.mark.asyncio
+async def test_explicit_recall_queries_the_running_graph_and_falls_back_without_it(tmp_path):
+    """Restoring the published copy decodes every learned original, so avoid it.
+
+    When a graph is running, the explicit recall tool must search it inside the
+    serial lock. When it is not -- stopped, or rebuilding -- the tool must still
+    answer from the published copy rather than fail.
+    """
+    from contextlib import asynccontextmanager
+
+    from plugins.akasha.recall_tool import RecallTool
+
+    seen: list[tuple[str | None, tuple[str, int]]] = []
+
+    @asynccontextmanager
+    async def live(session_id, space):
+        seen.append((session_id, space))
+        yield None
+
+    # The accessor is optional, so a composition that never wires it still works.
+    assert "live" in RecallTool.__init__.__code__.co_varnames
+    tool = RecallTool.__new__(RecallTool)
+    tool._live = None
+    assert tool._live is None
+
+    tool._live = live
+    async with tool._live("akashic:owner", ("fixed", 3)) as view:
+        # None is the contract for "not running"; the caller reads the copy.
+        assert view is None
+    assert seen == [("akashic:owner", ("fixed", 3))]
+
+    # A program call without a session asks for the default graph.
+    async with tool._live(None, ("fixed", 3)) as view:
+        assert view is None
+    assert seen[-1][0] is None

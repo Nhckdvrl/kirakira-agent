@@ -1271,7 +1271,7 @@
     "plugins/akasha/contract.py": {
       "sha256": "900fa560bd99a420dd0693416206d7ff94ca586c32f559c197f7cf840fd2e107",
       "patch": "third_party/patches/memory-query-api.patch",
-      "patch_sha256": "8832c42427c1a1f4aa55da4202b8122544e3057fb4958904efa07e7fdab83ffc",
+      "patch_sha256": "68ff9b35ea3b2d973b5918c80836526eed5d70f2a9372d862505410df52feb11",
       "reason": "Receipt-scoped memory recall, bounded original-source navigation, and validated source proofs."
     },
     "plugins/akasha/domain/diffusion.py": {
@@ -1317,9 +1317,9 @@
       "reason": "Upstream Akasha engine through 5ddd5ebb: blocked graph capacity, incremental basin structure with a resident index, lazy-heap Residual Push with an optional compiled kernel, matrix-backed resident feature pool, in-place incremental checkpoint publication with schema v3, tokenizer and vector reuse on restore, and incremental interest prototypes. Local changes keep an empty graph publishable, keep the consumption read and member routing off the event loop, and refuse a pre-v3 checkpoint instead of republishing an unreplayed graph as v3."
     },
     "plugins/akasha/inspector.py": {
-      "sha256": "96d8c82956daccdc950d4123982041f7e90e4bba2bbb860298d038e3ecfeb1c4",
+      "sha256": "e43c163a7be80225a9565937020495883c671a8a369644e4c77fe46cd51cb43e",
       "patch": "third_party/patches/memory-query-api.patch",
-      "patch_sha256": "8832c42427c1a1f4aa55da4202b8122544e3057fb4958904efa07e7fdab83ffc",
+      "patch_sha256": "68ff9b35ea3b2d973b5918c80836526eed5d70f2a9372d862505410df52feb11",
       "reason": "Session-scoped evidence queries, dated receipts and bounded presentation."
     },
     "plugins/akasha/interest.py": {
@@ -1337,7 +1337,7 @@
     "plugins/akasha/message_ui.css": {
       "sha256": "7fffd34225af5cd092b6ee2fbf292a308fba4cfa72d0c3d43a17b53d7a2dcc04",
       "patch": "third_party/patches/memory-query-api.patch",
-      "patch_sha256": "8832c42427c1a1f4aa55da4202b8122544e3057fb4958904efa07e7fdab83ffc",
+      "patch_sha256": "68ff9b35ea3b2d973b5918c80836526eed5d70f2a9372d862505410df52feb11",
       "reason": "Session-scoped evidence queries, dated receipts and bounded presentation."
     },
     "plugins/akasha/migration.catalog.toml": {
@@ -1347,9 +1347,9 @@
       "reason": "Upstream Akasha engine through 5ddd5ebb: blocked graph capacity, incremental basin structure with a resident index, lazy-heap Residual Push with an optional compiled kernel, matrix-backed resident feature pool, in-place incremental checkpoint publication with schema v3, tokenizer and vector reuse on restore, and incremental interest prototypes. Local changes keep an empty graph publishable, keep the consumption read and member routing off the event loop, and refuse a pre-v3 checkpoint instead of republishing an unreplayed graph as v3."
     },
     "plugins/akasha/plugin.py": {
-      "sha256": "5243c1864733458ddd48aa2985c7abcdb9c85cfc0bad0c987d5735520b8d8bf6",
+      "sha256": "3eb95c44e51d2e3b5de2b00e27d25f4642d4a6bbc2c03e5c423873c835bd2927",
       "patch": "third_party/patches/memory-query-api.patch",
-      "patch_sha256": "8832c42427c1a1f4aa55da4202b8122544e3057fb4958904efa07e7fdab83ffc",
+      "patch_sha256": "68ff9b35ea3b2d973b5918c80836526eed5d70f2a9372d862505410df52feb11",
       "reason": "Drain spawned workers without rethrowing already reported failures; preserve new cleanup failures and caller cancellation."
     },
     "plugins/akasha/projection.py": {
@@ -1359,27 +1359,27 @@
       "reason": "Upstream Akasha engine through 5ddd5ebb: blocked graph capacity, incremental basin structure with a resident index, lazy-heap Residual Push with an optional compiled kernel, matrix-backed resident feature pool, in-place incremental checkpoint publication with schema v3, tokenizer and vector reuse on restore, and incremental interest prototypes. Local changes keep an empty graph publishable, keep the consumption read and member routing off the event loop, and refuse a pre-v3 checkpoint instead of republishing an unreplayed graph as v3."
     },
     "plugins/akasha/recall_tool.py": {
-      "sha256": "9e94b9dc72ab17775c7e80bf111d5a854ab20c7f8c494da4f8984cc8db3b9640",
+      "sha256": "06b0909028c616599ff0002fb80b0ef3bbde60fcc0d18a8e428349b47bf7175d",
       "patch": "third_party/patches/memory-query-api.patch",
-      "patch_sha256": "8832c42427c1a1f4aa55da4202b8122544e3057fb4958904efa07e7fdab83ffc",
+      "patch_sha256": "68ff9b35ea3b2d973b5918c80836526eed5d70f2a9372d862505410df52feb11",
       "reason": "Receipt-scoped memory recall, bounded original-source navigation, and validated source proofs."
     },
     "plugins/akasha/recalls.py": {
       "sha256": "cc10ce0b32997c05569892a42172a4ad9f40f31446bc5c189b1c9e7317922bc5",
       "patch": "third_party/patches/memory-query-api.patch",
-      "patch_sha256": "8832c42427c1a1f4aa55da4202b8122544e3057fb4958904efa07e7fdab83ffc",
+      "patch_sha256": "68ff9b35ea3b2d973b5918c80836526eed5d70f2a9372d862505410df52feb11",
       "reason": "Session-scoped evidence queries, dated receipts and bounded presentation."
     },
     "plugins/akasha/runtime.py": {
-      "sha256": "68768a96e770bfa360661b1ec569dbab7b1c5fddf8fa0a730301d2d34aaf7df2",
+      "sha256": "b0bf59b26fbf4df95a43754b50e0345cde480f4021cc7d0a4e4bab66c203a847",
       "patch": "third_party/patches/memory-query-api.patch",
-      "patch_sha256": "8832c42427c1a1f4aa55da4202b8122544e3057fb4958904efa07e7fdab83ffc",
+      "patch_sha256": "68ff9b35ea3b2d973b5918c80836526eed5d70f2a9372d862505410df52feb11",
       "reason": "Session-scoped evidence queries, dated receipts and bounded presentation."
     },
     "plugins/akasha/settings.py": {
       "sha256": "0f28f278dcef395f03fce52c8fa218582d9eabace922608c28e70c770757dc78",
       "patch": "third_party/patches/memory-query-api.patch",
-      "patch_sha256": "8832c42427c1a1f4aa55da4202b8122544e3057fb4958904efa07e7fdab83ffc",
+      "patch_sha256": "68ff9b35ea3b2d973b5918c80836526eed5d70f2a9372d862505410df52feb11",
       "reason": "Session-scoped evidence queries, dated receipts and bounded presentation."
     },
     "plugins/akashic_clients/attachments.py": {
@@ -2393,22 +2393,24 @@
       "ac123d3b",
       "aea6a815",
       "b060c43d",
+      "b3148dbc",
       "b53a0608",
       "cd0101f8",
       "d45fb656",
+      "d9571101",
       "dc86f0f9",
       "df9d7a72",
       "f17a4d49",
       "f9e5c44c"
     ],
-    "scope": "Through 88e69687: personal-assistant continuity and recovery, identity-set context summaries, durable Markdown learning checkpoints, spawned-worker shutdown semantics, live tool restrictions and optional SearXNG search. Through 5ec690b2: the Akasha engine as file state at 5ddd5ebb (blocked graph capacity, incremental basins with a resident index, lazy-heap Residual Push with its compiled kernel, matrix feature pool, in-place incremental publication with schema v3, restore-time tokenizer and vector reuse, incremental interest prototypes), the persistent-goal plugin with its tests, memory scope on programmatic admission, and the two ledger capabilities those need: OwnerTransaction.delete and MessageCatalog.prefix_revision. The base runtime pin remains unchanged.",
+    "scope": "Through 88e69687: personal-assistant continuity and recovery, identity-set context summaries, durable Markdown learning checkpoints, spawned-worker shutdown semantics, live tool restrictions and optional SearXNG search. Through 5ec690b2: the Akasha engine as file state at 5ddd5ebb (blocked graph capacity, incremental basins with a resident index, lazy-heap Residual Push with its compiled kernel, matrix feature pool, in-place incremental publication with schema v3, restore-time tokenizer and vector reuse, incremental interest prototypes), the persistent-goal plugin with its tests, memory scope on programmatic admission, the recall-path perf changes (75da06f1 prefix reuse, b3148dbc projection cache, d9571101 live-graph search), and the two ledger capabilities those need: OwnerTransaction.delete and MessageCatalog.prefix_revision. The base runtime pin remains unchanged.",
     "declined": {
       "259bef42": "Index-only automatic recall. The same insight was wanted, but this distribution keeps a receipt-bound excerpt layer, so it withholds bodies the request already quotes and spends one index line on them while keeping read_memory_source and search_memory_source, rather than dropping those candidates and adding fetch_messages.",
       "353b5320": "Recall overlay on an F key, with a host message.actions slot. It rewrites the shared chat shell across files both sides have changed, and the overlay logic itself sits outside eslint and tsc, so the same information was added to this distribution's own recall card instead, with a render check.",
       "design series (1d8e1eba..1a1c6a56)": "Design canvas tab, which upstream uses to replace and delete the sites plugin. This distribution still ships sites and sites_tab, and no requirement here depends on a canvas.",
       "subagent runners (ffe7770e..bed19054, e23482c8)": "External Codex and Claude Code runners with DSH permission modes. Worth revisiting, but they extend host execution rather than either pillar, and they were not needed by the work in this round.",
       "chat and web perf series": "Large front-end performance work on files this distribution has patched for its own presentation. Not adopted because nothing measured here pointed at those paths; the recall and engine costs were measured and addressed directly instead.",
-      "akasha plugin/inspector perf (d9571101, 1ce7ffef, c8c62d18 plugin side, b3148dbc)": "Touch plugins/akasha/plugin.py and inspector.py, which this round rewrote for the covered-id wiring and the delivery forms. Re-examining them against the new shape is follow-up work, not a mechanical take. The runtime.py half (75da06f1) was taken: it reuses the caller's committed read face when verifying the recall prefix, so a long conversation no longer re-decodes its whole history each step."
+      "akasha startup perf (1ce7ffef, c8c62d18 plugin side)": "Defer graph catch-up until the host is ready, and route graphs from the watermark follow already produces. Both reshape plugin.py startup around ordering this round did not touch and cannot measure here without a long-running deployment, so they stay for a session that can observe boot. The recall-path members of that group were taken: b3148dbc caches turn projections per session and source, and d9571101 searches the running graph instead of restoring the published copy."
     },
     "local_divergence": {
       "pre-v3 checkpoints": "Upstream registers a one-time full replay through its migration catalog; this distribution's root catalog does not require Akasha migrations, so a checkpoint published before schema v3 is refused at load with MemoryRebuildRequiredError instead of being republished as v3.",

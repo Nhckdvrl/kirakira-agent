@@ -509,6 +509,22 @@ async def run(ctx: Context, interest: Interest) -> None:
         return RecallBinding(embedding_binding=identity, unavailable=None).model_dump()
 
     @asynccontextmanager
+    # 显式召回优先查询运行中的图：副本完整恢复要重新解码全部已学原消息。
+    @asynccontextmanager
+    async def live_graph(session_id, space):
+        key = DEFAULT_GRAPH if session_id is None else policies.route(session_id).read
+        # 重建期间不排队等待活图，照旧读已发布副本。
+        if not running or not graphs_ready.is_set() or key is None or key not in memories:
+            yield None
+            return
+        async with graph_access(key):
+            memory = memories.get(key)
+            if memory is None:
+                yield None
+                return
+            async with memory.view(space) as view:
+                yield view
+
     async def open_recall(captured: Mapping[str, object]) -> AsyncGenerator[RecallTool]:
         selected = RecallBinding.model_validate(dict(captured))
         bindings = ctx.require(BINDINGS)
@@ -525,7 +541,8 @@ async def run(ctx: Context, interest: Interest) -> None:
             memory=read_path, config=settings.memory_config(),
             catalog=ctx.require(MESSAGE_CATALOG), embeddings=ctx.require(MESSAGE_EMBEDDINGS),
             bindings=bindings, select_learning=select, records=records(),
-            open_embedding=partial(SavedEmbedding.open, bindings), max_chars=settings.inject_max_chars,
+            open_embedding=partial(SavedEmbedding.open, bindings), live=live_graph,
+            max_chars=settings.inject_max_chars,
         )
 
     await catalog.register(
