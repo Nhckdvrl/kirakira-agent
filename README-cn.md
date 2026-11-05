@@ -115,11 +115,12 @@ uv run --frozen --no-sync kirakira-agent gateway --config "$HOME/.kirakira/works
 | 能否从聊天交办，再按我的新要求调整？ | 两组生活场景各 **12/12 功能检查** | 历史更正、改规则后跳过、依据查询、暂停与重启恢复。[聊天交办实测](docs/operations/evaluations/2026-10-23-personal-assistant.md) |
 | 能否接续日常话题，并在结束后停下？ | 四类受邀话题，**32/32 验收断言** | 实际等待空闲，检查出处、投递、去重和停止。[伙伴体验实测](docs/operations/evaluations/2026-10-22-companion-personality.md) |
 | 真实模型下执行主链是否跑通？ | **13/13 主链场景** | 文件、Shell、MCP、子任务、中断与恢复。[验证记录](docs/operations/verification.md) |
+| 召回每轮花多少，能不能降下来？ | 每轮实时注入 **2393 → 757 字**；学习 150 轮 **47.66 → 20.34 s**；单次检索 **47.96 → 11.62 ms** | 各跑三次取中位数，不调用聊天模型。[`eval.recall_cost`](eval/recall_cost.py)、[`eval.memory_cost`](eval/memory_cost.py) |
+| 引入的上游边界是否真的可核对？ | **969 个文件按哈希固定**；**12 个补丁工件**逐个应用到基线后与本仓库逐字节一致 | 采纳、拒绝理由与刻意分歧均有记录。[第三方声明](third_party/THIRD_PARTY.md) |
 
-这些结果属于各自的实验条件，不代表记忆全面领先或用户满意度。
-个性设置已经接通并实测，实际回复仍可能夹带建议或补写无依据细节；
-跨模型一致性、长期陪伴效果以及主动联系的价值和误打扰仍需继续验证。
-[报告](docs/operations/verification.md)保留失败、开销和版本；[设计依据](docs/architecture/design-direction.md)解释取舍。
+每一行都有自己的分母和条件；[报告](docs/operations/verification.md)保留失败、开销与版本，而不是合成一个"成功率"。回归套件守的是不变量而非冒烟：scope 路由不得阻塞事件循环、v3 之前的检查点必须被拒绝而不是静默重写、索引行必须可引用可读取。
+
+三个问题仍然开放，需要连续真实使用才能回答：跨模型一致性、长期陪伴的实际价值、有用提醒与误打扰的比例。[设计依据](docs/architecture/design-direction.md)解释取舍。
 
 ## 开发与验证
 

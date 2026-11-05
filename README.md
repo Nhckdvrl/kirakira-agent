@@ -134,13 +134,17 @@ its request. The embedding encoder runs locally on CPU after an explicit model d
 | Can I delegate in chat and change my instructions later? | **12/12 functional checks** in each of two everyday scenarios | Corrected history, revised rules, evidence, pause and restart recovery. [Assistant workflow experiment](docs/operations/evaluations/2026-10-23-personal-assistant.md) |
 | Can it pick up everyday conversations and stop? | **32/32 assertions** across four invited topics | Actual idle waits; source, delivery, duplicate and stopping checks. [Companion experiment](docs/operations/evaluations/2026-10-22-companion-personality.md) |
 | Does the execution chain work with a real model? | **13/13 runtime scenarios** | Files, Shell, MCP, child tasks, interruption and recovery. [Verification records](docs/operations/verification.md) |
+| What does recall cost per turn, and can that be cut? | Live injection **2393 → 757 characters** a turn; learning 150 turns **47.66 → 20.34 s**; one recall **47.96 → 11.62 ms** | Three runs each, medians, no chat model. [`eval.recall_cost`](eval/recall_cost.py), [`eval.memory_cost`](eval/memory_cost.py) |
+| Is the imported upstream boundary actually checkable? | **969 files pinned**; all **12 patch artifacts** reproduce this tree when applied to the baseline | Adopted, declined-with-reason and deliberate divergence recorded. [Third-party notice](third_party/THIRD_PARTY.md) |
 
-These are scoped experiments, not a claim of overall memory superiority or user
-satisfaction. Personality controls are implemented and tested, while replies can
-still add unwanted advice or unsupported details. Cross-model consistency,
-long-term companionship and useful-versus-disruptive initiative need further study.
-The [reports](docs/operations/verification.md) retain failures, costs and version details;
-[design direction](docs/architecture/design-direction.md) explains the choices.
+Each row has its own denominator and conditions; the [reports](docs/operations/verification.md)
+keep the failures, costs and versions rather than a single success rate. The
+regression suite guards invariants, not smoke: scope routing must not block the
+event loop, a pre-v3 checkpoint must be refused rather than silently rewritten,
+an index line must stay citable and readable. Three questions stay open and need
+continuous real use: cross-model consistency, long-term companionship, and the
+ratio of useful alerts to interruptions. [Design direction](docs/architecture/design-direction.md)
+explains the choices.
 
 ## Development and verification
 
