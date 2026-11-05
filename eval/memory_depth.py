@@ -8,6 +8,7 @@ policies. Expansion is chosen by the reader, without reference-answer hints.
 import argparse
 import asyncio
 import hashlib
+import itertools
 import json
 import os
 import sqlite3
@@ -42,6 +43,8 @@ from plugins.ledger.embedding_store import MessageEmbeddings
 from plugins.ledger.log import MessageLog, SessionAttributes
 from plugins.models.contract import CHAT_MODELS, EMBEDDINGS, ModelRequest
 from plugins.turn_projection.plugin import TurnProjection
+
+from eval.significance import paired_comparison, wilson_interval
 
 SYSTEMS = ("dense-whole", "dense-excerpts", "fused-excerpts", "dense-adaptive", "fused-adaptive")
 # The window rule asks one question: when a recalled original is already quoted in
@@ -96,7 +99,7 @@ def corpus(per_family):
     return fixture, cases
 
 
-def followup_corpus(per_family, *, version=1):
+def followup_corpus(per_family, *, version=1, paragraph_count=240):
     """A focused source-navigation suite, frozen separately from depth-v1.
 
     Directory hints are ordinary source content. Neither the answer identifier
@@ -121,7 +124,11 @@ def followup_corpus(per_family, *, version=1):
             project = projects[index] + "资料归档"
             code = "KF-" + hashlib.sha256((f"source-followup-v{version}:" + str(index)).encode()).hexdigest()[:10].upper()
             question = project + "的正式签收凭证号是什么？"
-            paragraphs = [f"工作记录{n:03}：{project}核对材料完整性、会务和运输安排。此段不是签收结论。\n" for n in range(240)]
+            # Shorter reports when the whole original has to fit in the request
+            # alongside the others; the answer still sits at the head, the tail
+            # or the middle, so navigating for it is unchanged.
+            paragraphs = [f"工作记录{n:03}：{project}核对材料完整性、会务和运输安排。此段不是签收结论。\n"
+                          for n in range(paragraph_count)]
             conclusion = f"\n正式签收栏：凭证号 {code}。\n"
             if version >= 2:
                 conclusion = f"\n归档栏：{code}。\n"
@@ -135,7 +142,8 @@ def followup_corpus(per_family, *, version=1):
             elif family == "long-tail":
                 source = legend + "目录说明：归档栏在报告末页，工作记录不是签收结论。\n" + "".join(paragraphs) + conclusion
             elif family == "mid-document":
-                source = legend + "目录说明：归档栏在报告中部，前后均有工作记录。\n" + "".join(paragraphs[:120]) + conclusion + "".join(paragraphs[120:])
+                half = len(paragraphs) // 2
+                source = legend + "目录说明：归档栏在报告中部，前后均有工作记录。\n" + "".join(paragraphs[:half]) + conclusion + "".join(paragraphs[half:])
             else:
                 question = project + "的工作人员已确认的食物过敏原是什么？"
                 source = legend + "只记录材料与运输，没有采集任何工作人员的食物过敏资料。\n" + "".join(paragraphs)
@@ -163,6 +171,26 @@ def followup_corpus(per_family, *, version=1):
     return fixture, cases
 
 
+def comparisons(rows, systems):
+    """Every system pair, judged on the questions they disagree about.
+
+    Reported next to the totals because these suites routinely produce a gap in
+    the totals that the paired test cannot distinguish from chance. Leaving the
+    reader to assume otherwise is the easiest way for an honest number to carry
+    a dishonest claim.
+    """
+    scored = {}
+    for system in systems:
+        scored[system] = {row["case"]: bool(row.get("correct", False)) for row in rows
+                          if row["system"] == system and row["expected"] != "UNKNOWN"}
+    out = {}
+    for first, second in itertools.combinations(systems, 2):
+        if not scored[first] or not scored[second]:
+            continue
+        out[f"{first} vs {second}"] = paired_comparison(scored[first], scored[second])
+    return out
+
+
 def summary(rows, systems=SYSTEMS):
     out = {}
     for system in systems:
@@ -171,6 +199,10 @@ def summary(rows, systems=SYSTEMS):
         negative = [row for row in selected if row["expected"] == "UNKNOWN"]
         out[system] = {"trials": len(selected), "correct": sum(r.get("correct", False) for r in selected),
             "answerable": len(positive), "answerable_correct": sum(r.get("correct", False) for r in positive),
+            # A bare fraction over twelve questions invites a directional
+            # reading the sample may not carry, so the interval travels with it.
+            "answerable_correct_interval": [round(bound, 3) for bound in wilson_interval(
+                sum(r.get("correct", False) for r in positive), len(positive))],
             "abstentions": len(negative), "correct_abstentions": sum(r.get("correct", False) for r in negative),
             "supported_answers": sum(r.get("supported_answer", False) for r in selected),
             "initial_answer_spans": sum(r.get("initial_answer_span_present", False) for r in positive),
@@ -274,6 +306,7 @@ async def evaluate(args):
 
     def save():
         report["summary"] = summary(report["rows"], systems)
+        report["comparisons"] = comparisons(report["rows"], systems)
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
 
@@ -798,7 +831,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("workspace", "key-file", "model-config", "embedding-manifest", "output"):
         parser.add_argument("--" + name, type=Path, required=name == "output")
-    parser.add_argument("--per-family", type=int, default=4, choices=range(1, 5))
+    # Four per family caps a suite at sixteen questions, twelve of them
+    # answerable, and at that size a paired test cannot separate two retrieval
+    # methods. The fixtures are generated, so the ceiling was arbitrary.
+    parser.add_argument("--per-family", type=int, default=4, choices=range(1, 65))
     parser.add_argument("--suite", choices=("depth-v1", "source-followup-v1", "source-followup-v2", "window-v1"), default="depth-v1")
     parser.add_argument("--systems", nargs="+", choices=ALL_SYSTEMS, default=None)
     parser.add_argument("--candidates", type=int, default=4)

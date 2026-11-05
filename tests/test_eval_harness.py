@@ -14,7 +14,8 @@ import json
 
 import pytest
 
-from eval.memory_depth import ALL_SYSTEMS, followup_corpus, summary
+from eval.memory_depth import ALL_SYSTEMS, comparisons, followup_corpus, summary
+from eval.significance import mcnemar_exact, paired_comparison, wilson_interval
 
 # Published artifacts embed their own corpus, so verification does not depend on
 # this generator. Reproducing a published report from source does, and a silent
@@ -125,3 +126,57 @@ def test_summary_separates_truncation_from_refusal() -> None:
     assert out["protocol_failures"] == 2
     assert out["truncated_calls"] == 1
     assert out["prose_calls"] == 1
+
+
+def test_wilson_interval_stays_inside_the_unit_and_covers_the_estimate() -> None:
+    for correct, total in ((0, 12), (6, 12), (9, 12), (12, 12), (1, 1)):
+        low, high = wilson_interval(correct, total)
+        assert 0.0 <= low <= correct / total <= high <= 1.0, (correct, total)
+    # Smaller samples must not report tighter knowledge.
+    assert (wilson_interval(6, 12)[1] - wilson_interval(6, 12)[0]
+            > wilson_interval(60, 120)[1] - wilson_interval(60, 120)[0])
+    assert wilson_interval(0, 0) == (0.0, 1.0)
+
+
+def test_mcnemar_counts_only_the_disagreements() -> None:
+    assert mcnemar_exact(0, 0) == 1.0
+    assert mcnemar_exact(3, 3) == 1.0
+    # Agreement carries no information about which system is better, so a large
+    # shared score cannot rescue a comparison with few discordant pairs.
+    assert mcnemar_exact(5, 2) == pytest.approx(0.4531, abs=5e-4)
+    assert mcnemar_exact(21, 1) < 0.001
+    assert mcnemar_exact(10, 0) < 0.01
+
+
+def test_a_visible_gap_is_not_reported_as_a_difference() -> None:
+    """The property the harness exists to enforce.
+
+    Nine correct against six looks like a result and reads like one in prose.
+    On paired questions at this size it is not distinguishable from chance, and
+    the report has to say so rather than leave the totals to speak.
+    """
+    cases = [f"q{n}" for n in range(12)]
+    first = {case: n < 9 for n, case in enumerate(cases)}
+    second = {case: n < 6 for n, case in enumerate(cases)}
+    result = paired_comparison(first, second)
+    assert (result["only_first"], result["only_second"]) == (3, 0)
+    assert result["paired_questions"] == 12
+    assert result["separates"] is False, result
+
+    # The same nine-against-six totals, disagreeing on more questions, can
+    # separate: it is the discordant pairs that decide, not the totals.
+    spread_first = {case: n % 4 != 0 for n, case in enumerate(cases)}
+    spread_second = {case: n % 4 == 0 or n > 8 for n, case in enumerate(cases)}
+    assert paired_comparison(spread_first, spread_second)["discordant"] > result["discordant"]
+
+
+def test_comparisons_cover_every_pair_and_ignore_abstention_controls() -> None:
+    rows = []
+    for system, correct in (("window-bodies", True), ("window-index", False)):
+        rows.append({"system": system, "case": "a", "expected": "KF-1", "correct": correct})
+        rows.append({"system": system, "case": "u", "expected": "UNKNOWN", "correct": True})
+    out = comparisons(rows, ("window-bodies", "window-index"))
+    assert list(out) == ["window-bodies vs window-index"]
+    # The UNKNOWN control is scored in its own denominator elsewhere; including
+    # it here would let abstention agreement pad a capability comparison.
+    assert out["window-bodies vs window-index"]["paired_questions"] == 1
