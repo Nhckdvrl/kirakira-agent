@@ -1262,11 +1262,41 @@
       "sha256": "f37041f64c183331553786231d9f1475ac7bc7ac890b659c1dc9966caba6f380",
       "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
     },
+    "plugins/akasha/application/cycle.py": {
+      "sha256": "579372c09f9aee753b5c56fb9ef192c412ebb620601d8f822297a82f9811b26a",
+      "patch": "third_party/patches/akasha-retrieval-representation.patch",
+      "patch_sha256": "96bc2faa8b253031cbe4fc6a36291ce5bfc41849e040a3ac1b21df72c3736318",
+      "reason": "Upstream retrieval representation at cd0101f8 (with the matrix feature pool at 881f9fa7): graph capacity reserved in blocks, incremental basin structure with a resident index, and a lazy-heap Residual Push. Adopted without the later schema v3 publish path, which this distribution's own persistence and consumer patches would have to absorb first."
+    },
     "plugins/akasha/contract.py": {
       "sha256": "900fa560bd99a420dd0693416206d7ff94ca586c32f559c197f7cf840fd2e107",
       "patch": "third_party/patches/memory-query-api.patch",
       "patch_sha256": "5f6e572095efc31a2b623c3db0ac126efebc56fa1c5469a58dd8624001c537e5",
       "reason": "Receipt-scoped memory recall, bounded original-source navigation, and validated source proofs."
+    },
+    "plugins/akasha/domain/diffusion.py": {
+      "sha256": "4c9b5847b0d233c4eb3142f4e5c8257a89a47d86bcccb4cfcc515f57d4b084e7",
+      "patch": "third_party/patches/akasha-retrieval-representation.patch",
+      "patch_sha256": "96bc2faa8b253031cbe4fc6a36291ce5bfc41849e040a3ac1b21df72c3736318",
+      "reason": "Upstream retrieval representation at cd0101f8 (with the matrix feature pool at 881f9fa7): graph capacity reserved in blocks, incremental basin structure with a resident index, and a lazy-heap Residual Push. Adopted without the later schema v3 publish path, which this distribution's own persistence and consumer patches would have to absorb first."
+    },
+    "plugins/akasha/domain/features.py": {
+      "sha256": "cb4419b21663f5b72f8219d3206ca662acd29e58d2057ba4dc8a78d70fecaad8",
+      "patch": "third_party/patches/akasha-retrieval-representation.patch",
+      "patch_sha256": "96bc2faa8b253031cbe4fc6a36291ce5bfc41849e040a3ac1b21df72c3736318",
+      "reason": "Upstream retrieval representation at cd0101f8 (with the matrix feature pool at 881f9fa7): graph capacity reserved in blocks, incremental basin structure with a resident index, and a lazy-heap Residual Push. Adopted without the later schema v3 publish path, which this distribution's own persistence and consumer patches would have to absorb first."
+    },
+    "plugins/akasha/domain/graph.py": {
+      "sha256": "0cc6e08aa74307c218c85f57f1d48adf4e3abd9c6f83f51e1bd7203dafa272f5",
+      "patch": "third_party/patches/akasha-retrieval-representation.patch",
+      "patch_sha256": "96bc2faa8b253031cbe4fc6a36291ce5bfc41849e040a3ac1b21df72c3736318",
+      "reason": "Upstream retrieval representation at cd0101f8 (with the matrix feature pool at 881f9fa7): graph capacity reserved in blocks, incremental basin structure with a resident index, and a lazy-heap Residual Push. Adopted without the later schema v3 publish path, which this distribution's own persistence and consumer patches would have to absorb first."
+    },
+    "plugins/akasha/domain/readout.py": {
+      "sha256": "2c7060e394c892d0ce26e8a4982991aa1583d13c5ab07bc9d47ce052589f1738",
+      "patch": "third_party/patches/akasha-retrieval-representation.patch",
+      "patch_sha256": "96bc2faa8b253031cbe4fc6a36291ce5bfc41849e040a3ac1b21df72c3736318",
+      "reason": "Upstream retrieval representation at cd0101f8 (with the matrix feature pool at 881f9fa7): graph capacity reserved in blocks, incremental basin structure with a resident index, and a lazy-heap Residual Push. Adopted without the later schema v3 publish path, which this distribution's own persistence and consumer patches would have to absorb first."
     },
     "plugins/akasha/infrastructure/persistence.py": {
       "sha256": "8e4f1a267c49c24955d95626945d77dfcc72a32cec70800105e958ca6c4d529e",

@@ -43,6 +43,17 @@ uv run --frozen --no-sync python -m eval.recall_cost \
 
 它只衡量开销，不衡量回答质量：注入变少不等于模型仍能找到所需原文，两者分别验收。
 
+## 记忆开销
+
+不调用聊天模型，固定向量与真实学习／检索组件，分别报告学习耗时、检索延迟和峰值分配：
+
+```sh
+uv run --frozen --no-sync python -m eval.memory_cost \
+  --turns 150 --queries 15 --output /local-disk/eval/memory-cost.json
+```
+
+单次运行离散度较大，比较前后应各跑三次并报告中位数与范围。它只衡量开销，不衡量检索质量。
+
 ## 反馈离线回放
 
 不调用模型、不联系任何人，只读打开工作区的 `sessions.db`，重算每个跟进的关注权重并报告会改变哪些联系决定：

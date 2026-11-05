@@ -36,6 +36,15 @@ source evidence, optional candidate rank fusion, extractive evidence windows,
 receipt-bound original-text reads, SDK integration and evaluation tooling. They extend the existing learning and
 persistence owners rather than replacing source provenance.
 
+The retrieval representation follows upstream `cd0101f8` and `881f9fa7`: blocked
+graph capacity, incremental basin structure with a resident index, a lazy-heap
+Residual Push and a matrix-backed resident feature pool. Learning dynamics and
+pop ordering are unchanged. Recorded in
+`third_party/patches/akasha-retrieval-representation.patch`. The later schema v3
+publish path, compiled push kernel and single-threaded dense replay are not
+adopted, because they modify files this distribution already patches and carry a
+schema migration.
+
 Programmatic admission accepts an optional memory scope, adopted from upstream
 `6d7e25bf`. The learning axis only governs whether a session is written to
 memory; whether it is recalled from comes from the recall policy of each scope
