@@ -43,6 +43,17 @@ uv run --frozen --no-sync python -m eval.recall_cost \
 
 它只衡量开销，不衡量回答质量：注入变少不等于模型仍能找到所需原文，两者分别验收。
 
+## 一条命令跑完全部免模型测量
+
+不需要 API 密钥、聊天模型或私有工作区；固定向量与真实记忆组件，每项重复若干次并给出中位数与范围：
+
+```sh
+uv run --frozen --no-sync python -m eval.cost_report --runs 3 \
+  --output /local-disk/eval/cost-report.json
+```
+
+输出是一张可直接核对的表（召回每轮注入、正文与索引来源条数、学习耗时、检索均值、峰值分配）。拿到仓库的人可以自己复现这些数字；它只衡量开销，质量由 `eval.memory_depth` 用真实模型单独对照。
+
 ## 记忆开销
 
 不调用聊天模型，固定向量与真实学习／检索组件，分别报告学习耗时、检索延迟和峰值分配：
