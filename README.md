@@ -49,13 +49,23 @@ voice. Explicit requests and task formats take priority.
 **Remember, then check.** Akasha learns from completed conversations, combining
 semantic recall with episodic associations. When a recalled snippet is insufficient,
 the agent can locate and read the original text, including corrections and conditions.
-Markdown memory holds the long-term profile; source messages remain intact.
+Recall spends its character budget on what the request cannot already see: an
+original still quoted in the conversation costs one index line rather than a second
+copy, and that line stays readable back to the exact source. The card shows which
+form each recalled original arrived in, so a quiet recall is legible rather than
+mysterious. Markdown memory holds the long-term profile; source messages remain intact.
 [How memory works →](docs/architecture/memory.md)
 
-**Reach out for a reason.** Two paths share the same execution and delivery chain:
-configured sources can trigger investigation, and optional idle planning can propose
-a conversation, practical help or research. Both can choose to skip. Idle conversation
-has its own opt-in; budgets, deduplication, pause and topic completion bound initiative.
+**Reach out for a reason, and take correction.** Two paths share the same execution
+and delivery chain: configured sources can trigger investigation, and optional idle
+planning can propose a conversation, practical help or research. Both can choose to
+skip. Rating a delivered follow-up changes how loud that source is next time, within
+fixed bounds and never for something you asked to see. Each path can run on its own
+cheaper model, since neither waits for you. A stated goal is carried forward on its
+own turns with a token budget and a circuit breaker for idle spinning, and idle
+planning stands down while one is running so the two do not both reach you about the
+same work. Idle conversation has its own opt-in; budgets, deduplication, pause and
+topic completion bound initiative.
 [Memory and proactive setup →](docs/handbook/memory-proactive.md)
 
 **Follow through on real tasks.** Streaming conversation, files, Shell, MCP, child

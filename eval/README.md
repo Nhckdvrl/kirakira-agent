@@ -359,6 +359,24 @@ uv run --frozen --no-sync python -m eval.memory_depth \
 
 复核不重跑 reader、不追加原文、不改原报告；先复制一致的 SQLite 快照，judge 看不到方案名称。原机械规则、无效 judge 与新复核分别保存，不能挑高分替换首轮。确定性原文覆盖与有误差的答案评分分开解释。结果见[取证深度实测](../docs/operations/evaluations/2026-10-22-memory-depth.md)。运行实际渠道、工具与完整重启继续使用 `eval.memory_runtime`。
 
+### 窗口规则的答案质量
+
+召回把"请求已经引用的原文"改成只给一行索引之后，必须单独回答一个问题：**省下的预算有没有换来更差的答案。** 这个套件把两种呈现放在同一语料、同一候选集、同一初始预算和同一读取额度下对照，只有初始呈现不同：
+
+```sh
+uv run --frozen --no-sync python -m eval.memory_depth --suite window-v1 \
+  --model-config /private/path/model.json --key-file /private/path/model.key \
+  --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json \
+  --workspace /local-disk/eval/window-new --output /private/path/window.json \
+  --per-family 4 --candidates 4 --initial-chars 2400 --max-chars 6000 --parallel 3
+```
+
+`window-bodies` 按窗口规则之前的方式给出片段正文；`window-index` 把每个候选都当成"原文已在请求里"，withhold 正文、对放得下的花一行索引，和现在的召回一致。两臂都允许最多两次 `read_memory_source`，因此索引臂必须真的沿 `ref` 去读原文才能答对——这同时验证了索引行的读取准入。
+
+评分沿用严格规则：答案必须等于参考编号（或 UNKNOWN），引用必须指向本次查询确实呈现过的原文，且被引证据要包含该编号。报告里的 `initial_material_chars` 与 `initial_material_sha256` 同时给出两臂各自花掉多少、以及材料确实不同。
+
+它只覆盖一个合成导航夹具和一个模型，不能证明窗口规则对"答案就在初始材料里"的对话同样无损，也不能证明更弱的模型跟得上索引行。
+
 ### 记忆场景亮点
 
 以“初次只记得线索，还能否继续查到原始细节”为目标，运行固定相同初始材料的能力对照。它允许按需组追加材料和调用，分别记录代价；结果不用于整体排名。

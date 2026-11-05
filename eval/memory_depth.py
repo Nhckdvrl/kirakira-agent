@@ -33,7 +33,8 @@ from plugins.akasha.infrastructure.consumption import Consumption
 from plugins.akasha.infrastructure.persistence import logical_state_sha256
 from plugins.akasha.learning import AKASHA_LEARNING, Learning, LearningConfig
 from plugins.akasha.query import MemoryQueries
-from plugins.akasha.recalls import RecallRecords, query_memory, render_materials
+from plugins.akasha.recalls import (INDEX_MAX_CHARS, RecallRecords, query_memory, render_index,
+                                    render_materials, select_index_ids)
 from plugins.content.api import legacy_post_commit_effect
 from plugins.ledger.bindings import Bindings
 from plugins.ledger.contract import json_value
@@ -43,6 +44,12 @@ from plugins.models.contract import CHAT_MODELS, EMBEDDINGS, ModelRequest
 from plugins.turn_projection.plugin import TurnProjection
 
 SYSTEMS = ("dense-whole", "dense-excerpts", "fused-excerpts", "dense-adaptive", "fused-adaptive")
+# The window rule asks one question: when a recalled original is already quoted in
+# the request, is one index line plus a read as good as spending the budget on its
+# body? Both arms get the same corpus, candidates, initial budget and read
+# allowance, so only the initial presentation differs.
+WINDOW_SYSTEMS = ("window-bodies", "window-index")
+ALL_SYSTEMS = SYSTEMS + WINDOW_SYSTEMS
 ANSWER = {"type": "function", "function": {"name": "answer", "description": "Submit the concise final value and supporting source IDs; UNKNOWN when absent.",
     "parameters": {"type": "object", "properties": {"answer": {"type": "string"},
         "citations": {"type": "array", "items": {"type": "string"}}}, "required": ["answer", "citations"], "additionalProperties": False}}}
@@ -163,10 +170,14 @@ async def evaluate(args):
     if args.output.exists() or args.workspace.exists():
         raise ValueError("new output/workspace required; completed trials are never replaced")
     model = EvaluationModel.read(args.model_config)
-    focused = args.suite.startswith("source-followup-")
-    fixture, cases = (followup_corpus(args.per_family, version=int(args.suite[-1]))
+    window = args.suite == "window-v1"
+    # The window suite reuses the source-navigation fixture and its strict scoring:
+    # the answer is deliberately not in the initial material, which is exactly the
+    # case an index line has to carry.
+    focused = args.suite.startswith("source-followup-") or window
+    fixture, cases = (followup_corpus(args.per_family, version=2 if window else int(args.suite[-1]))
                       if focused else corpus(args.per_family))
-    systems = tuple(args.systems)
+    systems = tuple(args.systems) if args.systems else (WINDOW_SYSTEMS if window else SYSTEMS)
     os.environ["AKASHIC_PLUGIN_HOME"] = str(args.workspace / "isolated-plugin-home")
     initialize_workspace(args.workspace)
     report = {"schema": 1, "kind": "synthetic controlled evidence-depth component experiment",
@@ -185,6 +196,22 @@ async def evaluate(args):
         report["conditions"]["scoring"] = "Answer must equal the exact reference identifier (or UNKNOWN), with nonempty valid citations containing that identifier for answerable cases. No LLM judge or repair. This navigation fixture has explicit middle/end directory hints, not exact offsets."
     if args.suite == "source-followup-v2":
         report["conditions"]["budget_policy"] = "Both arms start with byte-identical material capped at adaptive_initial_chars. Static stops there; adaptive can read at most two additional windows up to max_retained_evidence_chars total. This is a capability ablation with explicitly unequal call and final-material budgets, not an equal-cost quality comparison."
+    if window:
+        report["conditions"]["budget_policy"] = (
+            "Both arms share one corpus, one candidate set, the same adaptive_initial_chars cap and the same "
+            "two-read allowance. window-bodies presents excerpt bodies, as recall did before the window rule. "
+            "window-index treats every candidate as already quoted in the request, withholds its body and "
+            "spends one index line on whichever fit, as recall does now. Only the initial presentation differs, "
+            "so a quality difference is attributable to it; initial_material_chars records what each arm spent.")
+        report["conditions"]["scoring"] = (
+            "Answer must equal the exact reference identifier (or UNKNOWN), with nonempty citations naming "
+            "originals this query surfaced as a body or an index line, and the cited evidence must contain the "
+            "identifier. Verification is stricter still: a citation counts only where the reader holds that "
+            "original's text. No LLM judge or repair.")
+        report["conditions"]["claim_limits"] = (
+            "This measures one synthetic navigation fixture with one model. It does not establish that the "
+            "window rule is harmless for conversations whose answers sit in the initial material, nor that an "
+            "index line suffices for a weaker model.")
     report["frozen_reader_source"] = Path(__file__).read_text()
     for name in ("eval/memory_depth.py", "plugins/akasha/excerpts.py", "plugins/akasha/query.py"):
         report["implementation"][name] = hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
@@ -248,10 +275,12 @@ async def evaluate(args):
             gate = asyncio.Semaphore(args.parallel)
             replays = []
 
-            async def trial(case, system, recall, material, refs, identity):
+            async def trial(case, system, recall, material, refs, identity, *, admitted=None):
                 started = time.monotonic()
-                adaptive = system.endswith("adaptive")
-                presented = {r["ref"] for r in refs}
+                adaptive = system.endswith("adaptive") or system.startswith("window-")
+                # Citations are checked against what the query actually surfaced,
+                # whether as a body or as one index line.
+                presented = set(admitted) if admitted is not None else {r["ref"] for r in refs}
                 blocks = [material]
                 visible = {}
                 for ref in refs:
@@ -362,13 +391,25 @@ async def evaluate(args):
                 rotated = systems[index % len(systems):] + systems[:index % len(systems)]
                 for system in rotated:
                     identity = "depth:" + case["id"] + ":" + system
-                    adaptive = system.endswith("adaptive")
+                    adaptive = system.endswith("adaptive") or system.startswith("window-")
                     cap = args.initial_chars if adaptive or args.suite == "source-followup-v2" else args.max_chars
                     rendered = recall.model_copy(update={"hits": dense_hits if system.startswith("dense") else recall.hits,
                         "rendering_version": 2 if system.endswith("whole") else 3,
                         "presentation": "whole" if system.endswith("whole") else "excerpts"})
+                    if system == "window-index":
+                        # Every candidate counts as already quoted, so bodies are
+                        # withheld and whichever index lines fit are spent instead.
+                        members = tuple(dict.fromkeys(
+                            identity_ for hit in rendered.hits for identity_ in hit.message_ids))
+                        rendered = rendered.model_copy(update={"withheld_message_ids": members})
+                        chosen = select_index_ids(rendered, learning, log.catalog(),
+                                                  replayed=frozenset(members), max_chars=min(INDEX_MAX_CHARS, cap))
+                        rendered = rendered.model_copy(update={"indexed_message_ids": chosen})
                     value = render_materials(identity, rendered, learning, log.catalog(), max_chars=cap)
                     material = "\n\n".join(r["text"] for r in value["reminders"])
+                    if system == "window-index":
+                        index_text = render_index(rendered, learning, log.catalog())
+                        material = "\n\n".join(part for part in (material, index_text) if part)
                     if args.suite == "source-followup-v2" and not system.endswith("whole"):
                         pair = (case["id"], system.startswith("dense"))
                         if pair in paired_initials:
@@ -380,7 +421,10 @@ async def evaluate(args):
                         "presented_message_ids": tuple(r["ref"] for r in refs),
                         "presented_spans": tuple(EvidenceSpan(message_id=r["ref"], **{k:r[k] for k in ("start", "end", "source_chars")}) for r in refs if "start" in r)})
                     records.save(identity, rendered)
-                    tasks.append(trial(case, system, rendered, material, refs, identity))
+                    # An index line is a real disclosure, so it is citable and
+                    # readable exactly as production admits it.
+                    tasks.append(trial(case, system, rendered, material, refs, identity,
+                                       admitted=set(rendered.admitted_message_ids)))
             await asyncio.gather(*tasks)
             after = logical_state_sha256(consumer.path)
             verified = 0
@@ -631,10 +675,11 @@ async def verify(args):
                     assert final == row["final_answer_span_present"]
                 correct = (answer.strip().upper() == "UNKNOWN" if expected == "UNKNOWN" else
                            answer.strip() == expected and valid and support)
-                if not original["conditions"].get("suite", "depth-v1").startswith("source-followup-") and expected != "UNKNOWN":
+                suite = original["conditions"].get("suite", "depth-v1")
+                if not (suite.startswith("source-followup-") or suite == "window-v1") and expected != "UNKNOWN":
                     correct = expected in answer and cases[row["case"]]["forbidden"] not in answer and valid and support
                 assert correct == row.get("correct", False), "stored score disagrees with original evidence"
-                if original["conditions"].get("suite") == "source-followup-v2" and not row["system"].endswith("whole"):
+                if suite == "source-followup-v2" and not row["system"].endswith("whole"):
                     pair = (row["case"], row["system"].startswith("dense"))
                     assert pair not in paired or paired[pair] == material, "unequal initial evidence"
                     paired[pair] = material
@@ -656,8 +701,8 @@ def main():
     for name in ("workspace", "key-file", "model-config", "embedding-manifest", "output"):
         parser.add_argument("--" + name, type=Path, required=name == "output")
     parser.add_argument("--per-family", type=int, default=4, choices=range(1, 5))
-    parser.add_argument("--suite", choices=("depth-v1", "source-followup-v1", "source-followup-v2"), default="depth-v1")
-    parser.add_argument("--systems", nargs="+", choices=SYSTEMS, default=SYSTEMS)
+    parser.add_argument("--suite", choices=("depth-v1", "source-followup-v1", "source-followup-v2", "window-v1"), default="depth-v1")
+    parser.add_argument("--systems", nargs="+", choices=ALL_SYSTEMS, default=None)
     parser.add_argument("--candidates", type=int, default=4)
     parser.add_argument("--max-chars", type=int, default=6000)
     parser.add_argument("--initial-chars", type=int, default=2400)
@@ -677,8 +722,13 @@ def main():
         parser.error("invalid budget")
     if args.analyze_existing and not args.corpus_db:
         parser.error("--analyze-existing requires --corpus-db")
-    if len(args.systems) != len(set(args.systems)):
+    if args.systems is not None and len(args.systems) != len(set(args.systems)):
         parser.error("--systems must not contain duplicates")
+    # Each suite has its own arms; mixing them would compare different fixtures.
+    if args.systems is not None:
+        allowed = WINDOW_SYSTEMS if args.suite == "window-v1" else SYSTEMS
+        if any(system not in allowed for system in args.systems):
+            parser.error(f"--systems for suite {args.suite} must come from {allowed}")
     raise SystemExit(0 if asyncio.run(analyze(args) if args.analyze_existing else evaluate(args)) else 1)
 
 
