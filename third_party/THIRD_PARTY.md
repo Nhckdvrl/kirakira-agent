@@ -21,6 +21,12 @@ background context maintenance and safe terminal notices. Source digests,
 supplemental files and complete baseline-to-distribution patches are recorded
 in `UPSTREAM.json`; these selections do not replace the runtime baseline pin.
 
+Upstream was reviewed through `5ec690b2944f682441e89630256f6b47b11efc43`. What was
+adopted, what was reviewed and declined with the reason, and where this
+distribution deliberately diverges are all recorded under `reviewed_updates` in
+[UPSTREAM.json](UPSTREAM.json). Declining is recorded as a decision rather than
+left as a silent gap, so a later reader can tell the two apart.
+
 The persistent-goal plugin (`plugins/goal/`) is imported whole from upstream at
 `101b1912885c6f0d6e6c88cb236d9994afb17ee5`, together with its tests; the state
 machine, store, settlement and same-source continuation are upstream work. Per-file

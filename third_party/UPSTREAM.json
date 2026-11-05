@@ -2365,25 +2365,54 @@
     }
   },
   "reviewed_updates": {
-    "commit": "88e69687ce140e2ff14005860c1da6a4b05bb6d3",
+    "commit": "5ec690b2944f682441e89630256f6b47b11efc43",
     "selected_commits": [
+      "02b0a6d1",
+      "09c579a0",
+      "101b1912",
+      "23a161e8",
       "3ac5b221",
+      "509e6d56",
+      "58ccf09c",
+      "5ddd5ebb",
+      "60b036c3",
+      "62175a92",
+      "6375c5a7",
+      "67de0106",
+      "6d7e25bf",
+      "7d5f9960",
+      "833cf697",
+      "87ef0a35",
+      "881f9fa7",
+      "8c920e48",
+      "9a35efb0",
       "9e1a7189",
       "a6a621da",
+      "a78a4b7e",
+      "ac123d3b",
       "aea6a815",
-      "7d5f9960",
-      "509e6d56",
-      "02b0a6d1",
-      "d45fb656",
-      "6375c5a7",
+      "b060c43d",
       "b53a0608",
-      "87ef0a35",
-      "f9e5c44c",
-      "58ccf09c",
-      "8c920e48",
-      "67de0106",
-      "09c579a0"
+      "cd0101f8",
+      "d45fb656",
+      "dc86f0f9",
+      "df9d7a72",
+      "f17a4d49",
+      "f9e5c44c"
     ],
-    "scope": "Selected personal-assistant continuity and recovery, identity-set context summaries, durable Markdown learning checkpoints, spawned-worker shutdown semantics, live tool restrictions and optional SearXNG search; base runtime pin remains unchanged."
+    "scope": "Through 88e69687: personal-assistant continuity and recovery, identity-set context summaries, durable Markdown learning checkpoints, spawned-worker shutdown semantics, live tool restrictions and optional SearXNG search. Through 5ec690b2: the Akasha engine as file state at 5ddd5ebb (blocked graph capacity, incremental basins with a resident index, lazy-heap Residual Push with its compiled kernel, matrix feature pool, in-place incremental publication with schema v3, restore-time tokenizer and vector reuse, incremental interest prototypes), the persistent-goal plugin with its tests, memory scope on programmatic admission, and the two ledger capabilities those need: OwnerTransaction.delete and MessageCatalog.prefix_revision. The base runtime pin remains unchanged.",
+    "declined": {
+      "259bef42": "Index-only automatic recall. The same insight was wanted, but this distribution keeps a receipt-bound excerpt layer, so it withholds bodies the request already quotes and spends one index line on them while keeping read_memory_source and search_memory_source, rather than dropping those candidates and adding fetch_messages.",
+      "353b5320": "Recall overlay on an F key, with a host message.actions slot. It rewrites the shared chat shell across files both sides have changed, and the overlay logic itself sits outside eslint and tsc, so the same information was added to this distribution's own recall card instead, with a render check.",
+      "design series (1d8e1eba..1a1c6a56)": "Design canvas tab, which upstream uses to replace and delete the sites plugin. This distribution still ships sites and sites_tab, and no requirement here depends on a canvas.",
+      "subagent runners (ffe7770e..bed19054, e23482c8)": "External Codex and Claude Code runners with DSH permission modes. Worth revisiting, but they extend host execution rather than either pillar, and they were not needed by the work in this round.",
+      "chat and web perf series": "Large front-end performance work on files this distribution has patched for its own presentation. Not adopted because nothing measured here pointed at those paths; the recall and engine costs were measured and addressed directly instead.",
+      "akasha runtime/plugin perf (75da06f1, d9571101, 1ce7ffef, c8c62d18 plugin side, b3148dbc)": "Touch plugins/akasha/runtime.py, plugin.py and inspector.py, which this round rewrote for the window rule, the covered-id wiring and the delivery forms. Re-examining them against the new shape is follow-up work, not a mechanical take."
+    },
+    "local_divergence": {
+      "pre-v3 checkpoints": "Upstream registers a one-time full replay through its migration catalog; this distribution's root catalog does not require Akasha migrations, so a checkpoint published before schema v3 is refused at load with MemoryRebuildRequiredError instead of being republished as v3.",
+      "member routing": "Upstream runs the member callback on the event loop. This distribution keeps scope routing off it, asserted by test_consumption_snapshot_and_membership_are_nonblocking, so that local change was re-applied on top of the upstream consumer.",
+      "numba": "Upstream leaves the compiled kernel undeclared. Here it is part of the memory extra, so a locked environment and a measured result agree."
+    }
   }
 }
