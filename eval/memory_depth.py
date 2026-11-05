@@ -153,6 +153,16 @@ def summary(rows, systems=SYSTEMS):
             # Model-free: the reference value is still inside an original this
             # receipt admits, so withholding its body deferred it rather than lost it.
             "reference_reachable": sum(r.get("reference_reachable", False) for r in positive),
+            # A reader that returns prose instead of a function call has not
+            # answered wrongly; it has not answered. Kept in the full denominator
+            # and reported apart so the score stays interpretable.
+            "protocol_failures": sum(
+                1 for r in selected
+                if any(len(c["tool_calls"]) != 1 for c in r["calls"]) or not r["calls"]),
+            "answered": sum(1 for r in selected if "answer" in r),
+            "answerable_answered": sum(1 for r in positive if "answer" in r),
+            "answerable_correct_of_answered": sum(
+                r.get("correct", False) for r in positive if "answer" in r),
             "mean_initial_material_chars": statistics.mean(
                 r["initial_material_chars"] for r in selected) if selected else None,
             "source_reads": sum(len(r["reads"]) for r in selected),
@@ -319,7 +329,15 @@ async def evaluate(args):
                             output += " The answer field must contain only the confirmed identifier, or UNKNOWN; do not add explanation or labels."
                         if can_read:
                             output += (" You may instead call read_memory_source for one original source window. "
-                                f"Only initially presented IDs are available. Offsets count Unicode characters. Remaining serialized evidence budget: {remaining}; at most {2-step} more reads. Choose whether and where to read; do not invent IDs or values.")
+                                f"Only IDs surfaced in this evidence are available. Offsets count Unicode characters. Remaining serialized evidence budget: {remaining}; at most {2-step} more reads. Choose whether and where to read; do not invent IDs or values.")
+                            if recall.indexed_message_ids:
+                                # Index entries carry an 80-character preview, not the
+                                # body. Saying only "initially presented IDs" told this
+                                # arm the opposite of its own admission rule, so it had
+                                # no reason to believe those refs were readable.
+                                output += (" Entries under the recall index heading show only a short preview of an"
+                                    " original that is not reproduced here; their ref IDs are readable, and the value"
+                                    " you need is likely inside one of them rather than in the preview text.")
                         evidence = "\n\n".join(blocks)
                         row["resent_evidence_chars"] += len(evidence)
                         async with gate, provider_slot(model, args.key_file), context.require(CHAT_MODELS).independent_execution(
