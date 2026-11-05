@@ -135,14 +135,16 @@ its request. The embedding encoder runs locally on CPU after an explicit model d
 | Can it pick up everyday conversations and stop? | **32/32 assertions** across four invited topics | Actual idle waits; source, delivery, duplicate and stopping checks. [Companion experiment](docs/operations/evaluations/2026-10-22-companion-personality.md) |
 | Does the execution chain work with a real model? | **13/13 runtime scenarios** | Files, Shell, MCP, child tasks, interruption and recovery. [Verification records](docs/operations/verification.md) |
 | What does recall cost per turn, and can that be cut? | Live injection **2393 → 757 characters** a turn; learning 150 turns **47.66 → 20.34 s**; one recall **47.96 → 11.62 ms** | Three runs each, medians, no chat model. [`eval.cost_report`](eval/cost_report.py) reproduces all of it without an API key |
-| Does spending less material lose the answer? | Initial material **2390 → 829 characters** (−65.3%) with the reference value still reachable **12/12** in both arms | Same corpus, candidates, budget and read allowance; only the presentation differs. [Window rule](docs/operations/evaluations/2026-11-06-memory-window.md) |
+| Does spending less material lose the answer? | Initial material **2390 → 820 characters** (−65.7%) with the reference value still reachable **12/12** in both arms; the cost is **9/12 against 6/12** correct on the rule's worst-case fixture | Same corpus, candidates, budget and read allowance; only the presentation differs, and neither arm ever invented an identifier. [Window rule](docs/operations/evaluations/2026-11-06-memory-window.md) |
 | Is the imported upstream boundary actually checkable? | **969 files pinned**; all **12 patch artifacts** reproduce this tree when applied to the baseline | Adopted, declined-with-reason and deliberate divergence recorded. [Third-party notice](third_party/THIRD_PARTY.md) |
 
 Each row has its own denominator and conditions; the [reports](docs/operations/verification.md)
 keep the failures, costs and versions rather than a single success rate. The
 regression suite guards invariants, not smoke: scope routing must not block the
 event loop, a pre-v3 checkpoint must be refused rather than silently rewritten,
-an index line must stay citable and readable. Three questions stay open and need
+an index line must stay citable and readable. Eight of them guard the evaluation
+itself: measurement code goes wrong in ways the product's own tests never see,
+and this round found three such defects and pinned each as a regression. Three questions stay open and need
 continuous real use: cross-model consistency, long-term companionship, and the
 ratio of useful alerts to interruptions. [Design direction](docs/architecture/design-direction.md)
 explains the choices.
