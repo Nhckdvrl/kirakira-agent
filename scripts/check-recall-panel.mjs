@@ -16,6 +16,7 @@ import {
   deliveryRank,
   deliveryTitle,
 } from "../frontend/plugins/akasha/src/recall-delivery.js";
+import { renderRecall } from "../frontend/plugins/akasha/src/recall-card.js";
 
 let failures = 0;
 
@@ -65,6 +66,35 @@ for (const form of ["body", "index", "quoted", "candidate"]) {
 }
 check("body title does not promise receipt",
       deliveryTitle({ form: "body" }).includes("不代表模型已经接收"), true);
+
+// 6. The rendered card: every form reaches the markup, and the lane heading
+//    counts originals rather than hits, so two numerators cannot exceed the
+//    total when one hit carries both a body and an index line.
+const card = renderRecall({ items: [{ hits: [
+  { score: 1, lane: "dense", sources: [], messages: [
+    { message_id: "a", form: "body", preview: "正文", recorded_at: "2026-11-05T00:00:00+00:00",
+      author: "user", excerpt: { start: 10, end: 90 } },
+    { message_id: "b", form: "index", preview: "索引", recorded_at: "2026-11-05T00:00:00+00:00", author: "user" },
+    { message_id: "c", form: "quoted", preview: "上文", recorded_at: "2026-11-05T00:00:00+00:00", author: "user" },
+    { message_id: "d", form: "candidate", preview: "候选", recorded_at: "2026-11-05T00:00:00+00:00", author: "user" },
+  ] },
+] }] });
+
+for (const [form, label] of [["body", "入选片段 [10:90]"], ["index", "仅索引行"],
+                             ["quoted", "原文已在上文"], ["candidate", "未入选"]]) {
+  if (!card.includes(`data-form="${form}"`) || !card.includes(label)) {
+    failures += 1;
+    console.error(`FAIL rendered card missing ${form} / ${label}`);
+  }
+}
+check("heading counts originals", card.includes("已选 1 · 索引 1 / 4"), true);
+
+// A preview is escaped, so a recalled original can never inject markup.
+const escaped = renderRecall({ items: [{ hits: [{ score: 1, lane: "dense", sources: [], messages: [
+  { message_id: "x", form: "body", preview: "<img src=x onerror=alert(1)>",
+    recorded_at: "2026-11-05T00:00:00+00:00", author: "user" },
+] }] }] });
+check("preview escaped", escaped.includes("&lt;img") && !escaped.includes("<img src=x"), true);
 
 if (failures) {
   console.error(`${failures} recall panel check(s) failed`);

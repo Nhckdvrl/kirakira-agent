@@ -1,14 +1,7 @@
 import "./plugin-ui.css";
 import { escapeHtml } from "./escape.js";
-import { deliveryLabel, deliveryOf, deliveryRank, deliveryTitle } from "./recall-delivery.js";
+import { renderRecall, sourceTime } from "./recall-card.js";
 import { mountMemoryBadge, mountMemoryField } from "./scope-ui.tsx";
-
-const sourceTime = value => {
-  if (typeof value !== "string" || !value) return "";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? String(value ?? "")
-    : date.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
-};
 
 /** 聚合事实在服务端确认闭合前仍可变化，不进入页面结果缓存。 */
 async function readRecall(context, isActive) {
@@ -64,33 +57,6 @@ function saveOpenedView(key, lanes) {
   }
 }
 
-/** 先计算展示内容；相同快照不改写真实卡片、选择与焦点。 */
-function renderRecall(result) {
-  return result.items.length ? `<div class="akasha-plugin-ui-recall-group">${[
-    ["dense", "语义匹配", "precise"], ["completion", "关联补全", "completion"],
-  ].map(([lane, title, style]) => {
-    // 多次真实查询可以命中同一回忆；卡片按消息成员展示一次，原查询留在 Inspector。
-    const merged = new Map();
-    for (const hit of result.items.flatMap(item => item.hits.filter(hit => hit.lane === lane))) {
-      const key = JSON.stringify(hit.messages.map(message => message.message_id));
-      const previous = merged.get(key);
-      merged.set(key, previous ? { ...hit, messages: hit.messages.map(message => {
-        const earlier = previous.messages.find(item => item.message_id === message.message_id);
-        // Keep whichever query delivered the most of this original, so merging
-        // two real queries never downgrades a body to a bare candidate.
-        return earlier && deliveryRank(earlier) > deliveryRank(message) ? earlier : message;
-      }) } : hit);
-    }
-    const hits = [...merged.values()];
-    const presented = hits.filter(hit => hit.messages.some(message => deliveryOf(message) === "body")).length;
-    const indexed = hits.filter(hit => hit.messages.some(message => deliveryOf(message) === "index")).length;
-    return `<details data-lane="${lane}" class="akasha-plugin-ui-recall akasha-plugin-ui-recall--${style}">
-      <summary><span>${title}</span><b title="编入正文的经历 · 只给索引行的经历 / 检索候选；不代表模型已经接收">已选 ${presented}${indexed ? ` · 索引 ${indexed}` : ""} / ${hits.length}</b></summary>
-      <ol class="akasha-plugin-ui-memories">${hits.map((hit) => `<li><div>${hit.messages.filter(message => message.preview).map((message) =>
-        `<p><small class="akasha-plugin-ui-evidence" data-form="${escapeHtml(deliveryOf(message))}" title="${escapeHtml(deliveryTitle(message))}">${deliveryLabel(message)} · ${escapeHtml(message.author || "")} · ${escapeHtml(sourceTime(message.recorded_at))}</small>${escapeHtml(message.preview)}${message.truncated ? "…" : ""}</p>`).join("")}</div></li>`).join("")
-        || '<li class="akasha-plugin-ui-empty">本次没有命中</li>'}</ol></details>`;
-  }).join("")}</div>` : "";
-}
 
 /** 已接纳 Input 持有面板；事实失效只刷新内容，不重新挂载。 */
 export function mountRecall(host, context) {
