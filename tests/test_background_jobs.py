@@ -3,6 +3,7 @@ import asyncio
 import json
 import shutil
 import sys
+import time
 from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
@@ -638,6 +639,12 @@ def _collecting_shell_sources(sources: Path, *, tool: str, chain: bool) -> None:
     provider.write_text(text)
 
 
+# A cold import of this project in a new interpreter, on storage that may be a
+# network filesystem. Generous on purpose: the fixture is not measuring startup.
+BRIDGE_SOCKET_TIMEOUT_S = 180.0
+BRIDGE_SHUTDOWN_TIMEOUT_S = 30.0
+
+
 @pytest_asyncio.fixture(params=["local", "host-bridge"])
 async def shell_backend(tmp_path, monkeypatch, request):
     """真实 Socket 和服务端复跑后台 Shell，核对本地与远端的可观察语义。"""
@@ -664,16 +671,39 @@ async def shell_backend(tmp_path, monkeypatch, request):
             "--bridge-python", sys.executable, stdout=log, stderr=log,
         )
         try:
-            async with asyncio.timeout(5):
-                while not socket.exists():
-                    assert process.returncode is None, (tmp_path / "bridge.log").read_text()
-                    await asyncio.sleep(0.01)
+            # Publishing the socket costs one cold import of this project in a
+            # fresh interpreter. On a checkout served over NFS that read is
+            # dominated by the filesystem, not by the bridge: measured here at
+            # 106s, 31s and 2.3s on successive runs as the page cache warmed,
+            # against roughly 23k module files in the environment. A few seconds
+            # is therefore a statement about the filesystem rather than about
+            # the code under test, so the budget is generous and the failure
+            # says what it was waiting for.
+            start = time.monotonic()
+            while not socket.exists():
+                waited = time.monotonic() - start
+                if process.returncode is not None:
+                    raise AssertionError(
+                        f"host bridge exited with {process.returncode} after {waited:.1f}s\n"
+                        + (tmp_path / "bridge.log").read_text())
+                if waited > BRIDGE_SOCKET_TIMEOUT_S:
+                    process.terminate()
+                    raise AssertionError(
+                        f"host bridge published no socket in {waited:.1f}s while still running; "
+                        f"a cold import on slow storage can exceed this\n"
+                        + (tmp_path / "bridge.log").read_text())
+                await asyncio.sleep(0.01)
             assert await claim_host_bridge_boot() is not None
             yield
         finally:
             if process.returncode is None:
                 process.terminate()
-            await asyncio.wait_for(process.wait(), 5)
+            try:
+                await asyncio.wait_for(process.wait(), BRIDGE_SHUTDOWN_TIMEOUT_S)
+            except TimeoutError:
+                process.kill()
+                await process.wait()
+                raise
 
 
 @pytest.mark.asyncio
