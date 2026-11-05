@@ -951,3 +951,61 @@ async def test_recall_indexes_quoted_originals_and_still_renders_compacted_ones(
         later = records.read(context_identity("conversation", "conversation", second_input.message_id))
         assert "user-0" in later.presented_message_ids
         assert not later.indexed_message_ids
+
+
+def test_inspector_distinguishes_body_index_quoted_and_undelivered(tmp_path):
+    """The panel must be able to tell the four outcomes apart.
+
+    A single `presented` boolean cannot: after the window rule, a candidate whose
+    original the request already quotes looks exactly like one that simply did
+    not fit the budget, and the owner cannot tell why memory looked quiet.
+    """
+    from datetime import UTC, datetime
+
+    from plugins.akasha.contract import ContextSource, Hit, Recall
+    from plugins.akasha.inspector import RecallInspector
+
+    log = MessageLog(tmp_path / "ledger.db")
+    try:
+        log.ensure_session("conversation", SessionAttributes())
+        writer = log.writer("conversation", author="user", source="conversation",
+                            body_types=(Input,), content={"text": check_text})
+        identities = []
+        for index in range(4):
+            message = writer.append(f"m{index}", Input((ContentPart("text", f"原文 {index} 的内容"),)))
+            identities.append(message.message_id)
+        body, line, quoted, undelivered = identities
+
+        recall = Recall(
+            learning_binding="fixed", graph_version=1, timestamp=datetime.now(UTC),
+            source=ContextSource(session_id="conversation", source="conversation", through_seq=3),
+            limit=10, rendering_version=3,
+            hits=(Hit(node_id=0, session_id="conversation", message_ids=tuple(identities),
+                      score=1.0, lane="dense", sources=("direct_dense",)),),
+            presented_message_ids=(body,),
+            withheld_message_ids=(line, quoted),
+            indexed_message_ids=(line,),
+            active_basin_count=0, pushes=0, residual_l1=0.0,
+        )
+
+        inspector = RecallInspector(read=lambda _i: recall, legacy_page=lambda _b: ((), None),
+                                    catalog=log.catalog())
+        detail = inspector._detail("context:fixture", recall)
+
+        forms = {row["message_id"]: row["form"] for row in detail["hits"][0]["messages"]}
+        assert forms[body] == "body"
+        assert forms[line] == "index"
+        assert forms[quoted] == "quoted"
+        assert forms[undelivered] == "candidate"
+
+        # The counts separate the three delivery outcomes as well.
+        assert detail["presented_count"] == 1
+        assert detail["indexed_count"] == 1
+        assert detail["withheld_count"] == 2
+        assert detail["hit_count"] == 1
+
+        # The existing boolean keeps its old meaning for anything already reading it.
+        presented = {row["message_id"]: row["presented"] for row in detail["hits"][0]["messages"]}
+        assert presented == {body: True, line: False, quoted: False, undelivered: False}
+    finally:
+        log.close()

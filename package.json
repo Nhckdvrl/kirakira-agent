@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "npm run build:dashboard && npm run build:chat && npm run build:web-plugins && node scripts/stage-web-assets.mjs",
+    "check:recall-panel": "node scripts/check-recall-panel.mjs",
     "build:dashboard": "vite build --config frontend/dashboard/vite.config.ts",
     "build:dashboard:watch": "vite build --config frontend/dashboard/vite.config.ts --watch",
     "build:chat": "vite build --config frontend/chat/vite.config.ts",

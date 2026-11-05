@@ -1,9 +1,7 @@
 import "./plugin-ui.css";
+import { escapeHtml } from "./escape.js";
+import { deliveryLabel, deliveryOf, deliveryRank, deliveryTitle } from "./recall-delivery.js";
 import { mountMemoryBadge, mountMemoryField } from "./scope-ui.tsx";
-
-const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
-  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-})[character]);
 
 const sourceTime = value => {
   if (typeof value !== "string" || !value) return "";
@@ -78,15 +76,18 @@ function renderRecall(result) {
       const previous = merged.get(key);
       merged.set(key, previous ? { ...hit, messages: hit.messages.map(message => {
         const earlier = previous.messages.find(item => item.message_id === message.message_id);
-        return earlier?.presented && !message.presented ? earlier : message;
+        // Keep whichever query delivered the most of this original, so merging
+        // two real queries never downgrades a body to a bare candidate.
+        return earlier && deliveryRank(earlier) > deliveryRank(message) ? earlier : message;
       }) } : hit);
     }
     const hits = [...merged.values()];
-    const presented = hits.filter(hit => hit.messages.some(message => message.presented)).length;
+    const presented = hits.filter(hit => hit.messages.some(message => deliveryOf(message) === "body")).length;
+    const indexed = hits.filter(hit => hit.messages.some(message => deliveryOf(message) === "index")).length;
     return `<details data-lane="${lane}" class="akasha-plugin-ui-recall akasha-plugin-ui-recall--${style}">
-      <summary><span>${title}</span><b title="至少一次编入召回材料的经历 / 检索候选；不代表模型已经接收">已选 ${presented} / ${hits.length}</b></summary>
+      <summary><span>${title}</span><b title="编入正文的经历 · 只给索引行的经历 / 检索候选；不代表模型已经接收">已选 ${presented}${indexed ? ` · 索引 ${indexed}` : ""} / ${hits.length}</b></summary>
       <ol class="akasha-plugin-ui-memories">${hits.map((hit) => `<li><div>${hit.messages.filter(message => message.preview).map((message) =>
-        `<p><small class="akasha-plugin-ui-evidence" title="${escapeHtml(message.recorded_at || "")}">${message.presented ? (message.excerpt ? `入选片段 [${escapeHtml(message.excerpt.start)}:${escapeHtml(message.excerpt.end)}]` : "入选原文") : "候选 · 未入选"} · ${escapeHtml(message.author || "")} · ${escapeHtml(sourceTime(message.recorded_at))}</small>${escapeHtml(message.preview)}${message.truncated ? "…" : ""}</p>`).join("")}</div></li>`).join("")
+        `<p><small class="akasha-plugin-ui-evidence" data-form="${escapeHtml(deliveryOf(message))}" title="${escapeHtml(deliveryTitle(message))}">${deliveryLabel(message)} · ${escapeHtml(message.author || "")} · ${escapeHtml(sourceTime(message.recorded_at))}</small>${escapeHtml(message.preview)}${message.truncated ? "…" : ""}</p>`).join("")}</div></li>`).join("")
         || '<li class="akasha-plugin-ui-empty">本次没有命中</li>'}</ol></details>`;
   }).join("")}</div>` : "";
 }

@@ -209,7 +209,7 @@
 +布局、断点或 token 变化还需启动实际 Web 工作区，在桌面与窄屏浏览器中检查聊天、侧栏、输入框、设置和重连；记录浏览器版本及视口，并保留前后截图。截图和登录信息留在本地私有目录。认证 HTTP、项目范围和实际文件工具可另用 `eval.native_web` 验证；该入口不代替浏览器交互检查。
 --- a/frontend/plugins/akasha/src/plugin-ui.css
 +++ b/frontend/plugins/akasha/src/plugin-ui.css
-@@ -1,5 +1,12 @@
+@@ -1,5 +1,23 @@
  @import "../../../../plugins/akasha/plugin_ui.css";
  
 +.akasha-plugin-ui-evidence {
@@ -219,26 +219,41 @@
 +  font-size: 0.6875rem;
 +}
 +
++/* 编入正文的经历读起来应该最实；只给索引或原文已在上文的更轻，
++   让人一眼看出这次预算花在哪里。颜色沿用既有文本 token，不新增品牌色。 */
++.akasha-plugin-ui-evidence[data-form="body"] {
++  color: var(--ak-color-text-primary);
++}
++
++.akasha-plugin-ui-evidence[data-form="index"],
++.akasha-plugin-ui-evidence[data-form="quoted"] {
++  font-style: italic;
++}
++
  .akasha-plugin-ui-query-status {
    margin-block: 8px;
    color: var(--ak-color-text-secondary);
 --- a/frontend/plugins/akasha/src/plugin-ui.js
 +++ b/frontend/plugins/akasha/src/plugin-ui.js
-@@ -5,6 +5,13 @@
-   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
- })[character]);
+@@ -1,9 +1,14 @@
+ import "./plugin-ui.css";
++import { escapeHtml } from "./escape.js";
++import { deliveryLabel, deliveryOf, deliveryRank, deliveryTitle } from "./recall-delivery.js";
+ import { mountMemoryBadge, mountMemoryField } from "./scope-ui.tsx";
  
+-const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
+-  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+-})[character]);
 +const sourceTime = value => {
 +  if (typeof value !== "string" || !value) return "";
 +  const date = new Date(value);
 +  return Number.isNaN(date.getTime()) ? String(value ?? "")
 +    : date.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
 +};
-+
+ 
  /** 聚合事实在服务端确认闭合前仍可变化，不进入页面结果缓存。 */
  async function readRecall(context, isActive) {
-   const query = async (messageId, offset) => {
-@@ -62,15 +69,24 @@
+@@ -62,15 +67,27 @@
  /** 先计算展示内容；相同快照不改写真实卡片、选择与焦点。 */
  function renderRecall(result) {
    return result.items.length ? `<div class="akasha-plugin-ui-recall-group">${[
@@ -254,18 +269,21 @@
 +      const previous = merged.get(key);
 +      merged.set(key, previous ? { ...hit, messages: hit.messages.map(message => {
 +        const earlier = previous.messages.find(item => item.message_id === message.message_id);
-+        return earlier?.presented && !message.presented ? earlier : message;
++        // Keep whichever query delivered the most of this original, so merging
++        // two real queries never downgrades a body to a bare candidate.
++        return earlier && deliveryRank(earlier) > deliveryRank(message) ? earlier : message;
 +      }) } : hit);
 +    }
 +    const hits = [...merged.values()];
-+    const presented = hits.filter(hit => hit.messages.some(message => message.presented)).length;
++    const presented = hits.filter(hit => hit.messages.some(message => deliveryOf(message) === "body")).length;
++    const indexed = hits.filter(hit => hit.messages.some(message => deliveryOf(message) === "index")).length;
      return `<details data-lane="${lane}" class="akasha-plugin-ui-recall akasha-plugin-ui-recall--${style}">
 -      <summary><span>${title}</span><b>${hits.length}</b></summary>
 -      <ol class="akasha-plugin-ui-memories">${hits.map((hit) => `<li><div>${hit.messages.map((message) =>
 -        `<p>${escapeHtml(message.preview || "（非文本消息）")}${message.truncated ? "…" : ""}</p>`).join("")}</div></li>`).join("")
-+      <summary><span>${title}</span><b title="至少一次编入召回材料的经历 / 检索候选；不代表模型已经接收">已选 ${presented} / ${hits.length}</b></summary>
++      <summary><span>${title}</span><b title="编入正文的经历 · 只给索引行的经历 / 检索候选；不代表模型已经接收">已选 ${presented}${indexed ? ` · 索引 ${indexed}` : ""} / ${hits.length}</b></summary>
 +      <ol class="akasha-plugin-ui-memories">${hits.map((hit) => `<li><div>${hit.messages.filter(message => message.preview).map((message) =>
-+        `<p><small class="akasha-plugin-ui-evidence" title="${escapeHtml(message.recorded_at || "")}">${message.presented ? (message.excerpt ? `入选片段 [${escapeHtml(message.excerpt.start)}:${escapeHtml(message.excerpt.end)}]` : "入选原文") : "候选 · 未入选"} · ${escapeHtml(message.author || "")} · ${escapeHtml(sourceTime(message.recorded_at))}</small>${escapeHtml(message.preview)}${message.truncated ? "…" : ""}</p>`).join("")}</div></li>`).join("")
++        `<p><small class="akasha-plugin-ui-evidence" data-form="${escapeHtml(deliveryOf(message))}" title="${escapeHtml(deliveryTitle(message))}">${deliveryLabel(message)} · ${escapeHtml(message.author || "")} · ${escapeHtml(sourceTime(message.recorded_at))}</small>${escapeHtml(message.preview)}${message.truncated ? "…" : ""}</p>`).join("")}</div></li>`).join("")
          || '<li class="akasha-plugin-ui-empty">本次没有命中</li>'}</ol></details>`;
    }).join("")}</div>` : "";
  }

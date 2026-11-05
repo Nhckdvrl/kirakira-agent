@@ -7,6 +7,17 @@
   font-size: 0.6875rem;
 }
 
+/* 编入正文的经历读起来应该最实；只给索引或原文已在上文的更轻，
+   让人一眼看出这次预算花在哪里。颜色沿用既有文本 token，不新增品牌色。 */
+.akasha-plugin-ui-evidence[data-form="body"] {
+  color: var(--ak-color-text-primary);
+}
+
+.akasha-plugin-ui-evidence[data-form="index"],
+.akasha-plugin-ui-evidence[data-form="quoted"] {
+  font-style: italic;
+}
+
 .akasha-plugin-ui-query-status {
   margin-block: 8px;
   color: var(--ak-color-text-secondary);

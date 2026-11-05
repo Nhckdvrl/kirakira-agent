@@ -225,12 +225,29 @@ class RecallInspector:
         return {"query_id": identity, "query_text": title[:180], "query_text_truncated": len(title) > 180,
                 "ts": recall.timestamp.isoformat(), "source": origin, "graph_version": recall.graph_version,
                 "hit_count": len(recall.hits), "presented_count": len(recall.presented_message_ids),
+                # Delivering a body, spending one index line and withholding both
+                # are three different outcomes; one count cannot stand for them.
+                "indexed_count": len(recall.indexed_message_ids),
+                "withheld_count": len(recall.withheld_message_ids),
                 "selection": recall.selection, "presentation": recall.presentation, "max_chars": recall.max_chars}
 
     # 命中和实际呈现分开显示；正文只从查询记录指向的原消息读取。
     def _detail(self, identity: str, recall: Recall) -> dict[str, object]:
         hits: list[dict[str, object]] = []
         spans = {span.message_id: span for span in recall.presented_spans}
+        presented = set(recall.presented_message_ids)
+        indexed = set(recall.indexed_message_ids)
+        withheld = set(recall.withheld_message_ids)
+
+        def form(message_id: str) -> str:
+            """How this candidate actually reached the request, if at all."""
+            if message_id in presented:
+                return "body"
+            if message_id in indexed:
+                return "index"
+            if message_id in withheld:
+                return "quoted"
+            return "candidate"
         for hit in recall.hits:
             messages: list[dict[str, object]] = []
             for message_id in hit.message_ids:
@@ -249,7 +266,7 @@ class RecallInspector:
                                  "truncated": len(shown) > 240,
                                  "excerpt": None if span is None else span.model_dump(mode="json"),
                                  "recorded_at": message.recorded_at.isoformat(), "author": message.author,
-                                 "presented": message_id in recall.presented_message_ids})
+                                 "presented": message_id in presented, "form": form(message_id)})
             hits.append({"score": hit.score, "lane": hit.lane, "sources": list(hit.sources), "messages": messages})
         return self._ui_result({**self._summary(identity, recall), "hits": hits, "pushes": recall.pushes,
                                     "residual_l1": recall.residual_l1})
