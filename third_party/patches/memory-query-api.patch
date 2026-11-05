@@ -17,12 +17,10 @@
  
  
  class Hit(BaseModel):
-@@ -62,6 +63,20 @@
-     lane: Literal["dense", "completion"]
-     sources: tuple[Text, ...]
+@@ -64,6 +65,20 @@
      basin_ids: tuple[Text, ...] = ()
-+
-+
+ 
+ 
 +class EvidenceSpan(BaseModel):
 +    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 +    message_id: Text
@@ -35,10 +33,12 @@
 +        if not self.start < self.end <= self.source_chars:
 +            raise ValueError("evidence excerpt is outside its source")
 +        return self
- 
- 
++
++
  class Recall(BaseModel):
-@@ -78,6 +93,11 @@
+     """这是发生过的查询，不证明模型已接收或输出已送达。"""
+ 
+@@ -78,8 +93,20 @@
      strong: bool = False
      time_start: AwareDatetime | None = None
      time_end: AwareDatetime | None = None
@@ -49,17 +49,48 @@
 +    presented_spans: tuple[EvidenceSpan, ...] = ()
      hits: tuple[Hit, ...] = Field(max_length=45)
      presented_message_ids: tuple[Text, ...] = ()
++    # Candidates whose body this request withholds because it already quotes the
++    # original verbatim; spending the character budget on them buys nothing.
++    withheld_message_ids: tuple[Text, ...] = ()
++    # The withheld subset that actually earned an index line, and so is readable
++    # through the source tools. Both are frozen here at first query, so tool
++    # continuation steps, reminder replay and restarts render the same bytes.
++    indexed_message_ids: tuple[Text, ...] = ()
      active_basin_count: Annotated[int, Field(ge=0)]
-@@ -97,6 +117,8 @@
+     pushes: Annotated[int, Field(ge=0)]
+     residual_l1: Annotated[FiniteFloat, Field(ge=0)]
+@@ -95,10 +122,30 @@
+         if (len(set(self.presented_message_ids)) != len(self.presented_message_ids)
+             or not set(self.presented_message_ids) <= members):
              raise ValueError("实际呈现的消息必须是本次命中的唯一成员")
++        withheld = set(self.withheld_message_ids)
++        if len(withheld) != len(self.withheld_message_ids) or not withheld <= members:
++            raise ValueError("被withheld的消息必须是本次命中的唯一成员")
++        if withheld & set(self.presented_message_ids):
++            raise ValueError("同一条消息不能既不呈现正文又呈现正文")
++        indexed = set(self.indexed_message_ids)
++        if len(indexed) != len(self.indexed_message_ids) or not indexed <= withheld:
++            raise ValueError("索引行只能来自本次withheld的唯一消息")
          if self.time_start is not None and self.time_end is not None and self.time_start > self.time_end:
              raise ValueError("召回时间窗口倒置")
 +        if self.presented_spans and tuple(span.message_id for span in self.presented_spans) != self.presented_message_ids:
 +            raise ValueError("excerpt spans must match the actually presented messages")
          return self
  
++    @property
++    def admitted_message_ids(self) -> tuple[Text, ...]:
++        """Originals this query actually surfaced, as a body or as an index line.
++
++        Source reads and proofs admit exactly these. An index line names a real
++        message id, so withholding its body must not also withhold the ability
++        to go and read it; nothing outside this query becomes readable.
++        """
++        return self.presented_message_ids + self.indexed_message_ids
++
  
-@@ -108,3 +130,116 @@
+ class RecallRecordsRead(Protocol):
+     def read(self, identity: str) -> Recall | None: ...
+@@ -108,3 +155,116 @@
  
  # Akasha dashboard 读取查询出处，不取得学习 writer。
  AKASHA_RECORDS_VIEW = ServiceKey[Callable[[], RecallRecordsRead]]("akasha.recall-records.v1")
@@ -229,16 +260,17 @@
  from plugins.akasha.contract import EMBEDDING_MEMORY_PLUGIN
  from plugins.models.contract import EMBEDDINGS
  from plugins.ui.contract import (
-@@ -43,7 +43,7 @@
+@@ -43,7 +43,8 @@
      SavedEmbedding,
  )
  from plugins.ui.contract import UI
 -from plugins.ledger.contract import Message
 +from plugins.ledger.contract import Message, MessageCatalog
++from plugins.compaction.contract import COMPACTION_SUMMARIES
  from plugins.context.contract import (
      MATERIALS_V4 as MATERIALS,
  )
-@@ -55,7 +55,7 @@
+@@ -55,7 +56,7 @@
      ContentCapability,
      ToolCatalog,
  )
@@ -247,7 +279,7 @@
  from .application.rebuild import manifest_json, rebuild_from_catalog
  from .application.snapshot import read_memory
  from .config import AkashaConfig, resolve_memory_path
-@@ -67,6 +67,13 @@
+@@ -67,6 +68,13 @@
  from .recall_tool import RecallArguments, RecallTool, check_recall
  from .recalls import RecallRecords, RecallRecordsRead
  from .contract import AKASHA_RECORDS_VIEW
@@ -261,7 +293,7 @@
  from .runtime import MessageMemory, prepare_materials
  from .tools import FeedbackArguments, FeedbackTool, check_feedback
  from .scopes import DEFAULT_GRAPH, LEARN_POLICIES, LearnPolicy, MemoryDisabled, PolicyLocked, ScopePolicies, ensure_graph_directory, graph_path
-@@ -79,11 +86,23 @@
+@@ -79,13 +87,25 @@
  
  api_version = 3
  name = "akasha"
@@ -271,8 +303,8 @@
  workspace_roots = ("memory",)
  
  MaterialData = Mapping[str, object]
-+
-+
+ 
+ 
 +async def _write_graphs(
 +    catalog: MessageCatalog, policies: ScopePolicies, heads: Mapping[str, int] | None = None,
 +) -> tuple[str, ...]:
@@ -283,10 +315,12 @@
 +        return (DEFAULT_GRAPH, *sorted(key for key in routed if key is not None and key != DEFAULT_GRAPH))
 +
 +    return await run_memory_job(discover)
- 
- 
++
++
  function_inject = (TURN_PROJECTION, CONTENT, MATERIALS, TOOLS, EMBEDDINGS,
-@@ -176,10 +195,10 @@
+           BINDINGS, MESSAGE_CATALOG, MESSAGE_EMBEDDINGS, OWNER_STATE, COMMANDS)
+ 
+@@ -176,10 +196,10 @@
      _ = await ctx.provide(AKASHA_LEARNING, learning)
      _ = await content.register(ctx, {
          "name": "akasha",
@@ -299,29 +333,50 @@
          _ = await ctx.provide(part_display_key(kind), hidden_part)
      # 同一 Root 只允许一个 embedding 记忆系统；一个 Akasha 实例管理全部图。
      _ = await ctx.provide(EMBEDDING_MEMORY_PLUGIN, object())
-@@ -242,12 +261,6 @@
- 
+@@ -243,12 +263,6 @@
      def member(key: str) -> Callable[[str], bool]:
          return lambda session_id: policies.route(session_id).write == key
--
+ 
 -    def write_graphs() -> tuple[str, ...]:
 -        """default 图总在；独立图只在有成员 Session 后才建立。"""
 -        heads = ctx.require(MESSAGE_CATALOG).snapshot_heads()
 -        routed = {policies.route(session_id).write for session_id in heads}
 -        return (DEFAULT_GRAPH, *sorted(key for key in routed if key is not None and key != DEFAULT_GRAPH))
- 
+-
      def records() -> RecallRecords:
          return RecallRecords(record_state)
-@@ -388,7 +401,7 @@
+ 
+@@ -387,8 +401,20 @@
+             "reminders": (reminder,),
          }
  
++    def covered_ids(session_id: str) -> frozenset[str]:
++        """Identities a stored summary already replaced, so recall may repeat them.
++
++        Without compaction nothing is known to be covered: the whole prefix is
++        treated as still quoted, and recall withholds what the request repeats.
++        """
++        with ctx.borrow(COMPACTION_SUMMARIES) as summaries:
++            if summaries is None:
++                return frozenset()
++            head = summaries.head(session_id)
++            return frozenset() if head is None else frozenset(head.source_message_ids)
++
      async def prepare(snapshot: tuple[Message, ...], source: str) -> MaterialData:
 -        key = policies.route(snapshot[0].session_id).read if snapshot else DEFAULT_GRAPH
 +        key = (await run_memory_job(partial(policies.route, snapshot[0].session_id))).read if snapshot else DEFAULT_GRAPH
          # An explicit policy denial precedes graph startup, embeddings, and receipts.
          if key is None:
              return {}
-@@ -511,6 +524,47 @@
+@@ -429,6 +455,7 @@
+                         bindings=bindings, learning_binding=identity, learning=selected, rule=rule,
+                         records=query_records, embed_batch=embedder(rule, model_id),
+                         limit=settings.context_recall_limit, max_chars=settings.inject_max_chars,
++                        covered_ids=covered_ids,
+                     )
+         except (EmbeddingSpaceMismatchError, MemoryRebuildRequiredError) as error:
+             set_graph_error(key, str(error))
+@@ -511,6 +538,47 @@
          idempotent=True,
          parallel=True,
      )
@@ -369,7 +424,7 @@
      # 只读账本按声明的 workspace root 解析学习图；不暴露 writer 或任意路径。
  
  
-@@ -535,8 +589,9 @@
+@@ -535,8 +603,9 @@
          starting_rules[key] = rule
          try:
              try:
@@ -380,7 +435,15 @@
                      embeddings=ctx.require(MESSAGE_EMBEDDINGS), bindings=ctx.require(BINDINGS),
                      config=settings.memory_config(), cutover=key == DEFAULT_GRAPH,
                      restore_embeddings=restore_embeddings,
-@@ -588,8 +643,8 @@
+@@ -550,6 +619,7 @@
+                 bindings=ctx.require(BINDINGS), learning_binding=identity, records=runtime_records,
+                 embed_batch=embedder(rule, model_id), limit=settings.context_recall_limit,
+                 max_chars=settings.inject_max_chars, member=member(key),
++                covered_ids=covered_ids,
+             )
+             # 2. 新选择必须与已有图一致；失败先归还 writer，绝不自动重建。
+             try:
+@@ -588,8 +658,8 @@
                      await close_memory()
                      memory_rule = None
                      reports: list[str] = []
@@ -391,20 +454,21 @@
                          backup_root = rebuild_backup_root if key == DEFAULT_GRAPH else (
                              rebuild_backup_root / "graphs" / path.parent.name
                          )
-@@ -664,7 +719,12 @@
+@@ -664,8 +734,13 @@
                  await changed.wait()
                  changed.clear()
                  async with ctx.runtime_scope(), graph_access(key):
 +                    started = key in memories
                      if not await start_memory(key):
-+                        continue
+                         continue
 +                    if not started:
 +                        # 首次启动已追赶自己的真实前缀。初始化期间的新通知仍留在
 +                        # changed 中，下一轮再追赶，不能在这里清除或重复扫描。
-                         continue
++                        continue
                      try:
                          _ = await memories[key].consume()
-@@ -676,10 +736,11 @@
+                     except (EmbeddingSpaceMismatchError, MemoryRebuildRequiredError) as error:
+@@ -676,10 +751,11 @@
                          health.degrade(str(error))
  
          async with asyncio.TaskGroup() as group:
@@ -418,7 +482,7 @@
                          changed = pending.get(key)
                          if changed is None:
                              changed = pending[key] = asyncio.Event()
-@@ -704,12 +765,7 @@
+@@ -704,12 +780,7 @@
          nonlocal running
          running = False
          try:
@@ -449,8 +513,11 @@
  from .scopes import MemoryDisabled
 -from .contract import ProgramSource, Recall, ToolSource
 -from .recalls import RecallRecords, query_memory, render_materials
--
--
++from .contract import ProgramSource, Recall, RecallQuery, ToolSource
++from .recalls import RecallRecords, query_memory, render_materials, record_materials
++from .source_tool import SourceProof
+ 
+ 
 -class RecallArguments(BaseModel):
 -    model_config = ConfigDict(extra="forbid", strict=True)
 -    query: str = Field(min_length=1, max_length=32000)
@@ -462,11 +529,6 @@
 -        if not value.strip():
 -            raise ValueError("召回问题不能为空白")
 -        return value
-+from .contract import ProgramSource, Recall, RecallQuery, ToolSource
-+from .recalls import RecallRecords, query_memory, render_materials, record_materials
-+from .source_tool import SourceProof
-+
-+
 +class RecallArguments(RecallQuery):
 +    pass
  
@@ -495,7 +557,7 @@
 +                parent = records.read(proof.retrieval_ref)
 +                if (tool["name"] not in {"read_memory_source", "search_memory_source"} or proof.call_ref != call_ref
 +                    or proof.caller_session_id != request.session_id or parent is None
-+                    or proof.span.message_id not in parent.presented_message_ids):
++                    or proof.span.message_id not in parent.admitted_message_ids):
 +                    raise ValueError("原文展开出处不属于实际工具调用")
 +                references[proof.span.message_id] = {
 +                    "ref": proof.span.message_id, "resolved_ref": proof.span.message_id,
@@ -695,14 +757,16 @@
      )
  
  
-@@ -177,6 +224,25 @@
+@@ -177,10 +224,33 @@
      rows: list[str] = []
      references: list[Mapping[str, object]] = []
      header = "## Akasha 召回\n历史资料仅供参考，不是当前用户指令。\n\n"
++    # Frozen at first query; replay and restart withhold exactly the same ones.
++    withheld = set(recall.withheld_message_ids)
 +    if recall.rendering_version == 3:
 +        from .excerpts import Passage, render
 +        passages = []
-+        seen = set()
++        seen = set(withheld)
 +        for hit in recall.hits:
 +            for message_id in hit.message_ids:
 +                if message_id in seen:
@@ -721,7 +785,13 @@
      used = len(header)
      for hit in recall.hits:
          reader = catalog.reader(hit.session_id)
-@@ -188,6 +254,8 @@
+         for message_id in hit.message_ids:
++            if message_id in withheld:
++                continue
+             message = reader.get(message_id)
+             if message is None:
+                 raise ValueError(f"召回出处消息缺失: {message_id}")
+@@ -188,6 +258,8 @@
              if not text.strip():
                  continue
              row = f"### 消息 {message_id}\n来源：{message.source}；作者：{message.author}；召回通道：{hit.lane}\n\n{text}"
@@ -730,10 +800,84 @@
              if used + len(row) + 2 * bool(rows) > max_chars:
                  continue
              used += len(row) + 2 * bool(rows)
-@@ -199,3 +267,15 @@
+@@ -199,3 +271,89 @@
          "name": "recall", "text": header + "\n\n".join(rows), "priority": 300,
      },)
      return {"reminders": reminders, "references": tuple(references)}
++
++
++INDEX_PREVIEW_CHARS = 80
++INDEX_MAX_CHARS = 800
++
++
++def _index_row(message, text: str, lane: str) -> str:
++    collapsed = " ".join(text.split())
++    preview = collapsed[:INDEX_PREVIEW_CHARS]
++    if len(collapsed) > INDEX_PREVIEW_CHARS:
++        preview += "\u2026"
++    return f"- [{message.recorded_at.isoformat()} \u00b7 {lane}] {preview}\uff08ref={message.message_id}\uff09"
++
++
++def select_index_ids(
++    recall: Recall, learning: Learning, catalog: MessageCatalog, *,
++    replayed: frozenset[str], max_chars: int = INDEX_MAX_CHARS,
++) -> tuple[str, ...]:
++    """Choose, in hit order, the quoted originals whose index line fits the budget.
++
++    Candidates past the budget are left to the ordinary body renderer, which
++    applies its own budget. Selection is frozen into the receipt so that every
++    later render of this request withholds and indexes exactly the same ones.
++    """
++    chosen: list[str] = []
++    used = 0
++    seen: set[str] = set()
++    for hit in recall.hits:
++        reader = catalog.reader(hit.session_id)
++        for message_id in hit.message_ids:
++            if message_id in seen or message_id not in replayed:
++                continue
++            seen.add(message_id)
++            message = reader.get(message_id)
++            if message is None:
++                raise ValueError(f"\u53ec\u56de\u51fa\u5904\u6d88\u606f\u7f3a\u5931: {message_id}")
++            text = learning.text(message)
++            if not text.strip():
++                continue
++            row = _index_row(message, text, hit.lane)
++            if used + len(row) + 1 > max_chars:
++                return tuple(chosen)
++            used += len(row) + 1
++            chosen.append(message_id)
++    return tuple(chosen)
++
++
++def render_index(recall: Recall, learning: Learning, catalog: MessageCatalog) -> str:
++    """One line per candidate whose original this request already quotes.
++
++    The body is withheld because the model can read it in the window already.
++    The line still states that this query surfaced it, and carries the real
++    message id so the source tools can go back to the exact original.
++    """
++    rows: list[str] = []
++    withheld = set(recall.indexed_message_ids)
++    for hit in recall.hits:
++        reader = catalog.reader(hit.session_id)
++        for message_id in hit.message_ids:
++            if message_id not in withheld:
++                continue
++            withheld.discard(message_id)
++            message = reader.get(message_id)
++            if message is None:
++                raise ValueError(f"召回出处消息缺失: {message_id}")
++            text = learning.text(message)
++            if not text.strip():
++                continue
++            rows.append(_index_row(message, text, hit.lane))
++    if not rows:
++        return ""
++    return ("## Akasha 召回索引\n本次检索命中、且原文已在当前对话中的消息。"
++            "需要原文细节时用 read_memory_source 或 search_memory_source 展开。\n\n"
++            + "\n".join(rows))
 +
 +
 +def record_materials(recall: Recall, material: MaterialData, *, max_chars: int) -> Recall:
@@ -758,7 +902,7 @@
  import logging
  from collections.abc import Awaitable, Callable, Mapping
  from datetime import UTC, datetime
-@@ -9,7 +12,7 @@
+@@ -9,19 +12,94 @@
  
  from plugins.ledger.contract import Bindings
  from plugins.ledger.contract import MessageCatalog, MessageEmbeddings
@@ -767,12 +911,14 @@
  
  from .application.consumer import MessageConsumer, run_memory_job
  from .learning import AKASHA_LEARNING, Learning, LearningConfig
-@@ -17,11 +20,65 @@
+ from .application.cycle import MemoryCycle
  from .infrastructure.consumption import Consumption
  from .projection import input_features
- from .contract import ContextSource
+-from .contract import ContextSource
 -from .recalls import RecallRecords, context_identity, query_memory, render_materials
-+from .recalls import RecallRecords, context_identity, query_memory, render_materials, record_materials
++from .contract import ContextSource, Recall
++from .recalls import (INDEX_MAX_CHARS, RecallRecords, context_identity, query_memory,
++                      render_index, render_materials, record_materials, select_index_ids)
  from .recall_tool import tool_references
  
  MaterialData = Mapping[str, object]
@@ -781,16 +927,24 @@
 +
 +
 +def _receipt_reminder(identity, recall):
-+    if not recall.presented_message_ids:
++    admitted = recall.admitted_message_ids
++    if not admitted:
 +        return None
 +    return {"name": "recall_sources", "priority": 290, "text":
 +        "## 已检索记忆的来源索引\n完整原文仍可用 read_memory_source 或 search_memory_source 展开。\n"
-+        + json.dumps({"retrieval_ref": identity, "message_ids": recall.presented_message_ids[:3],
-+                      "source_count": len(recall.presented_message_ids)}, ensure_ascii=False, separators=(",", ":"))}
++        + json.dumps({"retrieval_ref": identity, "message_ids": admitted[:3],
++                      "source_count": len(admitted)}, ensure_ascii=False, separators=(",", ":"))}
 +
 +
-+def _live_material(identity, recall, material):
++def _live_material(identity, recall, material, *, learning=None, catalog=None):
 +    reminders = tuple({**item, "replay": False} for item in material.get("reminders", ()))
++    if learning is not None and catalog is not None and recall.indexed_message_ids:
++        # Describes what this request's window already quotes, so it is current
++        # context rather than something to replay into later turns.
++        index = render_index(recall, learning, catalog)
++        if index:
++            reminders += ({"name": "recall_index", "text": index,
++                           "priority": 295, "replay": False},)
 +    pointer = _receipt_reminder(identity, recall)
 +    return {**material, "reminders": reminders + (() if pointer is None else (pointer,))}
 +
@@ -831,10 +985,38 @@
 +    while len(cache) > 512:
 +        del cache[next(iter(cache))]
 +    return tuple(patches)
++
++
++def window_message_ids(snapshot: tuple[Message, ...], covered: frozenset[str]) -> frozenset[str]:
++    """Originals this request still replays verbatim, so recall need not repeat them.
++
++    `covered` holds the identities a stored summary has already replaced. What
++    remains of the prefix is quoted in the request as ordinary history, so
++    injecting the same text again as recall material buys the model nothing.
++    Once compaction covers them they leave the window and may be recalled again.
++    """
++    return frozenset(message.message_id for message in snapshot
++                     if message.message_id not in covered)
  
  
  def _reference_rows(material: MaterialData) -> tuple[Mapping[str, object], ...]:
-@@ -62,6 +119,7 @@
+@@ -47,11 +125,15 @@
+         records: RecallRecords, embed_batch: Callable[[list[str]], Awaitable[list[list[float]]]],
+         limit: int = 40, max_chars: int = 12000,
+         member: Callable[[str], bool] | None = None,
++        covered_ids: Callable[[str], frozenset[str]] | None = None,
+     ):
+         if not 1 <= limit <= 40 or max_chars <= 0:
+             raise ValueError("召回数量或文本预算无效")
+         self._consumer = consumer
+         self._member = member
++        # Absent a compaction reader nothing is known to be covered, so the
++        # whole prefix counts as replayed and recall withholds what it repeats.
++        self._covered_ids = covered_ids
+         self._catalog = catalog
+         self._embeddings = embeddings
+         self._bindings = bindings
+@@ -62,6 +144,7 @@
          self._max_chars = max_chars
          self._lock = asyncio.Lock()
          self._closing = False
@@ -842,23 +1024,25 @@
  
      def _check_open(self) -> None:
          if self._closing:
-@@ -116,6 +174,7 @@
+@@ -116,6 +199,8 @@
                      learning_binding=self._learning_binding, learning=learning, rule=rule,
                      records=self._records, embed_batch=self._embed_batch,
                      limit=self._limit, max_chars=self._max_chars,
 +                    replay_cache=self._replay_cache,
++                    covered_ids=self._covered_ids,
                  )
  
  
-@@ -124,6 +183,7 @@
+@@ -124,6 +209,8 @@
      catalog: MessageCatalog, embeddings: MessageEmbeddings, bindings: Bindings,
      learning_binding: str, learning: Learning, rule: LearningConfig, records: RecallRecords,
      embed_batch: Callable[[list[str]], Awaitable[list[list[float]]]], limit: int, max_chars: int,
 +    replay_cache: dict | None = None,
++    covered_ids: Callable[[str], frozenset[str]] | None = None,
  ) -> MaterialData:
      """在已核对空间的图上查询真实输入前缀，发布出处后交付材料。"""
      if not snapshot:
-@@ -147,19 +207,23 @@
+@@ -147,32 +234,47 @@
          recall = await run_memory_job(lambda: records.read(identity))
          if recall is None:
              # 升级前的随机身份仍是实际查询证据；复用同一用户输入后的首次记录。
@@ -879,11 +1063,19 @@
                  material = await run_memory_job(lambda: render_materials(
                      identity, recall, original, catalog, max_chars=recall.max_chars,
                  ))
-+                material = _live_material(identity, recall, material)
++                material = _live_material(identity, recall, material,
++                                          learning=original, catalog=catalog)
          else:
++            covered = frozenset() if covered_ids is None else covered_ids(session_id)
              material = await query_inputs(
                  inputs, snapshot, source, identity=identity, cycle=cycle, state=state,
-@@ -172,7 +236,15 @@
+                 catalog=catalog, embeddings=embeddings, learning_binding=learning_binding,
+                 learning=learning, rule=rule, records=records, embed_batch=embed_batch,
+                 limit=limit, max_chars=max_chars,
++                replayed=window_message_ids(snapshot, covered),
+             )
+     references = {cast(str, ref["ref"]): ref for ref in _reference_rows(material)}
+     # 同一消息有多次真实查询时，当前工具结果的精确出处供后续 Citation 使用。
      tool_refs = await run_memory_job(lambda: tool_references(snapshot, source, learning, bindings, records))
      references.update((cast(str, ref["ref"]), ref) for ref in tool_refs)
      result = dict(material)
@@ -900,13 +1092,46 @@
      return result
  
  
-@@ -209,17 +281,12 @@
+@@ -182,6 +284,7 @@
+     embeddings: MessageEmbeddings, learning_binding: str, learning: Learning,
+     rule: LearningConfig, records: RecallRecords,
+     embed_batch: Callable[[list[str]], Awaitable[list[list[float]]]], limit: int, max_chars: int,
++    replayed: frozenset[str] = frozenset(),
+ ) -> MaterialData:
+     """真实用户输入首次准备时检索并保存结果，包括未命中。"""
+     session_id = snapshot[0].session_id
+@@ -209,17 +312,37 @@
      recall = await run_memory_job(lambda: query_memory(
          cycle, state, learning_binding=learning_binding,
          text=text, dense=dense, stamp=stamp, source=origin, limit=limit,
 +        selection="fused", presentation="excerpts",
      ))
++    # 3. Candidates this request already quotes verbatim cost one index line
++    #    rather than a body. The choice is made once, here, and frozen into the
++    #    receipt, so every later render withholds and indexes the same ones.
 +    max_chars = min(max_chars, AUTO_CONTEXT_CHARS)
++    # Every quoted original loses its body, whether or not a line fits: the
++    # point is not to spend the budget on text the request already carries.
++    withheld = tuple(dict.fromkeys(
++        message_id for hit in recall.hits for message_id in hit.message_ids
++        if message_id in replayed
++    ))
++    index_chars = 0
++    if withheld:
++        recall = Recall.model_validate(
++            recall.model_dump() | {"withheld_message_ids": withheld})
++        indexed = await run_memory_job(lambda: select_index_ids(
++            recall, learning, catalog, replayed=replayed,
++            max_chars=min(INDEX_MAX_CHARS, max_chars),
++        ))
++        if indexed:
++            recall = Recall.model_validate(
++                recall.model_dump() | {"indexed_message_ids": indexed})
++            index_chars = len(await run_memory_job(
++                lambda: render_index(recall, learning, catalog)))
++    # Index and bodies share one request budget; the index is charged first
++    # because its selection is what decided which bodies were withheld.
++    max_chars = max(1, max_chars - index_chars)
      material = await run_memory_job(lambda: render_materials(
          identity, recall, learning, catalog, max_chars=max_chars,
      ))
@@ -921,7 +1146,7 @@
 +    recall = record_materials(recall, material, max_chars=max_chars)
      _ = await run_memory_job(lambda: records.save(identity, recall))
 -    return material
-+    return _live_material(identity, recall, material)
++    return _live_material(identity, recall, material, learning=learning, catalog=catalog)
 --- a/plugins/akasha/settings.py
 +++ b/plugins/akasha/settings.py
 @@ -90,7 +90,7 @@

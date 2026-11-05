@@ -108,7 +108,11 @@ async def test_automatic_recall_bounds_live_context_and_retires_only_verified_le
         assert first == await memory.prepare(snapshot, "conversation")
         live = [item for item in first["reminders"] if item.get("replay") is False]
         assert live and sum(len(item["text"]) for item in live) <= 2400
-        assert "BUDGET=760" in str(live)
+        # The original is still quoted verbatim in this very request, so recall
+        # spends one index line on it instead of repeating the body.
+        index = [item for item in live if item["name"] == "recall_index"]
+        assert index and "ref=user-0" in index[0]["text"]
+        assert "BUDGET=760" not in str(live)
         assert any("retrieval_ref" in item["text"] for item in first["reminders"] if item.get("replay", True))
         patches = first["reminder_patches"]
         assert len(patches) == 1 and patches[0]["sha256"] == hashlib.sha256(reminder.encode()).hexdigest()
@@ -357,7 +361,7 @@ async def loop_turn() -> None:
 
 
 @asynccontextmanager
-async def memory_fixture(path: Path) -> AsyncIterator[tuple[MessageMemory, MessageConsumer, Learning, Bindings, MessageLog, MessageEmbeddings, CompositionRoot, asyncio.Event]]:
+async def memory_fixture(path: Path, covered_ids=None) -> AsyncIterator[tuple[MessageMemory, MessageConsumer, Learning, Bindings, MessageLog, MessageEmbeddings, CompositionRoot, asyncio.Event]]:
     """使用真实消息、固定向量、provider scope、学习器和磁盘 writer。"""
     log = MessageLog(path / "sessions.db")
     log.ensure_session("conversation", SessionAttributes())
@@ -384,7 +388,7 @@ async def memory_fixture(path: Path) -> AsyncIterator[tuple[MessageMemory, Messa
         embeddings=embeddings, bindings=bindings, config=MemoryConfig(), cutover=False)
     memory = MessageMemory(consumer, catalog=log.catalog(), embeddings=embeddings,
         bindings=bindings, learning_binding=identity, records=RecallRecords(log.owner("akasha")),
-        embed_batch=embed)
+        embed_batch=embed, covered_ids=covered_ids)
     try:
         yield memory, consumer, learning, bindings, log, embeddings, root, closed
     finally:
@@ -888,3 +892,62 @@ async def test_rebuild_finishes_publication_receipt_before_cancellation(tmp_path
         finally:
             gate.release.set()
             await asyncio.gather(job, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_recall_indexes_quoted_originals_and_still_renders_compacted_ones(tmp_path):
+    """A covered original earns its body back; a quoted one costs one index line.
+
+    Both decisions are frozen in the receipt, so re-rendering the same request
+    -- tool continuation steps, reminder replay, restart -- yields the same
+    bytes, and the source tools still admit whichever form was surfaced.
+    """
+    from plugins.akasha.contract import MemorySourceQuery
+    from plugins.akasha.query import MemoryQueries
+    from plugins.akasha.recalls import context_identity
+
+    covered: set[str] = set()
+
+    async with memory_fixture(tmp_path, covered_ids=lambda _session: frozenset(covered)) as (
+        memory, consumer, learning, _bindings, log, embeddings, _root, _closed,
+    ):
+        body = "Background filler. " * 200 + "needleproject budget BUDGET=915."
+        append_pair(log, embeddings, learning, 0, user_text=body)
+        for number in range(1, 3):
+            append_pair(log, embeddings, learning, number)
+        await memory.consume()
+        records = RecallRecords(log.owner("akasha"))
+        inputs = log.writer("conversation", author="user", source="conversation",
+                            body_types=(Input,), content={"text": check_text})
+
+        # 1. Nothing is covered yet, so the window still quotes user-0 verbatim.
+        first_input = inputs.append("ask-quoted", Input((ContentPart("text", "needleproject budget"),)))
+        quoted = await memory.prepare(log.reader("conversation").snapshot(), "conversation")
+        live = [item for item in quoted["reminders"] if item.get("replay") is False]
+        assert "BUDGET=915" not in str(live)
+        assert "ref=user-0" in str(live)
+        receipt = records.read(context_identity("conversation", "conversation", first_input.message_id))
+        assert "user-0" in receipt.indexed_message_ids
+        assert "user-0" not in receipt.presented_message_ids
+        # The index line is what makes an index-only source readable at all.
+        assert "user-0" in receipt.admitted_message_ids
+        queries = MemoryQueries(capture=None, open_recall=None, catalog=log.catalog(),
+                                records=lambda: records, check_scope=lambda _: "fixture-scope")
+        reread = await queries.source(MemorySourceQuery(
+            session_id="conversation",
+            retrieval_ref=context_identity("conversation", "conversation", first_input.message_id),
+            message_id="user-0", offset=len(body) - 60, length=60))
+        assert "BUDGET=915" in reread.text
+        # A frozen decision re-renders identically.
+        assert quoted == await memory.prepare(log.reader("conversation").snapshot(), "conversation")
+
+        # 2. Once a summary covers it, the original leaves the window and the
+        #    body is worth spending the character budget on again.
+        covered.update(message.message_id for message in log.reader("conversation").snapshot())
+        second_input = inputs.append("ask-compacted", Input((ContentPart("text", "needleproject budget"),)))
+        compacted = await memory.prepare(log.reader("conversation").snapshot(), "conversation")
+        live = [item for item in compacted["reminders"] if item.get("replay") is False]
+        assert "BUDGET=915" in str(live)
+        later = records.read(context_identity("conversation", "conversation", second_input.message_id))
+        assert "user-0" in later.presented_message_ids
+        assert not later.indexed_message_ids

@@ -31,6 +31,18 @@ uv sync --frozen --extra providers --extra memory
 
 报告记录实际模型、驱动、端点与输入条件。同一模型的两个驱动路径不算跨模型验证。日志可能包含首次登录信息，只能留在私有输出目录；不要上传整个工作区或凭据库。
 
+## 召回开销
+
+不需要聊天模型和外部账户，固定向量与真实记忆组件重放连续回合，分别报告每轮注入字符、重复注入和正文／索引构成：
+
+```sh
+uv run --frozen --no-sync python -m eval.recall_cost \
+  --seed-turns 12 --live-turns 15 --filler-chars 2000 \
+  --output /local-disk/eval/recall-cost.json
+```
+
+它只衡量开销，不衡量回答质量：注入变少不等于模型仍能找到所需原文，两者分别验收。
+
 ## 功能验证
 
 每次使用不存在或全新的隔离工作区：

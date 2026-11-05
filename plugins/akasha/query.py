@@ -72,9 +72,9 @@ class MemoryQueries:
         origin = parent.source.session_id
         if not origin or self._check_scope(origin) != route:
             raise ValueError("source receipt belongs to another memory scope")
-        if message_id is not None and message_id not in parent.presented_message_ids:
+        if message_id is not None and message_id not in parent.admitted_message_ids:
             raise ValueError("message was not presented by this retrieval")
-        identities = (message_id,) if message_id is not None else parent.presented_message_ids
+        identities = (message_id,) if message_id is not None else parent.admitted_message_ids
         sessions = {identity: hit.session_id for hit in parent.hits for identity in hit.message_ids}
         messages = tuple(self._catalog.reader(sessions[identity]).get(identity) for identity in identities)
         if any(message is None or not isinstance(message.body, (Input, Output)) for message in messages):

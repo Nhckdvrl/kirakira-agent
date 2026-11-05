@@ -44,6 +44,7 @@ from plugins.models.contract import (
 )
 from plugins.ui.contract import UI
 from plugins.ledger.contract import Message, MessageCatalog
+from plugins.compaction.contract import COMPACTION_SUMMARIES
 from plugins.context.contract import (
     MATERIALS_V4 as MATERIALS,
 )
@@ -400,6 +401,18 @@ async def run(ctx: Context, interest: Interest) -> None:
             "reminders": (reminder,),
         }
 
+    def covered_ids(session_id: str) -> frozenset[str]:
+        """Identities a stored summary already replaced, so recall may repeat them.
+
+        Without compaction nothing is known to be covered: the whole prefix is
+        treated as still quoted, and recall withholds what the request repeats.
+        """
+        with ctx.borrow(COMPACTION_SUMMARIES) as summaries:
+            if summaries is None:
+                return frozenset()
+            head = summaries.head(session_id)
+            return frozenset() if head is None else frozenset(head.source_message_ids)
+
     async def prepare(snapshot: tuple[Message, ...], source: str) -> MaterialData:
         key = (await run_memory_job(partial(policies.route, snapshot[0].session_id))).read if snapshot else DEFAULT_GRAPH
         # An explicit policy denial precedes graph startup, embeddings, and receipts.
@@ -442,6 +455,7 @@ async def run(ctx: Context, interest: Interest) -> None:
                         bindings=bindings, learning_binding=identity, learning=selected, rule=rule,
                         records=query_records, embed_batch=embedder(rule, model_id),
                         limit=settings.context_recall_limit, max_chars=settings.inject_max_chars,
+                        covered_ids=covered_ids,
                     )
         except (EmbeddingSpaceMismatchError, MemoryRebuildRequiredError) as error:
             set_graph_error(key, str(error))
@@ -605,6 +619,7 @@ async def run(ctx: Context, interest: Interest) -> None:
                 bindings=ctx.require(BINDINGS), learning_binding=identity, records=runtime_records,
                 embed_batch=embedder(rule, model_id), limit=settings.context_recall_limit,
                 max_chars=settings.inject_max_chars, member=member(key),
+                covered_ids=covered_ids,
             )
             # 2. 新选择必须与已有图一致；失败先归还 writer，绝不自动重建。
             try:

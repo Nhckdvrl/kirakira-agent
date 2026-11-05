@@ -100,6 +100,13 @@ class Recall(BaseModel):
     presented_spans: tuple[EvidenceSpan, ...] = ()
     hits: tuple[Hit, ...] = Field(max_length=45)
     presented_message_ids: tuple[Text, ...] = ()
+    # Candidates whose body this request withholds because it already quotes the
+    # original verbatim; spending the character budget on them buys nothing.
+    withheld_message_ids: tuple[Text, ...] = ()
+    # The withheld subset that actually earned an index line, and so is readable
+    # through the source tools. Both are frozen here at first query, so tool
+    # continuation steps, reminder replay and restarts render the same bytes.
+    indexed_message_ids: tuple[Text, ...] = ()
     active_basin_count: Annotated[int, Field(ge=0)]
     pushes: Annotated[int, Field(ge=0)]
     residual_l1: Annotated[FiniteFloat, Field(ge=0)]
@@ -115,11 +122,29 @@ class Recall(BaseModel):
         if (len(set(self.presented_message_ids)) != len(self.presented_message_ids)
             or not set(self.presented_message_ids) <= members):
             raise ValueError("实际呈现的消息必须是本次命中的唯一成员")
+        withheld = set(self.withheld_message_ids)
+        if len(withheld) != len(self.withheld_message_ids) or not withheld <= members:
+            raise ValueError("被withheld的消息必须是本次命中的唯一成员")
+        if withheld & set(self.presented_message_ids):
+            raise ValueError("同一条消息不能既不呈现正文又呈现正文")
+        indexed = set(self.indexed_message_ids)
+        if len(indexed) != len(self.indexed_message_ids) or not indexed <= withheld:
+            raise ValueError("索引行只能来自本次withheld的唯一消息")
         if self.time_start is not None and self.time_end is not None and self.time_start > self.time_end:
             raise ValueError("召回时间窗口倒置")
         if self.presented_spans and tuple(span.message_id for span in self.presented_spans) != self.presented_message_ids:
             raise ValueError("excerpt spans must match the actually presented messages")
         return self
+
+    @property
+    def admitted_message_ids(self) -> tuple[Text, ...]:
+        """Originals this query actually surfaced, as a body or as an index line.
+
+        Source reads and proofs admit exactly these. An index line names a real
+        message id, so withholding its body must not also withhold the ability
+        to go and read it; nothing outside this query becomes readable.
+        """
+        return self.presented_message_ids + self.indexed_message_ids
 
 
 class RecallRecordsRead(Protocol):

@@ -19,8 +19,9 @@ from .learning import AKASHA_LEARNING, Learning, LearningConfig
 from .application.cycle import MemoryCycle
 from .infrastructure.consumption import Consumption
 from .projection import input_features
-from .contract import ContextSource
-from .recalls import RecallRecords, context_identity, query_memory, render_materials, record_materials
+from .contract import ContextSource, Recall
+from .recalls import (INDEX_MAX_CHARS, RecallRecords, context_identity, query_memory,
+                      render_index, render_materials, record_materials, select_index_ids)
 from .recall_tool import tool_references
 
 MaterialData = Mapping[str, object]
@@ -29,16 +30,24 @@ AUTO_CONTEXT_CHARS = 2400
 
 
 def _receipt_reminder(identity, recall):
-    if not recall.presented_message_ids:
+    admitted = recall.admitted_message_ids
+    if not admitted:
         return None
     return {"name": "recall_sources", "priority": 290, "text":
         "## 已检索记忆的来源索引\n完整原文仍可用 read_memory_source 或 search_memory_source 展开。\n"
-        + json.dumps({"retrieval_ref": identity, "message_ids": recall.presented_message_ids[:3],
-                      "source_count": len(recall.presented_message_ids)}, ensure_ascii=False, separators=(",", ":"))}
+        + json.dumps({"retrieval_ref": identity, "message_ids": admitted[:3],
+                      "source_count": len(admitted)}, ensure_ascii=False, separators=(",", ":"))}
 
 
-def _live_material(identity, recall, material):
+def _live_material(identity, recall, material, *, learning=None, catalog=None):
     reminders = tuple({**item, "replay": False} for item in material.get("reminders", ()))
+    if learning is not None and catalog is not None and recall.indexed_message_ids:
+        # Describes what this request's window already quotes, so it is current
+        # context rather than something to replay into later turns.
+        index = render_index(recall, learning, catalog)
+        if index:
+            reminders += ({"name": "recall_index", "text": index,
+                           "priority": 295, "replay": False},)
     pointer = _receipt_reminder(identity, recall)
     return {**material, "reminders": reminders + (() if pointer is None else (pointer,))}
 
@@ -81,6 +90,18 @@ async def _historical_patches(snapshot, source, *, records, bindings, catalog, c
     return tuple(patches)
 
 
+def window_message_ids(snapshot: tuple[Message, ...], covered: frozenset[str]) -> frozenset[str]:
+    """Originals this request still replays verbatim, so recall need not repeat them.
+
+    `covered` holds the identities a stored summary has already replaced. What
+    remains of the prefix is quoted in the request as ordinary history, so
+    injecting the same text again as recall material buys the model nothing.
+    Once compaction covers them they leave the window and may be recalled again.
+    """
+    return frozenset(message.message_id for message in snapshot
+                     if message.message_id not in covered)
+
+
 def _reference_rows(material: MaterialData) -> tuple[Mapping[str, object], ...]:
     """读取 provider 已发布的引用行，并拒绝无法保存出处的形状。"""
     value = material.get("references", ())
@@ -104,11 +125,15 @@ class MessageMemory:
         records: RecallRecords, embed_batch: Callable[[list[str]], Awaitable[list[list[float]]]],
         limit: int = 40, max_chars: int = 12000,
         member: Callable[[str], bool] | None = None,
+        covered_ids: Callable[[str], frozenset[str]] | None = None,
     ):
         if not 1 <= limit <= 40 or max_chars <= 0:
             raise ValueError("召回数量或文本预算无效")
         self._consumer = consumer
         self._member = member
+        # Absent a compaction reader nothing is known to be covered, so the
+        # whole prefix counts as replayed and recall withholds what it repeats.
+        self._covered_ids = covered_ids
         self._catalog = catalog
         self._embeddings = embeddings
         self._bindings = bindings
@@ -175,6 +200,7 @@ class MessageMemory:
                     records=self._records, embed_batch=self._embed_batch,
                     limit=self._limit, max_chars=self._max_chars,
                     replay_cache=self._replay_cache,
+                    covered_ids=self._covered_ids,
                 )
 
 
@@ -184,6 +210,7 @@ async def prepare_materials(
     learning_binding: str, learning: Learning, rule: LearningConfig, records: RecallRecords,
     embed_batch: Callable[[list[str]], Awaitable[list[list[float]]]], limit: int, max_chars: int,
     replay_cache: dict | None = None,
+    covered_ids: Callable[[str], frozenset[str]] | None = None,
 ) -> MaterialData:
     """在已核对空间的图上查询真实输入前缀，发布出处后交付材料。"""
     if not snapshot:
@@ -223,13 +250,16 @@ async def prepare_materials(
                 material = await run_memory_job(lambda: render_materials(
                     identity, recall, original, catalog, max_chars=recall.max_chars,
                 ))
-                material = _live_material(identity, recall, material)
+                material = _live_material(identity, recall, material,
+                                          learning=original, catalog=catalog)
         else:
+            covered = frozenset() if covered_ids is None else covered_ids(session_id)
             material = await query_inputs(
                 inputs, snapshot, source, identity=identity, cycle=cycle, state=state,
                 catalog=catalog, embeddings=embeddings, learning_binding=learning_binding,
                 learning=learning, rule=rule, records=records, embed_batch=embed_batch,
                 limit=limit, max_chars=max_chars,
+                replayed=window_message_ids(snapshot, covered),
             )
     references = {cast(str, ref["ref"]): ref for ref in _reference_rows(material)}
     # 同一消息有多次真实查询时，当前工具结果的精确出处供后续 Citation 使用。
@@ -254,6 +284,7 @@ async def query_inputs(
     embeddings: MessageEmbeddings, learning_binding: str, learning: Learning,
     rule: LearningConfig, records: RecallRecords,
     embed_batch: Callable[[list[str]], Awaitable[list[list[float]]]], limit: int, max_chars: int,
+    replayed: frozenset[str] = frozenset(),
 ) -> MaterialData:
     """真实用户输入首次准备时检索并保存结果，包括未命中。"""
     session_id = snapshot[0].session_id
@@ -283,10 +314,35 @@ async def query_inputs(
         text=text, dense=dense, stamp=stamp, source=origin, limit=limit,
         selection="fused", presentation="excerpts",
     ))
+    # 3. Candidates this request already quotes verbatim cost one index line
+    #    rather than a body. The choice is made once, here, and frozen into the
+    #    receipt, so every later render withholds and indexes the same ones.
     max_chars = min(max_chars, AUTO_CONTEXT_CHARS)
+    # Every quoted original loses its body, whether or not a line fits: the
+    # point is not to spend the budget on text the request already carries.
+    withheld = tuple(dict.fromkeys(
+        message_id for hit in recall.hits for message_id in hit.message_ids
+        if message_id in replayed
+    ))
+    index_chars = 0
+    if withheld:
+        recall = Recall.model_validate(
+            recall.model_dump() | {"withheld_message_ids": withheld})
+        indexed = await run_memory_job(lambda: select_index_ids(
+            recall, learning, catalog, replayed=replayed,
+            max_chars=min(INDEX_MAX_CHARS, max_chars),
+        ))
+        if indexed:
+            recall = Recall.model_validate(
+                recall.model_dump() | {"indexed_message_ids": indexed})
+            index_chars = len(await run_memory_job(
+                lambda: render_index(recall, learning, catalog)))
+    # Index and bodies share one request budget; the index is charged first
+    # because its selection is what decided which bodies were withheld.
+    max_chars = max(1, max_chars - index_chars)
     material = await run_memory_job(lambda: render_materials(
         identity, recall, learning, catalog, max_chars=max_chars,
     ))
     recall = record_materials(recall, material, max_chars=max_chars)
     _ = await run_memory_job(lambda: records.save(identity, recall))
-    return _live_material(identity, recall, material)
+    return _live_material(identity, recall, material, learning=learning, catalog=catalog)
