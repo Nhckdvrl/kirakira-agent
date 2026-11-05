@@ -101,6 +101,16 @@ def followup_corpus(per_family, *, version=1):
 
     Directory hints are ordinary source content. Neither the answer identifier
     nor an exact read offset is supplied to the reader outside the original.
+
+    Version 2 renamed the carrier line to a term the question never uses, so a
+    reader could not keyword-match it. long-tail and mid-document still tied the
+    two together through their directory note. head-control carried no note, so
+    nothing in the originals connected the carrier to the asked field while an
+    earlier message stated no such number existed yet, and UNKNOWN became the
+    better-supported answer. Version 3 keeps the renamed carrier, so navigation
+    is still required, and states once per report which field registers the
+    number the question asks for. The answer is then determinate from the
+    originals without naming the value or its offset.
     """
     projects = ("雪松", "石竹", "月桂", "紫藤", "栎木", "杜鹃", "木棉", "桔梗",
                 "冷杉", "冬青", "芙蓉", "龙胆", "香樟", "水杉", "鸢尾", "荻花")
@@ -113,17 +123,32 @@ def followup_corpus(per_family, *, version=1):
             question = project + "的正式签收凭证号是什么？"
             paragraphs = [f"工作记录{n:03}：{project}核对材料完整性、会务和运输安排。此段不是签收结论。\n" for n in range(240)]
             conclusion = f"\n正式签收栏：凭证号 {code}。\n"
-            if version == 2:
+            if version >= 2:
                 conclusion = f"\n归档栏：{code}。\n"
+            # Version 3 states the field mapping as ordinary report content, once,
+            # at the top. It names neither the value nor where in the report the
+            # value sits, so the reader still has to navigate for it.
+            legend = (project + "完整报告。本报告以归档栏登记正式签收凭证号；工作记录不是签收结论。\n"
+                      if version >= 3 else project)
             if family == "head-control":
-                source = project + conclusion + "".join(paragraphs)
+                source = legend + conclusion + "".join(paragraphs)
             elif family == "long-tail":
-                source = project + "完整报告。目录说明：正式签收栏在报告末页，工作记录不是签收结论。\n" + "".join(paragraphs) + conclusion
+                source = legend + "目录说明：归档栏在报告末页，工作记录不是签收结论。\n" + "".join(paragraphs) + conclusion
             elif family == "mid-document":
-                source = project + "完整报告。目录说明：正式签收栏在报告中部，前后均有工作记录。\n" + "".join(paragraphs[:120]) + conclusion + "".join(paragraphs[120:])
+                source = legend + "目录说明：归档栏在报告中部，前后均有工作记录。\n" + "".join(paragraphs[:120]) + conclusion + "".join(paragraphs[120:])
             else:
                 question = project + "的工作人员已确认的食物过敏原是什么？"
-                source = project + "完整报告。只记录材料与运输，没有采集任何工作人员的食物过敏资料。\n" + "".join(paragraphs)
+                source = legend + "只记录材料与运输，没有采集任何工作人员的食物过敏资料。\n" + "".join(paragraphs)
+            if version < 3:
+                # Preserved exactly as published for v1 and v2.
+                if family == "head-control":
+                    source = project + conclusion + "".join(paragraphs)
+                elif family == "long-tail":
+                    source = project + "完整报告。目录说明：正式签收栏在报告末页，工作记录不是签收结论。\n" + "".join(paragraphs) + conclusion
+                elif family == "mid-document":
+                    source = project + "完整报告。目录说明：正式签收栏在报告中部，前后均有工作记录。\n" + "".join(paragraphs[:120]) + conclusion + "".join(paragraphs[120:])
+                else:
+                    source = project + "完整报告。只记录材料与运输，没有采集任何工作人员的食物过敏资料。\n" + "".join(paragraphs)
             histories.extend(((f"followup-{index}-draft", f"{project}的资料已送审，尚无正式签收凭证号。"),
                               (f"followup-{index}-report", source),
                               (f"followup-{index}-decoy", f"{project}演练采用 DEMO-{index:03}，只是模拟凭证，不能用作正式结果。")))
@@ -159,6 +184,17 @@ def summary(rows, systems=SYSTEMS):
             "protocol_failures": sum(
                 1 for r in selected
                 if any(len(c["tool_calls"]) != 1 for c in r["calls"]) or not r["calls"]),
+            # Two different things hide inside that count. A response that ended
+            # with finish_reason "length" was cut off before it could emit the
+            # call: an output-budget artifact of this harness, not the reader
+            # declining. One that stopped on its own and still returned prose is
+            # the reader ignoring a required tool call. They are reported apart
+            # so a budget mistake cannot be read as a model result.
+            "truncated_calls": sum(
+                1 for r in selected for c in r["calls"] if c["finish_reason"] == "length"),
+            "prose_calls": sum(
+                1 for r in selected for c in r["calls"]
+                if c["finish_reason"] != "length" and len(c["tool_calls"]) != 1),
             "answered": sum(1 for r in selected if "answer" in r),
             "answerable_answered": sum(1 for r in positive if "answer" in r),
             "answerable_correct_of_answered": sum(
@@ -185,12 +221,16 @@ async def evaluate(args):
     if args.output.exists() or args.workspace.exists():
         raise ValueError("new output/workspace required; completed trials are never replaced")
     model = EvaluationModel.read(args.model_config)
+    # Clamping this to a small constant truncates a reasoning reader before it
+    # emits its one required function call, which the scorer then records as a
+    # protocol failure the reader never made. Default to the configured budget.
+    reader_output_tokens = args.reader_output_tokens or model.max_output_tokens
     window = args.suite == "window-v1"
     # The window suite reuses the source-navigation fixture and its strict scoring:
     # the answer is deliberately not in the initial material, which is exactly the
     # case an index line has to carry.
     focused = args.suite.startswith("source-followup-") or window
-    fixture, cases = (followup_corpus(args.per_family, version=2 if window else int(args.suite[-1]))
+    fixture, cases = (followup_corpus(args.per_family, version=3 if window else int(args.suite[-1]))
                       if focused else corpus(args.per_family))
     systems = tuple(args.systems) if args.systems else (WINDOW_SYSTEMS if window else SYSTEMS)
     os.environ["AKASHIC_PLUGIN_HOME"] = str(args.workspace / "isolated-plugin-home")
@@ -205,6 +245,7 @@ async def evaluate(args):
             "adaptive_max_model_calls": 3, "static_max_model_calls": 1,
             "budget_policy": "Every serialized evidence block, including source headers, fits one retained-evidence cap. Earlier evidence is resent during adaptive calls; cumulative input tokens and resent evidence characters are recorded, not claimed equal. Dense receives identical adaptive capability.",
             "reader_protocol": "Native function calling, one answer or source-read tool call per request; same answer schema in all arms.",
+            "reader_output_tokens": reader_output_tokens,
             "scoring": "Exact seeded identifier, no superseded identifier; nonempty valid citations must point to evidence containing it. UNKNOWN controls scored separately. No LLM judge, no post-failure repair or answer hints to reader."},
         "rows": [], "invariants": {}}
     if focused:
@@ -351,7 +392,7 @@ async def evaluate(args):
                                 messages=({"role": "system", "content": output}, {"role": "user",
                                     "content": "Evidence:\n" + evidence + "\nQuestion: " + case["query"]}),
                                 tools=(ANSWER, READ) if can_read else (ANSWER,), tool_choice="required",
-                                max_output_tokens=min(1024, model.max_output_tokens), on_delta=delta))
+                                max_output_tokens=reader_output_tokens, on_delta=delta))
                         row["calls"].append({"duration_ms": (time.monotonic()-tick)*1000,
                             "usage": None if response.usage is None else asdict(response.usage),
                             "finish_reason": response.finish_reason, "raw_response": response.content,
@@ -652,6 +693,10 @@ async def verify(args):
                 source.backup(target)
             log = MessageLog(path)
         else:
+            if "source_snapshot" not in document:
+                raise ValueError(
+                    "this report predates embedded source snapshots and cannot be "
+                    "verified offline; pass --corpus-db with the frozen corpus it ran against")
             snapshot = document["source_snapshot"]
             fixture = snapshot["fixture"]
             if hashlib.sha256(json.dumps(fixture, ensure_ascii=False, sort_keys=True).encode()).hexdigest() != original["fixture_sha256"]:
@@ -759,6 +804,10 @@ def main():
     parser.add_argument("--candidates", type=int, default=4)
     parser.add_argument("--max-chars", type=int, default=6000)
     parser.add_argument("--initial-chars", type=int, default=2400)
+    # A reasoning reader spends output tokens before it emits a function
+    # call, so too small a budget is scored as a protocol failure that the
+    # reader never committed. 0 means the model configuration's own budget.
+    parser.add_argument("--reader-output-tokens", type=int, default=0)
     parser.add_argument("--parallel", type=int, default=3)
     parser.add_argument("--analyze-existing", type=Path)
     parser.add_argument("--verify-existing", type=Path)
