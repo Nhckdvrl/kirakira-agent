@@ -1,0 +1,80 @@
+{
+ "kind": "design guarantees of receipt-based recall against a stock retrieval memory",
+ "conditions": {
+  "seed_turns": 30,
+  "live_turns": 25,
+  "chat_model": null,
+  "api_key_required": false,
+  "embedding": "fixed 8-dimensional unit vector per text",
+  "baseline": "top-k over every stored message, pasted in, no per-request record"
+ },
+ "reproducibility": {
+  "ours_identical_after_index_growth": "25/25",
+  "stock_identical_after_index_growth": "16/25",
+  "stock_drift_examples": [
+   {
+    "turn": 0,
+    "chars_before": 187,
+    "chars_after": 157,
+    "changed_chars": 151
+   },
+   {
+    "turn": 1,
+    "chars_before": 150,
+    "chars_after": 117,
+    "changed_chars": 92
+   },
+   {
+    "turn": 2,
+    "chars_before": 151,
+    "chars_after": 151,
+    "changed_chars": 3
+   },
+   {
+    "turn": 4,
+    "chars_before": 187,
+    "chars_after": 193,
+    "changed_chars": 29
+   },
+   {
+    "turn": 5,
+    "chars_before": 113,
+    "chars_after": 117,
+    "changed_chars": 59
+   }
+  ]
+ },
+ "read_confinement": {
+  "illegal_attempts": 75,
+  "ours_refused": 75,
+  "stock_refused": 0,
+  "ours_allowed_control": "25/25",
+  "refusal_reasons": [
+   "forged retrieval reference: unknown memory retrieval reference",
+   "original from another memory scope: source receipt belongs to another memory scope",
+   "original this retrieval never presented: message was not presented by this retrieval"
+  ]
+ },
+ "attribution": {
+  "ours_receipts_with_a_recorded_cause": "25/25",
+  "ours_context_recalls_pinned_to_a_conversation_prefix": "25/25",
+  "cause_kinds": {
+   "context": 25
+  },
+  "stock_receipts_with_a_recorded_cause": "0/25",
+  "note": "tool-initiated recalls carry the originating call reference (plugins/akasha/recall_tool.py), so a memory the model pulled itself is distinguishable from one the turn surfaced automatically"
+ },
+ "verbatim_fidelity": {
+  "passages_checked": 50,
+  "byte_exact_slices_of_a_real_original": 50,
+  "characters_covered": 950,
+  "note": "召回材料直接读取原消息正文（plugins/akasha/recalls.py 的render_materials），不存储模型改写过的事实；因此每段材料都能定位到真实原文的精确字符范围，并按同一回执重读同一段字节。"
+ },
+ "repetition": {
+  "ours_already_quoted_bodies_injected": 0,
+  "stock_already_quoted_bodies_injected": 89,
+  "turns": 25
+ },
+ "claim_limits": "读取受限指的是『本次回执没有呈现过的原文读不到』，不等于模型无法接触更多历史：模型发起一次新的召回查询仍可在同一 scope 内surface新的原文，这正是记忆的用途。可证的是跨 scope 的硬隔离、伪造 ref 与未呈现消息被拒，以及每次召回都带可追责的来源。",
+ "caveat": "设计对照，不是检索质量对照：两边用同一批消息与同一组向量。现成方案同样可以自行缓存每轮材料或维护每轮白名单；这里衡量的是本项目已有数据结构直接给出的性质，以及它在索引变化后是否仍然成立。"
+}
