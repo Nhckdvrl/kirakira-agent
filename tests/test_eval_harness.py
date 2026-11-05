@@ -180,3 +180,42 @@ def test_comparisons_cover_every_pair_and_ignore_abstention_controls() -> None:
     # The UNKNOWN control is scored in its own denominator elsewhere; including
     # it here would let abstention agreement pad a capability comparison.
     assert out["window-bodies vs window-index"]["paired_questions"] == 1
+
+
+def test_controlled_mailbox_families_keep_the_decision_in_memory() -> None:
+    """The email must be useless on its own; only the stored condition decides.
+
+    Every family ships one body and two contradicting personal conditions, and
+    the scorer reads the convention positionally: profiles[0] is the case that
+    must be skipped, profiles[1] the case that must be shared. If a body ever
+    carried the verdict itself, a reader could score well without consulting
+    memory at all, which is the one thing this fixture exists to measure.
+    """
+    from eval.mail_followups import FAMILIES
+
+    assert len(FAMILIES) >= 12, "the controlled set was sized up; keep it there"
+    assert len({family["id"] for family in FAMILIES}) == len(FAMILIES)
+
+    negative = ("不提醒", "不用提醒", "不要提醒", "跳过")
+    for family in FAMILIES:
+        assert {"id", "topic", "profiles", "subject", "body"} <= set(family), family["id"]
+        assert len(family["profiles"]) == 2, family["id"]
+        skip_profile, share_profile = family["profiles"]
+        # The decision language belongs to the stored condition, never the mail:
+        # a body that says what to do could be scored without consulting memory.
+        assert "提醒" not in family["body"], family["id"]
+        # profiles[0] withholds, profiles[1] delivers, and the runner reads that
+        # by position, so the wording has to carry the same direction.
+        assert any(word in skip_profile for word in negative), family["id"]
+        assert "提醒" in share_profile, family["id"]
+        assert not any(word in share_profile for word in negative), family["id"]
+        # Two conditions that do not differ cannot flip the outcome.
+        assert family["profiles"][0] != family["profiles"][1], family["id"]
+        assert family["body"].strip() and family["subject"].strip(), family["id"]
+
+
+def test_the_mailbox_scorer_still_reads_profiles_positionally() -> None:
+    """The fixture's convention lives in one line of the runner; pin them together."""
+    source = (__import__("pathlib").Path("eval/mail_followups.py")).read_text(encoding="utf-8")
+    assert '"skip_content"' in source and '"share_content"' in source
+    assert "if index == 0" in source, "profiles[0] must still mean 'should be skipped'"
