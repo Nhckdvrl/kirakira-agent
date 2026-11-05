@@ -478,6 +478,18 @@ uv run --frozen --no-sync python -m eval.memory \
 
 使用相同 seed 和 `--offset 2`、`--offset 4` 生成另外两组，各 14 题。按类别内 `SHA256(seed:question_id)` 排序后固定取题，三个分区的题目不重叠；背景历史可能重叠。七类各取六题形成均衡子集，不代表完整基准的类别权重。
 
+### 扩到 140 题做等价判定
+
+上面那组每分区 14 题，足以看广泛退化，但分不出两种检索方案的高下。要给出**等价区间**而不是"没测出来"，把 `--per-category` 提到 20（七类各 20，共 140 题），并只保留决定性的三条臂：
+
+```sh
+uv run --frozen --no-sync python -m eval.memory   --dataset /local-disk/data/longmemeval_s_cleaned.json   --model-config /private/path/model.json --key-file /private/path/model.key   --embedding-manifest /local-disk/models/embedding-BAAI--bge-small-zh-v1.5.json   --per-category 20 --parallel 4   --systems no-memory dense-excerpts akasha-fused-excerpts   --output /local-disk/eval/parity-140
+```
+
+选 `akasha-fused-excerpts` 是因为自动上下文召回在 `plugins/akasha/runtime.py` 里写死 `selection="fused", presentation="excerpts"`——那才是日常对话里真正生效的配置，`akasha`（lanes/whole）只是召回工具的字段默认值。
+
+读结果时**先剔除 abstention**：不给历史的系统没有任何可用信息，天然会答"不知道"，20 道弃答题它对 19 道；混进总分会让它看起来有 13.6% 的成绩，而它在可回答题上是 0。结论与完整条件见[公开基准 140 题](../docs/operations/evaluations/2026-11-06-memory-parity.md)。
+
 所有方案共用编码器、reader、judge、候选上限和包含说明的字符上限。向量基线直接检索闭段的消息向量；混合基线对向量和 BM25 排名融合。原通道、融合与摘录分别保留，不能把加大材料预算当作算法改进。无记忆和近期历史也保留，以检查收益究竟来自哪里。
 
 默认 reader 返回普通文本与消息 ID 引用，独立 judge 按题型判断回答。自定义 judge 不是官方评测器；记录同模型评分的限制。检索指标包括支持会话与带答案标签的消息覆盖；消息覆盖不保证片段包含答案。引用 ID 合法不保证每句话都由证据支持。
