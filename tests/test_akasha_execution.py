@@ -957,6 +957,67 @@ async def test_recall_indexes_quoted_originals_and_still_renders_compacted_ones(
         assert not later.indexed_message_ids
 
 
+@pytest.mark.asyncio
+async def test_recall_never_withholds_a_body_this_request_does_not_quote(tmp_path):
+    """Withholding is lossless only because the same bytes are still in the request.
+
+    `withheld_message_ids` is built from the candidates that appear in
+    `window_message_ids(snapshot, covered)`, so a body may lose its place in the
+    material only while this very request replays it verbatim. A candidate from
+    another session, or one a summary has covered, is not in that window and has
+    to keep its body. This is the property that makes the window rule lossless
+    rather than merely cheaper, and nothing else in the suite pins it: an
+    experiment may withhold a body that is absent from the request to measure a
+    floor, but production must never do it.
+    """
+    from plugins.akasha.recalls import context_identity
+
+    covered: set[str] = set()
+
+    async with memory_fixture(tmp_path, covered_ids=lambda _session: frozenset(covered)) as (
+        memory, consumer, learning, _bindings, log, embeddings, _root, _closed,
+    ):
+        log.ensure_session("elsewhere", SessionAttributes())
+        needle = "Filler. " * 50 + "elsewhere budget BUDGET=777."
+        for author, kind, body in (
+            ("user", Input, Input((ContentPart("text", needle),))),
+            ("assistant", Output, Output((ContentPart("text", "noted"),), "complete")),
+        ):
+            message = log.writer("elsewhere", author=author, source="conversation",
+                body_types=(kind,), content={"text": check_text}).append(f"other-{author}", body)
+            embeddings.bind(learning.text).save(message, model="fixed", embedding=[1.0, 0.0, 0.0])
+        for number in range(3):
+            append_pair(log, embeddings, learning, number)
+        await memory.consume()
+        records = RecallRecords(log.owner("akasha"))
+        inputs = log.writer("conversation", author="user", source="conversation",
+                            body_types=(Input,), content={"text": check_text})
+
+        first = inputs.append("ask-window", Input((ContentPart("text", "budget"),)))
+        snapshot = log.reader("conversation").snapshot()
+        window = {message.message_id for message in snapshot}
+        await memory.prepare(snapshot, "conversation")
+        receipt = records.read(context_identity("conversation", "conversation", first.message_id))
+
+        members = {identity for hit in receipt.hits for identity in hit.message_ids}
+        outside = members - window
+        assert outside, "fixture must surface an original this request does not quote"
+        # The invariant, stated both ways round.
+        assert set(receipt.withheld_message_ids) <= window - covered
+        assert not (outside & set(receipt.withheld_message_ids))
+        assert set(receipt.indexed_message_ids) <= set(receipt.withheld_message_ids)
+
+        # Covering the window removes those originals from it, so the next
+        # request may no longer withhold them either.
+        covered.update(window)
+        second = inputs.append("ask-covered", Input((ContentPart("text", "budget"),)))
+        later_snapshot = log.reader("conversation").snapshot()
+        await memory.prepare(later_snapshot, "conversation")
+        later = records.read(context_identity("conversation", "conversation", second.message_id))
+        assert set(later.withheld_message_ids) <= {
+            message.message_id for message in later_snapshot} - covered
+
+
 def test_inspector_distinguishes_body_index_quoted_and_undelivered(tmp_path):
     """The panel must be able to tell the four outcomes apart.
 
