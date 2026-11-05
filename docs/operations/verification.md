@@ -9,7 +9,8 @@
 真实模型实测：在一份 **10,894 字符**的原文里，模型用 `search_memory_source` 定位到第 8400–9200 字符窗口，答出"预算由 500 更正为 760、必须防水、只在周末"，`tool_source_proofs: 3`、`search_windows: 2`，且 `query_contains_reference_answers: false`、`exact_offset_supplied: false`——没有给任何提示。
 
 固定语料的取证实验里，同一 6000 字符上限下加入按需读取后，参考值原文覆盖由 **4/12 升到 9/12**，末页事实由 **0/4 升到 4/4**，平均保留材料反而**减少 43.78%**。
-[取证深度](evaluations/2026-10-22-memory-depth.md) · [场景亮点](evaluations/2026-10-22-memory-scenarios.md) · [公开历史质量](evaluations/2026-10-21-memory-runtime.md)
+窗口规则把「原文已在请求里」的候选改成一行索引后，确定性对照给出：初始材料由 2390 字降到 **829 字（−65.3%）**，而 **12/12** 的参考值仍留在回执准入的原文里，一次读取即可取回；同一次运行内 17 份原文窗口在图重载前后均逐字节一致，2 次越权读取被拒绝，32 行可离线复核。
+[窗口规则](evaluations/2026-11-06-memory-window.md) · [取证深度](evaluations/2026-10-22-memory-depth.md) · [场景亮点](evaluations/2026-10-22-memory-scenarios.md) · [公开历史质量](evaluations/2026-10-21-memory-runtime.md)
 
 ## 二、过去的条件参与今天的决定，而且能被纠正
 
@@ -44,6 +45,7 @@
 
 | 主题 | 结果要点 |
 | --- | --- |
+| [窗口规则：材料减少 65.3%，可达性不变](evaluations/2026-11-06-memory-window.md) | 参考值可达 12/12 两臂一致；初始材料 2390 → 829 字；离线复核 32/32 |
 | [邮件、期限提醒与后台回访](evaluations/2026-10-31-personal-workflows.md) | 后台 6/6、邮件内容判断 2/2、提醒登记与恢复 2/2、通用主链 13/13；真实模型邮件 15/15、网页 6/6 |
 | 同页[长期运行](evaluations/2026-10-31-personal-workflows.md#11-月-1-日长期运行的压缩学习与退出) | 主链 15/15、记忆与主动集成 8/8、回归 225 项；完整 Turn 超窗仍未解决 |
 | [本地体验与会话接续](evaluations/2026-10-31-runtime-experience.md) | 网页连接 6 → 1；6358 字符原文展开与更正；最终 SDK/CLI 0/6 因 HTTP 429 失败 |

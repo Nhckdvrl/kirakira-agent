@@ -440,6 +440,13 @@ async def evaluate(args):
                     tasks.append(trial(case, system, rendered, material, refs, identity,
                                        admitted=set(rendered.admitted_message_ids)))
             await asyncio.gather(*tasks)
+            # Publish what an offline reviewer needs: the frozen histories and the
+            # receipts actually saved. Without these the report cannot be
+            # re-checked without a key, a model or this private workspace, which
+            # is the whole point of keeping them.
+            report["source_snapshot"] = {"fixture": fixture, "recall_records": {
+                identity: value.model_dump(mode="json") for identity, value in records.list()}}
+            save()
             after = logical_state_sha256(consumer.path)
             verified = 0
             for request, expected in replays:
@@ -648,6 +655,11 @@ async def verify(args):
                 recall = records.read(identity)
                 rendered = render_materials(identity, recall, learning, log.catalog(), max_chars=recall.max_chars)
                 material = "\n\n".join(item["text"] for item in rendered["reminders"])
+                if recall.indexed_message_ids:
+                    # The reader saw bodies plus the index lines, so verification
+                    # has to reassemble both or it checks something else.
+                    index_text = render_index(recall, learning, log.catalog())
+                    material = "\n\n".join(part for part in (material, index_text) if part)
                 assert hashlib.sha256(material.encode()).hexdigest() == row["initial_material_sha256"], "initial material changed"
                 assert list(rendered["references"]) == row["references"], "source references changed"
                 assert len(material) == row["initial_material_chars"]
@@ -682,7 +694,12 @@ async def verify(args):
                 assert retained == row["retained_evidence_chars"] <= original["conditions"]["max_retained_evidence_chars"]
                 final = expected != "UNKNOWN" and any(expected in text for chunks in windows.values() for text in chunks)
                 citations = row.get("citations", [])
-                valid = bool(citations) and all(ref in windows for ref in citations)
+                # Validity follows the receipt, as production admission does: an
+                # index line names a real original and is citable. Support stays
+                # stricter and still requires text the reader actually holds, so
+                # a citation alone can never carry a wrong answer.
+                admitted = set(recall.admitted_message_ids)
+                valid = bool(citations) and all(ref in admitted for ref in citations)
                 support = any(expected in text for ref in citations for text in windows.get(ref, []))
                 answer = row.get("answer", "")
                 if "answer" in row:
