@@ -25,10 +25,12 @@ from plugins.tools.contract import TOOLS
 
 from . import webpages
 from .contract import Feedback, Recheck, Revise, SetEnabled, WatchSpec
+from .feedback import measure as measure_attention
 from .feeds import MAX_BYTES, Entry, decode, feed_url, fingerprint
 from .mailbox import MailboxError
 
 MAX_WATCHES = 100
+MAX_FEEDBACK_RATINGS = 500
 MAX_CONCURRENT_POLLS = 4
 logger = logging.getLogger(__name__)
 
@@ -162,6 +164,16 @@ class Service:
         if record is None:
             raise ValueError("跟进不存在")
         return dict(json_value(record.value))
+
+    def _attention(self, watch_id):
+        """Aggregate this watch's recorded ratings into a bounded weight.
+
+        Reads only the stored rows for this watch. Unrated watches come back
+        neutral, so a deployment with no feedback behaves exactly as before.
+        """
+        prefix = f"feedback:followups:{watch_id}:"
+        rows = self.store.scan(start=prefix, stop=prefix[:-1] + ";", limit=MAX_FEEDBACK_RATINGS)
+        return measure_attention([json_value(record.value) for _, record in rows])
 
     def _watches(self):
         return [
@@ -594,6 +606,10 @@ class Service:
             "observed_at": now.isoformat(),
             "review_policy": REQUESTED_REVIEW if requested_review or spec.review_mode == "each_update" else None,
         }
+        # An explicitly requested review bypasses the pool, so weighting it
+        # would only risk suppressing something the owner asked to see.
+        attention = (None if intent["review_policy"] is not None
+                     else await run_file_io(lambda: self._attention(spec.watch_id)))
         items = [
             {
                 "item_id": entry.item_id,
@@ -607,6 +623,11 @@ class Service:
                     **(
                         {"review_policy": intent["review_policy"]}
                         if intent["review_policy"] is not None
+                        else {}
+                    ),
+                    **(
+                        {"attention_weight": attention.weight}
+                        if attention is not None and attention.adjusted
                         else {}
                     ),
                 },
@@ -1125,6 +1146,9 @@ class Service:
                 lambda: self._anchors(WatchSpec.model_validate(watch["spec"]))
             ),
             "cursor": json_value(cursor.value) if cursor else None,
+            # What the recorded ratings currently add up to, so the owner can see
+            # why this source became quieter or louder before trusting it.
+            "attention": (await run_file_io(lambda: self._attention(watch_id))).as_dict(),
             "events": events,
         }
 

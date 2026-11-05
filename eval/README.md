@@ -43,6 +43,18 @@ uv run --frozen --no-sync python -m eval.recall_cost \
 
 它只衡量开销，不衡量回答质量：注入变少不等于模型仍能找到所需原文，两者分别验收。
 
+## 反馈离线回放
+
+不调用模型、不联系任何人，只读打开工作区的 `sessions.db`，重算每个跟进的关注权重并报告会改变哪些联系决定：
+
+```sh
+uv run --frozen --no-sync python -m eval.feedback_replay \
+  --store /local-disk/workspace/sessions.db --holdout 0.2 \
+  --output /local-disk/eval/feedback-replay.json
+```
+
+`--holdout` 按稳定哈希留出一部分评价，供之后用未参与权重的评价单独评分。决定翻转不等于改善。
+
 ## 功能验证
 
 每次使用不存在或全新的隔离工作区：

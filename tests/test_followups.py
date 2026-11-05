@@ -1031,3 +1031,159 @@ def test_web_monitor_controls_exclude_tokens_scripts_hidden_fields_and_obey_disa
     assert safe_url("/magic-link/PRIVATE_PATH_TOKEN_A", url) is None
     assert safe_url("/%256d%2561gic-link/PRIVATE_PATH_TOKEN_A", url) is None
     assert safe_url("/events/42/buy", url) == "https://example.test/events/42/buy"
+
+
+def test_delivery_feedback_becomes_a_bounded_attention_weight():
+    """Ratings tune how loud a watch is, within fixed bounds and only with evidence.
+
+    An unrated or barely-rated watch must behave exactly as before, the weight
+    must stay inside its bounds however one-sided the ratings are, and it must
+    be monotone so one more complaint never makes a source louder.
+    """
+    from plugins.followups.feedback import (
+        MAX_WEIGHT,
+        MIN_RATINGS,
+        MIN_WEIGHT,
+        NEUTRAL_WEIGHT,
+        measure,
+    )
+
+    def rows(useful, irrelevant):
+        return [{"value": "useful"}] * useful + [{"value": "irrelevant"}] * irrelevant
+
+    # No evidence, and not enough evidence, both stay neutral.
+    assert measure([]).weight == NEUTRAL_WEIGHT
+    assert not measure([]).adjusted
+    assert measure(rows(MIN_RATINGS - 1, 0)).weight == NEUTRAL_WEIGHT
+    assert not measure(rows(MIN_RATINGS - 1, 0)).adjusted
+
+    # With enough evidence the extremes reach, but never exceed, the bounds.
+    assert measure(rows(MIN_RATINGS, 0)).weight == MAX_WEIGHT
+    assert measure(rows(0, MIN_RATINGS)).weight == MIN_WEIGHT
+    assert measure(rows(50, 0)).weight == MAX_WEIGHT
+    assert measure(rows(0, 50)).weight == MIN_WEIGHT
+    # An even split is neutral but is a real measurement, not an absent one.
+    even = measure(rows(4, 4))
+    assert even.weight == NEUTRAL_WEIGHT and even.rated == 8
+
+    # Monotone in both directions.
+    irrelevant_series = [measure(rows(10, n)).weight for n in range(0, 12)]
+    assert irrelevant_series == sorted(irrelevant_series, reverse=True)
+    useful_series = [measure(rows(n, 10)).weight for n in range(0, 12)]
+    assert useful_series == sorted(useful_series)
+
+    # Unreadable rows are ignored rather than counted as either judgement.
+    assert measure(rows(4, 0) + [{"value": "maybe"}, {}, {"value": None}]).rated == 4
+    assert all(MIN_WEIGHT <= measure(rows(a, b)).weight <= MAX_WEIGHT
+               for a in range(0, 9) for b in range(0, 9))
+
+
+def test_attention_weight_moves_the_pool_but_never_a_requested_review():
+    """The weight changes how much a rated source contributes, nothing else.
+
+    It must not change whether an item cleared the admission floor, and it must
+    not apply to a review the owner explicitly asked for.
+    """
+    from datetime import UTC, datetime
+
+    from plugins.eventmail.contract import REQUESTED_REVIEW
+    from plugins.wake.pool import WAKE_POOL_THRESHOLD, attention_weight, measure_pool
+
+    now = datetime.now(UTC)
+
+    def event(identity, *, weight=None, requested=False, initial=1.0):
+        # Shaped like wake.state._event output: the Content payload is flattened
+        # into the event, so a field nested under "payload" would never be seen.
+        event = {"id": identity, "_wake_initial_score": initial, "source_name": "s",
+                 "observed_at": now.isoformat(), "published_at": now.isoformat()}
+        if weight is not None:
+            event["attention_weight"] = weight
+        if requested:
+            event["review_policy"] = REQUESTED_REVIEW
+        return event
+
+    # A malformed or out-of-range weight is neutral, never a stronger preference.
+    for bad in (None, "0.5", True, float("nan"), 0.0, 9.0, -1.0):
+        assert attention_weight({"attention_weight": bad}) == 1.0
+    assert attention_weight({"attention_weight": 0.5}) == 0.5
+    assert attention_weight({}) == 1.0
+    # A weight nested under "payload" is not where the pool reads it, and must
+    # not be silently honoured from the wrong place either.
+    assert attention_weight({"payload": {"attention_weight": 0.5}}) == 1.0
+
+    ids = [f"item-{n}" for n in range(2)]
+    plain = measure_pool([event(i) for i in ids], now=now, new_item_ids=set(ids))
+    quiet = measure_pool([event(i, weight=0.5) for i in ids], now=now, new_item_ids=set(ids))
+    loud = measure_pool([event(i, weight=1.5) for i in ids], now=now, new_item_ids=set(ids))
+
+    assert quiet.pool_mass < plain.pool_mass < loud.pool_mass
+    # The plain comparison is retained so a weighted decision stays auditable.
+    assert quiet.unweighted_pool_mass == plain.unweighted_pool_mass == pytest.approx(plain.pool_mass)
+    assert quiet.below_floor == plain.below_floor == loud.below_floor == 0
+    assert plain.threshold == WAKE_POOL_THRESHOLD
+    # Ratings genuinely change the contact decision, in both directions.
+    assert plain.should_wake and not quiet.should_wake
+    assert loud.should_wake
+
+    # A requested review wakes regardless of how quiet the source was rated.
+    requested = measure_pool([event("asked", weight=0.5, requested=True)],
+                             now=now, new_item_ids={"asked"})
+    assert requested.should_wake and requested.requested_reviews == 1
+
+
+def test_feedback_replay_reports_weights_flips_and_holdout(tmp_path):
+    """The offline replay must show what would change, and keep a holdout aside.
+
+    It reads a real owner_records store, so the key layout it depends on is
+    covered rather than assumed, and it must stay read-only.
+    """
+    import sqlite3
+
+    from eval.feedback_replay import replay
+
+    store = tmp_path / "sessions.db"
+    with sqlite3.connect(store) as connection:
+        _ = connection.execute("create table owner_records (owner text, key text, version int, value text)")
+        rows = []
+        # One watch rated mostly irrelevant, one barely rated at all.
+        for index in range(8):
+            rows.append(("followups", f"feedback:followups:w_{'a' * 32}:item{index}:rev",
+                         1, json.dumps({"value": "irrelevant" if index else "useful"})))
+        for index in range(2):
+            rows.append(("followups", f"feedback:followups:w_{'b' * 32}:item{index}:rev",
+                         1, json.dumps({"value": "useful"})))
+        # Two Content items that together clear the threshold unweighted.
+        for index in range(2):
+            rows.append(("eventmail", f"item:{index}", 1, json.dumps({
+                "item_id": f"item-{index}",
+                "payload": {"_wake_initial_score": 1.0, "source_name": "s",
+                            "attention_weight": 0.5},
+            })))
+        _ = connection.executemany("insert into owner_records values (?, ?, ?, ?)", rows)
+
+    before = store.read_bytes()
+    report = replay(store, holdout=0.0)
+    assert store.read_bytes() == before, "replay must not modify the store"
+
+    assert report["ratings"]["total"] == 10
+    assert report["ratings"]["watches_rated"] == 2
+    # Only the watch with enough ratings is adjusted; the other stays neutral.
+    assert report["ratings"]["watches_adjusted"] == 1
+    heavy = report["weights"]["w_" + "a" * 32]
+    light = report["weights"]["w_" + "b" * 32]
+    assert heavy["adjusted"] and heavy["weight"] < 1.0 and heavy["rated"] == 8
+    assert not light["adjusted"] and light["weight"] == 1.0
+
+    # The replay shows the contact decision it would have changed.
+    decision = report["decision"]
+    assert decision["events_replayed"] == 2
+    assert decision["would_wake_unweighted"] and not decision["would_wake_weighted"]
+    assert decision["decision_flipped"] and decision["direction"] == "quieter"
+    assert decision["pool_mass_weighted"] < decision["pool_mass_unweighted"]
+
+    # A holdout removes ratings from the weight and reports them separately.
+    withheld = replay(store, holdout=0.5)
+    assert withheld["ratings"]["held_out"] > 0
+    assert withheld["ratings"]["applied"] + withheld["ratings"]["held_out"] == 10
+    # The same split is reproduced on a second run.
+    assert replay(store, holdout=0.5)["ratings"]["applied"] == withheld["ratings"]["applied"]
