@@ -47,19 +47,23 @@
 
 ## 分类别：差异不均匀，且互有胜负
 
-| 类别（各 20 题） | no-memory | dense-excerpts | 我们 |
-| --- | ---: | ---: | ---: |
-| abstention | **19** | 17 | 18 |
-| knowledge-update | 0 | 17 | 17 |
-| multi-session | 0 | **11** | 7 |
-| single-session-assistant | 0 | **10** | 9 |
-| single-session-preference | 0 | 2 | **4** |
-| single-session-user | 0 | 17 | **19** |
-| temporal-reasoning | 0 | 11 | 11 |
+每格分母只有 20，所以这张表连配对检验一起给——**没有任何一行达到显著**：
 
-每格分母只有 20，单看任何一行都不足以下结论。可以说的是：**互有胜负，没有一致方向**——我们在 `single-session-user` 和 `single-session-preference` 稍好，在 `multi-session` 明显差（7 对 11，这是值得单独查的一项）；`knowledge-update` 两者并列 17/20，而不给历史是 0。
+| 类别（各 20 题） | no-memory | dense | 我们 | 仅我们对 | 仅 dense 对 | p |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| abstention | **19** | 17 | 18 | 2 | 1 | 1.000 |
+| knowledge-update | 0 | 17 | 17 | 1 | 1 | 1.000 |
+| multi-session | 0 | 11 | 7 | 1 | 5 | 0.219 |
+| single-session-assistant | 0 | 10 | 9 | 1 | 2 | 1.000 |
+| single-session-preference | 0 | 2 | 4 | 2 | 0 | 0.500 |
+| single-session-user | 0 | 17 | 19 | 2 | 0 | 0.500 |
+| temporal-reasoning | 0 | 11 | 11 | 1 | 1 | 1.000 |
 
-`single-session-preference` 两边都很差（2 和 4），说明偏好类问题是**两种检索方案共同的短板**，不是设计差异。
+**互有胜负，没有一致方向，也没有一项站得住。** `multi-session` 是落差最大的一格（7 对 11），但只有 6 道题结果不同（1 比 5），**p = 0.219**——它是**值得查的线索，不是已确认的短板**。把它说成"我们在多会话推理上更弱"，就是在犯本页第一段批评的那个错误。
+
+要确认它需要更大的分母：该类别在完整数据集里有 121 题，这里只取了 20。
+
+`single-session-preference` 两边都很差（2 和 4），说明偏好类问题更像是**两种检索方案共同的短板**，而不是设计差异。
 
 ## 一条不经过 judge 的测量：检索召回
 
@@ -71,7 +75,9 @@
 | dense-excerpts | 0.8337 |
 | akasha-fused-excerpts | **0.8614** |
 
-我们**找到正确会话的比例略高**（+2.8 个百分点），但答对率并未因此更高。这与[取证深度](2026-10-22-memory-depth.md)那边的观察一致：覆盖率提升不自动变成答对率提升。它也提示 `multi-session` 上的落后不是"没检索到"，而是检索到之后的使用问题。
+我们**找到正确会话的比例略高**（+2.8 个百分点），但答对率并未因此更高。这与[取证深度](2026-10-22-memory-depth.md)那边的观察一致：覆盖率提升不自动变成答对率提升。
+
+不过单看 `multi-session` 这一格，召回反而是 dense 略高（0.873 对 0.843，`session_complete` 15/20 对 14/20），两边材料预算、呈现消息数与候选数都相同。所以那格的落差**不能归因于"我们检索得更好但用得更差"**；在这个分母下，它最可能的解释仍然是噪声。
 
 ## 可靠性与失败
 
@@ -89,6 +95,6 @@
 - 不支持"我们的图记忆答得更准"。数据明确反对这个说法。
 - 不支持任何榜单名次：judge 非官方口径，且只取 140/500 题。
 - 不支持跨模型结论：全程只用 step-5-preview 一个 reader（配额限制，按量计费端点返回 402）。
-- 分类别那张表的每格分母只有 20，不能拿单行下结论；`multi-session` 的落后值得查，但还不能当成定论。
+- 分类别那张表没有任何一行达到显著，包括落差最大的 `multi-session`（p = 0.219）。它是线索，不是结论。
 
 复现：数据集需另行下载（见[评测说明](../../../eval/README.md)），证据在 [`artifacts/2026-11-06-memory-parity/`](artifacts/2026-11-06-memory-parity/evidence.json)，统计量由 [`eval/significance.py`](../../../eval/significance.py) 计算。
