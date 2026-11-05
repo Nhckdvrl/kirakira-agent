@@ -980,6 +980,18 @@
       "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
+    "agent/plugin_composition/__init__.py": {
+      "patch": "third_party/patches/personal-assistant-experience.patch",
+      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
+      "sha256": "0122aec9c55b0ae720f737243eff941bbd07a417964ddcb558b7888039ad07b8",
+      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
+    },
+    "agent/plugin_composition/runtime_lifecycle.py": {
+      "patch": "third_party/patches/personal-assistant-experience.patch",
+      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
+      "sha256": "6ab1a10185ed1bd6e1f8cde47001ca7eb8c4efa0e43490a2b4a8f3b803ef195a",
+      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
+    },
     "agent/plugins/__init__.py": {
       "sha256": "d6510cbac83783f4395cae28cd6ad135229e6df70ce627a4cbcb29b0f2251748",
       "patch": "third_party/patches/distribution-branding.patch",
@@ -998,11 +1010,29 @@
       "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
+    "bundles/base.toml": {
+      "sha256": "454eb113878d61531ef28b090c10a08129b64be6c643e482b50d5b7d61bd60f7",
+      "patch": "third_party/patches/personal-assistant-experience.patch",
+      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022",
+      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."
+    },
+    "bundles/minimal.toml": {
+      "sha256": "f3920cd9b459ef81dd98e8615bde12f192ec76a9f0837287fb4491ca53718583",
+      "patch": "third_party/patches/personal-assistant-experience.patch",
+      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022",
+      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."
+    },
     "core/common/diagnostic_log.py": {
       "sha256": "ed28b0c6c20016fd7ed5b804db19283b57e06181eaf72b7396bf7b90f4410594",
       "patch": "third_party/patches/distribution-branding.patch",
       "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "core/net/http.py": {
+      "patch": "third_party/patches/tool-io-bounds.patch",
+      "reason": "Preserve tool protocols while bounding retained file output and streaming HTTP bodies; do not replay an already yielded response.",
+      "sha256": "7cbe556537d31ddc5e5bfdd87f24c25befed1608b8736838c7649d38f44ab7cf",
+      "patch_sha256": "0130aface0820b23479739a696972ac4786ec6dede26b810ead55b73d45d92d8"
     },
     "frontend/chat/harness/index.html": {
       "sha256": "972f35940d06a27d321bb86e0cedd11c760be2cfd372120823d8366c975dc032",
@@ -1016,17 +1046,47 @@
       "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
+    "frontend/chat/src/chat-message.ts": {
+      "sha256": "cb4b875a006af4a5dc122404a7518cabb45075aa86d80fd5e4ca3cb23a65e139",
+      "patch": "third_party/patches/personal-assistant-experience.patch",
+      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022",
+      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."
+    },
     "frontend/chat/src/compact-navigation.tsx": {
       "sha256": "1ee16d73eeada6660ed4f572a1945c038d7d96d1a1ee1c3bb8219c3106f6de01",
       "patch": "third_party/patches/distribution-branding.patch",
       "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
+    "frontend/chat/src/components/ai-elements/prompt-input.tsx": {
+      "sha256": "109e85576331753f075ca90fb43073f74b8426b4428825c046c0cf09c8bd1f16",
+      "patch": "third_party/patches/personal-assistant-experience.patch",
+      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022",
+      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."
+    },
+    "frontend/chat/src/conversation-navigation.tsx": {
+      "sha256": "2eb3414146fe43742117c9f5b2e6f355076f4934c6817c3c7647c0113282b334",
+      "patch": "third_party/patches/personal-assistant-experience.patch",
+      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022",
+      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."
+    },
     "frontend/chat/src/desktop-chat-view.tsx": {
       "sha256": "60aa94ae000685aeb68076cea7b3c95c6f4fa50605a886e2b0a86aa479651612",
       "patch": "third_party/patches/distribution-branding.patch",
       "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84",
       "reason": "Source-specific step-exhaustion recovery controls, retaining the existing distribution interface."
+    },
+    "frontend/chat/src/desktop-composer.tsx": {
+      "sha256": "cc39d9d0b4e2407252e2dddeadf07337351e9d7a858d098149da29f88bfd3a04",
+      "patch": "third_party/patches/personal-assistant-experience.patch",
+      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022",
+      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."
+    },
+    "frontend/chat/src/desktop-conversation.tsx": {
+      "patch": "third_party/patches/personal-assistant-experience.patch",
+      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
+      "sha256": "8ce7b17f9dfc6a3a45c3860e25135dfc68a49a99ac4586a1de39973617e97030",
+      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
     },
     "frontend/chat/src/desktop-sidebar.tsx": {
       "sha256": "1aad59759f49744d2d9c5352a421690772d59db8cdb264464d374479ba1fed32",
@@ -1040,6 +1100,36 @@
       "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
+    "frontend/chat/src/message-timeline.ts": {
+      "sha256": "7209134c4513d04400ccd7cd02f6bb85e96bcb55456eac0d61555491374babd4",
+      "patch": "third_party/patches/personal-assistant-experience.patch",
+      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022",
+      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."
+    },
+    "frontend/chat/src/message-view.css": {
+      "sha256": "6312707ec65d53aa26b7533c570d6e8d74f4e425780b2d907cabeff3b504758a",
+      "patch": "third_party/patches/personal-assistant-experience.patch",
+      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022",
+      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."
+    },
+    "frontend/chat/src/message-view.tsx": {
+      "sha256": "b0c57b6899b377a73a6da243ae8b560b002ff5097f9ba6352ab6767d17bd5d0d",
+      "patch": "third_party/patches/personal-assistant-experience.patch",
+      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022",
+      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."
+    },
+    "frontend/chat/src/plugin-ui-runtime.tsx": {
+      "sha256": "9465e01185af602d3afc22d98b53e658a237d4af272c45e691a7d61c001ab028",
+      "patch": "third_party/patches/personal-assistant-experience.patch",
+      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022",
+      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."
+    },
+    "frontend/chat/src/use-desktop-chat-controller.ts": {
+      "sha256": "1d9c4b2dbd569d754d8c0ccd4364385830ad25397d74580be59f0e3eb9c7d19a",
+      "patch": "third_party/patches/personal-assistant-experience.patch",
+      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022",
+      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."
+    },
     "frontend/chat/src/web-chat-data.ts": {
       "sha256": "0602fd26d8ec9f663d8162eec79ddc1fcac2884c3541f270995ce461c33c34ca",
       "patch": "third_party/patches/distribution-branding.patch",
@@ -1052,11 +1142,23 @@
       "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
+    "frontend/dashboard/tailwind.config.ts": {
+      "patch": "third_party/patches/stage-web-assets.patch",
+      "reason": "Group frontend tooling and protocol schemas with their owners; keep build commands and SDK links valid after relocation.",
+      "sha256": "1f295309fadb6c9aad657fdecfff812af99140dee7369b6759fb8bcc3881ccde",
+      "patch_sha256": "f23c035cf5897c61ee4dcfade30bafa8dd71c32ebdcf3c21743e31c9800abcc4"
+    },
     "frontend/design.md": {
       "sha256": "dff0876e06af57582bf3e559d2fbb088dbf42849eaee91123c4dbddc22dde0c4",
       "patch": "third_party/patches/distribution-branding.patch",
       "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "frontend/eslint.config.js": {
+      "patch": "third_party/patches/stage-web-assets.patch",
+      "reason": "Group frontend tooling and protocol schemas with their owners; keep build commands and SDK links valid after relocation.",
+      "sha256": "68799f602646a9ff5aa60ab7e0ac248090582ec929c4d6c8c4c8151e7aa9426d",
+      "patch_sha256": "f23c035cf5897c61ee4dcfade30bafa8dd71c32ebdcf3c21743e31c9800abcc4"
     },
     "frontend/plugins/akasha/src/plugin-ui.css": {
       "sha256": "fb49e78b390397a55ce1029b462819d8b4d470bd1805cd188eab4c5e69742996",
@@ -1069,6 +1171,12 @@
       "patch": "third_party/patches/distribution-branding.patch",
       "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "frontend/plugins/models/src/cache-usage.js": {
+      "patch": "third_party/patches/cache-usage-coverage.patch",
+      "reason": "Keep unreported cache usage distinct from observed misses; include observation coverage and rebuild old statistics.",
+      "sha256": "770857a61d7f3022df3dca8c6c0415b95e31dba53ec38f54368492a3460cf9a6",
+      "patch_sha256": "8aa98fee2ab5f89a1f6be07322510981987e3525c3161d71435f940abbfe1e4f"
     },
     "frontend/plugins/onboarding/src/index.tsx": {
       "sha256": "bb2a35e18c10f0cd7385e1e9e5f253154c503f67094c59e7bc04812d02932d0e",
@@ -1100,11 +1208,29 @@
       "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
+    "frontend/theme/src/fonts/README.md": {
+      "patch": "third_party/patches/stage-web-assets.patch",
+      "reason": "Maintain build inputs and asset documentation, retire commands without fixtures, and stage Web output inside owning plugins.",
+      "sha256": "6fcdd91c6c34b84f53254cef9284b1cfdff388963c50e7e477d331f22d58ae1a",
+      "patch_sha256": "f23c035cf5897c61ee4dcfade30bafa8dd71c32ebdcf3c21743e31c9800abcc4"
+    },
+    "frontend/theme/src/fonts/reading-serif.md": {
+      "patch": "third_party/patches/stage-web-assets.patch",
+      "reason": "Maintain build inputs and asset documentation, retire commands without fixtures, and stage Web output inside owning plugins.",
+      "sha256": "ada688107550c1544d78d10bc51f36d3167dad71cb72b055f96405a11aa56acd",
+      "patch_sha256": "f23c035cf5897c61ee4dcfade30bafa8dd71c32ebdcf3c21743e31c9800abcc4"
+    },
     "frontend/theme/src/material-tokens.css": {
       "sha256": "73ee4edcb232f704647ede6317d69c221df0b950a73aa49564e6808e8fa9f1d2",
       "patch": "third_party/patches/distribution-branding.patch",
       "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "frontend/tsconfig.json": {
+      "patch": "third_party/patches/stage-web-assets.patch",
+      "reason": "Group frontend tooling and protocol schemas with their owners; keep build commands and SDK links valid after relocation.",
+      "sha256": "016daa7397fdc585519a53b20e456109ec6ad3c82a02a15241cda21455213853",
+      "patch_sha256": "f23c035cf5897c61ee4dcfade30bafa8dd71c32ebdcf3c21743e31c9800abcc4"
     },
     "kirakira_agent/_upstream_main.py": {
       "sha256": "690c9658cd35cbcd9b759ef9f045f1823660a8bd21f877d7ff4fdcd0e4e5630e",
@@ -1112,11 +1238,29 @@
       "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
+    "migrations/README.md": {
+      "patch": "third_party/patches/stage-web-assets.patch",
+      "reason": "Keep maintained setup and migration documentation consistent with supported distribution commands and source layout.",
+      "sha256": "9019d430990100b08887ca04117ff8de5167539be7b5caa2284f2b534fd590f4",
+      "patch_sha256": "f23c035cf5897c61ee4dcfade30bafa8dd71c32ebdcf3c21743e31c9800abcc4"
+    },
+    "package-lock.json": {
+      "patch": "third_party/patches/stage-web-assets.patch",
+      "reason": "Maintain build inputs and asset documentation, retire commands without fixtures, and stage Web output inside owning plugins.",
+      "sha256": "00b0a0bf3455fdcae2566ceb793f7b6207f0a8835205040add6ae21f900821cf",
+      "patch_sha256": "f23c035cf5897c61ee4dcfade30bafa8dd71c32ebdcf3c21743e31c9800abcc4"
+    },
     "package.json": {
       "sha256": "40354d8e7ff2a68d51ebae81f97f5b3ff94b8197b038806c6af2f585303668c6",
       "patch": "third_party/patches/stage-web-assets.patch",
       "patch_sha256": "f23c035cf5897c61ee4dcfade30bafa8dd71c32ebdcf3c21743e31c9800abcc4",
       "reason": "Maintain build inputs and asset documentation, retire commands without fixtures, and stage Web output inside owning plugins."
+    },
+    "plugins/akasha/application/consumer.py": {
+      "patch": "third_party/patches/personal-assistant-experience.patch",
+      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
+      "sha256": "f37041f64c183331553786231d9f1475ac7bc7ac890b659c1dc9966caba6f380",
+      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
     },
     "plugins/akasha/contract.py": {
       "sha256": "900fa560bd99a420dd0693416206d7ff94ca586c32f559c197f7cf840fd2e107",
@@ -1238,6 +1382,12 @@
       "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
+    "plugins/akashic_clients/web_chat.py": {
+      "sha256": "ec5baf5abd53a6e633ae1c508e3e8fa757fd5e547662a1d015acda88f1a23961",
+      "patch": "third_party/patches/personal-assistant-experience.patch",
+      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022",
+      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."
+    },
     "plugins/akashic_sender/plugin.py": {
       "sha256": "e80625e7f802df72a642d6cd5eba07e5820844c4c0376947b25d381977c5bd56",
       "patch": "third_party/patches/distribution-branding.patch",
@@ -1256,6 +1406,30 @@
       "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
+    "plugins/compaction/contract.py": {
+      "patch": "third_party/patches/personal-assistant-experience.patch",
+      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
+      "sha256": "009bb3df6415b724c7d8de92d4f2b9ae69d3aa91c11c00fc5948cb8b4b6deca5",
+      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
+    },
+    "plugins/compaction/message_summary.py": {
+      "patch": "third_party/patches/telegram-latency.patch",
+      "reason": "Bound real summary generations and reject truncated summaries instead of inheriting unlimited provider defaults.",
+      "sha256": "2c0bc817259399a58572cc1c4d31398b04e715e58aafafa8abf7ae64481403b1",
+      "patch_sha256": "f9c7921b4efb914580bab2b2dc246a23d661788525607e767e16c760cec9afef"
+    },
+    "plugins/compaction/plugin.py": {
+      "patch": "third_party/patches/telegram-latency.patch",
+      "reason": "Cumulative identity-set summaries, legacy explicit-reset compatibility, durable learning progress and recoverable model failures; preserve bounded background context maintenance.",
+      "sha256": "1d8aa9c9c04e542d773ef84ea2b5cf687e1613b825ebca0541ac2b43db667074",
+      "patch_sha256": "f9c7921b4efb914580bab2b2dc246a23d661788525607e767e16c760cec9afef"
+    },
+    "plugins/compaction/records.py": {
+      "patch": "third_party/patches/telegram-latency.patch",
+      "reason": "Cumulative identity-set summaries, legacy explicit-reset compatibility, durable learning progress and recoverable model failures; preserve bounded background context maintenance.",
+      "sha256": "0638e027c8f7887c3e170c63fe85b142ba0b08be98a0e1248ddf964e071fafef",
+      "patch_sha256": "f9c7921b4efb914580bab2b2dc246a23d661788525607e767e16c760cec9afef"
+    },
     "plugins/computer/bench/README.md": {
       "sha256": "18791eebd806dc436292a8afb73ee29e0714eadd0d1cfd92e68e4d8307113a99",
       "patch": "third_party/patches/distribution-branding.patch",
@@ -1267,6 +1441,12 @@
       "patch": "third_party/patches/distribution-branding.patch",
       "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/computer/mcp_server.py": {
+      "patch": "third_party/patches/tool-io-bounds.patch",
+      "reason": "Selected upstream b53a0608: preserve readable webpage and JSON-RPC/control responses when driver text contains isolated UTF-16 surrogate characters.",
+      "sha256": "bcf7b51d5d20f887b2e9b2bd48b0ed9c541cabfbc5c1f6049e853d83fcc7994e",
+      "patch_sha256": "0130aface0820b23479739a696972ac4786ec6dede26b810ead55b73d45d92d8"
     },
     "plugins/computer/plugin.py": {
       "sha256": "d8e50534ef02581bb17f227d2c2d52460f19fe8a9a09a7be742741baded8e07b",
@@ -1298,11 +1478,47 @@
       "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
+    "plugins/context/api.py": {
+      "patch": "third_party/patches/telegram-latency.patch",
+      "reason": "Cumulative identity-set summaries, legacy explicit-reset compatibility, durable learning progress and recoverable model failures; preserve bounded background context maintenance.",
+      "sha256": "d46d67ba0d1f37f28343ec1b785acbaf53a2996f9534965178982d59504de9a9",
+      "patch_sha256": "f9c7921b4efb914580bab2b2dc246a23d661788525607e767e16c760cec9afef"
+    },
+    "plugins/context/contract.py": {
+      "patch": "third_party/patches/personal-assistant-experience.patch",
+      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
+      "sha256": "eed5457df73f97a99720cd6987e6c98951ae5a436033e1b1120cd443a9ab5101",
+      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
+    },
+    "plugins/context/materials.py": {
+      "patch": "third_party/patches/telegram-latency.patch",
+      "reason": "Cumulative identity-set summaries, legacy explicit-reset compatibility, durable learning progress and recoverable model failures; preserve bounded background context maintenance.",
+      "sha256": "c772a925c32c883749c83f79f243334c60b3faaa9e2c84a94707e3dda62440e5",
+      "patch_sha256": "f9c7921b4efb914580bab2b2dc246a23d661788525607e767e16c760cec9afef"
+    },
+    "plugins/context/plugin.py": {
+      "patch": "third_party/patches/telegram-latency.patch",
+      "reason": "Cumulative identity-set summaries, legacy explicit-reset compatibility, durable learning progress and recoverable model failures; preserve bounded background context maintenance.",
+      "sha256": "e56907e56e783a921ce0586bfe1f8558fddd4954fc29fbb41b1df69180e049c7",
+      "patch_sha256": "f9c7921b4efb914580bab2b2dc246a23d661788525607e767e16c760cec9afef"
+    },
+    "plugins/conversation/plugin.py": {
+      "patch": "third_party/patches/telegram-latency.patch",
+      "reason": "Guarded step-limit termination and explicit idempotent abandon, preserving source CAS and existing latency fixes.",
+      "sha256": "3b5e27d6d26dbffc55eac9be4a9eb8f83c9ce7f88d59a4cb06b77953b6e655aa",
+      "patch_sha256": "f9c7921b4efb914580bab2b2dc246a23d661788525607e767e16c760cec9afef"
+    },
     "plugins/delivery/contract.py": {
       "sha256": "d4ba89941a1cca0745c57f0b57106ab370c8cbee47011f60944bb97a1a93329b",
       "patch": "third_party/patches/followup-investigation.patch",
       "patch_sha256": "3a37fa4896d816091c6fc90c76622b035a329f8bd4bed580b5346f1b4e3eeb3d",
       "reason": "Owner-requested review, bounded inherited scope, phase-bound history checks, required decision tools, live inspection and exact delivery confirmations."
+    },
+    "plugins/delivery/execution.py": {
+      "patch": "third_party/patches/personal-assistant-experience.patch",
+      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
+      "sha256": "ed75e46aff3c90fc93fe8404bbdca59423f982bec8444695c4ea7b7337fea7ab",
+      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
     },
     "plugins/delivery/history.py": {
       "sha256": "bb80111d250c6d59cc6d8838861935eb15b8420e5494a16fbbf9c5ce256d44c3",
@@ -1316,11 +1532,35 @@
       "patch_sha256": "3a37fa4896d816091c6fc90c76622b035a329f8bd4bed580b5346f1b4e3eeb3d",
       "reason": "Owner-requested review, bounded inherited scope, phase-bound history checks, required decision tools, live inspection and exact delivery confirmations."
     },
+    "plugins/delivery_policy/follow.py": {
+      "patch": "third_party/patches/telegram-latency.patch",
+      "reason": "Deliver terminal failures and support explicit short-term conversation reset while retaining immutable history.",
+      "sha256": "addce3d9d186a1cc1c790401d6965c5a6b8a0eb25adf9c0cc7161cda71a6f2fc",
+      "patch_sha256": "f9c7921b4efb914580bab2b2dc246a23d661788525607e767e16c760cec9afef"
+    },
+    "plugins/delivery_policy/plugin.py": {
+      "patch": "third_party/patches/telegram-latency.patch",
+      "reason": "Deliver safe terminal notices for automatically abandoned conversation work, retaining channel routing and recovery.",
+      "sha256": "33d2e050b273c8f2f64316d432f57976e1a22ad715fd0ea27e7e347286a9b486",
+      "patch_sha256": "f9c7921b4efb914580bab2b2dc246a23d661788525607e767e16c760cec9afef"
+    },
+    "plugins/drift/contract.py": {
+      "patch": "third_party/patches/idle-reflection.patch",
+      "reason": "Generate bounded evidence-backed idle proposals and connect them to the existing Drift/Wake lifecycle.",
+      "sha256": "2b73654b779b267ec20822193408287a4abeb3426b238d08a04fa5ff2a35e278",
+      "patch_sha256": "11a2ed5bfde2629b933f1e6454a6ec8596542011cf0155668fda07126ce3433a"
+    },
     "plugins/drift/plugin.py": {
       "sha256": "c12c6bc0e6a30ff4616124f43dfed34d65988c0a28ab198b9a6376cb47393952",
       "patch": "third_party/patches/distribution-branding.patch",
       "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84",
       "reason": "Drain spawned workers without rethrowing already reported failures; preserve new cleanup failures and caller cancellation."
+    },
+    "plugins/drift/store.py": {
+      "patch": "third_party/patches/idle-reflection.patch",
+      "reason": "Generate bounded evidence-backed idle proposals and connect them to the existing Drift/Wake lifecycle.",
+      "sha256": "256c225436b0c875f16e3f867b3ff8449cd374198811a5eba7c4114679181d6e",
+      "patch_sha256": "11a2ed5bfde2629b933f1e6454a6ec8596542011cf0155668fda07126ce3433a"
     },
     "plugins/eventmail/contract.py": {
       "sha256": "d18638aa73eb34b20f4c76b8c546babb161cffc9001a623916eb8ec546b7b16b",
@@ -1340,6 +1580,30 @@
       "patch_sha256": "3a37fa4896d816091c6fc90c76622b035a329f8bd4bed580b5346f1b4e3eeb3d",
       "reason": "Owner-requested review, bounded inherited scope, phase-bound history checks, required decision tools, live inspection and exact delivery confirmations."
     },
+    "plugins/files/filesystem.py": {
+      "patch": "third_party/patches/tool-io-bounds.patch",
+      "reason": "Preserve tool protocols while bounding retained file output and streaming HTTP bodies; do not replay an already yielded response.",
+      "sha256": "04ec69c23b0a13e357b98c62f3007d688444d518fa49ef68e3cead1985b13f72",
+      "patch_sha256": "0130aface0820b23479739a696972ac4786ec6dede26b810ead55b73d45d92d8"
+    },
+    "plugins/gateway/cli.py": {
+      "sha256": "54b5482f40212a258476f5b4022657ad1644bbef1dbb42e8e80540d7b1efb727",
+      "patch": "third_party/patches/programmatic-memory-scope.patch",
+      "patch_sha256": "7179e20c5c9035893c25a3009cae7e764c6d71b5e6416812ea0b0648e599de9a",
+      "reason": "Programmatic admission may place a session in a memory scope, so that scope's policy governs recall as well as learning; the learning axis alone never closed the read path."
+    },
+    "plugins/gateway/protocol/models.py": {
+      "sha256": "690eee4584ba6187cb48c9104c60bedaf4dbb850deaf9bd8133ccf23679e5f0b",
+      "patch": "third_party/patches/personal-assistant-experience.patch",
+      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022",
+      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."
+    },
+    "plugins/gateway/schema/app-server-v2.json": {
+      "sha256": "be83c88176af900779bbd52c682633caf6edd64f8a755df0a1f16da6d228bba2",
+      "patch": "third_party/patches/personal-assistant-experience.patch",
+      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022",
+      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."
+    },
     "plugins/gateway/service.py": {
       "sha256": "916a3e120ef1d21547854f94db757a2524fd4ba96ce693b94ec365354570f7e5",
       "patch": "third_party/patches/distribution-branding.patch",
@@ -1357,6 +1621,12 @@
       "patch": "third_party/patches/distribution-branding.patch",
       "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/host_execution/bridge/filesystem.py": {
+      "patch": "third_party/patches/tool-io-bounds.patch",
+      "reason": "Preserve tool protocols while bounding retained file output and streaming HTTP bodies; do not replay an already yielded response.",
+      "sha256": "2b45c289626d462e2a5d8392c4865d006232a182f4793c77b6f174e81ac17e74",
+      "patch_sha256": "0130aface0820b23479739a696972ac4786ec6dede26b810ead55b73d45d92d8"
     },
     "plugins/host_execution/bridge/server.py": {
       "sha256": "fd48742cc38ffc4c4f09f22e422ed1b661e5c8b1c6ceb3605cb05ce4f67097a1",
@@ -1376,6 +1646,12 @@
       "reason": "Preserve zsh alias option while parsing function snapshots; actual local and HostBridge shell regressions.",
       "patch_sha256": "a2d4a1cd3635d62edd6ca11a8b2e7ace6b68d0dbec908feeb4bf4a17e1354f55"
     },
+    "plugins/jobs/plugin.py": {
+      "patch": "third_party/patches/personal-assistant-experience.patch",
+      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
+      "sha256": "4aaff9d1452e79b27a94574fda545df812e00e256d176d4d67adbec3b24a9892",
+      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
+    },
     "plugins/ledger/contract.py": {
       "sha256": "1b1123526ab2c38f38c1b9bcac4f08077d733408aa4485407bfee723499d6234",
       "patch": "third_party/patches/distribution-branding.patch",
@@ -1387,6 +1663,12 @@
       "patch": "third_party/patches/distribution-branding.patch",
       "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/ledger/log.py": {
+      "patch": "third_party/patches/telegram-latency.patch",
+      "reason": "Reuse only committed immutable binding descriptors, preserve conflict checks and failed-write isolation.",
+      "sha256": "91321f96277fceb8eb240ea01111d8c89db274894674699f5716dabf061bcf90",
+      "patch_sha256": "f9c7921b4efb914580bab2b2dc246a23d661788525607e767e16c760cec9afef"
     },
     "plugins/markdown_memory/documents.py": {
       "sha256": "fa3affb48e95b52ced2f28aef6f0d6cbdf1ca9815e87b7fe87d229c1d555c1e6",
@@ -1406,17 +1688,41 @@
       "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84",
       "reason": "Cumulative identity-set summaries, legacy explicit-reset compatibility, durable learning progress and recoverable model failures; preserve bounded background context maintenance."
     },
+    "plugins/models/contract.py": {
+      "patch": "third_party/patches/telegram-latency.patch",
+      "reason": "Cumulative identity-set summaries, legacy explicit-reset compatibility, durable learning progress and recoverable model failures; preserve bounded background context maintenance.",
+      "sha256": "62fd0b9f330b22354f9223901593fa957812cca39421189d7c60b025347c1355",
+      "patch_sha256": "f9c7921b4efb914580bab2b2dc246a23d661788525607e767e16c760cec9afef"
+    },
     "plugins/models/plugin.py": {
       "sha256": "ead5ff8ecaf301a2746335b471004771b33ef8cab97cbb7023ee38aed401cfd4",
       "patch": "third_party/patches/distribution-branding.patch",
       "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
+    "plugins/models/projection.py": {
+      "patch": "third_party/patches/telegram-latency.patch",
+      "reason": "Cumulative identity-set summaries, legacy explicit-reset compatibility, durable learning progress and recoverable model failures; preserve bounded background context maintenance.",
+      "sha256": "3faac57cb84f05cbc7ae0a846c5c8e7034a8919cbd15d01b5e268f2c9412134e",
+      "patch_sha256": "f9c7921b4efb914580bab2b2dc246a23d661788525607e767e16c760cec9afef"
+    },
     "plugins/models/state.py": {
       "sha256": "82f18e7ee2668910e9fc9137c8e8d9b49ede7367c55181fef5336c4c2341601a",
       "patch": "third_party/patches/distribution-branding.patch",
       "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/models/store.py": {
+      "patch": "third_party/patches/personal-assistant-experience.patch",
+      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
+      "sha256": "b8462f130709c5efef1503c98fac7b0418fddb85450b575bf54d7686f9147b9e",
+      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
+    },
+    "plugins/models/usage.py": {
+      "patch": "third_party/patches/cache-usage-coverage.patch",
+      "reason": "Keep unreported cache usage distinct from observed misses; include observation coverage and rebuild old statistics.",
+      "sha256": "3271212a8c9b08efadaa28a22d7222ae550c4851c0c68be5b08b96b0e5c86d4d",
+      "patch_sha256": "8aa98fee2ab5f89a1f6be07322510981987e3525c3161d71435f940abbfe1e4f"
     },
     "plugins/openai_compatible/driver.py": {
       "sha256": "49552bb4aa9251c36f040ebd334ad83403aa44a89bea86dbd66704d6eedb1b20",
@@ -1436,17 +1742,53 @@
       "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
+    "plugins/plugin_update/plugin.py": {
+      "patch": "third_party/patches/personal-assistant-experience.patch",
+      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
+      "sha256": "002534590986bc4b59345896c720deeaa689bd691dd6e421f3cf670103066578",
+      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
+    },
     "plugins/plugin_update/skills/plugin-system/SKILL.md": {
       "sha256": "de07942e2234f6391be7ef0819f408ef270e4ba082eaa710e2ced34011a784e4",
       "patch": "third_party/patches/distribution-branding.patch",
       "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
+    "plugins/programmatic/contract.py": {
+      "sha256": "0c6a67b73a26bdd2e5041ab51411a8484d79237b2737bb90cc3e6dc264f63f50",
+      "patch": "third_party/patches/programmatic-memory-scope.patch",
+      "patch_sha256": "7179e20c5c9035893c25a3009cae7e764c6d71b5e6416812ea0b0648e599de9a",
+      "reason": "Programmatic admission may place a session in a memory scope, so that scope's policy governs recall as well as learning; the learning axis alone never closed the read path."
+    },
+    "plugins/programmatic/control.py": {
+      "sha256": "c526ebfcc1e6a86944f452272973d905853e995ca8bea3cc0e2bd0e42a7f733c",
+      "patch": "third_party/patches/programmatic-memory-scope.patch",
+      "patch_sha256": "7179e20c5c9035893c25a3009cae7e764c6d71b5e6416812ea0b0648e599de9a",
+      "reason": "Programmatic admission may place a session in a memory scope, so that scope's policy governs recall as well as learning; the learning axis alone never closed the read path."
+    },
     "plugins/prompt/VEDA.md": {
       "sha256": "f387d558f7cd1ffbf217ea3ff685354af9caee59fc27ac2fa67efb8cee190db4",
       "patch": "third_party/patches/distribution-branding.patch",
       "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
+    },
+    "plugins/prompt/persona.py": {
+      "patch": "third_party/patches/distribution-branding.patch",
+      "reason": "Composable personality preferences with stable task and execution rules.",
+      "sha256": "979da6581d60524a7b4681dd36e5bb0c3e0d748b5ee31ab5c0980629a0fbb716",
+      "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84"
+    },
+    "plugins/prompt/plugin.py": {
+      "patch": "third_party/patches/distribution-branding.patch",
+      "reason": "Composable personality preferences with stable task and execution rules.",
+      "sha256": "3280aa9ed0dafa54301923b27d8d28b2fa3a7a8818a4ef010d5ce2d8a1bb90d2",
+      "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84"
+    },
+    "plugins/prompt/text.py": {
+      "patch": "third_party/patches/distribution-branding.patch",
+      "reason": "Configurable expression and background delegation; source-aware relative dates and reminders backed by actual tool receipts.",
+      "sha256": "8a0351eb96b95219944d7f05f29320f63c11829acf5f347946a80dbb8bea0fd0",
+      "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84"
     },
     "plugins/react/contract.py": {
       "sha256": "62064da41636a5ff161d9fef4269686ae3fac31926b350715214894d8be35adf",
@@ -1459,6 +1801,18 @@
       "patch": "third_party/patches/followup-investigation.patch",
       "patch_sha256": "3a37fa4896d816091c6fc90c76622b035a329f8bd4bed580b5346f1b4e3eeb3d",
       "reason": "Guarded step-limit termination and explicit idempotent abandon, preserving source CAS and existing latency fixes."
+    },
+    "plugins/reply/follow.py": {
+      "patch": "third_party/patches/personal-assistant-experience.patch",
+      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
+      "sha256": "106982277788ddc414edd2d789a163ac3e7203af03462889d0cb964f1f129f8c",
+      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
+    },
+    "plugins/reply/plugin.py": {
+      "patch": "third_party/patches/personal-assistant-experience.patch",
+      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
+      "sha256": "51a33de63d7d62df79a27ab4110dbec4e14622596a8d111f850069ddaa023c65",
+      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
     },
     "plugins/reply_program/contract.py": {
       "sha256": "cc6e56b9d9e967d2cc02b0c8a33a1778ecae840ac28f07411741a0d2102f5552",
@@ -1484,6 +1838,24 @@
       "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
+    "plugins/scheduler/plugin.py": {
+      "patch": "third_party/patches/personal-assistant-experience.patch",
+      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
+      "sha256": "49922f4049d39fa5d1853b1962663529b8cd1aee9ea1c6a71dde90aaf869025b",
+      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
+    },
+    "plugins/scheduler/schedule.py": {
+      "patch": "third_party/patches/tool-io-bounds.patch",
+      "reason": "Keep reminder dates anchored to actual user input, use elapsed durations across offset changes, and reject nonexistent or ambiguous wall times.",
+      "sha256": "a2f9d60c91200edf584d0ef3c1e3fbcd0b4ff217be3616421f46d8600df4cbe2",
+      "patch_sha256": "0130aface0820b23479739a696972ac4786ec6dede26b810ead55b73d45d92d8"
+    },
+    "plugins/scheduler/tools.py": {
+      "patch": "third_party/patches/tool-io-bounds.patch",
+      "reason": "Bind relative reminder dates to actual user input and preserve original receipts, displaying the exact instant in the selected timezone.",
+      "sha256": "5ba6a3edd9b84b8738dd732ea4145cd6c89ce73a9ae44c4a3141c0898149ac57",
+      "patch_sha256": "0130aface0820b23479739a696972ac4786ec6dede26b810ead55b73d45d92d8"
+    },
     "plugins/sites_tab/plugin.py": {
       "sha256": "ba6dab901da91e2f299784fcb406680e30608aa2dd5767d3fd297378ceab81e9",
       "patch": "third_party/patches/distribution-branding.patch",
@@ -1502,11 +1874,59 @@
       "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
+    "plugins/subagent/plugin.py": {
+      "patch": "third_party/patches/personal-assistant-experience.patch",
+      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
+      "sha256": "d5306f8fb6acc159dcf79b424ada062e9a1bd2e15e23db5020a65d86f9d5c83d",
+      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
+    },
+    "plugins/subagent/runtime.py": {
+      "patch": "third_party/patches/personal-assistant-experience.patch",
+      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
+      "sha256": "a66e8b308aa41039eb86a36a398e2714c12208104a7c339839b9ebcad9d5654d",
+      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
+    },
+    "plugins/subagent/tools.py": {
+      "patch": "third_party/patches/personal-assistant-experience.patch",
+      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
+      "sha256": "8ec1c1a5b3f015fa629947bf59412e0a39677d78324f8658e6aba7f29129d90c",
+      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
+    },
+    "plugins/telegram_channel/channel.py": {
+      "patch": "third_party/patches/telegram-latency.patch",
+      "reason": "Provider-independent bound-model facts, material-stage timing, transient Telegram drafts and NFS-compatible profile locks; final delivery remains on the native durable path.",
+      "sha256": "31752b543e700d364945080bb4d97aa5f65618766382b1a489f9a8b55849a556",
+      "patch_sha256": "f9c7921b4efb914580bab2b2dc246a23d661788525607e767e16c760cec9afef"
+    },
     "plugins/telegram_channel/plugin.py": {
       "sha256": "512b6d1e6ea3c87173cf587a89700a1243d013c52ee5c95c431476a8b2b877f9",
       "patch": "third_party/patches/telegram-latency.patch",
       "patch_sha256": "f9c7921b4efb914580bab2b2dc246a23d661788525607e767e16c760cec9afef",
       "reason": "Provider-independent bound-model facts, material-stage timing, transient Telegram drafts and NFS-compatible profile locks; final delivery remains on the native durable path."
+    },
+    "plugins/telegram_sender/plugin.py": {
+      "patch": "third_party/patches/telegram-latency.patch",
+      "reason": "Coordinate transient previews with the actual durable Telegram sender; content-free latency tracing.",
+      "sha256": "9d1400d6bbb31218e7eda74f44440e3ac7d0b6a5c541d9bf4ea16c97542638a6",
+      "patch_sha256": "f9c7921b4efb914580bab2b2dc246a23d661788525607e767e16c760cec9afef"
+    },
+    "plugins/telegram_sender/sender.py": {
+      "patch": "third_party/patches/telegram-latency.patch",
+      "reason": "Deliver safe terminal notices for automatically abandoned conversation work, retaining channel routing and recovery.",
+      "sha256": "a8b18d9be2d25c6d0d6338a79ab5fc80f75a365705f61c350266b77e05329b49",
+      "patch_sha256": "f9c7921b4efb914580bab2b2dc246a23d661788525607e767e16c760cec9afef"
+    },
+    "plugins/tools/plugin.py": {
+      "patch": "third_party/patches/personal-assistant-experience.patch",
+      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
+      "sha256": "4b39a2e572a010dc9dcff445afb529487e8e0a05e75420018258402cf7987d1e",
+      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
+    },
+    "plugins/ui/contract.py": {
+      "patch": "third_party/patches/personal-assistant-experience.patch",
+      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
+      "sha256": "a3e6d35254a5dd149dbc59ffad7486e1bd9c696fc617f5d7683897c8c15c078d",
+      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
     },
     "plugins/ui/dashboard_app.py": {
       "sha256": "edfc5ac5b17935ad419716b4170fbd8d3e85d8cb742aacebab6659d4d12a9111",
@@ -1616,6 +2036,12 @@
       "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
+    "plugins/web_fetch_http/fetch.py": {
+      "patch": "third_party/patches/tool-io-bounds.patch",
+      "reason": "Preserve tool protocols while bounding retained file output and streaming HTTP bodies; do not replay an already yielded response.",
+      "sha256": "dc7edd49fa896b97eecbadd178cf6cba5131b99452a19778e84a923caef323d1",
+      "patch_sha256": "0130aface0820b23479739a696972ac4786ec6dede26b810ead55b73d45d92d8"
+    },
     "plugins/workspace_changes/plugin.py": {
       "sha256": "381ff56f030d472b634d03841f8c7c2c32e08824174aaa6a09be57fdbf68d017",
       "patch": "third_party/patches/distribution-branding.patch",
@@ -1628,416 +2054,8 @@
       "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84",
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
-    "plugins/web_fetch_http/fetch.py": {
-      "patch": "third_party/patches/tool-io-bounds.patch",
-      "reason": "Preserve tool protocols while bounding retained file output and streaming HTTP bodies; do not replay an already yielded response.",
-      "sha256": "dc7edd49fa896b97eecbadd178cf6cba5131b99452a19778e84a923caef323d1",
-      "patch_sha256": "0130aface0820b23479739a696972ac4786ec6dede26b810ead55b73d45d92d8"
-    },
-    "plugins/models/usage.py": {
-      "patch": "third_party/patches/cache-usage-coverage.patch",
-      "reason": "Keep unreported cache usage distinct from observed misses; include observation coverage and rebuild old statistics.",
-      "sha256": "3271212a8c9b08efadaa28a22d7222ae550c4851c0c68be5b08b96b0e5c86d4d",
-      "patch_sha256": "8aa98fee2ab5f89a1f6be07322510981987e3525c3161d71435f940abbfe1e4f"
-    },
-    "frontend/plugins/models/src/cache-usage.js": {
-      "patch": "third_party/patches/cache-usage-coverage.patch",
-      "reason": "Keep unreported cache usage distinct from observed misses; include observation coverage and rebuild old statistics.",
-      "sha256": "770857a61d7f3022df3dca8c6c0415b95e31dba53ec38f54368492a3460cf9a6",
-      "patch_sha256": "8aa98fee2ab5f89a1f6be07322510981987e3525c3161d71435f940abbfe1e4f"
-    },
-    "plugins/drift/contract.py": {
-      "patch": "third_party/patches/idle-reflection.patch",
-      "reason": "Generate bounded evidence-backed idle proposals and connect them to the existing Drift/Wake lifecycle.",
-      "sha256": "2b73654b779b267ec20822193408287a4abeb3426b238d08a04fa5ff2a35e278",
-      "patch_sha256": "11a2ed5bfde2629b933f1e6454a6ec8596542011cf0155668fda07126ce3433a"
-    },
-    "plugins/drift/store.py": {
-      "patch": "third_party/patches/idle-reflection.patch",
-      "reason": "Generate bounded evidence-backed idle proposals and connect them to the existing Drift/Wake lifecycle.",
-      "sha256": "256c225436b0c875f16e3f867b3ff8449cd374198811a5eba7c4114679181d6e",
-      "patch_sha256": "11a2ed5bfde2629b933f1e6454a6ec8596542011cf0155668fda07126ce3433a"
-    },
-    "core/net/http.py": {
-      "patch": "third_party/patches/tool-io-bounds.patch",
-      "reason": "Preserve tool protocols while bounding retained file output and streaming HTTP bodies; do not replay an already yielded response.",
-      "sha256": "7cbe556537d31ddc5e5bfdd87f24c25befed1608b8736838c7649d38f44ab7cf",
-      "patch_sha256": "0130aface0820b23479739a696972ac4786ec6dede26b810ead55b73d45d92d8"
-    },
-    "plugins/host_execution/bridge/filesystem.py": {
-      "patch": "third_party/patches/tool-io-bounds.patch",
-      "reason": "Preserve tool protocols while bounding retained file output and streaming HTTP bodies; do not replay an already yielded response.",
-      "sha256": "2b45c289626d462e2a5d8392c4865d006232a182f4793c77b6f174e81ac17e74",
-      "patch_sha256": "0130aface0820b23479739a696972ac4786ec6dede26b810ead55b73d45d92d8"
-    },
-    "plugins/files/filesystem.py": {
-      "patch": "third_party/patches/tool-io-bounds.patch",
-      "reason": "Preserve tool protocols while bounding retained file output and streaming HTTP bodies; do not replay an already yielded response.",
-      "sha256": "04ec69c23b0a13e357b98c62f3007d688444d518fa49ef68e3cead1985b13f72",
-      "patch_sha256": "0130aface0820b23479739a696972ac4786ec6dede26b810ead55b73d45d92d8"
-    },
-    "plugins/context/materials.py": {
-      "patch": "third_party/patches/telegram-latency.patch",
-      "reason": "Cumulative identity-set summaries, legacy explicit-reset compatibility, durable learning progress and recoverable model failures; preserve bounded background context maintenance.",
-      "sha256": "c772a925c32c883749c83f79f243334c60b3faaa9e2c84a94707e3dda62440e5",
-      "patch_sha256": "f9c7921b4efb914580bab2b2dc246a23d661788525607e767e16c760cec9afef"
-    },
-    "plugins/telegram_channel/channel.py": {
-      "patch": "third_party/patches/telegram-latency.patch",
-      "reason": "Provider-independent bound-model facts, material-stage timing, transient Telegram drafts and NFS-compatible profile locks; final delivery remains on the native durable path.",
-      "sha256": "31752b543e700d364945080bb4d97aa5f65618766382b1a489f9a8b55849a556",
-      "patch_sha256": "f9c7921b4efb914580bab2b2dc246a23d661788525607e767e16c760cec9afef"
-    },
-    "plugins/telegram_sender/plugin.py": {
-      "patch": "third_party/patches/telegram-latency.patch",
-      "reason": "Coordinate transient previews with the actual durable Telegram sender; content-free latency tracing.",
-      "sha256": "9d1400d6bbb31218e7eda74f44440e3ac7d0b6a5c541d9bf4ea16c97542638a6",
-      "patch_sha256": "f9c7921b4efb914580bab2b2dc246a23d661788525607e767e16c760cec9afef"
-    },
-    "plugins/telegram_sender/sender.py": {
-      "patch": "third_party/patches/telegram-latency.patch",
-      "reason": "Deliver safe terminal notices for automatically abandoned conversation work, retaining channel routing and recovery.",
-      "sha256": "a8b18d9be2d25c6d0d6338a79ab5fc80f75a365705f61c350266b77e05329b49",
-      "patch_sha256": "f9c7921b4efb914580bab2b2dc246a23d661788525607e767e16c760cec9afef"
-    },
-    "plugins/conversation/plugin.py": {
-      "patch": "third_party/patches/telegram-latency.patch",
-      "reason": "Guarded step-limit termination and explicit idempotent abandon, preserving source CAS and existing latency fixes.",
-      "sha256": "3b5e27d6d26dbffc55eac9be4a9eb8f83c9ce7f88d59a4cb06b77953b6e655aa",
-      "patch_sha256": "f9c7921b4efb914580bab2b2dc246a23d661788525607e767e16c760cec9afef"
-    },
-    "plugins/prompt/plugin.py": {
-      "patch": "third_party/patches/distribution-branding.patch",
-      "reason": "Composable personality preferences with stable task and execution rules.",
-      "sha256": "3280aa9ed0dafa54301923b27d8d28b2fa3a7a8818a4ef010d5ce2d8a1bb90d2",
-      "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84"
-    },
-    "plugins/prompt/text.py": {
-      "patch": "third_party/patches/distribution-branding.patch",
-      "reason": "Configurable expression and background delegation; source-aware relative dates and reminders backed by actual tool receipts.",
-      "sha256": "8a0351eb96b95219944d7f05f29320f63c11829acf5f347946a80dbb8bea0fd0",
-      "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84"
-    },
-    "plugins/prompt/persona.py": {
-      "patch": "third_party/patches/distribution-branding.patch",
-      "reason": "Composable personality preferences with stable task and execution rules.",
-      "sha256": "979da6581d60524a7b4681dd36e5bb0c3e0d748b5ee31ab5c0980629a0fbb716",
-      "patch_sha256": "bf65a47468f18aeaa406348d17d1068287ba2344de9f0bcf244404eb9df13a84"
-    },
-    "package-lock.json": {
-      "patch": "third_party/patches/stage-web-assets.patch",
-      "reason": "Maintain build inputs and asset documentation, retire commands without fixtures, and stage Web output inside owning plugins.",
-      "sha256": "00b0a0bf3455fdcae2566ceb793f7b6207f0a8835205040add6ae21f900821cf",
-      "patch_sha256": "f23c035cf5897c61ee4dcfade30bafa8dd71c32ebdcf3c21743e31c9800abcc4"
-    },
-    "frontend/theme/src/fonts/README.md": {
-      "patch": "third_party/patches/stage-web-assets.patch",
-      "reason": "Maintain build inputs and asset documentation, retire commands without fixtures, and stage Web output inside owning plugins.",
-      "sha256": "6fcdd91c6c34b84f53254cef9284b1cfdff388963c50e7e477d331f22d58ae1a",
-      "patch_sha256": "f23c035cf5897c61ee4dcfade30bafa8dd71c32ebdcf3c21743e31c9800abcc4"
-    },
-    "frontend/theme/src/fonts/reading-serif.md": {
-      "patch": "third_party/patches/stage-web-assets.patch",
-      "reason": "Maintain build inputs and asset documentation, retire commands without fixtures, and stage Web output inside owning plugins.",
-      "sha256": "ada688107550c1544d78d10bc51f36d3167dad71cb72b055f96405a11aa56acd",
-      "patch_sha256": "f23c035cf5897c61ee4dcfade30bafa8dd71c32ebdcf3c21743e31c9800abcc4"
-    },
-    "migrations/README.md": {
-      "patch": "third_party/patches/stage-web-assets.patch",
-      "reason": "Keep maintained setup and migration documentation consistent with supported distribution commands and source layout.",
-      "sha256": "9019d430990100b08887ca04117ff8de5167539be7b5caa2284f2b534fd590f4",
-      "patch_sha256": "f23c035cf5897c61ee4dcfade30bafa8dd71c32ebdcf3c21743e31c9800abcc4"
-    },
-    "frontend/tsconfig.json": {
-      "patch": "third_party/patches/stage-web-assets.patch",
-      "reason": "Group frontend tooling and protocol schemas with their owners; keep build commands and SDK links valid after relocation.",
-      "sha256": "016daa7397fdc585519a53b20e456109ec6ad3c82a02a15241cda21455213853",
-      "patch_sha256": "f23c035cf5897c61ee4dcfade30bafa8dd71c32ebdcf3c21743e31c9800abcc4"
-    },
-    "frontend/eslint.config.js": {
-      "patch": "third_party/patches/stage-web-assets.patch",
-      "reason": "Group frontend tooling and protocol schemas with their owners; keep build commands and SDK links valid after relocation.",
-      "sha256": "68799f602646a9ff5aa60ab7e0ac248090582ec929c4d6c8c4c8151e7aa9426d",
-      "patch_sha256": "f23c035cf5897c61ee4dcfade30bafa8dd71c32ebdcf3c21743e31c9800abcc4"
-    },
-    "frontend/dashboard/tailwind.config.ts": {
-      "patch": "third_party/patches/stage-web-assets.patch",
-      "reason": "Group frontend tooling and protocol schemas with their owners; keep build commands and SDK links valid after relocation.",
-      "sha256": "1f295309fadb6c9aad657fdecfff812af99140dee7369b6759fb8bcc3881ccde",
-      "patch_sha256": "f23c035cf5897c61ee4dcfade30bafa8dd71c32ebdcf3c21743e31c9800abcc4"
-    },
-    "plugins/scheduler/tools.py": {
-      "patch": "third_party/patches/tool-io-bounds.patch",
-      "reason": "Bind relative reminder dates to actual user input and preserve original receipts, displaying the exact instant in the selected timezone.",
-      "sha256": "5ba6a3edd9b84b8738dd732ea4145cd6c89ce73a9ae44c4a3141c0898149ac57",
-      "patch_sha256": "0130aface0820b23479739a696972ac4786ec6dede26b810ead55b73d45d92d8"
-    },
-    "plugins/delivery_policy/plugin.py": {
-      "patch": "third_party/patches/telegram-latency.patch",
-      "reason": "Deliver safe terminal notices for automatically abandoned conversation work, retaining channel routing and recovery.",
-      "sha256": "33d2e050b273c8f2f64316d432f57976e1a22ad715fd0ea27e7e347286a9b486",
-      "patch_sha256": "f9c7921b4efb914580bab2b2dc246a23d661788525607e767e16c760cec9afef"
-    },
-    "plugins/delivery_policy/follow.py": {
-      "patch": "third_party/patches/telegram-latency.patch",
-      "reason": "Deliver terminal failures and support explicit short-term conversation reset while retaining immutable history.",
-      "sha256": "addce3d9d186a1cc1c790401d6965c5a6b8a0eb25adf9c0cc7161cda71a6f2fc",
-      "patch_sha256": "f9c7921b4efb914580bab2b2dc246a23d661788525607e767e16c760cec9afef"
-    },
-    "plugins/compaction/plugin.py": {
-      "patch": "third_party/patches/telegram-latency.patch",
-      "reason": "Cumulative identity-set summaries, legacy explicit-reset compatibility, durable learning progress and recoverable model failures; preserve bounded background context maintenance.",
-      "sha256": "1d8aa9c9c04e542d773ef84ea2b5cf687e1613b825ebca0541ac2b43db667074",
-      "patch_sha256": "f9c7921b4efb914580bab2b2dc246a23d661788525607e767e16c760cec9afef"
-    },
-    "plugins/compaction/records.py": {
-      "patch": "third_party/patches/telegram-latency.patch",
-      "reason": "Cumulative identity-set summaries, legacy explicit-reset compatibility, durable learning progress and recoverable model failures; preserve bounded background context maintenance.",
-      "sha256": "0638e027c8f7887c3e170c63fe85b142ba0b08be98a0e1248ddf964e071fafef",
-      "patch_sha256": "f9c7921b4efb914580bab2b2dc246a23d661788525607e767e16c760cec9afef"
-    },
-    "plugins/ledger/log.py": {
-      "patch": "third_party/patches/telegram-latency.patch",
-      "reason": "Reuse only committed immutable binding descriptors, preserve conflict checks and failed-write isolation.",
-      "sha256": "91321f96277fceb8eb240ea01111d8c89db274894674699f5716dabf061bcf90",
-      "patch_sha256": "f9c7921b4efb914580bab2b2dc246a23d661788525607e767e16c760cec9afef"
-    },
-    "plugins/compaction/message_summary.py": {
-      "patch": "third_party/patches/telegram-latency.patch",
-      "reason": "Bound real summary generations and reject truncated summaries instead of inheriting unlimited provider defaults.",
-      "sha256": "2c0bc817259399a58572cc1c4d31398b04e715e58aafafa8abf7ae64481403b1",
-      "patch_sha256": "f9c7921b4efb914580bab2b2dc246a23d661788525607e767e16c760cec9afef"
-    },
-    "plugins/context/api.py": {
-      "patch": "third_party/patches/telegram-latency.patch",
-      "reason": "Cumulative identity-set summaries, legacy explicit-reset compatibility, durable learning progress and recoverable model failures; preserve bounded background context maintenance.",
-      "sha256": "d46d67ba0d1f37f28343ec1b785acbaf53a2996f9534965178982d59504de9a9",
-      "patch_sha256": "f9c7921b4efb914580bab2b2dc246a23d661788525607e767e16c760cec9afef"
-    },
-    "plugins/context/plugin.py": {
-      "patch": "third_party/patches/telegram-latency.patch",
-      "reason": "Cumulative identity-set summaries, legacy explicit-reset compatibility, durable learning progress and recoverable model failures; preserve bounded background context maintenance.",
-      "sha256": "e56907e56e783a921ce0586bfe1f8558fddd4954fc29fbb41b1df69180e049c7",
-      "patch_sha256": "f9c7921b4efb914580bab2b2dc246a23d661788525607e767e16c760cec9afef"
-    },
-    "plugins/models/contract.py": {
-      "patch": "third_party/patches/telegram-latency.patch",
-      "reason": "Cumulative identity-set summaries, legacy explicit-reset compatibility, durable learning progress and recoverable model failures; preserve bounded background context maintenance.",
-      "sha256": "62fd0b9f330b22354f9223901593fa957812cca39421189d7c60b025347c1355",
-      "patch_sha256": "f9c7921b4efb914580bab2b2dc246a23d661788525607e767e16c760cec9afef"
-    },
-    "plugins/models/projection.py": {
-      "patch": "third_party/patches/telegram-latency.patch",
-      "reason": "Cumulative identity-set summaries, legacy explicit-reset compatibility, durable learning progress and recoverable model failures; preserve bounded background context maintenance.",
-      "sha256": "3faac57cb84f05cbc7ae0a846c5c8e7034a8919cbd15d01b5e268f2c9412134e",
-      "patch_sha256": "f9c7921b4efb914580bab2b2dc246a23d661788525607e767e16c760cec9afef"
-    },
-    "bundles/base.toml": {
-      "sha256": "454eb113878d61531ef28b090c10a08129b64be6c643e482b50d5b7d61bd60f7",
-      "patch": "third_party/patches/personal-assistant-experience.patch",
-      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022",
-      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."
-    },
-    "frontend/chat/src/chat-message.ts": {
-      "sha256": "cb4b875a006af4a5dc122404a7518cabb45075aa86d80fd5e4ca3cb23a65e139",
-      "patch": "third_party/patches/personal-assistant-experience.patch",
-      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022",
-      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."
-    },
-    "frontend/chat/src/components/ai-elements/prompt-input.tsx": {
-      "sha256": "109e85576331753f075ca90fb43073f74b8426b4428825c046c0cf09c8bd1f16",
-      "patch": "third_party/patches/personal-assistant-experience.patch",
-      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022",
-      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."
-    },
-    "frontend/chat/src/conversation-navigation.tsx": {
-      "sha256": "2eb3414146fe43742117c9f5b2e6f355076f4934c6817c3c7647c0113282b334",
-      "patch": "third_party/patches/personal-assistant-experience.patch",
-      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022",
-      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."
-    },
-    "frontend/chat/src/desktop-composer.tsx": {
-      "sha256": "cc39d9d0b4e2407252e2dddeadf07337351e9d7a858d098149da29f88bfd3a04",
-      "patch": "third_party/patches/personal-assistant-experience.patch",
-      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022",
-      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."
-    },
-    "frontend/chat/src/message-timeline.ts": {
-      "sha256": "7209134c4513d04400ccd7cd02f6bb85e96bcb55456eac0d61555491374babd4",
-      "patch": "third_party/patches/personal-assistant-experience.patch",
-      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022",
-      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."
-    },
-    "frontend/chat/src/message-view.css": {
-      "sha256": "6312707ec65d53aa26b7533c570d6e8d74f4e425780b2d907cabeff3b504758a",
-      "patch": "third_party/patches/personal-assistant-experience.patch",
-      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022",
-      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."
-    },
-    "frontend/chat/src/message-view.tsx": {
-      "sha256": "b0c57b6899b377a73a6da243ae8b560b002ff5097f9ba6352ab6767d17bd5d0d",
-      "patch": "third_party/patches/personal-assistant-experience.patch",
-      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022",
-      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."
-    },
-    "frontend/chat/src/plugin-ui-runtime.tsx": {
-      "sha256": "9465e01185af602d3afc22d98b53e658a237d4af272c45e691a7d61c001ab028",
-      "patch": "third_party/patches/personal-assistant-experience.patch",
-      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022",
-      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."
-    },
-    "frontend/chat/src/use-desktop-chat-controller.ts": {
-      "sha256": "1d9c4b2dbd569d754d8c0ccd4364385830ad25397d74580be59f0e3eb9c7d19a",
-      "patch": "third_party/patches/personal-assistant-experience.patch",
-      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022",
-      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."
-    },
-    "plugins/akashic_clients/web_chat.py": {
-      "sha256": "ec5baf5abd53a6e633ae1c508e3e8fa757fd5e547662a1d015acda88f1a23961",
-      "patch": "third_party/patches/personal-assistant-experience.patch",
-      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022",
-      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."
-    },
-    "plugins/gateway/protocol/models.py": {
-      "sha256": "690eee4584ba6187cb48c9104c60bedaf4dbb850deaf9bd8133ccf23679e5f0b",
-      "patch": "third_party/patches/personal-assistant-experience.patch",
-      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022",
-      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."
-    },
-    "plugins/gateway/schema/app-server-v2.json": {
-      "sha256": "be83c88176af900779bbd52c682633caf6edd64f8a755df0a1f16da6d228bba2",
-      "patch": "third_party/patches/personal-assistant-experience.patch",
-      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022",
-      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."
-    },
     "sdk/python/src/akashic_sdk/client.py": {
       "sha256": "18aeedd9f754b01c63620f3d4f48fd1976ce95b8f4b0868d2fbf92c450885333",
-      "patch": "third_party/patches/personal-assistant-experience.patch",
-      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022",
-      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."
-    },
-    "plugins/akasha/application/consumer.py": {
-      "patch": "third_party/patches/personal-assistant-experience.patch",
-      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
-      "sha256": "f37041f64c183331553786231d9f1475ac7bc7ac890b659c1dc9966caba6f380",
-      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
-    },
-    "plugins/models/store.py": {
-      "patch": "third_party/patches/personal-assistant-experience.patch",
-      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
-      "sha256": "b8462f130709c5efef1503c98fac7b0418fddb85450b575bf54d7686f9147b9e",
-      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
-    },
-    "plugins/reply/follow.py": {
-      "patch": "third_party/patches/personal-assistant-experience.patch",
-      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
-      "sha256": "106982277788ddc414edd2d789a163ac3e7203af03462889d0cb964f1f129f8c",
-      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
-    },
-    "plugins/delivery/execution.py": {
-      "patch": "third_party/patches/personal-assistant-experience.patch",
-      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
-      "sha256": "ed75e46aff3c90fc93fe8404bbdca59423f982bec8444695c4ea7b7337fea7ab",
-      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
-    },
-    "plugins/ui/contract.py": {
-      "patch": "third_party/patches/personal-assistant-experience.patch",
-      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
-      "sha256": "a3e6d35254a5dd149dbc59ffad7486e1bd9c696fc617f5d7683897c8c15c078d",
-      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
-    },
-    "plugins/subagent/runtime.py": {
-      "patch": "third_party/patches/personal-assistant-experience.patch",
-      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
-      "sha256": "a66e8b308aa41039eb86a36a398e2714c12208104a7c339839b9ebcad9d5654d",
-      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
-    },
-    "plugins/subagent/tools.py": {
-      "patch": "third_party/patches/personal-assistant-experience.patch",
-      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
-      "sha256": "8ec1c1a5b3f015fa629947bf59412e0a39677d78324f8658e6aba7f29129d90c",
-      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
-    },
-    "plugins/subagent/plugin.py": {
-      "patch": "third_party/patches/personal-assistant-experience.patch",
-      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
-      "sha256": "d5306f8fb6acc159dcf79b424ada062e9a1bd2e15e23db5020a65d86f9d5c83d",
-      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
-    },
-    "plugins/jobs/plugin.py": {
-      "patch": "third_party/patches/personal-assistant-experience.patch",
-      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
-      "sha256": "4aaff9d1452e79b27a94574fda545df812e00e256d176d4d67adbec3b24a9892",
-      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
-    },
-    "plugins/scheduler/schedule.py": {
-      "patch": "third_party/patches/tool-io-bounds.patch",
-      "reason": "Keep reminder dates anchored to actual user input, use elapsed durations across offset changes, and reject nonexistent or ambiguous wall times.",
-      "sha256": "a2f9d60c91200edf584d0ef3c1e3fbcd0b4ff217be3616421f46d8600df4cbe2",
-      "patch_sha256": "0130aface0820b23479739a696972ac4786ec6dede26b810ead55b73d45d92d8"
-    },
-    "plugins/computer/mcp_server.py": {
-      "patch": "third_party/patches/tool-io-bounds.patch",
-      "reason": "Selected upstream b53a0608: preserve readable webpage and JSON-RPC/control responses when driver text contains isolated UTF-16 surrogate characters.",
-      "sha256": "bcf7b51d5d20f887b2e9b2bd48b0ed9c541cabfbc5c1f6049e853d83fcc7994e",
-      "patch_sha256": "0130aface0820b23479739a696972ac4786ec6dede26b810ead55b73d45d92d8"
-    },
-    "agent/plugin_composition/__init__.py": {
-      "patch": "third_party/patches/personal-assistant-experience.patch",
-      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
-      "sha256": "0122aec9c55b0ae720f737243eff941bbd07a417964ddcb558b7888039ad07b8",
-      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
-    },
-    "agent/plugin_composition/runtime_lifecycle.py": {
-      "patch": "third_party/patches/personal-assistant-experience.patch",
-      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
-      "sha256": "6ab1a10185ed1bd6e1f8cde47001ca7eb8c4efa0e43490a2b4a8f3b803ef195a",
-      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
-    },
-    "frontend/chat/src/desktop-conversation.tsx": {
-      "patch": "third_party/patches/personal-assistant-experience.patch",
-      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
-      "sha256": "8ce7b17f9dfc6a3a45c3860e25135dfc68a49a99ac4586a1de39973617e97030",
-      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
-    },
-    "plugins/compaction/contract.py": {
-      "patch": "third_party/patches/personal-assistant-experience.patch",
-      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
-      "sha256": "009bb3df6415b724c7d8de92d4f2b9ae69d3aa91c11c00fc5948cb8b4b6deca5",
-      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
-    },
-    "plugins/context/contract.py": {
-      "patch": "third_party/patches/personal-assistant-experience.patch",
-      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
-      "sha256": "eed5457df73f97a99720cd6987e6c98951ae5a436033e1b1120cd443a9ab5101",
-      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
-    },
-    "plugins/plugin_update/plugin.py": {
-      "patch": "third_party/patches/personal-assistant-experience.patch",
-      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
-      "sha256": "002534590986bc4b59345896c720deeaa689bd691dd6e421f3cf670103066578",
-      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
-    },
-    "plugins/reply/plugin.py": {
-      "patch": "third_party/patches/personal-assistant-experience.patch",
-      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
-      "sha256": "51a33de63d7d62df79a27ab4110dbec4e14622596a8d111f850069ddaa023c65",
-      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
-    },
-    "plugins/scheduler/plugin.py": {
-      "patch": "third_party/patches/personal-assistant-experience.patch",
-      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
-      "sha256": "49922f4049d39fa5d1853b1962663529b8cd1aee9ea1c6a71dde90aaf869025b",
-      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
-    },
-    "plugins/tools/plugin.py": {
-      "patch": "third_party/patches/personal-assistant-experience.patch",
-      "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
-      "sha256": "4b39a2e572a010dc9dcff445afb529487e8e0a05e75420018258402cf7987d1e",
-      "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022"
-    },
-    "bundles/minimal.toml": {
-      "sha256": "f3920cd9b459ef81dd98e8615bde12f192ec76a9f0837287fb4491ca53718583",
       "patch": "third_party/patches/personal-assistant-experience.patch",
       "patch_sha256": "3b122ccc776de696cc9a82edfab63872e02bd7b22dd79369734dd7cc94867022",
       "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."

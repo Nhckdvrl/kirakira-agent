@@ -36,6 +36,13 @@ source evidence, optional candidate rank fusion, extractive evidence windows,
 receipt-bound original-text reads, SDK integration and evaluation tooling. They extend the existing learning and
 persistence owners rather than replacing source provenance.
 
+Programmatic admission accepts an optional memory scope, adopted from upstream
+`6d7e25bf`. The learning axis only governs whether a session is written to
+memory; whether it is recalled from comes from the recall policy of each scope
+dimension the session carries, so a session with no scope satisfied that
+condition vacuously and kept receiving recall. Recorded in
+`third_party/patches/programmatic-memory-scope.patch`.
+
 Local patches also cover distribution branding, account-default compatibility,
 the zsh snapshot fix, zero-turn rebuild validation, and Web build staging.
 Generated plugin assets are rebuilt from registered frontend sources and the npm
