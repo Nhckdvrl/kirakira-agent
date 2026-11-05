@@ -386,6 +386,11 @@ uv run --frozen --no-sync python -m eval.memory_depth --suite window-v1 \
 
 评分沿用严格规则：答案必须等于参考编号（或 UNKNOWN），引用必须指向本次查询确实呈现过的原文，且被引证据要包含该编号。报告里的 `initial_material_chars` 与 `initial_material_sha256` 同时给出两臂各自花掉多少、以及材料确实不同。
 
+报告里有两类并列的分母，不要混读：
+
+- `reference_reachable / answerable`：**不经过模型**的确定性判定——参考编号是否确实出现在本次回执准入可读的原文里。它回答"省掉正文是推迟了还是丢了"。
+- `answerable_correct / answerable` 与 `answerable_correct_of_answered / answerable_answered`：前者分母是全部可回答题，后者只算 reader 真的返回了函数调用的那些。`protocol_failures` 单独给出"返回散文而非函数调用"的次数——那不是答错，是没答；混进答错会让小分母被供应商行为主导。
+
 它只覆盖一个合成导航夹具和一个模型，不能证明窗口规则对"答案就在初始材料里"的对话同样无损，也不能证明更弱的模型跟得上索引行。
 
 ### 记忆场景亮点
