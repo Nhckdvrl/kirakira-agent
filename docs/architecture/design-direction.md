@@ -1,6 +1,6 @@
 # 个人 AI 伙伴：定位、体验与设计依据
 
-基础调研日期：2026-10-21；2026-10-22 补充核对个人伙伴、主动交互和记忆导航，2026-10-23 核对对话交办与自动化管理的官方文档和实现，2026-10-31 补充已有邮件、期限提醒与后台回访的日常体验要求。以下是设计输入，不是能力排名，也不代表已把其他项目的机制全部实现。只有本项目实际运行的实验进入本项目的结果表。
+基础调研日期：2026-10-21；2026-10-22 补充核对个人伙伴、主动交互和记忆导航，2026-10-23 核对对话交办与自动化管理的官方文档和实现，2026-10-31 补充已有邮件、期限提醒与后台回访的日常体验要求。以下是设计输入：读这些实现是为了决定本项目怎么做，不是为了排名。结果表只收本项目实际跑过的实验。
 
 ## 产品定位
 
@@ -9,6 +9,16 @@
 它面向日常交流、学习、兴趣、生活安排和个人工作。用户可以随时找它聊天或交办事情；它能够利用过去的相处与记录理解当下，在新信息值得关注时主动联系用户，并在后台继续处理已经交付的工作。长期记忆、主动交互和持续行动共同组成体验。
 
 “个人 AI 伙伴”是整体产品定位。“持续跟进”是其中一条工作流；“可追溯、可纠正”是这条工作流已经做出的具体设计。它们帮助证明产品，而不是把产品限制成邮件监控或项目提醒工具。插件、图检索和持久账本属于支撑机制，不能代替用户体验。
+
+### 这个项目把什么做成了特色
+
+三件事是本项目真正下了功夫、并且有测量支撑的：
+
+**记忆可取证。** 召回不止给出片段，还留下不可变回执：呈现过哪些消息、原文的精确字符范围、来源会话与时间。之后可以沿同一回执读回原文窗口，而且只能读这次确实呈现过的消息——准入由回执决定。每次读取在 Ledger 留下绑定真实调用的证明。于是"它凭什么这么说"始终可查。
+
+**预算只花在看不到的东西上。** 原文仍在当前对话里的候选不重复注入正文，改为一行索引并保留可读回出处的 `ref`；判断在首次查询时冻结进回执，重渲染与重启字节一致。每轮实时召回注入因此由 2393 字降到 757 字。
+
+**主动交互可以被纠正。** 历史条件参与今天的判断；用户改口后，同一内容可以按新规则复查，旧决定与原文都保留。送达反馈按有界权重影响同一来源后续条目的门槛，明确要求逐条调查的条目不受影响。
 
 ### 三种交互，共用一份相处经历
 
@@ -89,18 +99,18 @@ Kirakira 当前将跟进管理限制在创建它的对话内；跨对话管理�
 
 | 项目与一手材料 | 具体机制 | 对本项目的启发 |
 | --- | --- | --- |
-| [Pi](https://pi.dev/) 与 [Pi Durable](https://earendil.com/posts/pi-durable/) | 小内核、扩展、自定义上下文；长期执行已有专门实验 | 解释为何保留完整 Runtime 以及复杂性换来的行为，不能把持久化本身称作独有优势 |
+| [Pi](https://pi.dev/) 与 [Pi Durable](https://earendil.com/posts/pi-durable/) | 小内核、扩展、自定义上下文；长期执行已有专门实验 | 说明保留完整 Runtime 换来了哪些可观察行为，并用长期执行实验验证 |
 | [Maka](https://github.com/apache/maka) | 执行日志是运行事实，界面和恢复是其投影；评测公开逐任务记录 | 评测层管理实验与评分，执行仍交给正式链路；报告失败、条件和分母 |
 | [OpenClaw Memory](https://github.com/openclaw/openclaw/blob/main/docs/concepts/memory.md) | 档案、每日记录、后台整理、来源准入与可追溯提升 | 记忆写入资格、日常召回、长期提炼需要分别定义，后台整理不应把外部文字自动升级为主人指令 |
 | [Letta Code MemFS](https://github.com/letta-ai/letta-code/blob/main/src/agent/prompts/letta_local_memfs.md) | 核心记忆与外部记忆分层；提交的版本参与后续上下文编译 | 明确“文件已写入”和“当前请求已使用”的区别，保持少量常驻档案与按需历史读取 |
 | [Graphiti 的边记录](https://github.com/getzep/graphiti/blob/main/graphiti_core/edges.py) | 事实有效起止时间与记录过期字段分开 | 消息时间筛选不能冒充事实时态；真正的事实有效期需要抽取、更正与消歧协议 |
 | [Mem0 当前 README](https://github.com/mem0ai/mem0) | 本轮读取的 v2 介绍采用单次 ADD-only 抽取，并组合语义、BM25、实体和时间信号；与旧版更新路径应区分 | 记忆系统会改变设计，比较必须固定版本和实际路径；不能用旧实现描述新版本，或只比较一次向量查询成本 |
 | [Hindsight](https://github.com/vectorize-io/hindsight) | retain、recall、reflect 分离，记忆类型与 mental models | 观察、推断和长期总结应能区分，跨场景的推断不能替代原始证据 |
-| [Mastra Observational Memory](https://mastra.ai/docs/memory/observational-memory) | 观察与后续压缩组织长历史；retrieval 模式还能从观察回到原始消息 | 回源本身并非独有机制；需要做好本项目中的范围、原文证据、后续执行和恢复，并测完整交互 |
+| [Mastra Observational Memory](https://mastra.ai/docs/memory/observational-memory) | 观察与后续压缩组织长历史；retrieval 模式还能从观察回到原始消息 | 本项目把回源做成受准入控制的能力：范围隔离、原文证据、读取留痕，并测完整交互 |
 | [Hermes Memory](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/features/memory.md) | 有容量限制的常驻记忆与会话搜索协作，另有程序性 Skill | 不把所有经历塞进常驻 Prompt；稳定偏好、具体历史和可复用操作方法分别组织 |
-| [Nanobot Automations](https://github.com/HKUDS/nanobot/blob/main/docs/automations.md) | 明确区分定时、心跳与事件触发的自动化入口 | 主动行为首先需要可靠触发、停止和交付语义；“会主动”还不是通知有用的证据 |
+| [Nanobot Automations](https://github.com/HKUDS/nanobot/blob/main/docs/automations.md) | 明确区分定时、心跳与事件触发的自动化入口 | 主动行为先把触发、停止与交付语义做确定，再用有用提醒与误打扰分别计量 |
 | [OpenClaw 自动化](https://docs.openclaw.ai/automation/cron-jobs)与[长期意图](https://docs.openclaw.ai/concepts/standing-intents) | 自动化入口与主人明确创建的长期意图分工，长期意图有范围、到期与冷却等状态 | 明确要求持续跟进的事，应有可检查的来源与停止控制；不应完全依赖模型猜测兴趣 |
-| [memU](https://github.com/NevaMind-AI/MemU) | 当前介绍强调跨会话与跨 Agent 的可读 Wiki、历史转为可复用 Skill，以及渐进检索 | 经历、稳定偏好与可复用方法分工；拥有记忆库还不足以说明伙伴体验，需要证明后续交流与行动中的实际用途 |
+| [memU](https://github.com/NevaMind-AI/MemU) | 当前介绍强调跨会话与跨 Agent 的可读 Wiki、历史转为可复用 Skill，以及渐进检索 | 经历、稳定偏好与可复用方法分工；用后续交流与行动中的实际用途来验收记忆，而不是用库的存在 |
 | [Deep Agents 架构](https://github.com/langchain-ai/deepagents/blob/main/libs/ARCHITECTURE.md) | Harness middleware、后端与底层图 Runtime 分工 | 扩展行为、模型循环和持久执行分别有 owner；增加一个功能不应再造另一套运行权威 |
 | [OpenClaw 人格](https://github.com/openclaw/openclaw/blob/main/docs/reference/templates/SOUL.md)与[Heartbeat](https://github.com/openclaw/openclaw/blob/main/docs/gateway/heartbeat.md) | 人格和持续联系由可编辑的工作区约定与后台触发共同承载 | 人格文字必须有对应运行行为；主动交流需要上下文、合适时机、保持安静和停止控制 |
 | [QwenPaw（原 CoPaw）](https://github.com/agentscope-ai/QwenPaw) | 官方介绍将个人助理、多聊天入口、记忆演进、Heartbeat 和定时工作放在同一产品中 | 陪伴、个人助理和主动性可以共同存在，不能因为某次评测选了邮件或研究就把产品收窄 |
@@ -124,7 +134,7 @@ Kirakira 当前将跟进管理限制在创建它的对话内；跨对话管理�
 
 ## 个人 Agent 的日常工作流
 
-以下补充读取了 2026 年 10 月 21 日可访问的官方介绍、手册和开源实现。Muse、Dots、Grok Bot 是闭源产品，只用于研究用户流程，不能据此推断内部实现。项目是否“热门”没有进入技术选择依据。
+以下补充读取了 2026 年 10 月 21 日可访问的官方介绍、手册和开源实现。Muse、Dots、Grok Bot 是闭源产品，只用于研究用户流程，不推断其内部实现。
 
 | 一手资料 | 已公开的行为 | 在 Kirakira 中采用的设计输入 |
 | --- | --- | --- |
@@ -141,7 +151,7 @@ Kirakira 当前将跟进管理限制在创建它的对话内；跨对话管理�
 
 ### 先做成哪些事情
 
-这轮选择的第一条完整路径是：**持续跟进一件已讨论过的事，在新信息出现时结合当前安排决定是否联系用户。** 已有发布订阅和静态网页接入，使用同一套历史范围、调查、来源核对与确认投递。它是可演示的工作流，不声称其他产品没有。
+这轮选择的第一条完整路径是：**持续跟进一件已讨论过的事，在新信息出现时结合当前安排决定是否联系用户。** 已有发布订阅和静态网页接入，使用同一套历史范围、调查、来源核对与确认投递。它是一条端到端可演示的工作流：从原始对话建立关注，到结合历史判断、核对来源、确认投递，每一步都有可查的记录。
 
 | 场景 | 用户实际得到什么 | 接入和下一步设计 | 验收方式 |
 | --- | --- | --- | --- |

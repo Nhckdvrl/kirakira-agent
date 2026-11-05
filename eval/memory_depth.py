@@ -432,11 +432,15 @@ async def evaluate(args):
                 assert (await queries.source(request)).model_dump(mode="json") == expected
                 verified += 1
             denied = 0
-            example = records.list()[0]
+            # A window-index receipt presents no bodies at all, so the scope check
+            # needs a receipt that actually admits something to be denied across.
+            example = next((row for row in records.list() if row[1].admitted_message_ids),
+                           records.list()[0])
+            admitted = example[1].admitted_message_ids
             for request in (
                 MemorySourceQuery(session_id="evaluation:reader", retrieval_ref=example[0], message_id=next(
-                    m.message_id for m in messages if m.message_id not in example[1].presented_message_ids)),
-                MemorySourceQuery(session_id="evaluation:other-scope", retrieval_ref=example[0], message_id=example[1].presented_message_ids[0]),
+                    m.message_id for m in messages if m.message_id not in admitted)),
+                MemorySourceQuery(session_id="evaluation:other-scope", retrieval_ref=example[0], message_id=admitted[0]),
             ):
                 try:
                     await queries.source(request)
