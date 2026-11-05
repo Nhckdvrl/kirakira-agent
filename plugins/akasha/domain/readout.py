@@ -7,11 +7,10 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .diffusion import residual_push
+from .diffusion import TransitionCache, residual_push
 from .features import (
     FeaturePool,
     _sparsemax,
-    _tail_surprisal,
     binary_entropy,
 )
 from .graph import (
@@ -88,17 +87,14 @@ class TemporalGraphView:
     def __init__(self, graph: DynamicMemoryGraph) -> None:
         self.graph = graph
         self.max_nodes = graph.max_nodes
-        self._transition_cache: dict[
-            int,
-            tuple[tuple[tuple[int, float, int], ...], float],
-        ] = {}
+        self.transition_cache = TransitionCache()
 
     def transitions(
         self,
         node_id: int,
         event: int,
     ) -> tuple[tuple[tuple[int, float, int], ...], float]:
-        cached = self._transition_cache.get(node_id)
+        cached = self.transition_cache.get(node_id)
         if cached is not None:
             return cached
         weighted: list[tuple[int, float, int]] = []
@@ -120,7 +116,7 @@ class TemporalGraphView:
         total = math.fsum(weight for _, weight, _ in weighted)
         if total == 0.0:
             result = ((), 1.0)
-            self._transition_cache[node_id] = result
+            self.transition_cache[node_id] = result
             return result
         spread = -math.expm1(-total)
         result = (
@@ -130,7 +126,7 @@ class TemporalGraphView:
             ),
             1.0 - spread,
         )
-        self._transition_cache[node_id] = result
+        self.transition_cache[node_id] = result
         return result
 
 
@@ -766,18 +762,10 @@ def _evidence_fields(
             for term, value in query.user_terms
         }
     )
-    current_dense = _tail_surprisal(
-        pool.dense_scores(query.user_dense, index)
-    )
-    current_bm25 = _tail_surprisal(
-        pool.bm25_scores(query_terms, index)
-    )
-    context_dense = _tail_surprisal(
-        pool.dense_scores(context.dense, index)
-    )
-    context_bm25 = _tail_surprisal(
-        pool.bm25_scores(dict(context.terms), index)
-    )
+    current_dense = pool.dense_surprisal(query.user_dense, index)[1]
+    current_bm25 = pool.bm25_surprisal(query_terms, index)[1]
+    context_dense = pool.dense_surprisal(context.dense, index)[1]
+    context_bm25 = pool.bm25_surprisal(dict(context.terms), index)[1]
     current = current_dense + current_bm25
     same_event = current + context_dense + context_bm25
     return {

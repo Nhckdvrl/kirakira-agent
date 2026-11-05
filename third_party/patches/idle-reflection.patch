@@ -25,11 +25,10 @@
 +DRIFT_INITIATIVE = ServiceKey[DriftInitiative]("drift.initiative.v1")
 --- a/plugins/drift/store.py
 +++ b/plugins/drift/store.py
-@@ -188,6 +188,23 @@
-                     "state_version": 1,
+@@ -189,6 +189,23 @@
                  },
              }
-+
+ 
 +    def proposal_status(self, proposal_id: str, revision: str) -> str | None:
 +        """Owner-local producer observation; execution state remains in this store."""
 +        with self._transaction(write=False) as connection:
@@ -46,6 +45,7 @@
 +                (datetime.now(UTC).isoformat(), proposal_id, revision),
 +            )
 +            return changed.rowcount == 1
- 
++
      def snapshot(self, now: datetime) -> DriftSnapshot:
          """Return the next durable deadline and frozen due proposals."""
+ 

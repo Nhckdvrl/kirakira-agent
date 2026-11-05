@@ -1796,7 +1796,27 @@
          return value
  
      def close(self) -> None:
-@@ -1152,7 +1195,7 @@
+@@ -1016,6 +1059,19 @@
+             lambda: self.sessions(prefix=prefix, visibility=visibility, after=after, limit=limit)
+         )
+ 
++    def prefix_revision(self) -> int | None:
++        """已提交消息前缀的改写计数：只追加时不变，UPDATE/DELETE/改写式插入后递增。
++
++        跨重启保存的投影续读点据此判断前缀未被改写；库缺少该标记时返回 None，调用方不能复用。
++        """
++        log = self._log
++        if not log._has_prefix_revision:
++            return None
++        with log._read(snapshot=False) as connection:
++            return int(connection.execute(
++                "SELECT revision FROM message_prefix_revision WHERE singleton=1"
++            ).fetchone()[0])
++
+     async def snapshot_heads_async(
+         self, *, prefix: str = "", visibility: Literal["listed", "internal"] | None = None,
+     ) -> Mapping[str, int]:
+@@ -1152,7 +1208,7 @@
                  # 这段全会话水位查询在 worker 内排水，不阻塞事件循环上的其他订阅者。
                  heads = (await self.snapshot_heads_async(prefix=prefix, visibility=visibility)
                           if polled or prefix or visibility is not None
@@ -1805,7 +1825,7 @@
                  if heads != previous:
                      previous = heads
                      yield heads
-@@ -2295,6 +2338,21 @@
+@@ -2295,6 +2351,21 @@
              lambda: self._save(key, value, expected_version=expected_version)
          )
  

@@ -10,11 +10,29 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .diffusion import TransitionCache
 from .model import DiffusionResult, MemoryConfig, PlasticityResult, SeedEvidence
 
 MEMBERSHIP = 0
 TEMPORAL_FORWARD = 1
 TEMPORAL_BACKWARD = 2
+# 持久化的逐边列；发布时与上次发布的副本逐位比对，只重写变化的边。
+EDGE_COLUMNS = (
+    "source", "target", "weight", "last_updated", "created_event", "observed_credit",
+    "recurrent_credit", "support_credit", "independent_credit", "last_support_seconds",
+    "resource", "plasticity_threshold", "last_stimulated_seconds",
+)
+
+
+@dataclass(frozen=True)
+class PublishedGraph:
+    """Remember what the durable snapshot already holds so the next publish writes only the difference."""
+
+    turn_count: int
+    edge_count: int
+    hub_count: int
+    columns: dict[str, np.ndarray]
+    external: dict[int, float]
 
 
 @dataclass(frozen=True)
@@ -96,13 +114,35 @@ class DynamicMemoryGraph:
         self.last_external_seed_seconds: dict[int, float] = {}
         self.current_external: dict[int, float] = {}
         self.current_event = -1
-        self._transition_cache: dict[
-            int,
-            tuple[tuple[tuple[int, float, int], ...], float],
-        ] = {}
+        self.transition_cache = TransitionCache()
         # 读出侧 basin 结构缓存：按 hub 创建事件记录，学习改过成员权重的 hub 记为脏；None 表示全部重算。
         self.basin_cache: dict[int, object] = {}
         self._dirty_basins: set[int] | None = None
+        self.published: PublishedGraph | None = None
+
+    def mark_published(self) -> None:
+        """Record the state just made durable; only called after the snapshot commit succeeded."""
+
+        self.published = PublishedGraph(
+            turn_count=self.turn_count,
+            edge_count=len(self.source),
+            hub_count=len(self.hubs),
+            columns={name: _column(getattr(self, name)).copy() for name in EDGE_COLUMNS},
+            external=dict(self.last_external_seed_seconds),
+        )
+
+    def changed_edges(self) -> list[int]:
+        """Return published edges whose persisted columns differ bit-for-bit from the last publish."""
+
+        published = self.published
+        if published is None:
+            raise RuntimeError("graph has no published snapshot")
+        count = published.edge_count
+        changed = np.zeros(count, dtype=bool)
+        for name in EDGE_COLUMNS:
+            current = _column(getattr(self, name))[:count]
+            changed |= current.view(np.uint64) != published.columns[name].view(np.uint64)
+        return [int(edge) for edge in np.flatnonzero(changed)]
 
     def take_dirty_basins(self) -> set[int] | None:
         dirty = self._dirty_basins
@@ -129,7 +169,7 @@ class DynamicMemoryGraph:
             return
         old_turn_count = self.turn_count
         offset = turn_count - old_turn_count
-        self._transition_cache.clear()
+        self.transition_cache.clear()
 
         # 2. Shift every engram above the expanded contiguous turn range.
         def remap(node_id: int) -> int:
@@ -180,7 +220,7 @@ class DynamicMemoryGraph:
                 self.turn_count, self.max_nodes, self.source, self.target,
                 self.hubs, self.hub_members, self.adjacency,
             ) = previous
-            self._transition_cache.clear()
+            self.transition_cache.clear()
 
     def capture_retrieval_state(self) -> RetrievalState:
         """Snapshot causal clocks without copying graph topology or weights."""
@@ -229,7 +269,7 @@ class DynamicMemoryGraph:
         )
         self.current_external = dict(state.current_external)
         self.current_event = state.current_event
-        self._transition_cache.clear()
+        self.transition_cache.clear()
 
     @property
     def resource_tau_seconds(self) -> float:
@@ -293,7 +333,7 @@ class DynamicMemoryGraph:
         gap = 0.0 if gap_seconds is None else gap_seconds
         self.elapsed_seconds += gap
         self._observe_gap(gap)
-        self._transition_cache.clear()
+        self.transition_cache.clear()
 
         # 2. Record only query-owned evidence as independent reactivation.
         direct_nodes = evidence.channels.get(
@@ -327,7 +367,7 @@ class DynamicMemoryGraph:
 
         if event < self.current_event:
             raise ValueError("relation state cannot move backwards in time")
-        cached = self._transition_cache.get(node_id)
+        cached = self.transition_cache.get(node_id)
         if cached is not None:
             return cached
         weighted: list[tuple[int, float, int]] = []
@@ -341,7 +381,7 @@ class DynamicMemoryGraph:
         total = math.fsum(value for _, value, _ in weighted)
         if total == 0.0:
             result = ((), 1.0)
-            self._transition_cache[node_id] = result
+            self.transition_cache[node_id] = result
             return result
         spread = -math.expm1(-total)
         transitions = tuple(
@@ -349,7 +389,7 @@ class DynamicMemoryGraph:
             for target, value, edge_id in weighted
         )
         result = (transitions, 1.0 - spread)
-        self._transition_cache[node_id] = result
+        self.transition_cache[node_id] = result
         return result
 
     def apply_feedback_inhibition(
@@ -381,7 +421,7 @@ class DynamicMemoryGraph:
         credit = math.log(gain)
         affected_hubs: set[int] = set()
         affected_sources: set[int] = set()
-        self._transition_cache.clear()
+        self.transition_cache.clear()
 
         # 2. Potentiate the target membership without creating neighbor relations.
         for node_id in sorted(node_ids):
@@ -423,7 +463,7 @@ class DynamicMemoryGraph:
         """Adapt exposed relations and store the current event in one state."""
 
         # 1. Convert direct and completed recall into one continuous activity field.
-        self._transition_cache.clear()
+        self.transition_cache.clear()
         observed, activity = self._event_activity(event, evidence, diffusion)
         turn_nodes = np.flatnonzero(activity[: self.turn_count] > 0.0)
         values = activity[turn_nodes]
@@ -1174,6 +1214,11 @@ class DynamicMemoryGraph:
         return threshold + (1.0 - threshold) * -math.expm1(
             -(activity * activity)
         )
+
+
+def _column(values: array) -> np.ndarray:
+    dtype = np.float64 if values.typecode == "d" else np.int64
+    return np.frombuffer(values, dtype=dtype) if len(values) else np.empty(0, dtype=dtype)
 
 
 def _entmax15(logits: np.ndarray) -> tuple[tuple[int, float], ...]:

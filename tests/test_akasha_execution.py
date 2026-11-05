@@ -448,8 +448,10 @@ async def test_graph_discovery_reuses_notified_heads_and_cutover_io_drains(tmp_p
             await asyncio.gather(discovery, return_exceptions=True)
 
         gate = WorkerGate()
-        def snapshot():
-            result = original()
+        def snapshot(*args, **kwargs):
+            # The catalog now passes a prefix filter; the fake forwards whatever
+            # the caller used so the gate keeps measuring the real call.
+            result = original(*args, **kwargs)
             gate.stop()
             return result
 
@@ -501,8 +503,10 @@ async def test_consumption_snapshot_and_membership_are_nonblocking_fixed_and_can
         gate = WorkerGate()
         admitted = []
 
-        def snapshot():
-            result = original()
+        def snapshot(*args, **kwargs):
+            # The catalog now passes a prefix filter; the fake forwards whatever
+            # the caller used so the gate keeps measuring the real call.
+            result = original(*args, **kwargs)
             gate.stop()
             return result
 
@@ -1009,3 +1013,41 @@ def test_inspector_distinguishes_body_index_quoted_and_undelivered(tmp_path):
         assert presented == {body: True, line: False, quoted: False, undelivered: False}
     finally:
         log.close()
+
+
+def test_a_pre_v3_checkpoint_demands_an_explicit_rebuild(tmp_path):
+    """A graph published under the old schema must not be silently republished.
+
+    Before schema v3 the edge weights varied with the clock and dense reduction
+    was multi-threaded, so such a checkpoint's online trajectory cannot be
+    reproduced from the log. Continuing would rewrite it as v3 and make an
+    unreplayed graph indistinguishable from a migrated one.
+    """
+    import sqlite3
+
+    from plugins.akasha.domain.model import MemoryRebuildRequiredError
+    from plugins.akasha.infrastructure.persistence import load_consumption
+
+    graph = tmp_path / "akasha.db"
+    with sqlite3.connect(graph) as connection:
+        _ = connection.execute("CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT)")
+        _ = connection.execute("INSERT INTO metadata VALUES ('consumer_state_json', '{}')")
+        _ = connection.execute("PRAGMA user_version = 2")
+
+    before = graph.read_bytes()
+    try:
+        load_consumption(graph)
+    except MemoryRebuildRequiredError as error:
+        assert "v2" in str(error) and "v3" in str(error)
+        assert "重建" in str(error), "the operator needs to be told what to do"
+    else:
+        raise AssertionError("a pre-v3 checkpoint was accepted")
+    # Reading must not touch the old checkpoint; rebuilding stays the owner's call.
+    assert graph.read_bytes() == before
+
+    # A graph with no version recorded at all is left to the existing checks,
+    # which report a missing consumption provenance rather than a schema age.
+    unversioned = tmp_path / "unversioned.db"
+    with sqlite3.connect(unversioned) as connection:
+        _ = connection.execute("CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT)")
+    assert load_consumption(unversioned) is None

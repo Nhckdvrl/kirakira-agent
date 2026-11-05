@@ -1,3 +1,418 @@
+--- a/plugins/akasha/application/consumer.py
++++ b/plugins/akasha/application/consumer.py
+@@ -3,15 +3,20 @@
+ 
+ from dataclasses import replace
+ import asyncio
+-from collections.abc import Awaitable, Callable
++import hashlib
++import os
++import time
++from collections.abc import Awaitable, Callable, Mapping, Sequence
+ from datetime import datetime
+ from itertools import groupby
+-from functools import partial
++from functools import cache, partial
+ from pathlib import Path
+-from typing import TYPE_CHECKING
++from typing import TYPE_CHECKING, Literal
++
++from pydantic import BaseModel, ConfigDict
+ 
+ from plugins.ledger.contract import Bindings
+-from plugins.ledger.contract import MessageCatalog, MessageEmbeddings, Message, Input
++from plugins.ledger.contract import EmbeddingRecords, MessageCatalog, MessageEmbeddings, Message, Input
+ 
+ from ..domain.features import BurstAwareFeaturePool
+ from ..domain.model import (
+@@ -23,18 +28,61 @@
+ )
+ from ..infrastructure.consumption import Applied, Consumption, Skipped
+ from ..infrastructure.lease import WriterLease
++from ..infrastructure.lexical import TermCache, Terms, terms as lexical_terms
+ from ..infrastructure.persistence import load_consumption, load_memory_state, write_memory_database
+ from .cycle import MemoryCycle
+ 
+ if TYPE_CHECKING:
+     from ..projection import Sample, SessionCursor
+-    from ..learning import LearningConfig
++    from ..learning import Learning, LearningConfig
+ 
+ 
+ type RestoreEmbeddings = Callable[["LearningConfig", list[str]], Awaitable[list[list[float]]]]
+ 
+ # 在线连续学习最多攒这么多条再发布一次；未发布的尾部崩溃后由日志按原序重学。
+ PUBLISH_EVERY = 16
++# 启动还原每块最多解码这么多条已学样本；整图一次解码会让大工具输出同时驻留。
++LOAD_CHUNK = 256
++# 落盘续读点最多这么久写一次；落后的续读点只多投影一段，已学和已跳过的闭段仍被过滤。
++CURSOR_SAVE_SECONDS = 60.0
++# 决定"哪些消息组成样本、哪些样本被准入"的代码所在的包；任一源码变了，落盘续读点作废。
++# content 提供历史消息的 post-commit effect 解释，直接决定准入。
++_PROJECTION_PACKAGES = ("akasha", "turn_projection", "ledger", "content")
++
++
++# 投影与准入实现的源码指纹：规则相同但实现变了时，旧续读点可能越过新实现会接纳的闭段。
++# 读不全源码时返回空串，本进程既不复用也不保存落盘续读点，退回从头投影。
++@cache
++def _projection_code() -> str:
++    plugins = Path(__file__).resolve().parents[2]
++    digest = hashlib.sha256()
++    try:
++        for package in _PROJECTION_PACKAGES:
++            for path in sorted((plugins / package).rglob("*.py")):
++                if "__pycache__" in path.parts:
++                    continue
++                digest.update(path.relative_to(plugins).as_posix().encode())
++                digest.update(path.read_bytes())
++    except OSError:
++        return ""
++    return digest.hexdigest()
++
++
++class _SavedCursors(BaseModel):
++    """随已发布快照保存的投影续读点；只在同一学习规则、同一前缀 revision、同一消费进度前缀下复用。
++
++    learning binding 的身份含插件 generation，每次部署都会变；投影只取决于规则与投影实现，
++    所以落盘续读点按规则加投影代码指纹匹配，内存续读点仍按 binding。
++    """
++
++    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
++
++    version: Literal[2] = 2
++    learning_rule: str
++    prefix_revision: int
++    applied: tuple[int, str | None]
++    skipped: tuple[int, str | None]
++    cursors: dict[str, tuple[int, dict[str, int]]]
+ 
+ 
+ class MessageConsumer:
+@@ -56,8 +104,13 @@
+         self._error: BaseException | None = None
+         self._closed = False
+         self._embedding_model: str | None = None
+-        # 投影续读点只在一批成功消费后前进；换学习绑定或新实例都从头投影。
+-        self._cursors: tuple[str, dict[str, SessionCursor]] = ("", {})
++        # 投影续读点只在一批成功消费后前进；换学习绑定或前缀被改写时从头投影。
++        # 新实例从落盘续读点恢复，重启不再整段解码全部历史。
++        self._cursors: tuple[str, int | None, dict[str, SessionCursor]] = ("", None, {})
++        self._cursor_path = path.with_name(path.name + ".cursors.json")
++        self._cursor_file_read = False
++        self._cursor_rule = ""
++        self._cursors_saved_at: float | None = None
+         self._lease = WriterLease(path)
+         try:
+             # 1. 恢复只能装载已发布图；缺图不能触发历史重学。
+@@ -116,20 +169,30 @@
+         embeddings: MessageEmbeddings, bindings: Bindings,
+         config: MemoryConfig, cutover: bool = True,
+         restore_embeddings: RestoreEmbeddings | None = None,
++        term_cache: Path | None = None,
+     ) -> MessageConsumer:
+         """先按原绑定还原材料，再取得唯一 writer 装载图；缺失来源不自动重学。"""
+         from ..learning import AKASHA_LEARNING, LearningConfig
+ 
+         # 1. 第一次启用固定已有日志上界，重启前也必须把空图与起点一起发布。
+         #    独立图的成员从接纳起就固定路由到它，不设上界而从头学习。
+-        if not path.exists():
++        def read_state() -> tuple[bool, Consumption | None]:
++            if path.exists():
++                return True, load_consumption(path)
+             heads = catalog.snapshot_heads().items() if cutover else ()
+-            state = Consumption(cutover_heads=tuple(sorted(heads)))
+-            return await cls.create(path, turns=[], state=state, config=config)
+-        state = await run_memory_job(partial(load_consumption, path))
++            return False, Consumption(cutover_heads=tuple(sorted(heads)))
++
++        exists, state = await run_memory_job(read_state)
+         if state is None:
+             raise MemoryRebuildRequiredError("学习图缺少当前消费出处，需要显式重建")
++        if not exists:
++            return await cls.create(path, turns=[], state=state, config=config)
+         # 2. 按原算法验证出处，缺失向量由明确的模型端口补算；不调用学习 commit。
++        #    分词是纯函数，按正文哈希复用上次结果，只有新正文现场切分。
++        cache = None if term_cache is None else TermCache(term_cache)
++        if cache is not None:
++            await run_memory_job(cache.load)
++        terms = lexical_terms if cache is None else cache.terms
+         turns: list[Turn] = []
+         space: str | None = None
+         for identity, grouped in groupby(state.applied, key=lambda entry: entry.learning_binding):
+@@ -139,36 +202,17 @@
+                 await run_memory_job(lambda: _check_embedding_space(
+                     rule.embedding_model, rule.dimension, space, turns,
+                 ))
+-                samples = await run_memory_job(lambda: tuple(
+-                    learning.load_sample(catalog, rule, entry) for entry in entries
+-                ))
+-                records = embeddings.bind(learning.text)
+-                def missing_vectors() -> list[Message]:
+-                    messages = {message.message_id: message for sample in samples
+-                                for message in sample.messages
+-                                if isinstance(message.body, Input) or message == sample.ending}
+-                    return [message for message in messages.values() if learning.text(message).strip()
+-                            and records.read(message, model=rule.embedding_model, dimension=rule.dimension) is None]
+-                missing = await run_memory_job(missing_vectors)
+-                if missing:
+-                    if restore_embeddings is None:
+-                        raise MemoryRebuildRequiredError("派生向量缺失；当前只读调用没有模型补算权限")
+-                    vectors = await restore_embeddings(rule, [learning.text(message) for message in missing])
+-                    if len(vectors) != len(missing) or any(len(vector) != rule.dimension for vector in vectors):
+-                        raise ValueError("补算向量数量或维度不匹配原学习空间")
+-                    def save_vectors() -> None:
+-                        for message, vector in zip(missing, vectors, strict=True):
+-                            records.save(message, model=rule.embedding_model, embedding=vector)
+-                    await run_memory_job(save_vectors)
+-                def restore_entries() -> None:
+-                    """按原前缀逐条恢复；后一条只能读取已完成的 previous。"""
+-                    for sample in samples:
+-                        turns.append(learning.restore(
+-                            sample, embeddings, rule, previous=turns, state=state, bindings=bindings,
+-                        ))
+-
+-                await run_memory_job(restore_entries)
++                # 分块还原：同一时刻只解码一块样本的原消息，Turn 只留文本与向量。
++                for offset in range(0, len(entries), LOAD_CHUNK):
++                    await _restore_chunk(
++                        entries[offset:offset + LOAD_CHUNK], turns, catalog=catalog,
++                        embeddings=embeddings, bindings=bindings, learning=learning, rule=rule,
++                        state=state, terms=terms, restore_embeddings=restore_embeddings,
++                    )
+                 space = rule.embedding_model
++        if cache is not None:
++            cache.release()
++            await run_memory_job(cache.save)
+         consumer = await cls.create(path, turns=turns, state=state, config=config)
+         consumer._embedding_model = space
+         return consumer
+@@ -229,13 +273,17 @@
+         async with bindings.open(learning_binding, AKASHA_LEARNING) as (learning, metadata):
+             rule = LearningConfig.model_validate(dict(metadata))
+             # 图空间从原出处恢复；切换模型不能把新向量接到旧图中。
+-            await run_memory_job(partial(
+-                self.check_embedding_space, rule.embedding_model, rule.dimension, bindings,
+-            ))
+-            heads = {
+-                session: head for session, head in catalog.snapshot_heads().items()
+-                if member is None or member(session)
+-            }
++            def snapshot_heads() -> dict[str, int]:
++                self.check_embedding_space(rule.embedding_model, rule.dimension, bindings)
++                # 成员路由也会读取 Session 与策略；整个固定前缀在后台取得，
++                # 否则 scope 路由会在事件循环上阻塞宿主（见 test_task_scopes 不变量）。
++                # 不跨连接缓存 heads，后续到达的消息由下一轮通知消费。
++                return {
++                    session: head for session, head in catalog.snapshot_heads().items()
++                    if member is None or member(session)
++                }
++
++            heads = await run_memory_job(snapshot_heads)
+             cutover = dict(self.state.cutover_heads)
+             applied = {entry.ending[1] for entry in self.state.applied}
+             skipped = {item.ending[1] for item in self.state.skipped}
+@@ -249,10 +297,13 @@
+             records = embeddings.bind(learning.text)
+             count = 0
+             # 投影只读续读点之后的尾部；与图发布共用排空后才取消的后台执行方式。
+-            known, cursors = self._cursors
++            # revision 先于投影读取并随续读点保存：投影期间的前缀改写会让下次检查失配。
++            revision = await run_memory_job(catalog.prefix_revision)
++            code = await run_memory_job(_projection_code)
++            rule_key = f"{rule.model_dump_json()}|{code}" if code else ""
++            cursors = await run_memory_job(partial(self._resume_cursors, learning_binding, rule_key, revision))
+             samples, advanced = await run_memory_job(partial(
+-                learning.samples_since, catalog, rule, heads=heads,
+-                cursors=cursors if known == learning_binding else {}, keep=fresh,
++                learning.samples_since, catalog, rule, heads=heads, cursors=cursors, keep=fresh,
+             ))
+             for sample in samples:
+                 inputs = [message for message in sample.messages if isinstance(message.body, Input)]
+@@ -298,9 +349,57 @@
+             # 3. 本批学完统一发布一次；批内攒满 PUBLISH_EVERY 已在途中发布。
+             await run_memory_job(self.flush)
+             # 4. 整批处理并发布后才前进续读点；失败或取消时下次仍从旧续读点重读。
+-            self._cursors = (learning_binding, advanced)
++            self._cursors = (learning_binding, revision, advanced)
++            self._cursor_rule = rule_key
++            await run_memory_job(self._save_cursors)
+             return count
+ 
++    # 内存续读点按 binding 优先；新实例读一次落盘续读点，按规则匹配。规则、revision 或消费进度对不上都从头投影。
++    def _resume_cursors(self, binding: str, rule_key: str, revision: int | None) -> Mapping[str, SessionCursor]:
++        from ..projection import SessionCursor
++
++        known, known_revision, cursors = self._cursors
++        if revision is None:
++            return {}
++        if known:
++            return cursors if known == binding and known_revision == revision else {}
++        if not rule_key or self._cursor_file_read:
++            return {}
++        self._cursor_file_read = True
++        try:
++            saved = _SavedCursors.model_validate_json(self._cursor_path.read_bytes())
++        except (OSError, ValueError):
++            # 缺失、损坏或旧格式都只是没有续读点；ValidationError 是 ValueError 子类。
++            return {}
++        if (saved.learning_rule != rule_key or saved.prefix_revision != revision
++                or not _progress_prefix(saved, self._published)):
++            return {}
++        return {session: SessionCursor(head, boundaries)
++                for session, (head, boundaries) in saved.cursors.items()}
++
++    # 只保存已发布进度对应的续读点；重建候选不落盘，节流写入后原子替换。
++    def _save_cursors(self) -> None:
++        binding, revision, cursors = self._cursors
++        if not binding or not self._cursor_rule or revision is None or self._closed or self._deferred_publish:
++            return
++        # 续读点越过的闭段必须都已发布；否则崩溃后已发布进度回退，越过的样本永不重学。
++        if self.state != self._published:
++            return
++        now = time.monotonic()
++        if self._cursors_saved_at is not None and now - self._cursors_saved_at < CURSOR_SAVE_SECONDS:
++            return
++        published = self._published
++        saved = _SavedCursors(
++            learning_rule=self._cursor_rule, prefix_revision=revision,
++            applied=(len(published.applied), published.applied[-1].ending[1] if published.applied else None),
++            skipped=(len(published.skipped), published.skipped[-1].ending[1] if published.skipped else None),
++            cursors={session: (cursor.head, dict(cursor.boundaries)) for session, cursor in cursors.items()},
++        )
++        temporary = self._cursor_path.with_name(self._cursor_path.name + ".tmp")
++        _ = temporary.write_text(saved.model_dump_json(), encoding="utf-8")
++        os.replace(temporary, self._cursor_path)
++        self._cursors_saved_at = now
++
+     def publish_snapshot(self) -> str:
+         """按当前内存状态发布一次完整快照；延迟发布的重建用它收口。"""
+ 
+@@ -352,11 +451,11 @@
+         """重复通知不强化；提交失败后停止本实例，避免猜测外部发布是否成功。"""
+         # 1. 同一 ending 的重复消费必须有完全相同的固定出处。
+         cycle = self.cycle
+-        for applied in self.state.applied:
+-            if applied.ending[1] == entry.ending[1]:
+-                if applied != entry:
+-                    raise ValueError("重复学习通知的出处不一致")
+-                return False
++        applied = self.state.applied_at(entry.ending[1])
++        if applied is not None:
++            if applied != entry:
++                raise ValueError("重复学习通知的出处不一致")
++            return False
+         state = self.state.append(entry)
+         now = datetime.fromisoformat(turn.committed_at)
+         if now.utcoffset() is None:
+@@ -373,7 +472,8 @@
+                 if (now, entry.session_id, entry.ending) <= (last, last_entry.session_id, last_entry.ending):
+                     raise ValueError("新学习材料违反已发布的全局顺序")
+         turn = replace(turn, node_id=cycle.state_version, inter_gap_seconds=gap)
+-        state.check_turns([*cycle.turns, turn])
++        # cycle.turns 已与 self.state 逐项对应（构造或上一次 apply 已核对），只核对新节点。
++        state.check_next([*cycle.turns, turn])
+ 
+         # 2. MemoryCycle 唯一学习一次；图与消费出处在一个完整文件中一起发布。
+         try:
+@@ -390,6 +490,66 @@
+         return True
+ 
+ 
++# 按原前缀还原一块已学样本：核对出处、补算缺失向量，再逐条接到 turns 之后。
++async def _restore_chunk(
++    entries: Sequence[Applied], turns: list[Turn], *, catalog: MessageCatalog,
++    embeddings: MessageEmbeddings, bindings: Bindings, learning: Learning, rule: LearningConfig,
++    state: Consumption, terms: Callable[[str], Terms], restore_embeddings: RestoreEmbeddings | None,
++) -> None:
++    # 1. 按原算法验证出处；分块不改变还原顺序，后一条只能读取已完成的 previous。
++    samples = await run_memory_job(lambda: tuple(
++        learning.load_sample(catalog, rule, entry) for entry in entries
++    ))
++    records = embeddings.bind(learning.text)
++    verified: dict[str, tuple[float, ...]] = {}
++    def missing_vectors() -> list[Message]:
++        messages = {message.message_id: message for sample in samples
++                    for message in sample.messages
++                    if isinstance(message.body, Input) or message == sample.ending}
++        missing: list[Message] = []
++        for message in messages.values():
++            if not learning.text(message).strip():
++                continue
++            vector = records.read(message, model=rule.embedding_model, dimension=rule.dimension)
++            if vector is None:
++                missing.append(message)
++            else:
++                verified[message.message_id] = vector
++        return missing
++    # 2. 缺失向量由明确的模型端口补算；不调用学习 commit。
++    missing = await run_memory_job(missing_vectors)
++    if missing:
++        if restore_embeddings is None:
++            raise MemoryRebuildRequiredError("派生向量缺失；当前只读调用没有模型补算权限")
++        vectors = await restore_embeddings(rule, [learning.text(message) for message in missing])
++        if len(vectors) != len(missing) or any(len(vector) != rule.dimension for vector in vectors):
++            raise ValueError("补算向量数量或维度不匹配原学习空间")
++        def save_vectors() -> None:
++            for message, vector in zip(missing, vectors, strict=True):
++                records.save(message, model=rule.embedding_model, embedding=vector)
++        await run_memory_job(save_vectors)
++    # 3. 用已验证的样本还原材料。
++    def restore_entries() -> None:
++        for sample in samples:
++            turns.append(learning.restore(
++                sample, _VerifiedVectors(embeddings, verified), rule,
++                previous=turns, state=state, bindings=bindings, terms=terms,
++            ))
++    await run_memory_job(restore_entries)
++
++
++# 保存时的已发布进度必须仍是当前进度的前缀：消费只追加，换了图或重建后的不同历史不复用。
++def _progress_prefix(saved: _SavedCursors, state: Consumption) -> bool:
++    applied_count, applied_last = saved.applied
++    skipped_count, skipped_last = saved.skipped
++    if applied_count > len(state.applied) or skipped_count > len(state.skipped):
++        return False
++    if (applied_last is None) != (applied_count == 0) or (skipped_last is None) != (skipped_count == 0):
++        return False
++    return ((applied_count == 0 or state.applied[applied_count - 1].ending[1] == applied_last)
++            and (skipped_count == 0 or state.skipped[skipped_count - 1].ending[1] == skipped_last))
++
++
+ def _check_embedding_space(model: str, dimension: int, previous_model: str | None, turns: list[Turn]) -> None:
+     """图不能混合向量空间；身份来自原学习出处，维度来自实际恢复的材料。"""
+     if previous_model is not None and previous_model != model:
+@@ -399,6 +559,31 @@
+         raise EmbeddingSpaceMismatchError("新学习 binding 的维度不匹配已有图，需显式重建")
+ 
+ 
++# 恢复复用刚核对过正文出处的向量，不再逐条重读；未命中（如刚补算的）仍走原存储与校验。
++class _VerifiedVectors:
++    def __init__(self, embeddings: MessageEmbeddings, vectors: Mapping[str, tuple[float, ...]]):
++        self._embeddings = embeddings
++        self._vectors = vectors
++
++    def bind(self, text: Callable[[Message], str]) -> EmbeddingRecords:
++        return _VerifiedRecords(self._embeddings.bind(text), self._vectors)
++
++
++class _VerifiedRecords:
++    def __init__(self, records: EmbeddingRecords, vectors: Mapping[str, tuple[float, ...]]):
++        self._records = records
++        self._vectors = vectors
++
++    def read(self, message: Message, *, model: str, dimension: int) -> tuple[float, ...] | None:
++        vector = self._vectors.get(message.message_id)
++        if vector is not None and len(vector) == dimension:
++            return vector
++        return self._records.read(message, model=model, dimension=dimension)
++
++    def save(self, message: Message, *, model: str, embedding: Sequence[float]) -> None:
++        self._records.save(message, model=model, embedding=embedding)
++
++
+ async def run_memory_job[T](work: Callable[[], T]) -> T:
+     """CPU 与文件发布移出事件循环；取消后先排空线程，再允许关闭图 writer。"""
+     job = asyncio.create_task(asyncio.to_thread(work))
 --- a/plugins/akasha/application/cycle.py
 +++ b/plugins/akasha/application/cycle.py
 @@ -28,6 +28,9 @@
@@ -19,7 +434,27 @@
              try:
                  self.graph.prepare_retrieval(
                      event,
-@@ -420,6 +423,11 @@
+@@ -214,6 +217,8 @@
+         self,
+         turn: Turn,
+         ticket: RetrievalTicket | None,
++        *,
++        record_recall: bool = False,
+     ) -> CycleCommit:
+         """Commit one turn and its retrieval-induced plasticity atomically."""
+ 
+@@ -228,8 +233,10 @@
+             else turn
+         )
+         if recomputed:
++            # 学习只读 evidence 与 diffusion；模式补全只供 Inspector 记录，默认不算。
+             selected = self.retrieve(
+                 causal_turn,
++                include_completion=record_recall,
+             )
+         else:
+             if ticket is None:
+@@ -420,6 +427,11 @@
          )
  
  
@@ -33,7 +468,7 @@
      for event, turn in enumerate(turns):
 --- a/plugins/akasha/domain/diffusion.py
 +++ b/plugins/akasha/domain/diffusion.py
-@@ -3,6 +3,7 @@
+@@ -3,17 +3,70 @@
  from __future__ import annotations
  
  import math
@@ -41,7 +476,70 @@
  from typing import Protocol
  
  import numpy as np
-@@ -127,76 +128,85 @@
+ 
+ from .model import DiffusionResult
+ 
++try:
++    from . import _push_kernel as kernel
++except ImportError:  # numba 不可用时退回解释器循环，结果相同。
++    kernel = None
++
++
++Transitions = tuple[tuple[tuple[int, float, int], ...], float]
++
++
++class PushTable:
++    """Flat copy of already-computed transitions so the compiled loop can read them without Python."""
++
++    def __init__(self, max_nodes: int) -> None:
++        self.max_nodes = max_nodes
++        self.start = np.zeros(max_nodes, dtype=np.int64)
++        self.count = np.full(max_nodes, -1, dtype=np.int64)
++        self.unspread = np.zeros(max_nodes, dtype=np.float64)
++        self.target = np.empty(4096, dtype=np.int64)
++        self.probability = np.empty(4096, dtype=np.float64)
++        self.size = 0
++
++    def load(self, node_id: int, transitions: Transitions) -> None:
++        items, unspread = transitions
++        end = self.size + len(items)
++        if end > self.target.size:
++            capacity = max(end, self.target.size * 2)
++            self.target = np.resize(self.target, capacity)
++            self.probability = np.resize(self.probability, capacity)
++        for offset, (target, probability, _) in enumerate(items, start=self.size):
++            self.target[offset] = target
++            self.probability[offset] = probability
++        self.start[node_id] = self.size
++        self.count[node_id] = len(items)
++        self.unspread[node_id] = unspread
++        self.size = end
++
++
++class TransitionCache(dict[int, Transitions]):
++    """Per-state transition cache; clearing it also drops the flat copy used by the compiled loop."""
++
++    table: PushTable | None = None
++
++    def clear(self) -> None:
++        super().clear()
++        self.table = None
++
++    def push_table(self, max_nodes: int) -> PushTable:
++        if self.table is None or self.table.max_nodes != max_nodes:
++            self.table = PushTable(max_nodes)
++        return self.table
++
+ 
+ class TransitionGraph(Protocol):
+     """Expose the finite transition interface required by Residual Push."""
+ 
+     max_nodes: int
++    transition_cache: TransitionCache
+ 
+     def transitions(
+         self,
+@@ -127,76 +180,143 @@
          empty = np.zeros(graph.max_nodes, dtype=np.float64)
          return DiffusionResult(empty, np.empty(0, dtype=np.int32), 0, 0.0, None, None)
  
@@ -49,6 +547,9 @@
 -    residual = np.zeros(graph.max_nodes, dtype=np.float64)
 -    reserve = np.zeros(graph.max_nodes, dtype=np.float64)
 -    heap = IndexedMaxHeap(graph.max_nodes, residual)
++    if kernel is not None and not capture_paths:
++        return _compiled_push(graph, seed, event, restart=restart, tolerance=tolerance)
++
 +    # 1. 残差只存正值节点；出堆次序由 (残差降序, 节点升序) 唯一确定，惰性堆与原索引堆逐次相同。
 +    residual: dict[int, float] = {}
 +    reserve: dict[int, float] = {}
@@ -170,10 +671,138 @@
 -        parent_edge=parent_edge,
 +        parent_node=paths_node,
 +        parent_edge=paths_edge,
++    )
++
++
++# 编译循环：与上面的解释器循环同一出堆全序、同一浮点运算；转移与精确求和仍由 Python 提供。
++def _compiled_push(
++    graph: TransitionGraph,
++    seed: tuple[tuple[int, float], ...],
++    event: int,
++    *,
++    restart: float,
++    tolerance: float,
++) -> DiffusionResult:
++    assert kernel is not None
++    # 1. 初始残差与堆；seed 内节点唯一，按 (残差降序, 节点升序) 入堆。
++    table = graph.transition_cache.push_table(graph.max_nodes)
++    residual = np.zeros(graph.max_nodes, dtype=np.float64)
++    reserve = np.zeros(graph.max_nodes, dtype=np.float64)
++    heap_value = np.empty(4096, dtype=np.float64)
++    heap_node = np.empty(4096, dtype=np.int64)
++    seed_nodes = np.fromiter((node for node, _ in seed), dtype=np.int64, count=len(seed))
++    seed_values = np.fromiter((value for _, value in seed), dtype=np.float64, count=len(seed))
++    residual[seed_nodes] = seed_values
++    scalars = np.array([math.fsum(value for _, value in seed), 0.0])
++    counters = np.zeros(3, dtype=np.int64)
++    for node_id, value in sorted(seed, key=lambda item: (-item[1], item[0])):
++        heap_value[counters[0]] = value
++        heap_node[counters[0]] = node_id
++        counters[0] += 1
++
++    # 2. 内核跑到需要协助时返回：补转移、精确求和或扩堆，然后接着跑。
++    while True:
++        status = kernel.run(
++            residual, reserve, heap_value, heap_node, table.start, table.count, table.unspread,
++            table.target, table.probability, seed_nodes, seed_values, scalars, counters,
++            restart, 1.0 - restart, tolerance,
++        )
++        if status == kernel.DONE:
++            break
++        if status == kernel.NEED_TRANSITIONS:
++            node_id = int(counters[2])
++            table.load(node_id, graph.transitions(node_id, event))
++        elif status == kernel.NEED_SUM:
++            scalars[0] = math.fsum(residual[np.flatnonzero(residual)].tolist())
++            scalars[1] = 1.0
++        else:
++            heap_value = np.resize(heap_value, heap_value.size * 2)
++            heap_node = np.resize(heap_node, heap_node.size * 2)
++    active = np.flatnonzero(reserve > 0.0).astype(np.int32, copy=False)
++    return DiffusionResult(
++        reserve=reserve,
++        active_nodes=active,
++        pushes=int(counters[1]),
++        residual_l1=float(scalars[0]),
++        parent_node=None,
++        parent_edge=None,
      )
 --- a/plugins/akasha/domain/features.py
 +++ b/plugins/akasha/domain/features.py
-@@ -263,6 +263,8 @@
+@@ -6,12 +6,25 @@
+ import math
+ from array import array
+ from collections import defaultdict
+-from dataclasses import dataclass
++from collections.abc import Callable
++from dataclasses import dataclass, field
+ 
+ import numpy as np
++from threadpoolctl import threadpool_limits
+ 
+ from .model import ContextState, SeedEvidence, Turn
+ 
++# BLAS 的规约次序随线程数变化：同一份日志在不同核数的机器上会学出不同的图。
++# 进程内固定单线程，在线学习、查询与任何机器上的重建才是同一个函数（ADR 0138）。
++# 不用临时限制再恢复：查询与多张图的学习在不同线程并发，恢复会改掉别人正在用的线程数。
++_ = threadpool_limits(limits=1, user_api="blas")
++
++
++@dataclass
++class _ScoreMemo:
++    end: int = -1
++    entries: dict[tuple[object, ...], tuple[np.ndarray, np.ndarray]] = field(default_factory=dict)
++
+ 
+ class FeaturePool:
+     """Serve causal evidence from contiguous dense and inverted lexical arrays."""
+@@ -27,6 +40,8 @@
+         self.turns = list(turns)
+         self._query_turn: Turn | None = None
+         self._appendable = appendable
++        # 查询视图浅拷贝 __dict__，共享同一个记忆表。
++        self._score_memo = _ScoreMemo()
+         self._size = len(turns)
+         self._capacity = _next_capacity(self._size) if appendable else self._size
+         dimension = _dense_dimension(turns)
+@@ -114,6 +129,36 @@
+             math.fsum(value * value for value in residuals) / len(residuals)
+         )
+ 
++    # 历史矩阵与倒排只追加，(end, cue) 的分数及其尾部惊奇度是纯函数。
++    # 同一状态版本上的查询与随后的学习检索常是同一条用户输入，直接共用；返回只读数组。
++    def dense_surprisal(self, cue: np.ndarray | None, end: int) -> tuple[np.ndarray, np.ndarray]:
++        key = ("dense", None if cue is None else (cue.dtype.str, cue.shape, cue.tobytes()))
++        return self._remember(key, end, lambda: self.dense_scores(cue, end))
++
++    def bm25_surprisal(self, query_terms: dict[str, float], end: int) -> tuple[np.ndarray, np.ndarray]:
++        key = ("bm25", tuple(sorted(query_terms.items())))
++        return self._remember(key, end, lambda: self.bm25_scores(query_terms, end))
++
++    def _remember(
++        self,
++        key: tuple[object, ...],
++        end: int,
++        score: Callable[[], np.ndarray],
++    ) -> tuple[np.ndarray, np.ndarray]:
++        memo = self._score_memo
++        if memo.end != end:
++            memo.end = end
++            memo.entries.clear()
++        found = memo.entries.get(key)
++        if found is None:
++            scores = score()
++            surprisal = _tail_surprisal(scores)
++            scores.flags.writeable = False
++            surprisal.flags.writeable = False
++            found = (scores, surprisal)
++            memo.entries[key] = found
++        return found
++
+     def dense_scores(self, cue: np.ndarray | None, end: int) -> np.ndarray:
+         if cue is None or end == 0:
+             return np.zeros(end, dtype=np.float64)
+@@ -263,6 +308,8 @@
          appendable: bool = False,
      ) -> None:
          super().__init__(turns, appendable=appendable)
@@ -182,7 +811,7 @@
          dependence = _causal_context_dependence(turns)
          self.context_dependence = _reserve_values(
              dependence,
-@@ -360,6 +362,7 @@
+@@ -360,6 +407,7 @@
              capacity,
          )
          self._capacity = capacity
@@ -190,7 +819,7 @@
  
      def _write_dense_row(self, node_id: int, turn: Turn) -> None:
          vectors = [
-@@ -391,6 +394,13 @@
+@@ -391,6 +439,13 @@
                      raise ValueError("dense vectors must share one dimension")
                  matrix[node_id] = vector
                  mask[node_id] = True
@@ -204,7 +833,34 @@
  
      def infer_burst_seed(
          self,
-@@ -597,6 +607,14 @@
+@@ -404,18 +459,15 @@
+         # 1. Score the current cue and the complete visible burst separately.
+         query = self._turn_at(index)
+         query_terms = _normalize_pairs(query.user_terms)
+-        query_dense = self.dense_scores(query.user_dense, index)
+-        query_bm25 = self.bm25_scores(query_terms, index)
+-        context_dense = self.dense_scores(candidate_context.dense, index)
+-        context_bm25 = self.bm25_scores(
+-            dict(candidate_context.terms),
+-            index,
+-        )
++        query_dense, query_dense_field = self.dense_surprisal(query.user_dense, index)
++        query_bm25, query_bm25_field = self.bm25_surprisal(query_terms, index)
++        context_dense_field = self.dense_surprisal(candidate_context.dense, index)[1]
++        context_bm25_field = self.bm25_surprisal(dict(candidate_context.terms), index)[1]
+         fields = {
+-            "query_dense": _tail_surprisal(query_dense),
+-            "query_bm25": _tail_surprisal(query_bm25),
+-            "context_dense": _tail_surprisal(context_dense),
+-            "context_bm25": _tail_surprisal(context_bm25),
++            "query_dense": query_dense_field,
++            "query_bm25": query_bm25_field,
++            "context_dense": context_dense_field,
++            "context_bm25": context_bm25_field,
+         }
+ 
+         # 2. Rescue underspecified cues only when temporal evidence agrees.
+@@ -597,6 +649,14 @@
      return term_order, postings
  
  
@@ -219,15 +875,85 @@
  def _next_capacity(size: int) -> int:
      return (size // 256 + 1) * 256
  
+@@ -609,7 +669,8 @@
+     result = np.empty(len(matrix), dtype=np.result_type(matrix, cue))
+     start = 0
+     while start < len(matrix):
+-        stop = min(start + 256, len(matrix))
++        # 64 行的 float64 临时块留在 L2 内；逐行规约与原 256 行分块逐位相同（多种形状实测）。
++        stop = min(start + 64, len(matrix))
+         # 合并很短的尾块，避免 BLAS 对单行走不同的 dot 规约路径。
+         if len(matrix) - stop < 8:
+             stop = len(matrix)
 --- a/plugins/akasha/domain/graph.py
 +++ b/plugins/akasha/domain/graph.py
-@@ -100,6 +100,18 @@
-             int,
-             tuple[tuple[tuple[int, float, int], ...], float],
-         ] = {}
+@@ -10,11 +10,29 @@
+ 
+ import numpy as np
+ 
++from .diffusion import TransitionCache
+ from .model import DiffusionResult, MemoryConfig, PlasticityResult, SeedEvidence
+ 
+ MEMBERSHIP = 0
+ TEMPORAL_FORWARD = 1
+ TEMPORAL_BACKWARD = 2
++# 持久化的逐边列；发布时与上次发布的副本逐位比对，只重写变化的边。
++EDGE_COLUMNS = (
++    "source", "target", "weight", "last_updated", "created_event", "observed_credit",
++    "recurrent_credit", "support_credit", "independent_credit", "last_support_seconds",
++    "resource", "plasticity_threshold", "last_stimulated_seconds",
++)
++
++
++@dataclass(frozen=True)
++class PublishedGraph:
++    """Remember what the durable snapshot already holds so the next publish writes only the difference."""
++
++    turn_count: int
++    edge_count: int
++    hub_count: int
++    columns: dict[str, np.ndarray]
++    external: dict[int, float]
+ 
+ 
+ @dataclass(frozen=True)
+@@ -96,10 +114,44 @@
+         self.last_external_seed_seconds: dict[int, float] = {}
+         self.current_external: dict[int, float] = {}
+         self.current_event = -1
+-        self._transition_cache: dict[
+-            int,
+-            tuple[tuple[tuple[int, float, int], ...], float],
+-        ] = {}
++        self.transition_cache = TransitionCache()
 +        # 读出侧 basin 结构缓存：按 hub 创建事件记录，学习改过成员权重的 hub 记为脏；None 表示全部重算。
 +        self.basin_cache: dict[int, object] = {}
 +        self._dirty_basins: set[int] | None = None
++        self.published: PublishedGraph | None = None
++
++    def mark_published(self) -> None:
++        """Record the state just made durable; only called after the snapshot commit succeeded."""
++
++        self.published = PublishedGraph(
++            turn_count=self.turn_count,
++            edge_count=len(self.source),
++            hub_count=len(self.hubs),
++            columns={name: _column(getattr(self, name)).copy() for name in EDGE_COLUMNS},
++            external=dict(self.last_external_seed_seconds),
++        )
++
++    def changed_edges(self) -> list[int]:
++        """Return published edges whose persisted columns differ bit-for-bit from the last publish."""
++
++        published = self.published
++        if published is None:
++            raise RuntimeError("graph has no published snapshot")
++        count = published.edge_count
++        changed = np.zeros(count, dtype=bool)
++        for name in EDGE_COLUMNS:
++            current = _column(getattr(self, name))[:count]
++            changed |= current.view(np.uint64) != published.columns[name].view(np.uint64)
++        return [int(edge) for edge in np.flatnonzero(changed)]
 +
 +    def take_dirty_basins(self) -> set[int] | None:
 +        dirty = self._dirty_basins
@@ -240,7 +966,70 @@
  
      def grow_turn_capacity(self, turn_count: int) -> None:
          """Grow turn slots and remap engram nodes without changing relations."""
-@@ -361,9 +373,9 @@
+@@ -117,7 +169,7 @@
+             return
+         old_turn_count = self.turn_count
+         offset = turn_count - old_turn_count
+-        self._transition_cache.clear()
++        self.transition_cache.clear()
+ 
+         # 2. Shift every engram above the expanded contiguous turn range.
+         def remap(node_id: int) -> int:
+@@ -168,7 +220,7 @@
+                 self.turn_count, self.max_nodes, self.source, self.target,
+                 self.hubs, self.hub_members, self.adjacency,
+             ) = previous
+-            self._transition_cache.clear()
++            self.transition_cache.clear()
+ 
+     def capture_retrieval_state(self) -> RetrievalState:
+         """Snapshot causal clocks without copying graph topology or weights."""
+@@ -217,7 +269,7 @@
+         )
+         self.current_external = dict(state.current_external)
+         self.current_event = state.current_event
+-        self._transition_cache.clear()
++        self.transition_cache.clear()
+ 
+     @property
+     def resource_tau_seconds(self) -> float:
+@@ -281,7 +333,7 @@
+         gap = 0.0 if gap_seconds is None else gap_seconds
+         self.elapsed_seconds += gap
+         self._observe_gap(gap)
+-        self._transition_cache.clear()
++        self.transition_cache.clear()
+ 
+         # 2. Record only query-owned evidence as independent reactivation.
+         direct_nodes = evidence.channels.get(
+@@ -315,7 +367,7 @@
+ 
+         if event < self.current_event:
+             raise ValueError("relation state cannot move backwards in time")
+-        cached = self._transition_cache.get(node_id)
++        cached = self.transition_cache.get(node_id)
+         if cached is not None:
+             return cached
+         weighted: list[tuple[int, float, int]] = []
+@@ -329,7 +381,7 @@
+         total = math.fsum(value for _, value, _ in weighted)
+         if total == 0.0:
+             result = ((), 1.0)
+-            self._transition_cache[node_id] = result
++            self.transition_cache[node_id] = result
+             return result
+         spread = -math.expm1(-total)
+         transitions = tuple(
+@@ -337,7 +389,7 @@
+             for target, value, edge_id in weighted
+         )
+         result = (transitions, 1.0 - spread)
+-        self._transition_cache[node_id] = result
++        self.transition_cache[node_id] = result
+         return result
+ 
+     def apply_feedback_inhibition(
+@@ -361,15 +413,15 @@
  
          # 1. Resolve only the episode created by the addressed turn itself.
          own_hubs = {
@@ -253,7 +1042,14 @@
          }
          gain = boost ** self.config.learning_rate
          credit = math.log(gain)
-@@ -378,7 +390,7 @@
+         affected_hubs: set[int] = set()
+         affected_sources: set[int] = set()
+-        self._transition_cache.clear()
++        self.transition_cache.clear()
+ 
+         # 2. Potentiate the target membership without creating neighbor relations.
+         for node_id in sorted(node_ids):
+@@ -378,7 +430,7 @@
                  continue
              target_edges = tuple(
                  edge
@@ -262,7 +1058,7 @@
                  if self.source[edge] == node_id
              )
              if len(target_edges) != 1:
-@@ -390,6 +402,7 @@
+@@ -390,6 +442,7 @@
                  1.0,
                  self.weight[edge_id] * gain,
              )
@@ -270,7 +1066,16 @@
              self.last_updated[edge_id] = self.current_event
              self._support_edge(edge_id, credit, credit)
              affected_hubs.add(self.target[edge_id])
-@@ -589,6 +602,7 @@
+@@ -410,7 +463,7 @@
+         """Adapt exposed relations and store the current event in one state."""
+ 
+         # 1. Convert direct and completed recall into one continuous activity field.
+-        self._transition_cache.clear()
++        self.transition_cache.clear()
+         observed, activity = self._event_activity(event, evidence, diffusion)
+         turn_nodes = np.flatnonzero(activity[: self.turn_count] > 0.0)
+         values = activity[turn_nodes]
+@@ -589,6 +642,7 @@
          affected_members: set[int] = set()
          for hub_node in exposed:
              edges = self.hub_members[hub_node]
@@ -278,7 +1083,7 @@
              hub_activity = math.fsum(
                  self.effective_weight(edge_id)
                  * activity[self.source[edge_id]]
-@@ -753,6 +767,7 @@
+@@ -753,6 +807,7 @@
                  )
              )
          self.hub_members[hub_node] = member_edges
@@ -286,7 +1091,7 @@
          for node_id, _ in values:
              self._normalize_membership_source(node_id)
          innovation = math.fsum(self.weight[edge_id] for edge_id in member_edges)
-@@ -860,6 +875,7 @@
+@@ -860,6 +915,7 @@
              return 0.0
          scale = budget / total
          inhibited = 0.0
@@ -294,7 +1099,7 @@
          for edge_id in edges:
              old = self.weight[edge_id]
              self.weight[edge_id] = old * scale
-@@ -885,6 +901,7 @@
+@@ -885,6 +941,7 @@
              old = self.weight[edge_id]
              self.weight[edge_id] = old * scale
              inhibited += old - self.weight[edge_id]
@@ -302,9 +1107,72 @@
          return inhibited
  
      def _normalize_temporal_source(self, source: int, kind: int) -> float:
+@@ -1159,6 +1216,11 @@
+         )
+ 
+ 
++def _column(values: array) -> np.ndarray:
++    dtype = np.float64 if values.typecode == "d" else np.int64
++    return np.frombuffer(values, dtype=dtype) if len(values) else np.empty(0, dtype=dtype)
++
++
+ def _entmax15(logits: np.ndarray) -> tuple[tuple[int, float], ...]:
+     """Project logits onto a sparse simplex without a fixed support size."""
+ 
 --- a/plugins/akasha/domain/readout.py
 +++ b/plugins/akasha/domain/readout.py
-@@ -248,7 +248,7 @@
+@@ -7,11 +7,10 @@
+ 
+ import numpy as np
+ 
+-from .diffusion import residual_push
++from .diffusion import TransitionCache, residual_push
+ from .features import (
+     FeaturePool,
+     _sparsemax,
+-    _tail_surprisal,
+     binary_entropy,
+ )
+ from .graph import (
+@@ -88,17 +87,14 @@
+     def __init__(self, graph: DynamicMemoryGraph) -> None:
+         self.graph = graph
+         self.max_nodes = graph.max_nodes
+-        self._transition_cache: dict[
+-            int,
+-            tuple[tuple[tuple[int, float, int], ...], float],
+-        ] = {}
++        self.transition_cache = TransitionCache()
+ 
+     def transitions(
+         self,
+         node_id: int,
+         event: int,
+     ) -> tuple[tuple[tuple[int, float, int], ...], float]:
+-        cached = self._transition_cache.get(node_id)
++        cached = self.transition_cache.get(node_id)
+         if cached is not None:
+             return cached
+         weighted: list[tuple[int, float, int]] = []
+@@ -120,7 +116,7 @@
+         total = math.fsum(weight for _, weight, _ in weighted)
+         if total == 0.0:
+             result = ((), 1.0)
+-            self._transition_cache[node_id] = result
++            self.transition_cache[node_id] = result
+             return result
+         spread = -math.expm1(-total)
+         result = (
+@@ -130,7 +126,7 @@
+             ),
+             1.0 - spread,
+         )
+-        self._transition_cache[node_id] = result
++        self.transition_cache[node_id] = result
+         return result
+ 
+ 
+@@ -248,7 +244,7 @@
      config: MemoryConfig,
      visible_nodes: tuple[int, ...],
      burst_continued: bool,
@@ -313,7 +1181,7 @@
  ) -> PatternCompletion:
      """Settle the existing current-cue plus active-context route."""
  
-@@ -289,7 +289,7 @@
+@@ -289,7 +285,7 @@
      historical_surprise: np.ndarray,
      config: MemoryConfig,
      visible_nodes: tuple[int, ...],
@@ -322,7 +1190,7 @@
  ) -> PatternCompletion:
      """Settle a query-only graph-address route without active context."""
  
-@@ -343,12 +343,11 @@
+@@ -343,12 +339,11 @@
      config: MemoryConfig,
      visible_nodes: tuple[int, ...],
      burst_continued: bool,
@@ -336,7 +1204,7 @@
      temperature = _surprise_temperature(
          surprise,
          historical_surprise,
-@@ -358,7 +357,8 @@
+@@ -358,7 +353,8 @@
      heads = _accessibility_supported_heads(
          graph,
          _pooled_heads(
@@ -346,7 +1214,30 @@
              fields,
              continuation,
              temperature,
-@@ -822,91 +822,144 @@
+@@ -766,18 +762,10 @@
+             for term, value in query.user_terms
+         }
+     )
+-    current_dense = _tail_surprisal(
+-        pool.dense_scores(query.user_dense, index)
+-    )
+-    current_bm25 = _tail_surprisal(
+-        pool.bm25_scores(query_terms, index)
+-    )
+-    context_dense = _tail_surprisal(
+-        pool.dense_scores(context.dense, index)
+-    )
+-    context_bm25 = _tail_surprisal(
+-        pool.bm25_scores(dict(context.terms), index)
+-    )
++    current_dense = pool.dense_surprisal(query.user_dense, index)[1]
++    current_bm25 = pool.bm25_surprisal(query_terms, index)[1]
++    context_dense = pool.dense_surprisal(context.dense, index)[1]
++    context_bm25 = pool.bm25_surprisal(dict(context.terms), index)[1]
+     current = current_dense + current_bm25
+     same_event = current + context_dense + context_bm25
+     return {
+@@ -822,91 +810,144 @@
  def _active_basin_structures(
      graph: DynamicMemoryGraph,
      event: int,
@@ -560,7 +1451,7 @@
      return _merge_overlapping_heads(selected)
  
  
-@@ -918,13 +971,9 @@
+@@ -918,13 +959,9 @@
  
      if len(heads) < 2:
          return heads
@@ -575,7 +1466,7 @@
              for head_id, _, _ in heads
          ],
          dtype=np.float64,
-@@ -948,18 +997,11 @@
+@@ -948,18 +985,11 @@
      head_id: str,
      hubs_by_event: dict[int, int] | None = None,
  ) -> float:
@@ -596,3 +1487,996 @@
      )
      raw = math.fsum(graph.weight[edge_id] for edge_id in edge_ids)
      effective = math.fsum(
+--- a/plugins/akasha/infrastructure/consumption.py
++++ b/plugins/akasha/infrastructure/consumption.py
+@@ -2,10 +2,11 @@
+ from __future__ import annotations
+ 
+ from typing import Annotated, Literal, Self
++import json
+ from collections.abc import Sequence
+ from pathlib import Path
+ 
+-from pydantic import BaseModel, ConfigDict, Field, model_validator
++from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
+ 
+ from ..domain.model import Turn
+ 
+@@ -62,6 +63,12 @@
+     cutover_heads: tuple[tuple[Text, Head], ...]
+     applied: tuple[Applied, ...] = ()
+     skipped: tuple[Skipped, ...] = ()
++    # 结束消息 → 已学下标（跳过记为 -1）；构造时整段校验后建立，追加只校验新条目。
++    _endings: dict[str, int] = PrivateAttr(default_factory=dict)
++    # 每条出处的规范 JSON 片段；整段文本由片段拼接，追加时只序列化新条目。
++    _applied_json: list[str] | None = PrivateAttr(default=None)
++    _skipped_json: list[str] | None = PrivateAttr(default=None)
++    _text: str | None = PrivateAttr(default=None)
+ 
+     @model_validator(mode="after")
+     def check_order(self) -> Self:
+@@ -71,41 +78,108 @@
+             raise ValueError("切换 heads 包含重复 Session")
+         if tuple(sorted(self.cutover_heads)) != self.cutover_heads:
+             raise ValueError("切换 heads 必须按 Session 排序")
+-        seen: set[str] = set()
+-        for entry in self.applied:
++        seen: dict[str, int] = {}
++        for index, entry in enumerate(self.applied):
+             if entry.ending[1] in seen:
+                 raise ValueError("同一结束消息不能重复学习")
+             if entry.ending[0] <= heads.get(entry.session_id, -1):
+                 raise ValueError("新消费不能重新学习切换前的结束消息")
+-            seen.add(entry.ending[1])
++            seen[entry.ending[1]] = index
+         for item in self.skipped:
+             if item.ending[1] in seen:
+                 raise ValueError("同一结束消息不能既学习又跳过")
+             if item.ending[0] <= heads.get(item.session_id, -1):
+                 raise ValueError("跳过记事不能指向切换前的结束消息")
+-            seen.add(item.ending[1])
++            seen[item.ending[1]] = -1
++        self._endings = seen
+         return self
+ 
+     def append(self, entry: Applied) -> Consumption:
+-        return Consumption(
+-            cutover_heads=self.cutover_heads,
+-            applied=(*self.applied, entry),
+-            skipped=self.skipped,
+-        )
++        # 前缀已在构造时整段校验；归纳地只校验新条目，与整段 check_order 的结论相同。
++        self._check_new(entry.ending, entry.session_id, "同一结束消息不能重复学习", "新消费不能重新学习切换前的结束消息")
++        return self._extend((*self.applied, entry), self.skipped, entry.ending[1], len(self.applied))
+ 
+     def mark_skipped(self, entry: Skipped) -> Consumption:
+         """记录一次明确跳过；图与节点身份不因跳过改变。"""
+ 
+-        return Consumption(
+-            cutover_heads=self.cutover_heads,
+-            applied=self.applied,
+-            skipped=(*self.skipped, entry),
++        self._check_new(entry.ending, entry.session_id, "同一结束消息不能既学习又跳过", "跳过记事不能指向切换前的结束消息")
++        return self._extend(self.applied, (*self.skipped, entry), entry.ending[1], -1)
++
++    # 私有缓存（索引、JSON 片段）不属于消费事实；相等只比较公开字段。
++    def __eq__(self, other: object) -> bool:
++        if not isinstance(other, Consumption):
++            return NotImplemented
++        return (self.version, self.cutover_heads, self.applied, self.skipped) == (
++            other.version, other.cutover_heads, other.applied, other.skipped)
++
++    __hash__ = None  # type: ignore[assignment]
++
++    def canonical_text(self) -> str:
++        """与 canonical_json(self.model_dump(mode="json")) 逐字节相同：键序 applied、cutover_heads、skipped、version。"""
++        if self._text is None:
++            if self._applied_json is None:
++                self._applied_json = [_canonical(entry.model_dump(mode="json")) for entry in self.applied]
++            if self._skipped_json is None:
++                self._skipped_json = [_canonical(entry.model_dump(mode="json")) for entry in self.skipped]
++            heads = _canonical([list(item) for item in self.cutover_heads])
++            self._text = (
++                '{"applied":[' + ",".join(self._applied_json) + '],"cutover_heads":' + heads
++                + ',"skipped":[' + ",".join(self._skipped_json) + '],"version":' + str(self.version) + "}"
++            )
++        return self._text
++
++    def check_suffix(self, turns: list[Turn], start: int) -> None:
++        """前 start 个节点已在上次发布时逐项核对，只核对之后的新节点。"""
++        self.check_count(len(turns))
++        for node_id in range(start, len(turns)):
++            turn, entry = turns[node_id], self.applied[node_id]
++            if turn.node_id != node_id:
++                raise ValueError("学习节点必须连续且有序")
++            if (turn.session_key != entry.session_id
++                or turn.assistant_message_id != entry.ending[1]
++                or (turn.user_seq, turn.user_message_id) not in entry.members):
++                raise ValueError("学习节点与消费出处不一致")
++
++    def applied_at(self, message_id: str) -> Applied | None:
++        index = self._endings.get(message_id, -1)
++        return None if index < 0 else self.applied[index]
++
++    def _check_new(self, ending: Ref, session_id: str, duplicate: str, cutover: str) -> None:
++        if ending[1] in self._endings:
++            raise ValueError(duplicate)
++        if ending[0] <= dict(self.cutover_heads).get(session_id, -1):
++            raise ValueError(cutover)
++
++    def _extend(self, applied: tuple[Applied, ...], skipped: tuple[Skipped, ...], ending: str, index: int) -> Consumption:
++        extended = Consumption.model_construct(
++            version=self.version, cutover_heads=self.cutover_heads, applied=applied, skipped=skipped,
+         )
++        extended._endings = {**self._endings, ending: index}
++        if index >= 0 and self._applied_json is not None:
++            extended._applied_json = [*self._applied_json, _canonical(applied[-1].model_dump(mode="json"))]
++            extended._skipped_json = self._skipped_json
++        elif index < 0 and self._skipped_json is not None:
++            extended._skipped_json = [*self._skipped_json, _canonical(skipped[-1].model_dump(mode="json"))]
++            extended._applied_json = self._applied_json
++        return extended
+ 
+     def check_count(self, count: int) -> None:
+         if len(self.applied) != count:
+             raise ValueError("消费进度与学习图节点数不一致")
+ 
++    def check_next(self, turns: list[Turn]) -> None:
++        """前缀已逐项对应时，只核对新追加的最后一个节点。"""
++        self.check_count(len(turns))
++        if not turns:
++            return
++        turn, entry = turns[-1], self.applied[-1]
++        if turn.node_id != len(turns) - 1:
++            raise ValueError("学习节点必须连续且有序")
++        if (turn.session_key != entry.session_id
++            or turn.assistant_message_id != entry.ending[1]
++            or (turn.user_seq, turn.user_message_id) not in entry.members):
++            raise ValueError("学习节点与消费出处不一致")
++
+     def check_turns(self, turns: list[Turn]) -> None:
+         """验证每个节点都逐项对应同一份已学出处。"""
+         self.check_count(len(turns))
+@@ -119,6 +193,10 @@
+                 raise ValueError("学习节点与消费出处不一致")
+ 
+ 
++def _canonical(value: object) -> str:
++    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
++
++
+ def message_nodes(applied: Sequence[Applied]) -> dict[str, int]:
+     """节点身份来自已学投影的全部成员。"""
+     targets: dict[str, int] = {}
+--- a/plugins/akasha/infrastructure/lexical.py
++++ b/plugins/akasha/infrastructure/lexical.py
+@@ -2,15 +2,24 @@
+ 
+ from __future__ import annotations
+ 
+-import re
+-import warnings
+ from collections import Counter
++from collections.abc import Mapping
++from contextlib import closing
+ from functools import cache
++import hashlib
++from importlib.metadata import version
++import json
++import logging
++from pathlib import Path
++import re
++import sqlite3
++import warnings
+ from typing import TYPE_CHECKING
+ 
+ if TYPE_CHECKING:
+     import jieba
+ 
++logger = logging.getLogger(__name__)
+ TOKEN_CHUNKS = re.compile(r"[A-Za-z0-9_]+|[\u3400-\u9fff]+")
+ 
+ 
+@@ -42,3 +51,80 @@
+         )
+         terms.extend(piece.strip() for piece in pieces if len(piece.strip()) >= 2)
+     return Counter(terms)
++
++
++Terms = tuple[tuple[str, int], ...]
++# 切分规则或缓存编码变化时递增，旧缓存整表作废。
++_TERMS_VERSION = 1
++
++
++def terms(text: str) -> Terms:
++    return tuple(sorted(tokenize(text).items()))
++
++
++# 开机恢复按正文哈希复用上次的切分结果；结果只由正文、jieba 版本与切分规则决定，
++# 指纹不符即视为没有缓存。缓存损坏或写失败只退回现场切分，不影响学习结果。
++class TermCache:
++    def __init__(self, path: Path):
++        self._path = path
++        self._known: dict[str, Terms] = {}
++        self._added: dict[str, Terms] = {}
++
++    def terms(self, text: str) -> Terms:
++        key = hashlib.sha256(text.encode("utf-8")).hexdigest()
++        found = self._known.get(key)
++        if found is None:
++            found = self._added.get(key)
++        if found is None:
++            found = self._added[key] = terms(text)
++        return found
++
++    def load(self) -> None:
++        try:
++            with closing(sqlite3.connect(f"file:{self._path}?mode=ro", uri=True)) as connection:
++                row = connection.execute("SELECT value FROM meta WHERE key='fingerprint'").fetchone()
++                if row is None or row[0] != _fingerprint():
++                    return
++                self._known = {
++                    key: tuple((term, count) for term, count in json.loads(value))
++                    for key, value in connection.execute("SELECT hash, terms FROM terms")
++                }
++        except (sqlite3.Error, ValueError, TypeError):
++            logger.warning("Akasha 分词缓存不可读，本次现场切分: %s", self._path, exc_info=True)
++            self._known = {}
++
++    def save(self) -> None:
++        if not self._added:
++            return
++        try:
++            with closing(sqlite3.connect(self._path, timeout=30)) as connection:
++                _write_terms(connection, self._added)
++        except sqlite3.Error:
++            logger.warning("Akasha 分词缓存写入失败，下次开机重新切分: %s", self._path, exc_info=True)
++            return
++        self._added = {}
++
++    def release(self) -> None:
++        self._known = {}
++
++
++def _fingerprint() -> str:
++    return f"{_TERMS_VERSION}:{version('jieba')}:{TOKEN_CHUNKS.pattern}"
++
++
++def _write_terms(connection: sqlite3.Connection, added: Mapping[str, Terms]) -> None:
++    # 1. 指纹变化时先清空旧切分，再写入本次结果与新指纹。
++    with connection:
++        _ = connection.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
++        _ = connection.execute("CREATE TABLE IF NOT EXISTS terms (hash TEXT PRIMARY KEY, terms TEXT NOT NULL)")
++        fingerprint = _fingerprint()
++        row = connection.execute("SELECT value FROM meta WHERE key='fingerprint'").fetchone()
++        if row is None or row[0] != fingerprint:
++            _ = connection.execute("DELETE FROM terms")
++            _ = connection.execute("INSERT OR REPLACE INTO meta VALUES ('fingerprint', ?)", (fingerprint,))
++        # 2. 同一正文的结果确定，并发写入同键时保留先到者即可。
++        _ = connection.executemany(
++            "INSERT OR IGNORE INTO terms VALUES (?, ?)",
++            [(key, json.dumps(value, ensure_ascii=False, separators=(",", ":")))
++             for key, value in added.items()],
++        )
+--- a/plugins/akasha/infrastructure/persistence.py
++++ b/plugins/akasha/infrastructure/persistence.py
+@@ -7,6 +7,7 @@
+ import os
+ import sqlite3
+ import tempfile
++from collections.abc import Iterable
+ from functools import cache
+ from dataclasses import asdict
+ from pathlib import Path
+@@ -67,14 +68,27 @@
+     if "consumer_state_json" in metadata:
+         raise ValueError("消费状态必须通过 consumption 提交")
+     if consumption is not None:
+-        consumption.check_turns(turns)
++        if previous_consumption is None:
++            consumption.check_turns(turns)
++        else:
++            consumption.check_suffix(turns, len(previous_consumption.applied))
+         metadata = {
+             **metadata,
+-            "consumer_state_json": canonical_json(consumption.model_dump(mode="json")),
++            "consumer_state_json": consumption.canonical_text(),
+         }
+     elif output_path.exists() and load_consumption(output_path) is not None:
+         raise ValueError("不能用旧 writer 覆盖已切换的消费状态")
+     output_path.parent.mkdir(parents=True, exist_ok=True)
++    if previous_consumption is not None and consumption is not None and not captures:
++        if _publish_in_place(
++            output_path, turns=turns, graph=graph, events=events, evidence=evidence,
++            context=context, burst_members=burst_members, config=config, metadata=metadata,
++            recalls=recalls, consumption=consumption, previous=previous_consumption,
++        ):
++            graph.mark_published()
++            return ""
++        if _schema_version(output_path) != _SCHEMA_VERSION:
++            previous_consumption = None
+     # 1. 本次写入只拥有自己的临时文件；失败不删除其他进程的恢复材料。
+     descriptor, name = tempfile.mkstemp(
+         prefix=output_path.name + ".", suffix=".tmp", dir=output_path.parent,
+@@ -116,9 +130,93 @@
+         os.fsync(directory)
+     finally:
+         os.close(directory)
++    graph.mark_published()
+     return sha256_file(output_path)
+ 
+ 
++def _schema_version(path: Path) -> int:
++    connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
++    try:
++        return int(connection.execute("PRAGMA user_version").fetchone()[0])
++    finally:
++        connection.close()
++
++
++# 原地增量发布：同一 SQLite 事务写入本批新增行与变化行，提交即 (S(k), consumption[:k]) 一起前进。
++# 失败回滚保留上一检查点；外键在写入时逐行强制，前缀已在更早的发布中校验。
++def _publish_in_place(
++    output_path: Path,
++    *,
++    turns: list[Turn],
++    graph: DynamicMemoryGraph,
++    events: list[PlasticityResult],
++    evidence: list[SeedEvidence],
++    context: ContextState,
++    burst_members: dict[str, list[int]],
++    config: MemoryConfig,
++    metadata: dict[str, str],
++    recalls: list[RecallCapture] | tuple[RecallCapture, ...],
++    consumption: Consumption,
++    previous: Consumption,
++) -> bool:
++    published = graph.published
++    if published is None or published.turn_count != graph.turn_count or not output_path.exists():
++        return False
++    connection = sqlite3.connect(output_path, isolation_level=None)
++    try:
++        connection.execute("PRAGMA foreign_keys = ON")
++        connection.execute("PRAGMA synchronous = FULL")
++        connection.execute("BEGIN IMMEDIATE")
++        # 1. 文件必须正是上次发布的检查点：同 schema、同消费前缀、同配置、同容量与规模。
++        stored = dict(connection.execute("SELECT key, value FROM metadata"))
++        version = int(connection.execute("PRAGMA user_version").fetchone()[0])
++        start = len(previous.applied)
++        if (version != _SCHEMA_VERSION
++            or stored.get("consumer_state_json") != previous.canonical_text()
++            or stored.get("config_json") != canonical_json(asdict(config))
++            or stored.get("graph_turn_capacity") != str(published.turn_count)
++            or stored.get("relation_count") != str(published.edge_count)
++            or stored.get("hub_count") != str(published.hub_count)
++            or stored.get("turn_count") != str(start)
++            or consumption.cutover_heads != previous.cutover_heads
++            or consumption.applied[:start] != previous.applied
++            or consumption.skipped[:len(previous.skipped)] != previous.skipped):
++            connection.execute("ROLLBACK")
++            return False
++
++        # 2. 追加本批经历；改写变化的边、时钟、外部 seed 与小型当前态。
++        connection.execute("DELETE FROM metadata")
++        _write_metadata(connection, metadata, turns, graph, config)
++        _write_turns(connection, turns[start:])
++        _write_feedback_events(connection, turns[start:])
++        _write_hubs(connection, graph.hubs[published.hub_count:])
++        _write_edges(connection, graph, graph.changed_edges(), replace=True)
++        _write_edges(connection, graph, range(published.edge_count, len(graph.source)))
++        _write_clock(connection, graph)
++        connection.executemany(
++            "INSERT OR REPLACE INTO external_seed_state VALUES (?, ?)",
++            sorted(
++                (node, seconds)
++                for node, seconds in graph.last_external_seed_seconds.items()
++                if published.external.get(node) != seconds
++            ),
++        )
++        _write_events(connection, events[start:], evidence[start:], start=start)
++        _write_recalls(connection, [item for item in recalls if item.query_node_id >= start])
++        connection.execute("DELETE FROM context_state")
++        connection.execute("DELETE FROM burst_context_members")
++        _write_context(connection, context)
++        _write_burst_members(connection, burst_members)
++        connection.execute("COMMIT")
++        return True
++    except BaseException:
++        if connection.in_transaction:
++            connection.execute("ROLLBACK")
++        raise
++    finally:
++        connection.close()
++
++
+ def _copy_previous_database(
+     connection: sqlite3.Connection,
+     path: Path,
+@@ -134,7 +232,7 @@
+     try:
+         source.execute("BEGIN")
+         metadata = dict(source.execute("SELECT key, value FROM metadata"))
+-        if Consumption.model_validate_json(metadata["consumer_state_json"]) != previous:
++        if metadata["consumer_state_json"] != previous.canonical_text():
+             raise ValueError("连续发布的已发布消费状态发生变化")
+         start = len(previous.applied)
+         if (current.cutover_heads != previous.cutover_heads
+@@ -207,6 +305,8 @@
+             len(turns),
+             config,
+         )
++        if int(connection.execute("PRAGMA user_version").fetchone()[0]) == _SCHEMA_VERSION:
++            graph.mark_published()
+         events = _load_events(connection)
+         evidence = _load_evidence(connection, len(events))
+         context = _load_context(connection, turns)
+@@ -229,6 +329,17 @@
+ 
+     connection = sqlite3.connect(f"file:{memory_path}?mode=ro", uri=True)
+     try:
++        # A graph published before schema v3 was learned with clock-dependent
++        # edge weights and multi-threaded dense reduction, so its online
++        # trajectory cannot be reproduced by a rebuild from the log. Continuing
++        # would republish it as v3 and make an unreplayed graph look migrated,
++        # so the operator is told to rebuild explicitly instead.
++        version = int(connection.execute("PRAGMA user_version").fetchone()[0])
++        if version and version < _SCHEMA_VERSION:
++            raise MemoryRebuildRequiredError(
++                f"学习图是 schema v{version} 的检查点，当前实现为 v{_SCHEMA_VERSION}："
++                "边权与 dense 规约方式已变，无法从日志重建出同一轨迹，需要显式重建后继续"
++            )
+         rows = dict(connection.execute(
+             "SELECT key, value FROM metadata WHERE key IN ('consumer_state_json', 'turn_count')"
+         ))
+@@ -329,6 +440,8 @@
+     values = {
+         **metadata,
+         "config_json": canonical_json(asdict(config)),
++        # dense 打分在固定单线程 BLAS 下得出（ADR 0138）；重放迁移据此判定图是否已重放。
++        "dense_threads": "1",
+         "engine": "single_state_empirical_recurrence_survival_v9_feedback",
+         "graph_turn_capacity": str(graph.turn_count),
+         "hub_count": str(len(graph.hubs)),
+@@ -463,6 +576,16 @@
+     connection: sqlite3.Connection,
+     graph: DynamicMemoryGraph,
+ ) -> None:
++    _write_hubs(connection, graph.hubs)
++    _write_edges(connection, graph, range(len(graph.source)))
++    _write_clock(connection, graph)
++    connection.executemany(
++        "INSERT INTO external_seed_state VALUES (?, ?)",
++        sorted(graph.last_external_seed_seconds.items()),
++    )
++
++
++def _write_hubs(connection: sqlite3.Connection, hubs: list[HubRecord]) -> None:
+     connection.executemany(
+         "INSERT INTO hub_nodes VALUES (?, ?, ?, ?, ?, ?)",
+         [
+@@ -474,18 +597,26 @@
+                 hub.innovation_mass,
+                 len(hub.member_edge_ids),
+             )
+-            for hub in graph.hubs
++            for hub in hubs
+         ],
+     )
++
++
++def _write_edges(
++    connection: sqlite3.Connection,
++    graph: DynamicMemoryGraph,
++    edge_ids: Iterable[int],
++    *,
++    replace: bool = False,
++) -> None:
+     membership_rows = []
+     temporal_rows = []
+-    for edge_id in range(len(graph.source)):
++    for edge_id in edge_ids:
+         common = (
+             edge_id,
+             graph.source[edge_id],
+             graph.target[edge_id],
+             graph.weight[edge_id],
+-            graph.effective_weight(edge_id),
+             graph.last_updated[edge_id],
+             graph.created_event[edge_id],
+             graph.observed_credit[edge_id],
+@@ -507,17 +638,21 @@
+                     *common[1:],
+                 )
+             )
++    verb = "INSERT OR REPLACE" if replace else "INSERT"
+     connection.executemany(
+-        "INSERT INTO hub_memberships VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
++        f"{verb} INTO hub_memberships VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         membership_rows,
+     )
+     connection.executemany(
+-        "INSERT INTO temporal_edges VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
++        f"{verb} INTO temporal_edges VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         temporal_rows,
+     )
++
++
++def _write_clock(connection: sqlite3.Connection, graph: DynamicMemoryGraph) -> None:
+     connection.execute(
+         """
+-        INSERT INTO plasticity_clock
++        INSERT OR REPLACE INTO plasticity_clock
+         VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         """,
+         (
+@@ -542,10 +677,6 @@
+             graph.recurrence_weight,
+         ),
+     )
+-    connection.executemany(
+-        "INSERT INTO external_seed_state VALUES (?, ?)",
+-        sorted(graph.last_external_seed_seconds.items()),
+-    )
+ 
+ 
+ def _write_captures(
+@@ -836,8 +967,8 @@
+     if row is None:
+         raise ValueError("memory snapshot is missing turn_count metadata")
+     count = int(row[0])
+-    if count <= 0:
+-        raise ValueError("memory snapshot turn_count must be positive")
++    if count < 0:
++        raise ValueError("memory snapshot turn_count must be nonnegative")
+     return count
+ 
+ 
+@@ -1180,6 +1311,10 @@
+     )
+ 
+ 
++# 3：去掉 effective_weight。它由 weight、最近支持时间与时钟导出，每轮都随时间变化，
++# 存下来会让「何时发布」改变已发布的行，在线按批发布就无法与一次性重建逐行相同。
++_SCHEMA_VERSION = 3
++
+ _LOGICAL_STATE_TABLES = (
+     "turn_nodes",
+     "feedback_events",
+@@ -1199,7 +1334,7 @@
+ 
+ _SCHEMA = """
+ PRAGMA application_id = 1095452754;
+-PRAGMA user_version = 2;
++PRAGMA user_version = 3;
+ 
+ CREATE TABLE metadata (
+     key TEXT PRIMARY KEY,
+@@ -1240,7 +1375,6 @@
+     turn_node_id INTEGER NOT NULL REFERENCES turn_nodes(node_id),
+     hub_node_id INTEGER NOT NULL REFERENCES hub_nodes(node_id),
+     weight REAL NOT NULL CHECK(weight >= 0.0),
+-    effective_weight REAL NOT NULL CHECK(effective_weight >= 0.0),
+     last_updated_event INTEGER NOT NULL,
+     created_event INTEGER NOT NULL,
+     observed_credit REAL NOT NULL,
+@@ -1262,7 +1396,6 @@
+     source_node_id INTEGER NOT NULL REFERENCES turn_nodes(node_id),
+     target_node_id INTEGER NOT NULL REFERENCES turn_nodes(node_id),
+     weight REAL NOT NULL CHECK(weight >= 0.0),
+-    effective_weight REAL NOT NULL CHECK(effective_weight >= 0.0),
+     last_updated_event INTEGER NOT NULL,
+     created_event INTEGER NOT NULL,
+     observed_credit REAL NOT NULL,
+--- a/plugins/akasha/interest.py
++++ b/plugins/akasha/interest.py
+@@ -1,20 +1,40 @@
+ from __future__ import annotations
+ 
+-from collections.abc import Awaitable, Callable, Sequence
++from collections.abc import Awaitable, Callable, Mapping, Sequence
++from dataclasses import dataclass
+ from datetime import datetime
++import heapq
++import threading
++from typing import Literal
+ 
+ import numpy as np
+ 
+-from plugins.ledger.contract import MessageCatalog, MessageEmbeddings
++from plugins.ledger.contract import EmbeddingRecords, MessageCatalog, MessageEmbeddings
+ from plugins.ledger.contract import Input, Output
+ from plugins.akasha.contract import SEMANTIC_INTEREST as SEMANTIC_INTEREST
+ 
+ from .application.consumer import run_memory_job
+ from .learning import Learning, LearningConfig
+-from .projection import Sample, input_features
++from .projection import CausalKey, Sample, SessionCursor, input_features
+ 
+ type Embed = Callable[[list[str]], Awaitable[list[list[float]]]]
+ 
++# 兴趣只取 cutoff 前最新的这么多个原型；增量缓存多留一倍，cutoff 过滤后不足且曾截断时整段重算。
++PROTOTYPES = 256
++_KEEP = 2 * PROTOTYPES
++
++
++@dataclass(slots=True)
++class _Prototypes:
++    """同一学习空间与前缀 revision 下的投影续读点、已算原型，以及向量尚未写入、下次重试的样本。"""
++
++    rule: tuple[str, int, tuple[str, ...]]
++    revision: int
++    cursors: dict[str, SessionCursor]
++    items: list[tuple[CausalKey, np.ndarray]]
++    pending: list[Sample]
++    truncated: bool = False
++
+ 
+ class SemanticInterest:
+     """用已完成对话的固定向量衡量候选兴趣，不重建历史向量或写学习图。"""
+@@ -25,6 +45,9 @@
+         self._catalog = catalog
+         self._embeddings = embeddings
+         self._select = select
++        # 每批新 Content 都要评分；按 Session 续读只投影新增闭段，不再每次整段解码全部历史。
++        self._cache: _Prototypes | None = None
++        self._cache_lock = threading.Lock()
+ 
+     async def score(self, texts: Sequence[str], *, cutoff: str) -> tuple[float, ...]:
+         """沿用 0.9 输入加 0.1 回复的最大余弦四次方，只采用 cutoff 前的证据。"""
+@@ -56,32 +79,119 @@
+ 
+     def _prototypes(self, rule: LearningConfig, through: datetime) -> list[np.ndarray]:
+         """Read the fixed historical inputs off the host event loop."""
++        with self._cache_lock:
++            # 1. 固定消息上界；前缀被改写或学习空间变化时丢弃缓存，从头投影。
++            heads = self._catalog.snapshot_heads()
++            revision = self._catalog.prefix_revision()
++            identity = (rule.embedding_model, rule.dimension, tuple(rule.sources))
++            cache = self._cache
++            if cache is None or revision is None or cache.rule != identity or cache.revision != revision:
++                cache = _Prototypes(identity, -1 if revision is None else revision, {}, [], [])
++            # 2. 删除的 Session 不再提供证据；有界堆只留最新 _KEEP 个原型，溢出即记为截断。
++            kept = _Newest(_KEEP, [item for item in cache.items if item[0][1] in heads])
++            records = self._embeddings.bind(self._learning.text)
++            pending: list[Sample] = []
++            cursors: dict[str, SessionCursor] = {}
++
++            def admit(sample: Sample) -> None:
++                if sample.ending.session_id not in heads:
++                    return
++                # cutoff 之后的样本不读向量，留到 cutoff 推进后再算，与原算法同样不受其向量影响。
++                if sample.key[0] > through:
++                    pending.append(_compact(sample))
++                    return
++                prototype = self._prototype(sample, rule, records)
++                if not isinstance(prototype, str):
++                    kept.push(sample.key, prototype)
++                elif prototype == "missing":
++                    pending.append(_compact(sample))
++            for sample in cache.pending:
++                admit(sample)
++            # 3. 学习准入继续由 Akasha 独占；逐 Session 投影续读点之后的闭段并当场归约，冷启动不再整段常驻全部历史。
++            for session, samples, cursor in self._learning.iter_samples_since(
++                self._catalog, rule, heads=heads, cursors=cache.cursors, keep=_complete,
++            ):
++                cursors[session] = cursor
++                for sample in samples:
++                    admit(sample)
++            cache.items, cache.pending, cache.cursors = kept.sorted(), pending, cursors
++            cache.truncated = cache.truncated or kept.dropped
++            if revision is not None:
++                self._cache = cache
++            selected = [vector for key, vector in cache.items if key[0] <= through]
++            if len(selected) < PROTOTYPES and cache.truncated:
++                self._cache = None
++                return self._full(rule, through, heads)
++            return selected[-PROTOTYPES:]
++
++    # 缓存被截断而 cutoff 早于保留窗口时，按原算法整段重算一次，不写缓存；同样逐 Session 归约。
++    def _full(self, rule: LearningConfig, through: datetime, heads: Mapping[str, int]) -> list[np.ndarray]:
+         records = self._embeddings.bind(self._learning.text)
+-        prototypes: list[np.ndarray] = []
+-        # 1. 固定消息上界；学习准入继续由 Akasha 独占，内部和未完成工作没有样本。
+-        heads = self._catalog.snapshot_heads()
+-        samples: list[Sample] = []
+-        for session_id, head in heads.items():
+-            samples.extend(self._learning.samples(self._catalog, rule, heads={session_id: head}))
+-        samples.sort(key=lambda sample: sample.key)
+-        for sample in samples:
+-            ending = sample.ending
+-            if ending.recorded_at > through or not isinstance(ending.body, Output) or ending.body.finish != "complete":
+-                continue
+-            users = [message for message in sample.messages
+-                     if isinstance(message.body, Input) and self._learning.text(message).strip()]
+-            if not users or not self._learning.text(ending).strip():
+-                continue
+-            vectors = [records.read(message, model=rule.embedding_model, dimension=rule.dimension)
+-                       for message in (*users, ending)]
+-            if any(vector is None for vector in vectors):
+-                continue
+-            _, user = input_features(users, text=self._learning.text, embeddings=records,
+-                                     embedding_model=rule.embedding_model, dimension=rule.dimension)
+-            if user is None:
+-                continue
+-            combined = 0.9 * user + 0.1 * np.asarray(vectors[-1], dtype=np.float32)
+-            norm = float(np.linalg.norm(combined))
+-            if norm > 0:
+-                prototypes.append(combined / norm)
+-        return prototypes[-256:]
++        kept = _Newest(PROTOTYPES, [])
++        for _, samples, _ in self._learning.iter_samples_since(
++            self._catalog, rule, heads=heads, cursors={}, keep=_complete,
++        ):
++            for sample in samples:
++                if sample.key[0] > through:
++                    continue
++                prototype = self._prototype(sample, rule, records)
++                if not isinstance(prototype, str):
++                    kept.push(sample.key, prototype)
++        return [vector for _, vector in kept.sorted()]
++
++    # 0.9 输入加 0.1 回复的归一化原型；"skip" 表示样本永远不提供证据，"missing" 表示固定向量尚未写入。
++    def _prototype(
++        self, sample: Sample, rule: LearningConfig, records: EmbeddingRecords,
++    ) -> np.ndarray | Literal["skip", "missing"]:
++        ending = sample.ending
++        users = [message for message in sample.messages
++                 if isinstance(message.body, Input) and self._learning.text(message).strip()]
++        if not users or not self._learning.text(ending).strip():
++            return "skip"
++        vectors = [records.read(message, model=rule.embedding_model, dimension=rule.dimension)
++                   for message in (*users, ending)]
++        if any(vector is None for vector in vectors):
++            return "missing"
++        _, user = input_features(users, text=self._learning.text, embeddings=records,
++                                 embedding_model=rule.embedding_model, dimension=rule.dimension)
++        if user is None:
++            return "skip"
++        combined = 0.9 * user + 0.1 * np.asarray(vectors[-1], dtype=np.float32)
++        norm = float(np.linalg.norm(combined))
++        return combined / norm if norm > 0 else "skip"
++
++
++# 按因果键只留最新 limit 个原型的最小堆；键含 Session 与 seq，互不相等，向量不参与比较。
++class _Newest:
++    def __init__(self, limit: int, items: list[tuple[CausalKey, np.ndarray]]) -> None:
++        self._limit = limit
++        self._heap = items
++        heapq.heapify(self._heap)
++        self.dropped = False
++        while len(self._heap) > limit:
++            _ = heapq.heappop(self._heap)
++            self.dropped = True
++
++    def push(self, key: CausalKey, vector: np.ndarray) -> None:
++        if len(self._heap) < self._limit:
++            heapq.heappush(self._heap, (key, vector))
++            return
++        self.dropped = True
++        if key > self._heap[0][0]:
++            _ = heapq.heapreplace(self._heap, (key, vector))
++
++    def sorted(self) -> list[tuple[CausalKey, np.ndarray]]:
++        return sorted(self._heap, key=lambda item: item[0])
++
++
++# 只有完整回复的闭段可能成为原型；其余样本不让正文常驻。
++def _complete(sample: Sample) -> bool:
++    ending = sample.ending
++    return isinstance(ending.body, Output) and ending.body.finish == "complete"
++
++
++# 等待向量或晚于 cutoff 的样本只留计算原型要读的输入与回复，不持有工具输出等成员正文。
++def _compact(sample: Sample) -> Sample:
++    kept = tuple(message for message in sample.messages
++                 if isinstance(message.body, Input) or message == sample.ending)
++    return Sample(ending=sample.ending, messages=kept, observations=())
+--- a/plugins/akasha/learning.py
++++ b/plugins/akasha/learning.py
+@@ -1,6 +1,6 @@
+ from __future__ import annotations
+ 
+-from collections.abc import Callable, Mapping, Sequence
++from collections.abc import Callable, Iterator, Mapping, Sequence
+ from datetime import datetime
+ from typing import Annotated, Literal, cast
+ 
+@@ -13,8 +13,9 @@
+ from ._boundaries import PostCommitReader, TOOLS, TurnProjection
+ from .domain.model import Turn, TurnFeedback
+ from .infrastructure.consumption import Applied, Consumption, message_nodes
++from .infrastructure.lexical import Terms, terms as lexical_terms
+ from .projection import (
+-    Sample, SessionCursor, dialogue_turn, project_session, restore_sample,
++    Sample, SessionCursor, dialogue_turn, iter_session, restore_sample,
+ )
+ 
+ 
+@@ -65,22 +66,34 @@
+         """只投影续读点之后的闭段；新续读点由调用者在成功消费后才采用。"""
+         found: list[Sample] = []
+         advanced: dict[str, SessionCursor] = {}
++        for session, samples, cursor in self.iter_samples_since(
++            catalog, config, heads=heads, cursors=cursors, keep=keep,
++        ):
++            advanced[session] = cursor
++            found.extend(samples)
++        return tuple(sorted(found, key=lambda sample: sample.key)), advanced
++
++    # 逐 Session、分块产出新闭段与续读点；调用者可边读边归约，正文不必整段常驻。
++    def iter_samples_since(
++        self, catalog: MessageCatalog, config: LearningConfig, *, heads: Mapping[str, int],
++        cursors: Mapping[str, SessionCursor], keep: Callable[[Sample], bool],
++    ) -> Iterator[tuple[str, tuple[Sample, ...], SessionCursor]]:
+         for session, head in heads.items():
+             cursor = cursors.get(session)
+             # 1. 没有新消息的 Session 连学习资格也不再读取；资格在接纳时固定，不必解码禁止学习的正文。
+             if cursor is not None and cursor.head == head:
+-                advanced[session] = cursor
++                yield session, (), cursor
+                 continue
+             if catalog.attributes(session).learning != "eligible":
+-                advanced[session] = SessionCursor(head, {})
++                yield session, (), SessionCursor(head, {})
+                 continue
+-            samples, advanced[session] = project_session(
++            # 2. 来源和历史 effect 仍由原学习规则筛选；keep 只丢弃调用者本来就跳过的样本，不让其正文常驻。
++            #    同一 Session 可能分块产出多次，最后一次的续读点才覆盖到 head。
++            for samples, advanced in iter_session(
+                 catalog, self.projection, session, head, cursor=cursor,
+                 include=lambda _session, source: source in config.sources,
+-            )
+-            # 2. 来源和历史 effect 仍由原学习规则筛选；keep 只丢弃调用者本来就跳过的样本，不让其正文常驻。
+-            found.extend(sample for sample in samples if self.accepts(sample) and keep(sample))
+-        return tuple(sorted(found, key=lambda sample: sample.key)), advanced
++            ):
++                yield session, tuple(sample for sample in samples if self.accepts(sample) and keep(sample)), advanced
+ 
+     def accepts(self, sample: Sample) -> bool:
+         """一条历史成员被禁止沉淀时，整个问答样本不成为学习材料。"""
+@@ -131,13 +144,14 @@
+     def make_turn(
+         self, sample: Sample, config: LearningConfig, embeddings: MessageEmbeddings,
+         *, previous: Sequence[Turn], state: Consumption, bindings: Bindings,
++        terms: Callable[[str], Terms] = lexical_terms,
+     ) -> Turn | None:
+         return dialogue_turn(
+             sample, node_id=len(previous),
+             previous=datetime.fromisoformat(previous[-1].committed_at) if previous else None,
+             text=self.text, embeddings=embeddings.bind(self.text),
+             embedding_model=config.embedding_model, dimension=config.dimension,
+-            feedback=self.feedback(sample, previous, state, bindings),
++            feedback=self.feedback(sample, previous, state, bindings), terms=terms,
+         )
+ 
+     def load_sample(self, catalog: MessageCatalog, config: LearningConfig, entry: Applied) -> Sample:
+@@ -154,10 +168,11 @@
+     def restore(
+         self, sample: Sample, embeddings: MessageEmbeddings,
+         config: LearningConfig, *, previous: Sequence[Turn],
+-        state: Consumption, bindings: Bindings,
++        state: Consumption, bindings: Bindings, terms: Callable[[str], Terms] = lexical_terms,
+     ) -> Turn:
+         """用已验证的样本还原材料，不写图或重放学习事件。"""
+-        turn = self.make_turn(sample, config, embeddings, previous=previous, state=state, bindings=bindings)
++        turn = self.make_turn(sample, config, embeddings, previous=previous, state=state,
++                              bindings=bindings, terms=terms)
+         if turn is None:
+             raise ValueError("原学习规则不再接纳已经学习的样本")
+         return turn
+--- a/plugins/akasha/migration.catalog.toml
++++ b/plugins/akasha/migration.catalog.toml
+@@ -1,6 +1,6 @@
+ schema_version = 2
+ bundle_id = "akasha"
+-version = "1.3.0"
++version = "1.4.0"
+ migration_root = "akasha_migrations"
+ package_name = "akasha_migrations"
+ 
+@@ -27,3 +27,9 @@
+ path = "20260918_04_retire_removed_config_keys.py"
+ depends = ["20260918_03_register_replay_without_memory_config"]
+ transactional = false
++
++[[migrations]]
++id = "20261029_01_replay_with_single_thread_dense"
++path = "20261029_01_replay_with_single_thread_dense.py"
++depends = ["20260918_04_retire_removed_config_keys"]
++transactional = false
+--- a/plugins/akasha/projection.py
++++ b/plugins/akasha/projection.py
+@@ -1,6 +1,6 @@
+ from __future__ import annotations
+ 
+-from collections.abc import Callable, Mapping, Sequence
++from collections.abc import Callable, Iterator, Mapping, Sequence
+ from dataclasses import dataclass
+ from datetime import UTC, datetime
+ import hashlib
+@@ -13,7 +13,7 @@
+ 
+ from .domain.model import Turn, TurnFeedback
+ from .infrastructure.consumption import Applied
+-from .infrastructure.lexical import tokenize
++from .infrastructure.lexical import Terms, terms as lexical_terms
+ from ._boundaries import Turn as ProjectedTurn, TurnProjection
+ 
+ 
+@@ -58,17 +58,20 @@
+     boundaries: Mapping[str, int]
+ 
+ 
+-def project_session(
++# 单次投影读取的 seq 窗口；开放段跨过整个窗口时翻倍，保证前进。
++_WINDOW = 1024
++
++
++def iter_session(
+     catalog: MessageCatalog, projection: TurnProjection, session_id: str, head: int, *,
+     include: Callable[[str, str], bool], cursor: SessionCursor | None = None,
+-) -> tuple[list[Sample], SessionCursor]:
+-    """只读取每个学习来源上次闭段之后的尾部；返回新闭段和前进后的续读点。"""
++) -> Iterator[tuple[list[Sample], SessionCursor]]:
++    """按 seq 窗口分块产出新闭段；只有最后一次产出的续读点覆盖到 head，中途的不可保存。"""
+     # 1. 倒退的 head 不可信，退回从头投影。
+     if cursor is not None and cursor.head > head:
+         cursor = None
+     reader = catalog.reader(session_id)
+     boundaries = {} if cursor is None else dict(cursor.boundaries)
+-    samples: list[Sample] = []
+     for source in sorted(reader.source_names()):
+         if not include(session_id, source):
+             continue
+@@ -76,14 +79,25 @@
+         if cursor is not None and reader.head(source=source) <= cursor.head:
+             continue
+         after = boundaries.get(source, -1)
+-        messages = reader.scan(tuple, after_seq=after, through_seq=head, source=source)
+-        turns = projection.project(messages, source, after_seq=after)
+-        samples.extend(closed_samples(messages, turns))
+-        # 3. 任一闭段（含 abandoned）的结束点都是投影合同允许的续读起点。
+-        boundaries[source] = next(
+-            (turn.through_seq for turn in reversed(turns) if turn.status != "open"), after,
+-        )
+-    return samples, SessionCursor(head, boundaries)
++        window = _WINDOW
++        while True:
++            # 3. 闭段之后的投影不依赖更早消息，窗口从上一块最后一个闭段续读，开放尾部留给下一块重读。
++            upper = min(head, after + window)
++            messages = reader.scan(tuple, after_seq=after, through_seq=upper, source=source)
++            turns = projection.project(messages, source, after_seq=after)
++            # 4. 任一闭段（含 abandoned）的结束点都是投影合同允许的续读起点。
++            closed = next((turn.through_seq for turn in reversed(turns) if turn.status != "open"), after)
++            chunk = closed_samples(messages, turns)
++            del messages, turns
++            if upper >= head:
++                boundaries[source] = closed
++                yield chunk, SessionCursor(head, dict(boundaries))
++                break
++            window = window * 2 if closed == after else _WINDOW
++            after = boundaries[source] = closed
++            if chunk:
++                yield chunk, SessionCursor(head, dict(boundaries))
++    yield [], SessionCursor(head, boundaries)
+ 
+ 
+ def closed_samples(messages: Sequence[Message], turns: Sequence[ProjectedTurn]) -> list[Sample]:
+@@ -159,6 +173,7 @@
+     sample: Sample, *, node_id: int, previous: datetime | None,
+     text: Callable[[Message], str], embeddings: EmbeddingRecords,
+     embedding_model: str, dimension: int, feedback: TurnFeedback = TurnFeedback(),
++    terms: Callable[[str], Terms] = lexical_terms,
+ ) -> Turn | None:
+     """默认学习完整问答；多输入共享一个样本，向量缺口明确失败。"""
+     # 1. 选择学习材料的职责属于 Akasha，投影插件仍返回所有闭段。
+@@ -185,8 +200,7 @@
+         started_at=users[0].recorded_at.astimezone(UTC).isoformat(),
+         committed_at=committed.isoformat(), user_text=joined, assistant_text=answer,
+         user_dense=user_dense, assistant_dense=assistant_dense,
+-        user_terms=tuple(sorted(tokenize(joined).items())),
+-        assistant_terms=tuple(sorted(tokenize(answer).items())),
++        user_terms=terms(joined), assistant_terms=terms(answer),
+         inter_gap_seconds=gap, feedback=feedback,
+     )
+ 

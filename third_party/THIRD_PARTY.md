@@ -36,14 +36,21 @@ source evidence, optional candidate rank fusion, extractive evidence windows,
 receipt-bound original-text reads, SDK integration and evaluation tooling. They extend the existing learning and
 persistence owners rather than replacing source provenance.
 
-The retrieval representation follows upstream `cd0101f8` and `881f9fa7`: blocked
-graph capacity, incremental basin structure with a resident index, a lazy-heap
-Residual Push and a matrix-backed resident feature pool. Learning dynamics and
-pop ordering are unchanged. Recorded in
-`third_party/patches/akasha-retrieval-representation.patch`. The later schema v3
-publish path, compiled push kernel and single-threaded dense replay are not
-adopted, because they modify files this distribution already patches and carry a
-schema migration.
+The Akasha engine follows upstream through `5ddd5ebb`: blocked graph capacity,
+incremental basin structure with a resident index, a lazy-heap Residual Push with
+an optional compiled kernel, a matrix-backed resident feature pool, in-place
+incremental checkpoint publication with schema v3, tokenizer and vector reuse on
+restore, and incremental interest prototypes. Learning dynamics and pop ordering
+are unchanged. Recorded in
+`third_party/patches/akasha-retrieval-representation.patch`, with the compiled
+kernel and the replay migration listed among the supplemental files.
+
+Three local changes sit on top: an empty graph stays publishable, the consumption
+read and member routing stay off the event loop, and a checkpoint published
+before schema v3 is refused rather than republished as v3. The last one differs
+from upstream deliberately: upstream registers a one-time full replay through its
+migration, and this distribution's root migration catalog does not require Akasha
+migrations, so refusing is what keeps an unreplayed graph from looking migrated.
 
 Programmatic admission accepts an optional memory scope, adopted from upstream
 `6d7e25bf`. The learning axis only governs whether a session is written to

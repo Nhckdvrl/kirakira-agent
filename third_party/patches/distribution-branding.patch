@@ -828,7 +828,16 @@
      parser.add_argument(
 --- a/plugins/ledger/contract.py
 +++ b/plugins/ledger/contract.py
-@@ -866,6 +866,8 @@
+@@ -683,6 +683,8 @@
+         self, *, prefix: str = "", visibility: Literal["listed", "internal"] | None = None,
+     ) -> Mapping[str, int]: ...
+ 
++    def prefix_revision(self) -> int | None: ...
++
+     async def snapshot_heads_async(
+         self, *, prefix: str = "", visibility: Literal["listed", "internal"] | None = None,
+     ) -> Mapping[str, int]: ...
+@@ -866,6 +868,8 @@
          self, key: str, value: Mapping[str, object], *, expected_version: int | None
      ) -> OwnerRecord: ...
  
@@ -837,7 +846,7 @@
      def append(
          self,
          writer: MessageWriter,
-@@ -995,7 +997,7 @@
+@@ -995,7 +999,7 @@
  APPEND_CHECKS = ServiceKey[AppendChecks]("ledger.append_checks.v1")
  
  def detect_supported_image_mime(head: bytes) -> str | None:
