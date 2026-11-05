@@ -11,7 +11,7 @@
 
 ## 设计与实现
 
-- [为什么不用现成的记忆方案](architecture/why-not-off-the-shelf.md)：先说哪里不是优势，再给四条当场可验证的差别，以及明确不声称什么。
+- [为什么不用现成的](architecture/why-not-off-the-shelf.md)：记忆与主动交互各自的差别在哪、怎么当场验证，以及明确不声称什么。
 - [产品定位与设计依据](architecture/design-direction.md)：三条特色的机制与取舍，以及读过的设计输入。
 - [记忆架构](architecture/memory.md)：学习循环、两条检索通道、原文证据、窗口规则与开销。
 - [Runtime 架构](architecture/overview.md)：统一执行主链、所有权、生命周期和恢复。
