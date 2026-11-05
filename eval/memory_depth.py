@@ -150,6 +150,11 @@ def summary(rows, systems=SYSTEMS):
             "supported_answers": sum(r.get("supported_answer", False) for r in selected),
             "initial_answer_spans": sum(r.get("initial_answer_span_present", False) for r in positive),
             "final_answer_spans": sum(r.get("final_answer_span_present", False) for r in positive),
+            # Model-free: the reference value is still inside an original this
+            # receipt admits, so withholding its body deferred it rather than lost it.
+            "reference_reachable": sum(r.get("reference_reachable", False) for r in positive),
+            "mean_initial_material_chars": statistics.mean(
+                r["initial_material_chars"] for r in selected) if selected else None,
             "source_reads": sum(len(r["reads"]) for r in selected),
             "model_calls": sum(len(r["calls"]) for r in selected),
             "mean_retained_evidence_chars": statistics.mean(r["retained_evidence_chars"] for r in selected) if selected else None,
@@ -294,6 +299,15 @@ async def evaluate(args):
                     "references": refs, "reads": [], "calls": [], "resent_evidence_chars": 0}
                 row["initial_answer_span_present"] = case["expected"] != "UNKNOWN" and any(
                     case["expected"] in chunk for chunks in visible.values() for chunk in chunks)
+                # Deterministic, model-free: is the reference value still inside an
+                # original this receipt admits for reading? Withholding a body only
+                # defers the value if the answer remains one read away; losing it
+                # would be the real failure, and that does not depend on the reader.
+                row["admitted_message_ids"] = sorted(presented)
+                row["reference_reachable"] = case["expected"] != "UNKNOWN" and any(
+                    case["expected"] in learning.text(log.reader(hit.session_id).get(identity))
+                    for hit in recall.hits for identity in hit.message_ids
+                    if identity in presented)
                 try:
                     for step in range(3 if adaptive else 1):
                         remaining = args.max_chars - len("\n\n".join(blocks))

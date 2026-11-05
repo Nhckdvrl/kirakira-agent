@@ -1,37 +1,33 @@
 # 文档
 
+先看[证据与验证](operations/verification.md)：那一页先讲本项目最值得称道的四件事（可取证的记忆、可纠正的主动判断、说得出并降下来的开销、可核对的来源边界），每件都带数字，后面是全部 13 份报告的索引。
+
 ## 使用
 
 - [启动与日常使用](handbook/start.md)：单一 Python 环境、Web、模型切换、Telegram 和既有数据导入。
-- [记忆与主动交互](handbook/memory-proactive.md)：记忆配置、事件入口、空闲思考和升级。
+- [记忆与主动交互](handbook/memory-proactive.md)：记忆配置、事件入口、持久目标、空闲思考和升级。
 - [个性与相处方式](handbook/personality.md)：组合表达与行为偏好、人物底稿、临时要求及任务边界。
-- [持续跟进](handbook/followups.md)：聊天交办与工作台管理，发布、网页与邮件接入，规则修改、复查和投递反馈。
+- [持续跟进](handbook/followups.md)：聊天交办与工作台管理，发布、网页与邮件接入，规则修改、复查、投递反馈与关注权重。
 
 ## 设计与实现
 
-- [产品定位与设计依据](architecture/design-direction.md)：个人 AI 伙伴的体验、设计取舍和实测依据。
-- [人格与言行一致](architecture/personality.md)：14 个开源项目的设计输入、可组合人格、具体行为与验证方法。
+- [产品定位与设计依据](architecture/design-direction.md)：三条特色的机制与取舍，以及读过的设计输入。
+- [记忆架构](architecture/memory.md)：学习循环、两条检索通道、原文证据、窗口规则与开销。
 - [Runtime 架构](architecture/overview.md)：统一执行主链、所有权、生命周期和恢复。
-- [记忆架构](architecture/memory.md)：第二代学习循环、查询、原文证据和预算。
+- [人格与言行一致](architecture/personality.md)：14 个开源项目的设计输入、可组合人格与验证方法。
 - [插件清单](status/plugin-inventory.md)：发行组件与默认选择。
 
 ## 开发与验证
 
+- [证据与验证](operations/verification.md)：四项主要结论与全部报告索引。
+- [评测复现](../eval/README.md)：环境、模型条件、开销测量与质量对照的完整命令。
 - [工程工作流](engineering/development-workflow.md)：实现、验证、交付与目录维护。
 - [维护脚本](../scripts/README.md)：源码校验、迁移、场景验证和清理命令。
-- [评测复现](../eval/README.md)：环境、模型条件、真实链路与公开记忆实验。
-- [本地体验与会话接续实测](operations/evaluations/2026-10-31-runtime-experience.md)：SDK、CLI、网页、Telegram、NFS 与模型等待的分段测量，及长原文与新决定的真实读取。
-- [邮件、提醒与后台回访](operations/evaluations/2026-10-31-personal-workflows.md)：连接前已有的重要邮件、真实聊天交办、确认期限提醒，以及后台研究、完成通知与原始结果查询。
-- [聊天交办与持续行动实测](operations/evaluations/2026-10-23-personal-assistant.md)：普通助理工作、跨会话条件、改规则、投递和恢复；保留失败与耗时。
-- [伙伴与个性实测](operations/evaluations/2026-10-22-companion-personality.md)：单维度表达控制、示例与事实、日常话题接续及原文定位；功能与风格效果分开。
-- [记忆场景亮点](operations/evaluations/2026-10-22-memory-scenarios.md)：从线索继续查原文、历史参与行动、出处复核；最终答案、开销和失败。
-- [公开历史记忆质量](operations/evaluations/2026-10-21-memory-runtime.md)：逐题对照、补全贡献、真实主链与恢复证据。
-- [验证结果](operations/verification.md)：分主题报告和原始证据。
+- [第三方来源声明](../third_party/THIRD_PARTY.md)：上游来源、逐文件摘要、采纳与拒绝记录。
 
 ## 当前状态与后续工作
 
 - [当前状态](status/current.md)：实际交付与现有限制。
 - [交付与研究路线](status/roadmap.md)：尚待验证的体验与研究问题。
 
-带日期的评测报告记录当时版本，当前功能以使用说明、架构和状态页为准。
-正式证据统一位于 `operations/evaluations/artifacts/<日期-主题>/`；历史实现和已完成的一次性迁移记录通过 Git 查看。
+带日期的评测报告记录当时版本，当前功能以使用说明、架构和状态页为准。正式证据位于 `operations/evaluations/artifacts/<日期-主题>/`；历史实现与已完成的一次性迁移通过 Git 查看。
