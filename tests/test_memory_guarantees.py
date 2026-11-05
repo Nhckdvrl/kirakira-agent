@@ -65,5 +65,5 @@ async def test_receipt_design_holds_its_three_properties() -> None:
     assert report["repetition"]["stock_already_quoted_bodies_injected"] > 0
 
     # The limits of the claim travel with it.
-    assert "新的召回查询" in report["claim_limits"]
+    assert "新的召回查询" in report["claim_limits"] and "浮出新的原文" in report["claim_limits"]
     assert report["conditions"]["chat_model"] is None

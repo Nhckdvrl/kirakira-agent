@@ -2,7 +2,7 @@
 
 这一页用来回答一个具体的问题：已经有 Mem0、Zep、Letta、LangMem，为什么还要自己做一套记忆？
 
-回答分三段：**先说哪里不是优势**（避免把打平说成领先），**再给四条当场能验证的差别**，**最后写清楚不声称什么**。
+回答分三段：**先说哪里不是优势**（避免把打平说成领先），**再给五条当场能验证的差别**，**最后写清楚不声称什么**。
 
 ## 一、先承认：回答准确率不是我们的优势
 
@@ -16,7 +16,7 @@
 
 **把"答得更准"当卖点，是最容易被面试官一句话问倒的地方。** 真正的差别在别处，而且可以量。
 
-## 二、四条当场能验证的差别
+## 二、五条当场能验证的差别
 
 下面每个数字都来自同一条命令，**不需要 API 密钥、不调用任何聊天模型**：
 
@@ -99,6 +99,6 @@ Zep 的**双时间线**（valid time 与 transaction time 分开）我们没有�
 
 ## 复现与证据
 
-- 本页第二段的四条：[`eval/memory_guarantees.py`](../../eval/memory_guarantees.py)，证据在 [`artifacts/2026-11-06-memory-guarantees/`](../operations/evaluations/artifacts/2026-11-06-memory-guarantees/evidence.json)，回归在 `tests/test_memory_guarantees.py`。
+- 本页第二段的五条：[`eval/memory_guarantees.py`](../../eval/memory_guarantees.py)，证据在 [`artifacts/2026-11-06-memory-guarantees/`](../operations/evaluations/artifacts/2026-11-06-memory-guarantees/evidence.json)，回归在 `tests/test_memory_guarantees.py`。
 - 第一段的统计：[`eval/significance.py`](../../eval/significance.py)，详见[证据与验证](../operations/verification.md)。
 - 第四段：[邮件与可纠正跟进](../operations/evaluations/2026-10-21-mail-followups.md)。
