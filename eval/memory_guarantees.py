@@ -65,6 +65,8 @@ from plugins.ledger.embedding_store import MessageEmbeddings
 from plugins.ledger.log import MessageLog, SessionAttributes
 from plugins.turn_projection.plugin import TurnProjection
 
+from eval.significance import mcnemar_exact
+
 SESSION = "conversation"
 OTHER_SESSION = "other-conversation"
 SOURCE = "conversation"
@@ -349,7 +351,16 @@ async def measure(*, seed_turns: int, live_turns: int) -> dict[str, object]:
         "reproducibility": {
             "ours_identical_after_index_growth": f"{reproducible['ours']}/{reproducible['turns']}",
             "stock_identical_after_index_growth": f"{reproducible['stock']}/{reproducible['turns']}",
+            # The one axis where the baseline genuinely varies, so it is the one
+            # that needs a test rather than a count: ours holds by construction,
+            # the baseline's depends on how far the index moved. Paired, because
+            # both arms answer the same turns.
+            "paired_mcnemar_p": round(mcnemar_exact(
+                reproducible["ours"] - min(reproducible["ours"], reproducible["stock"]),
+                reproducible["stock"] - min(reproducible["ours"], reproducible["stock"])), 5),
             "stock_drift_examples": reproducible["drift"][:5],
+            "note": ("其余各项是结构性性质而非抽样估计：分母表示检查了多少次，"
+                     "每次都成立；出现一次反例即为缺陷，不是统计波动。"),
         },
         "read_confinement": {
             "illegal_attempts": confinement["attempts"] - len(turns),

@@ -38,8 +38,13 @@ def test_the_baseline_is_a_fair_stand_in_not_a_straw_man() -> None:
 async def test_receipt_design_holds_its_three_properties() -> None:
     report = await measure(seed_turns=4, live_turns=3)
 
-    ours, _, total = report["reproducibility"]["ours_identical_after_index_growth"].partition("/")
+    repro = report["reproducibility"]
+    ours, _, total = repro["ours_identical_after_index_growth"].partition("/")
     assert ours == total, "a saved receipt must re-render identically after the index grows"
+    # The only axis where the baseline genuinely varies, so it carries a test
+    # rather than a bare count; the rest are structural and a single
+    # counter-example would be a defect, not sampling noise.
+    assert 0.0 <= repro["paired_mcnemar_p"] <= 1.0
 
     confinement = report["read_confinement"]
     assert confinement["illegal_attempts"] > 0

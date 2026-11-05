@@ -11,6 +11,7 @@
  "reproducibility": {
   "ours_identical_after_index_growth": "25/25",
   "stock_identical_after_index_growth": "16/25",
+  "paired_mcnemar_p": 0.00391,
   "stock_drift_examples": [
    {
     "turn": 0,
@@ -42,7 +43,8 @@
     "chars_after": 117,
     "changed_chars": 59
    }
-  ]
+  ],
+  "note": "其余各项是结构性性质而非抽样估计：分母表示检查了多少次，每次都成立；出现一次反例即为缺陷，不是统计波动。"
  },
  "read_confinement": {
   "illegal_attempts": 75,
