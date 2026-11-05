@@ -91,7 +91,9 @@ cache_dir = ".cache/pytest"
 cache-dir = ".cache/ruff"
 
 [project.optional-dependencies]
-memory = ["fastembed==0.9.0"]
+# numba 让 Residual Push 走编译内核：固定 150 轮下检索均值 35.63 ms → 12.73 ms，
+# 代价是峰值约 +27 MiB 与每进程一次编译。缺少它时按 ImportError 退回解释器循环，结果相同。
+memory = ["fastembed==0.9.0", "numba==0.68.1"]
 providers = [
     "curl_cffi>=0.14.0",
     "grpcio>=1.78.0,<2",

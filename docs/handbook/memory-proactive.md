@@ -18,7 +18,7 @@ local-embedding、event-ingress、followups；会话引用与可配置的 SearXN
 
 ## 本地记忆
 
-需要安装 `memory` 可选依赖；安装与评测共用项目的同一个 `.venv`。
+需要安装 `memory` 可选依赖；安装与评测共用项目的同一个 `.venv`。该 extra 除本地向量编码器外还带编译内核（`numba`），召回检索因此明显更快，代价是学习峰值分配约由 52 MiB 升到 77 MiB，且每个进程首次检索要先编译一次。不安装它时记忆仍可用，检索走解释器回退、结果相同。具体数字见[检索表示与开销](../architecture/memory.md#检索表示与开销)。
 
 ```sh
 uv run --frozen --no-sync kirakira-agent configure-memory \

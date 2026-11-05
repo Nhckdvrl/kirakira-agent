@@ -2241,7 +2241,7 @@
       "source_sha256": "d7123fbd951cc2dffa11e35a234a1e7463b8fedd6ce825ade5c24185bdb6d7cf",
       "sha256": "d7123fbd951cc2dffa11e35a234a1e7463b8fedd6ce825ade5c24185bdb6d7cf",
       "license": "MIT",
-      "adaptation": "Optional compiled Residual Push loop; imported unchanged and used only when numba is present."
+      "adaptation": "Compiled Residual Push loop; imported unchanged. numba is part of this distribution's memory extra, and diffusion falls back to the interpreter loop when it is absent, with the same result."
     },
     "plugins/goal/__init__.py": {
       "source_commit": "101b1912885c6f0d6e6c88cb236d9994afb17ee5",

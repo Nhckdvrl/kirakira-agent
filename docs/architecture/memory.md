@@ -111,21 +111,15 @@ async def project_history():
 
 固定 150 轮已学习历史、16 维固定向量、各跑三次的[开销测量](../../eval/memory_cost.py)（中位数）：
 
-| | 改前 | 表示变换后 | 完整引擎 | 完整引擎 + numba |
-| --- | --- | --- | --- | --- |
-| 学习 150 轮 | 47.66 s | 29.38 s | **14.35 s** | 19.24 s |
-| 单次检索均值 | 47.96 ms | 30.53 ms | 35.63 ms | **12.73 ms** |
-| 学习峰值分配 | 52.03 MiB | 52.20 MiB | 49.30 MiB | 76.80 MiB |
+| | 改前 | 表示变换后 | 完整引擎（当前默认） |
+| --- | --- | --- | --- |
+| 学习 150 轮 | 47.66 s | 29.38 s | 20.34 s |
+| 单次检索均值 | 47.96 ms | 30.53 ms | **11.62 ms** |
+| 学习峰值分配 | 52.03 MiB | 52.20 MiB | 76.79 MiB |
 
-两点需要说清楚。**不装 numba 时检索比只做表示变换时略慢**（35.63 ms 对 30.53 ms）：编译内核缺席时走解释器回退，结果相同但少了这段加速。**装上 numba 后检索降到 12.73 ms**，代价是峰值多约 27 MiB，且进程首次使用时要编译一次（上表学习列 19.24 s 即含这次编译，比不装时的 14.35 s 更久）。
+编译内核（`numba`）已纳入 `memory` extra，因此按 `uv sync --frozen --extra providers --extra memory` 安装后默认生效：检索均值由 47.96 ms 降到 11.62 ms。代价是峰值分配由 52 MiB 升到约 77 MiB，并且每个进程首次使用时要编译一次——上表学习列 20.34 s 含这次编译，不含编译时约 14.4 s。
 
-numba 不在锁定依赖里，和上游一样是可选项：
-
-```sh
-uv pip install numba
-```
-
-是否纳入 `memory` extra 需要单独决定——它带来 llvmlite 和额外峰值。缺少它时 `domain/diffusion.py` 按 ImportError 退回解释器循环，结果一致。
+缺少 `numba` 时 `domain/diffusion.py` 按 ImportError 退回解释器循环，结果完全相同，只是检索回到约 35.6 ms；未安装 `memory` extra 的部署因此仍然可用。
 
 这条测量只衡量开销，不衡量检索质量。更快不等于答案同样有用；质量仍由[取证深度实验](../operations/evaluations/2026-10-22-memory-depth.md)和[记忆实测](../operations/evaluations/2026-10-21-memory-runtime.md)分别验收。
 
