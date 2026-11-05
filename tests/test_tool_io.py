@@ -1,6 +1,7 @@
 """Large inputs must respect output budgets before accumulating whole responses."""
 
 import asyncio
+import contextlib
 import gzip
 import json
 import os
@@ -16,6 +17,73 @@ from plugins.host_execution.bridge.filesystem import ReadFileOperation
 from plugins.standard_web.contract import FetchRequest, SearchRequest
 from plugins.web_fetch_http.fetch import FetchConfig, HttpFetch
 from plugins.web_search_searxng.search import SearxngConfig, SearxngSearch
+
+# The MCP server runs in a new interpreter and imports this project before it
+# answers anything, on storage that may be a network filesystem. Five seconds
+# measures cold import rather than the behaviour under test, so the budget is
+# generous on purpose, matching the host-bridge fixture's.
+#
+# This test did fail twice in a row here and then passed some twenty times, and
+# the original message was not captured, so the cause is NOT established: a slow
+# cold start and a subprocess that died early both look like a stalled readline.
+# The budget covers the first; the diagnostics below name whichever it was, so
+# the next occurrence does not need to be guessed at.
+MCP_STARTUP_TIMEOUT_S = 180.0
+MCP_REPLY_TIMEOUT_S = 60.0
+MCP_SHUTDOWN_TIMEOUT_S = 30.0
+
+
+async def _await_line(awaitable, *, seconds, what, process=None):
+    """Wait with a budget, and say what happened instead when nothing arrives.
+
+    A bare TimeoutError cannot distinguish a slow start from a dead subprocess,
+    and an empty line reaches the caller as a JSON decode error several frames
+    away from the cause. Both are named here.
+    """
+    try:
+        line = await asyncio.wait_for(awaitable, seconds)
+    except TimeoutError as error:
+        detail = ""
+        if process is not None and process.returncode is not None:
+            detail = f"; the subprocess had already exited with {process.returncode}"
+        raise AssertionError(
+            f"{what} did not arrive within {seconds}s{detail}. This budget covers a "
+            f"cold interpreter start and project import, so a timeout means the "
+            f"subprocess never got that far") from error
+    if not line:
+        stderr = b""
+        if process is not None and process.stderr is not None:
+            with contextlib.suppress(Exception):
+                stderr = await asyncio.wait_for(process.stderr.read(), 5)
+        raise AssertionError(
+            f"{what}: the stream closed without a line, so the subprocess stopped "
+            f"early (returncode {None if process is None else process.returncode}). "
+            f"stderr tail: {stderr.decode('utf-8', 'replace')[-2000:]!r}")
+    return line
+
+
+@pytest.mark.asyncio
+async def test_subprocess_stall_and_early_exit_are_told_apart():
+    """The two ways a reply never arrives must not look the same.
+
+    A stalled read and a subprocess that died both leave the caller waiting on
+    a line. Reported as a bare TimeoutError or a JSON decode error they are
+    indistinguishable, which is how a flaky run turns into a guess.
+    """
+    async def never():
+        await asyncio.Event().wait()
+
+    with pytest.raises(AssertionError, match="did not arrive within"):
+        await _await_line(never(), seconds=0.05, what="a reply")
+
+    async def closed():
+        return b""
+
+    done = await asyncio.create_subprocess_exec(sys.executable, "-c", "pass",
+                                                stderr=asyncio.subprocess.PIPE)
+    await done.wait()
+    with pytest.raises(AssertionError, match="stopped early"):
+        await _await_line(closed(), seconds=5, what="a reply", process=done)
 
 
 @pytest.mark.parametrize("scenario", [
@@ -366,7 +434,15 @@ async def test_computer_control_and_jsonrpc_keep_page_text_with_isolated_surroga
         async def rpc(payload):
             process.stdin.write(json.dumps(payload).encode("ascii") + b"\n")
             await process.stdin.drain()
-            raw = await asyncio.wait_for(process.stdout.readline(), 5)
+            # initialize is always the first request, and it is the one that
+            # waits on the subprocess's cold import; later replies should be
+            # quick. Keyed on the method rather than on driver traffic, which
+            # the subprocess may or may not have sent by this point.
+            method = payload.get("method")
+            raw = await _await_line(
+                process.stdout.readline(),
+                seconds=MCP_STARTUP_TIMEOUT_S if method == "initialize" else MCP_REPLY_TIMEOUT_S,
+                what=f"MCP reply to {method!r}", process=process)
             return raw, json.loads(raw.decode("utf-8"))
 
         _, initialized = await rpc({"jsonrpc": "2.0", "id": 1, "method": "initialize"})
@@ -378,7 +454,8 @@ async def test_computer_control_and_jsonrpc_keep_page_text_with_isolated_surroga
                 writer.write(json.dumps({"op": "run", "code": code,
                     "context": {"session_id": "fixture", "call_id": code}}).encode("ascii") + b"\n")
                 await writer.drain()
-                raw = await asyncio.wait_for(reader.readline(), 5)
+                raw = await _await_line(reader.readline(), seconds=MCP_REPLY_TIMEOUT_S,
+                                        what=f"control reply for {code!r}")
                 expected = normal if code == "page" else "🚀"
                 assert expected.encode("utf-8") in raw
                 return json.loads(raw.decode("utf-8"))
@@ -405,7 +482,7 @@ async def test_computer_control_and_jsonrpc_keep_page_text_with_isolated_surroga
         if process is not None:
             process.stdin.close()
             try:
-                await asyncio.wait_for(process.wait(), 5)
+                await asyncio.wait_for(process.wait(), MCP_SHUTDOWN_TIMEOUT_S)
             except TimeoutError:
                 process.kill()
                 await process.wait()
