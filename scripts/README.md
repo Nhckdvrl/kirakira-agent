@@ -8,7 +8,7 @@
 - `scheduler_tools_scenario.py`：确定性模型对端上的原生调度集成验收。
 - `ledger_runtime_scenario.py`：提交后进程退出、恢复与插件局部更新。
 - `clean_workspace.py`：清理缓存，保留源码、环境和用户运行数据。
-- `check-recall-panel.mjs`：核对召回卡片的交付形态分类（正文／索引行／已在上文／候选）与旧回执兼容。
+- `check-recall-panel.mjs`：核对召回卡片的交付形态分类（正文／索引行／已在上文／候选）与旧回执兼容；`--html <路径>` 另写出一张可用浏览器打开的独立页面。
 - `build-web-plugins.mjs`：构建原生插件的工作台界面。
 - `stage-web-assets.mjs`：将构建结果放入对应插件制品。
 
@@ -21,7 +21,13 @@
 
 完整运行说明见[启动与日常使用](../docs/handbook/start.md)；真实模型验证入口和实验条件见[评测说明](../eval/README.md)。
 
-`check-recall-panel.mjs` 覆盖 eslint 与 tsc 都不检查的面板逻辑模块；它不渲染界面，因此标签是否真的显示正确仍需实际打开对话核对。
+`check-recall-panel.mjs` 覆盖 eslint 与 tsc 都不检查的面板逻辑模块。断言字符串说明不了版面：
+
+```sh
+node scripts/check-recall-panel.mjs --html /local-disk/recall-panel.html
+```
+
+这条命令把同一张卡片连同面板真正的两份样式表写成一张独立页面（面板样式表 `@import` 了插件样式表，两者又都依赖宿主主题变量，少任何一份都会看到真实应用里不存在的塌陷版面）。用它在真实浏览器引擎里核对过：`summary` 的三列栅格把通道名与计数分列两端，计数按原文计且分子不超过总数，正文比索引行读起来更重，预览转义与截断号正常。
 
 三个 `*_scenario.py` 是仍维护的源码验收入口，Scheduler 场景复用 `tests/` 夹具，需从完整 checkout 运行。
 它们与 `eval/` 的真实模型实验分开；构建和清理命令不依赖这些测试夹具。

@@ -6,10 +6,18 @@
  * ordering used when two real queries hit the same experience, and the fallback
  * for receipts saved before the window rule existed.
  *
- * It renders nothing and touches no workspace. Run from a full checkout:
+ * It touches no workspace. Run from a full checkout:
  *   node scripts/check-recall-panel.mjs
+ *
+ * With --html <path> it also writes a standalone page carrying the same card
+ * and the panel's real stylesheets, so the markup can be opened in an actual
+ * browser engine. Asserting on strings cannot show that the summary's three
+ * column grid separates the lane name from its counts, or that a body reads
+ * heavier than an index line; those are the things the page is for.
  */
 
+import { writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import {
   deliveryLabel,
   deliveryOf,
@@ -95,6 +103,57 @@ const escaped = renderRecall({ items: [{ hits: [{ score: 1, lane: "dense", sourc
     recorded_at: "2026-11-05T00:00:00+00:00", author: "user" },
 ] }] }] });
 check("preview escaped", escaped.includes("&lt;img") && !escaped.includes("<img src=x"), true);
+
+// A standalone page for looking at the result in a browser. The panel
+// stylesheet @imports the plugin one and both rely on host theme tokens, so a
+// page that loads neither shows a collapsed layout the real app never has.
+const htmlFlag = process.argv.indexOf("--html");
+if (htmlFlag !== -1) {
+  const target = process.argv[htmlFlag + 1];
+  if (!target) {
+    console.error("--html needs a path");
+    process.exit(2);
+  }
+  const here = new URL(".", import.meta.url).pathname;
+  const style = readFileSync(`${here}../plugins/akasha/plugin_ui.css`, "utf8") + "\n"
+    + readFileSync(`${here}../frontend/plugins/akasha/src/plugin-ui.css`, "utf8")
+      .replace(/@import[^;]+;/g, "");
+  const at = "2026-11-05T00:00:00+00:00";
+  const page = renderRecall({ items: [{ hits: [
+    { score: 0.91, lane: "dense", sources: ["direct_dense"], messages: [
+      { message_id: "a", form: "body", preview: "预算由 500 更正为 760，必须防水，只在周末施工。",
+        recorded_at: at, author: "user", excerpt: { start: 10, end: 90 } },
+      { message_id: "b", form: "index", preview: "雪松资料归档完整报告。本报告以归档栏登记正式签收凭证号。",
+        recorded_at: at, author: "user" },
+      { message_id: "c", form: "quoted", preview: "这条原文此刻仍逐字留在本次请求里。",
+        recorded_at: at, author: "user" },
+      { message_id: "d", form: "candidate", preview: "候选但未入选的经历。",
+        recorded_at: at, author: "assistant" },
+    ] },
+    { score: 0.42, lane: "completion", sources: ["graph_completion"], messages: [
+      { message_id: "e", form: "index", preview: "另一条只拿到索引行的原文，预览被截断于此",
+        recorded_at: at, author: "user", truncated: true },
+    ] },
+  ] }] });
+  writeFileSync(target, `<!doctype html><html lang="zh"><head><meta charset="utf-8">
+<title>Akasha 召回卡片</title><style>
+:root {
+  --ak-color-text-primary: #16181d; --ak-color-text-secondary: #5c6370;
+  --ak-color-bg-canvas: #ffffff; --ak-color-bg-surface: #f7f8fa;
+  --ak-color-action-primary: #2f6fed; --ak-color-on-action-container: #0b2b6b;
+  --ak-color-status-error: #c0392b; --ak-color-status-trace: #7a5af5;
+  --chat-muted: #5c6370; --chat-chip: #eef0f4;
+}
+body { margin: 0; padding: 24px; width: 760px; font: 14px/1.6 system-ui, sans-serif;
+       background: var(--ak-color-bg-canvas); color: var(--ak-color-text-primary); }
+${style}
+</style></head><body>
+<p>折叠态</p>${page}
+<p>展开态</p>${page.replaceAll("<details", "<details open")}
+</body></html>
+`);
+  console.log(`wrote ${target}`);
+}
 
 if (failures) {
   console.error(`${failures} recall panel check(s) failed`);
