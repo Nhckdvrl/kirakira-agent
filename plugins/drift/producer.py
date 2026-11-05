@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from core.common.file_io import run_file_io
 from plugins.akasha.contract import MEMORY_QUERIES, SEMANTIC_INTEREST, MemoryQuery
+from plugins.goal.contract import GOAL_STATUS
 from plugins.ledger.contract import (
     MESSAGE_CATALOG,
     OWNER_STATE,
@@ -219,6 +220,15 @@ class Producer:
                 return {"status": "model_unavailable"}
             if self.ctx.require(SEMANTIC_INTEREST).status() is not None:
                 return {"status": "memory_unavailable"}
+            # A goal is already carrying this conversation forward on its own
+            # turns. Proposing an idle initiative beside it would contact the
+            # owner twice about the same work, so idle planning stands down and
+            # resumes once the goal stops.
+            with self.ctx.borrow(GOAL_STATUS) as goals:
+                if goals is not None:
+                    goal = await goals.get(session)
+                    if goal is not None and goal.active:
+                        return {"status": "goal_running", "goal_id": goal.goal_id}
             messages = await reader.read_async(lambda r: r.snapshot())
             conversation = [m for m in messages if m.source == "conversation" and isinstance(m.body, (Input, Output))]
             user = next((m for m in reversed(conversation) if isinstance(m.body, Input) and m.author == "user"), None)

@@ -188,6 +188,14 @@
       "pinned_files": 5
     },
     {
+      "id": "goal",
+      "directory": "plugins/goal",
+      "api_version": 3,
+      "upstream": false,
+      "headless_selected": false,
+      "pinned_files": 0
+    },
+    {
       "id": "host_execution",
       "directory": "plugins/host_execution",
       "api_version": 3,

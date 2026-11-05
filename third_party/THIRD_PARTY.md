@@ -21,6 +21,14 @@ background context maintenance and safe terminal notices. Source digests,
 supplemental files and complete baseline-to-distribution patches are recorded
 in `UPSTREAM.json`; these selections do not replace the runtime baseline pin.
 
+The persistent-goal plugin (`plugins/goal/`) is imported whole from upstream at
+`101b1912885c6f0d6e6c88cb236d9994afb17ee5`, together with its tests; the state
+machine, store, settlement and same-source continuation are upstream work. Per-file
+digests are recorded in [UPSTREAM.json](UPSTREAM.json). `OwnerTransaction.delete`
+was adopted from the same upstream so the imported store keeps its version CAS.
+Local work is the integration: idle planning stands down while a goal is active,
+so the two proactive paths do not contact the owner about the same work.
+
 The episodic memory plugin includes the Akasha v2 engine. Its own source provenance
 is retained in [memory provenance](../plugins/akasha/UPSTREAM.json).
 Kirakira's additions include session-scoped memory queries, dated and bounded

@@ -201,6 +201,10 @@ disabled = true
 plugin = "akasha@release"
 disabled = true
 
+[rows."goal"]
+plugin = "goal@release"
+disabled = true
+
 [rows."drift"]
 plugin = "drift@release"
 disabled = true

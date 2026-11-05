@@ -827,7 +827,16 @@
      parser.add_argument(
 --- a/plugins/ledger/contract.py
 +++ b/plugins/ledger/contract.py
-@@ -995,7 +995,7 @@
+@@ -866,6 +866,8 @@
+         self, key: str, value: Mapping[str, object], *, expected_version: int | None
+     ) -> OwnerRecord: ...
+ 
++    def delete(self, key: str, *, expected_version: int) -> None: ...
++
+     def append(
+         self,
+         writer: MessageWriter,
+@@ -995,7 +997,7 @@
  APPEND_CHECKS = ServiceKey[AppendChecks]("ledger.append_checks.v1")
  
  def detect_supported_image_mime(head: bytes) -> str | None:

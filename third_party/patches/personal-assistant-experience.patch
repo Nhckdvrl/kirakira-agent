@@ -60,6 +60,29 @@
  [rows."onboarding"]
  plugin = "onboarding@release"
  
+@@ -171,6 +174,9 @@
+ [rows."akasha"]
+ plugin = "akasha@release"
+ 
++[rows."goal"]
++plugin = "goal@release"
++
+ [rows."drift"]
+ plugin = "drift@release"
+ 
+--- a/bundles/minimal.toml
++++ b/bundles/minimal.toml
+@@ -201,6 +201,10 @@
+ plugin = "akasha@release"
+ disabled = true
+ 
++[rows."goal"]
++plugin = "goal@release"
++disabled = true
++
+ [rows."drift"]
+ plugin = "drift@release"
+ disabled = true
 --- a/frontend/chat/src/chat-message.ts
 +++ b/frontend/chat/src/chat-message.ts
 @@ -46,6 +46,8 @@
@@ -303,11 +326,10 @@
      && previous.onCopied === next.onCopied
      && previous.onError === next.onError
      && previous.activities.length === next.activities.length
-@@ -459,6 +462,20 @@
-         && activity.preview?.message_id === other.preview?.message_id;
+@@ -460,6 +463,20 @@
      });
  });
-+
+ 
 +function TimelineAbandon({ disabled, onAbandon }: {
 +  disabled: boolean;
 +  onAbandon: () => Promise<void>;
@@ -321,9 +343,10 @@
 +    </button>
 +  </div>;
 +}
- 
++
  /** 失败块的收尾：重跑这一轮的文字按钮，以及收起的此前失败。 */
  function FailureRetry({ inputId, earlier = [], disabled, onRetry }: {
+   inputId?: string;
 --- a/frontend/chat/src/message-timeline.ts
 +++ b/frontend/chat/src/message-timeline.ts
 @@ -9,8 +9,11 @@
@@ -567,12 +590,10 @@
    const key = pushKey(frame.plugin_id, frame.plugin_revision, frame.session_id);
    // null 表示流已结束，直接忘掉这个键，长连接跨会话不会越攒越多。
    if (state === null) pushed.delete(key);
-@@ -444,6 +446,16 @@
-   const keys = [...pushed.keys()];
-   pushed.clear();
+@@ -446,6 +448,16 @@
    keys.forEach((key) => deliverPush(key, null));
-+}
-+
+ }
+ 
 +/** 连接保留、只换跟随的会话切换：旧会话的推送状态即刻失效，回到它时由新跟随的基线帧重建。 */
 +export function invalidatePluginUiSession(sessionId: string) {
 +  const keys = [...pushed.keys()]
@@ -581,9 +602,11 @@
 +    pushed.delete(key);
 +    deliverPush(key, null);
 +  }
- }
- 
++}
++
  function subscribePush(pluginId: string, revision: string, sessionId: string | undefined, callback: (value: Record<string, unknown> | null) => void): () => void {
+   if (!sessionId) return () => undefined;
+   const key = pushKey(pluginId, revision, sessionId);
 --- a/frontend/chat/src/use-desktop-chat-controller.ts
 +++ b/frontend/chat/src/use-desktop-chat-controller.ts
 @@ -3,7 +3,7 @@
@@ -732,18 +755,10 @@
        const markDelivery = (delivery: ChatMessage["delivery"]) => setMessages((current) => current.map((item) => item.id === clientMessageId ? { ...item, delivery } : item));
        await deliverMessage(clientMessageId, payload, controller.signal, () => markDelivery("retrying"));
        controller.signal.throwIfAborted();
-@@ -928,6 +956,28 @@
-       await deliverMessage(requestId, {
-         type: "message.send", request_id: requestId, session_id: sessionId, text: "", media: [], retry_of: inputId,
-       }, controller.signal, () => undefined);
-+    } catch (error) {
-+      if (sendRequestRef.current === controller) setStatusLive("idle");
-+      if (!isAbortError(error)) reportError(error, "error");
-+    } finally {
-+      if (sendRequestRef.current === controller) sendRequestRef.current = null;
-+    }
-+  }, [canSend, deliverMessage, reportError, setStatusLive]);
-+
+@@ -936,6 +964,28 @@
+     }
+   }, [canSend, deliverMessage, reportError, setStatusLive]);
+ 
 +  // 与手工发送 /abandon 相同，只有服务端提交控制后才恢复输入状态。
 +  const abandonTurn = useCallback(async () => {
 +    const sessionId = activeSessionRef.current;
@@ -758,9 +773,17 @@
 +        type: "message.send", request_id: requestId, session_id: sessionId, text: "/abandon", media: [],
 +      }, controller.signal, () => undefined);
 +      if (sendRequestRef.current === controller) setStatusLive("idle");
-     } catch (error) {
-       if (sendRequestRef.current === controller) setStatusLive("idle");
-       if (!isAbortError(error)) reportError(error, "error");
++    } catch (error) {
++      if (sendRequestRef.current === controller) setStatusLive("idle");
++      if (!isAbortError(error)) reportError(error, "error");
++    } finally {
++      if (sendRequestRef.current === controller) sendRequestRef.current = null;
++    }
++  }, [canSend, deliverMessage, reportError, setStatusLive]);
++
+   const sendSteerFrame = useCallback((payload: Record<string, unknown>) => sendWhenOpen(connect(), payload), [connect]);
+   const steers = useSteers({ sessionId: activeSessionId, timeline: timelineMessages, send: sendSteerFrame });
+   useEffect(() => { steerResultRef.current = steers.onResult; }, [steers.onResult]);
 @@ -1035,7 +1085,13 @@
      setSurface("chat");
      clearChatRoute();
@@ -1091,6 +1114,29 @@
 -                ", default_embedding_model_id"
 -                if "default_embedding_model_id" in meta_columns
 -                else ""
+-            )
+-            meta = connection.execute(
+-                f"SELECT revision{default_column} FROM model_registry_meta "
+-                "WHERE singleton = 1"
+-            ).fetchone()
+-            if meta is None:
+-                raise RuntimeError("model registry is missing revision metadata")
+-            config_column = (
+-                "driver_config_json"
+-                if "driver_config_json" in connection_columns
+-                else "'{}'"
+-            )
+-            connection_rows = connection.execute(
+-                "SELECT id, name, provider, catalog_provider_id, base_url, auth_id, "
+-                f"{config_column}, enabled FROM model_connections ORDER BY created_at, id"
+-            ).fetchall()
+-            chat_rows = connection.execute(
+-                _SELECT_CHAT_MODELS.format(
+-                    capabilities_json=(
+-                        "capabilities_json"
+-                        if "capabilities_json" in model_columns
+-                        else "NULL"
+-                    )
 +        with self._replay_connection() as (connection, marker):
 +            cached = self._snapshot_cache
 +            # data_version 只能在同一连接比较；writer 忙时的独立 RO 使用一次性 marker。
@@ -1138,39 +1184,7 @@
 +                    "capabilities_json"
 +                    if "capabilities_json" in model_columns
 +                    else "NULL"
-+                )
-             )
--            meta = connection.execute(
--                f"SELECT revision{default_column} FROM model_registry_meta "
--                "WHERE singleton = 1"
--            ).fetchone()
--            if meta is None:
--                raise RuntimeError("model registry is missing revision metadata")
--            config_column = (
--                "driver_config_json"
--                if "driver_config_json" in connection_columns
--                else "'{}'"
-+        ).fetchall()
-+        embedding_rows = connection.execute(
-+            _SELECT_EMBEDDING_MODELS.format(
-+                capabilities_json=(
-+                    "capabilities_json"
-+                    if "capabilities_json" in embedding_columns
-+                    else "NULL"
-+                )
-             )
--            connection_rows = connection.execute(
--                "SELECT id, name, provider, catalog_provider_id, base_url, auth_id, "
--                f"{config_column}, enabled FROM model_connections ORDER BY created_at, id"
--            ).fetchall()
--            chat_rows = connection.execute(
--                _SELECT_CHAT_MODELS.format(
--                    capabilities_json=(
--                        "capabilities_json"
--                        if "capabilities_json" in model_columns
--                        else "NULL"
--                    )
--                )
+                 )
 -            ).fetchall()
 -            embedding_rows = connection.execute(
 -                _SELECT_EMBEDDING_MODELS.format(
@@ -1179,12 +1193,21 @@
 -                        if "capabilities_json" in embedding_columns
 -                        else "NULL"
 -                    )
--                )
++            )
++        ).fetchall()
++        embedding_rows = connection.execute(
++            _SELECT_EMBEDDING_MODELS.format(
++                capabilities_json=(
++                    "capabilities_json"
++                    if "capabilities_json" in embedding_columns
++                    else "NULL"
+                 )
 -            ).fetchall()
 -            role_rows = connection.execute(
 -                "SELECT role, model_id, reasoning_effort "
 -                "FROM model_role_bindings ORDER BY role"
 -            ).fetchall()
++            )
 +        ).fetchall()
 +        role_rows = connection.execute(
 +            "SELECT role, model_id, reasoning_effort "
@@ -1246,23 +1269,36 @@
          current_sources = {source.name: source for source in self._sources.entries()}
          source_names = set(self._previous_sources) | set(current_sources)
          changed_source_names = {
-@@ -316,6 +316,39 @@
+@@ -316,39 +316,57 @@
              name for name in changed_source_names if name in current_sources
          }
  
-+        changed_sessions = {
-+            session_id for session_id, head in heads.items()
-+            if self._previous_heads.get(session_id) != head
-+        }
-+        # 2. One scan handles changed sessions and genuine identity changes.
+-        # 1. A revoked source only updates an existing local handoff; its
+-        # exact Source owner still stops the in-flight Task via the scope monitor.
+-        for (_session_id, source_name), wake in tuple(self._active.items()):
+-            if source_name in changed_source_names:
+-                wake.source = current_sources.get(source_name)
+-                wake.changed = True
+-
+         changed_sessions = {
+             session_id for session_id, head in heads.items()
+             if self._previous_heads.get(session_id) != head
+         }
+-        self._previous_heads = dict(heads)
+-        self._previous_sources = current_sources
+-
+         # 2. One scan handles changed sessions and genuine identity changes.
+-        session_ids = (
 +        session_ids = tuple(
-+            heads
-+            if current_identity_changes
-+            else (session_id for session_id in heads if session_id in changed_sessions)
-+        )
+             heads
+             if current_identity_changes
+             else (session_id for session_id in heads if session_id in changed_sessions)
+         )
+-        for session_id in session_ids:
+-            reader = self._catalog.reader(session_id)
 +
 +        def read_source_heads(reader: MessageReader) -> dict[str, int]:
-+            present = reader.source_names()
+             present = reader.source_names()
 +            return {name: reader.head(source=name) for name in current_sources if name in present}
 +
 +        # 目录 SQL 可能等待物理文件锁；worker 只读事实，不触碰 wake 或 TaskGroup。
@@ -1283,29 +1319,14 @@
 +        self._previous_heads = dict(heads)
 +        self._previous_sources = current_sources
 +
-         # 1. A revoked source only updates an existing local handoff; its
-         # exact Source owner still stops the in-flight Task via the scope monitor.
-         for (_session_id, source_name), wake in tuple(self._active.items()):
-@@ -323,32 +356,17 @@
-                 wake.source = current_sources.get(source_name)
-                 wake.changed = True
- 
--        changed_sessions = {
--            session_id for session_id, head in heads.items()
--            if self._previous_heads.get(session_id) != head
--        }
--        self._previous_heads = dict(heads)
--        self._previous_sources = current_sources
--
--        # 2. One scan handles changed sessions and genuine identity changes.
--        session_ids = (
--            heads
--            if current_identity_changes
--            else (session_id for session_id in heads if session_id in changed_sessions)
--        )
-         for session_id in session_ids:
--            reader = self._catalog.reader(session_id)
--            present = reader.source_names()
++        # 1. A revoked source only updates an existing local handoff; its
++        # exact Source owner still stops the in-flight Task via the scope monitor.
++        for (_session_id, source_name), wake in tuple(self._active.items()):
++            if source_name in changed_source_names:
++                wake.source = current_sources.get(source_name)
++                wake.changed = True
++
++        for session_id in session_ids:
              session_changed = session_id in changed_sessions
              for source in current_sources.values():
                  source_name = source.name
@@ -1632,7 +1653,7 @@
          if message is None:
              original = reader.get(request.input_id)
              assert original is not None and isinstance(original.body, Input)
-@@ -289,11 +382,36 @@
+@@ -289,12 +382,37 @@
                  + "\n\n这是后台执行资料，不是用户的新指令或用户事实。"
              ), "priority": 500},)
              async def report(task: Task, current: MessageReader, check_admission: SourceGuard) -> Message:
@@ -1662,15 +1683,16 @@
 +                    finally:
 +                        writer.expire()
              message = await ctx.require(CONVERSATION_COMPLETE)(parent.session_id, report)
-+
+ 
 +        # 用户停止或回访失败只暂停通知；结果与原指针仍在，下次真实输入再接续。
 +        if isinstance(message.body, Control):
 +            return False
 +        if message.source != source or not isinstance(message.body, Output) or message.body.finish == "continue":
 +            raise ValueError("子任务回访缺少本来源的已完成回复")
- 
++
          # 2. 原发送成功或失败都关闭通知；失败回执保留，不重复回传。
          assert request.sink is not None
+         delivery = ctx.require(DELIVERY).open(ctx)
 @@ -327,6 +445,18 @@
          """正式生命周期追赶持久输入；短通知不持有工具归档或运行 generation。"""
          attempted: dict[str, tuple[int, int]] = {}
@@ -1706,7 +1728,7 @@
                  except CompositionError as error:
                      if entered or error.code != "OWNER_UNAVAILABLE":
                          raise
-@@ -361,41 +496,96 @@
+@@ -361,35 +496,45 @@
                  logger.exception("子任务执行失败，原消息与发送回执已保留 key=%s", key)
              finally:
                  del active[key]
@@ -1779,11 +1801,10 @@
          finally:
              tasks = tuple(active.values())
              for task in tasks:
-                 task.cancel()
-             for task in tasks:
+@@ -398,6 +543,51 @@
                  await drain(task)
-+
-+
+ 
+ 
 +def _message_ref(message: Message) -> dict[str, object]:
 +    """出处只引用原消息；正文窗口不复制到另一份持久记录。"""
 +    return {"session_id": message.session_id, "message_id": message.message_id, "seq": message.seq,
@@ -1827,9 +1848,11 @@
 +    if finished is None:
 +        return None
 +    return reader.read(after_seq=finished - 1, through_seq=finished, source=source, limit=1)[0]
- 
- 
++
++
  def _pointer(record: OwnerRecord) -> tuple[str, str, bool]:
+     """在存储边界读取同一份子任务恢复指针。"""
+     value = record.value
 --- a/plugins/subagent/tools.py
 +++ b/plugins/subagent/tools.py
 @@ -26,8 +26,16 @@
@@ -1891,12 +1914,10 @@
      async def query(self, key: str) -> Result | None:
 --- a/plugins/tools/plugin.py
 +++ b/plugins/tools/plugin.py
-@@ -13,38 +13,55 @@
+@@ -13,39 +13,56 @@
      RUNTIME_STOPPING,
      Context,
      Effect,
--)
--from plugins.ledger.contract import BINDINGS, Bindings
 +    stop_spawned,
 +)
 +from agent.plugin_composition.tasks import (
@@ -1908,22 +1929,23 @@
 +from core.common.frozen_json import freeze_json
 +from plugins.content.contract import (
 +    CONTENT as CONTENT,
-+)
+ )
+-from plugins.ledger.contract import BINDINGS, Bindings
  from plugins.ledger.contract import (
 +    BINDINGS,
      MESSAGE_CATALOG,
      MESSAGE_WRITERS,
      OWNER_STATE,
-+    Bindings,
-+    CallRef,
-     MessageReader,
+-    MessageReader,
 -)
 -from agent.plugin_composition.tasks import TASKS, ExternalRootPermit, Task, TaskAdmission
 -from plugins.ledger.contract import (
--    CallRef,
++    Bindings,
+     CallRef,
 -    ContentPart,
 -    ContentReferences,
 -    ToolResult,
++    MessageReader,
      Output,
      ToolCall,
 -)
@@ -1943,26 +1965,27 @@
 +)
 +from plugins.tools.contract import (
      TOOL_DISPLAY as TOOL_DISPLAY,
+-    ToolDisplay,
 +)
 +from plugins.tools.contract import (
-+    TOOLS as TOOLS,
+     TOOLS as TOOLS,
+-    ToolRef as ToolRef,
 +)
 +from plugins.tools.contract import (
-     ToolDisplay,
--    TOOLS as TOOLS,
-+    ToolRelease,
-+    tool_key,
-+)
-+from plugins.tools.contract import (
-     ToolRef as ToolRef,
--    ToolRelease,
-+)
-+from plugins.tools.contract import (
-     ToolView as ToolView,
--    tool_key,
++    ToolDisplay,
+     ToolRelease,
+-    ToolView as ToolView,
+     tool_key,
  )
++from plugins.tools.contract import (
++    ToolRef as ToolRef,
++)
++from plugins.tools.contract import (
++    ToolView as ToolView,
++)
  
  from .abandon import follow_abandon, reject_start
+ from .api import (
 @@ -61,7 +78,6 @@
  )
  from .cleanup import Release, tool_cleanup
@@ -1971,12 +1994,10 @@
  from .program import TOOL_PROGRAM, ToolProgramFactory
  
  api_version = 3
-@@ -133,6 +149,15 @@
-     context: Context
-     name: str
+@@ -135,6 +151,15 @@
      authorize: BindingAuthorize
-+
-+
+ 
+ 
 +def _binding_fields(metadata: Mapping[str, object]) -> set[str]:
 +    # 旧 binding 保存的限制已退役；执行时始终使用当前注册。
 +    return set(metadata) - {"authorize"}
@@ -1984,9 +2005,11 @@
 +
 +def _expected_fields(registration: _Registration) -> set[str]:
 +    return {"tool", "prepare", *(("state",) if registration.capture is not None else ())}
- 
- 
++
++
  class _ToolView:
+     """每次打开只访问固定目标，释放后不能保留入口再执行。"""
+ 
 @@ -306,7 +331,7 @@
      async def register_authorize(
          self, ctx: Context, *, tool: ToolRef, name: str, authorize: BindingAuthorize

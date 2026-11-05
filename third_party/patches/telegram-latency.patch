@@ -1,6 +1,6 @@
 --- a/plugins/compaction/message_summary.py
 +++ b/plugins/compaction/message_summary.py
-@@ -37,8 +37,14 @@
+@@ -37,9 +37,15 @@
  
  保留路径、符号、命令、错误、数值、外部效果和验证结果。
  仍在运行的执行必须保留 execution_id、命令和当前状态。
@@ -9,13 +9,14 @@
 +已解决的问题只留结论；闲聊只记有持续价值的信息，不能扩写成任务。
 +每条事实只写一次，空节写“无”，省略重复探索、无用日志和 provider 协议细节。只输出摘要正文。
  """
-+
+ 
 +# The limit covers the entire generation, including reasoning on providers that
 +# cannot disable it. A summary must never inherit an unlimited server default.
 +MAX_OUTPUT_TOKENS = 4096
- 
++
  
  class SummaryError(ValueError):
+     """摘要不能满足完整前缀、容量或输出合同。"""
 @@ -176,7 +182,11 @@
  
  def _request(model: BoundChatModel, summary: str, groups: Sequence[tuple[Message, ...]],
@@ -50,28 +51,28 @@
      if response.tool_calls or headings != HEADINGS:
 --- a/plugins/compaction/plugin.py
 +++ b/plugins/compaction/plugin.py
-@@ -1,12 +1,15 @@
+@@ -1,46 +1,87 @@
 -"""候选 Message 摘要入口；正式 manifest 在完整迁移验收后切换。"""
 +"""原生上下文压缩：后台整理旧前缀，硬容量不足时由前台缩减。"""
  from __future__ import annotations
  
+-from importlib import import_module
+-from collections.abc import Callable, Mapping, Sequence
 +import asyncio
 +import hashlib
 +import json
-+import logging
+ import logging
 +from collections.abc import Awaitable, Callable, Mapping, Sequence
 +from contextlib import aclosing
 +from dataclasses import dataclass
- from importlib import import_module
--from collections.abc import Callable, Mapping, Sequence
--import logging
++from importlib import import_module
  from uuid import uuid4
--
--from core.common.file_io import run_file_io
  
+-from core.common.file_io import run_file_io
+-
  from pydantic import BaseModel, ConfigDict, Field
  
-@@ -14,33 +17,71 @@
+ from agent.plugin_composition import (
      RUNTIME_STARTED,
      RUNTIME_STOPPING,
      Context,
@@ -125,7 +126,7 @@
 -from agent.plugin_composition.plugin_config import PLUGIN_CONFIG
 -from agent.plugin_composition.model import ServiceKey
  from plugins.ui.contract import Configuration, ModelSettings, mount_settings
-+
+ 
 +from .message_summary import (
 +    MAX_OUTPUT_TOKENS,
 +    SummaryError,
@@ -144,7 +145,7 @@
 +    SummaryRecord,
 +    SummaryRecords,
 +)
- 
++
  logger = logging.getLogger(__name__)
  
  api_version = 3
@@ -155,12 +156,10 @@
  inject = (PLUGIN_CONFIG, MATERIALS_V4, CONTEXT, OWNER_STATE, BINDINGS, MESSAGE_CATALOG, CHAT_MODELS, TURN_PROJECTION)
  
  
-@@ -51,6 +92,53 @@
- class Config(BaseModel):
-     model_config = ConfigDict(extra="forbid")
+@@ -53,6 +94,53 @@
      keep_recent_tokens: int = Field(default=20_000, gt=0, strict=True)
-+
-+
+ 
+ 
 +class StartNew(BaseModel):
 +    model_config = ConfigDict(extra="forbid", strict=True)
 +    session_id: str = Field(min_length=1)
@@ -206,9 +205,11 @@
 +    covered_message_ids: frozenset[str]
 +    result: asyncio.Future[MaterialData | None]
 +    running: bool = False
- 
- 
++
++
  class _CompactionReader:
+     """Markdown 只取得 compaction 的纯读取算法，不取得发布或模型权限。"""
+ 
 @@ -86,6 +174,59 @@
      # 状态查询在线程执行；启动时取得窄读取口，不在线程中重新申请 owner 写权限。
      read_record: Callable[[str], StoredSummary | None] | None = None
@@ -298,11 +299,10 @@
  
      _ = await ctx.on(RUNTIME_STARTED, start)
      _ = await ctx.on(RUNTIME_STOPPING, stop)
-@@ -115,6 +265,56 @@
-     _ = await ctx.provide(COMPACTION_READER, _CompactionReader(
+@@ -116,6 +266,56 @@
          settled_prefixes=context.settled_prefixes,
      ))
-+
+ 
 +    async def start_new(request: StartNew):
 +        reader = ctx.require(MESSAGE_CATALOG).reader(request.session_id)
 +        state = records()
@@ -352,9 +352,10 @@
 +            handler=new_conversation, recover=new_conversation,
 +        ))
 +    await ctx.inject((COMMANDS,), commands, name="new-conversation-command")
- 
++
      def material(record: StoredSummary) -> MaterialData:
          reference = ctx.require(BINDINGS).bind(COMPACTION_SUMMARIES, {
+             "record_ref": record.reference, "session_id": record.session_id,
 @@ -155,8 +355,8 @@
      async def compact(snapshot: tuple[Message, ...], materials: MaterialData, request: ModelRequest,
                        model: BoundChatModel, projection: ContextModel, *, source: str, force: bool,
@@ -432,7 +433,9 @@
          room = window - reserve - planned_tokens[selected]
 -        count = start + sum(len(group) for group in groups[:selected])
 -        added = snapshot[start:count]
--
++        added = tuple(message for group in groups[:selected] for message in group)
++        covered = parent_ids | frozenset(message.message_id for message in added)
+ 
 -        def measure(text: str, calls: tuple[str, ...],
 -                    summarized: tuple[tuple[Message, ...], ...]) -> tuple[SummaryRecord, MaterialData, int]:
 -            summary_ids = tuple(message.message_id for group in summarized for message in group)
@@ -447,9 +450,12 @@
 -                content=text, model_call_ids=calls, trigger="context_overflow" if force else "soft_limit",
 -                context_window=window, max_output_tokens=request.max_output_tokens,
 -                keep_recent_tokens=config.keep_recent_tokens, tokens_before=before, tokens_after=0,
-+        added = tuple(message for group in groups[:selected] for message in group)
-+        covered = parent_ids | frozenset(message.message_id for message in added)
-+
+-            )
+-            summary = material(record)
+-            after_request, _ = context.build_attempt(
+-                snapshot, materials={**materials, "summary": summary}, model=projection,
+-                tools=request.tools, max_output_tokens=request.max_output_tokens,
+-                current_reminder_input_id=reminder_input_id,
 +        async def finish(model: BoundChatModel, projection: ContextModel,
 +                         reporter: ReductionStatus | None = None) -> MaterialData:
 +            def measure(text: str, calls: tuple[str, ...],
@@ -518,17 +524,14 @@
 +            _ = await records().publish(
 +                record, reader, parent=parent, summary_indexes=context.summary_indexes,
              )
--            summary = material(record)
--            after_request, _ = context.build_attempt(
--                snapshot, materials={**materials, "summary": summary}, model=projection,
--                tools=request.tools, max_output_tokens=request.max_output_tokens,
--                current_reminder_input_id=reminder_input_id,
--            )
 -            return record, summary, projection.estimate(after_request)
--
++            return summary
+ 
 -        def fits(after: int) -> bool:
 -            return after < before and after + reserve <= window
--
++        if not defer:
++            return await finish(model, projection, on_status)
+ 
 -        async def generate(groups: tuple[tuple[Message, ...], ...], previous: str,
 -                           limit: int) -> tuple[str, tuple[str, ...], tuple[tuple[Message, ...], ...]]:
 -            # 嵌套 execution 复用调用者已经固定的角色，不重读模型配置；
@@ -570,11 +573,6 @@
 -            record, reader, parent=parent, summary_range=context.summary_range,
 -        )
 -        return summary
-+            return summary
-+
-+        if not defer:
-+            return await finish(model, projection, on_status)
-+
 +        # Freeze only the native rendered tail. No caller model, material view,
 +        # tool menu, or borrowed execution survives into the owned worker.
 +        from types import SimpleNamespace
@@ -962,19 +960,18 @@
 -from plugins.models.contract import ContextModel, ModelRequest
 -from plugins.models.contract import BoundChatModel
  from agent.plugin_composition.tasks import child_task_context
+-from plugins.ledger.contract import Message
 +from core.common.diagnostic_log import log_timing
-+from plugins.context.contract import (
+ from plugins.context.contract import (
+-    MaterialData, MaterialKind, Prepare, ReductionStatus, SummaryData, SummaryReducer,
 +    MaterialData,
 +    MaterialKind,
 +    Prepare,
 +    ReductionStatus,
 +    SummaryData,
 +    SummaryReducer,
-+)
- from plugins.ledger.contract import Message
--from plugins.context.contract import (
--    MaterialData, MaterialKind, Prepare, ReductionStatus, SummaryData, SummaryReducer,
--)
+ )
++from plugins.ledger.contract import Message
 +from plugins.models.contract import BoundChatModel, ContextModel, ModelRequest
  
  from .api import (
@@ -1065,7 +1062,6 @@
      CONTEXT_NOTICE_DISPLAY,
      MATERIALS_V4,
      MaterialData,
--)
 +    output_reserve,
 +)
 +from plugins.ledger.contract import (
@@ -1076,7 +1072,7 @@
 +    Output,
 +    ToolCall,
 +    ToolResult,
-+)
+ )
 +from plugins.models.contract import ContextModel, ModelRequest
 +from plugins.ui.contract import hidden_part, part_display_key
  
@@ -1084,9 +1080,9 @@
      ContextOverflow,
      Materials,
      Summary,
-+    check_notice,
-     check_summary,
--    check_notice,
+-    check_summary,
+     check_notice,
++    check_summary,
      decode_material,
      settled_prefixes,
 -    summary_range,
@@ -1189,23 +1185,31 @@
  from contextlib import ExitStack
  from functools import partial
  from typing import cast
-+
-+from agent.plugin_composition import Context
-+from agent.plugin_composition.tasks import (
-+    RESTART_GATE,
-+    TASKS,
-+    Task,
-+)
-+from core.common.diagnostic_log import log_timing
- from core.common.file_io import run_file_io
+-from core.common.file_io import run_file_io
 -from core.common.diagnostic_log import log_timing
--
--from agent.plugin_composition import Context
+ 
+ from agent.plugin_composition import Context
 -from plugins.ui.contract import hidden_part, part_display_key
 -from plugins.ledger.contract import ARTIFACT_READ
 -from plugins.ledger.contract import BINDINGS
 -from plugins.channels.contract import CHANNEL_STEER, ChannelInboundMessage, InputPartRejected, read_input_parts
 -from plugins.commands.contract import COMMANDS
+-from plugins.ledger.contract import (
+-    MESSAGE_CATALOG,
+-    MESSAGE_WRITERS,
+-    OWNER_STATE,
+-    SESSION_ADMISSION,
+-    MessageConflict,
+-    MessageReader,
+-    SessionAttributes,
+-)
+ from agent.plugin_composition.tasks import (
+     RESTART_GATE,
+     TASKS,
+     Task,
+ )
++from core.common.diagnostic_log import log_timing
++from core.common.file_io import run_file_io
 +from plugins.channels.contract import (
 +    CHANNEL_STEER,
 +    ChannelInboundMessage,
@@ -1231,20 +1235,10 @@
  from plugins.ledger.contract import (
 +    ARTIFACT_READ,
 +    BINDINGS,
-     MESSAGE_CATALOG,
-     MESSAGE_WRITERS,
-     OWNER_STATE,
-     SESSION_ADMISSION,
--    MessageConflict,
--    MessageReader,
--    SessionAttributes,
--)
--from agent.plugin_composition.tasks import (
--    RESTART_GATE,
--    TASKS,
--    Task,
--)
--from plugins.ledger.contract import (
++    MESSAGE_CATALOG,
++    MESSAGE_WRITERS,
++    OWNER_STATE,
++    SESSION_ADMISSION,
      ContentPart,
      ContentReferences,
      Control,
@@ -1274,14 +1268,13 @@
 +from plugins.sources.contract import (
      CompletionProgram,
 -    SessionFactoryV4 as SessionFactory,
+-    SourceChangedV3 as SourceChanged,
 +)
 +from plugins.sources.contract import (
-+    GuardedSourceSession as SourceSession,
-+)
+     GuardedSourceSession as SourceSession,
+ )
 +from plugins.sources.contract import (
-     SourceChangedV3 as SourceChanged,
--    GuardedSourceSession as SourceSession,
--)
++    SourceChangedV3 as SourceChanged,
 +)
 +from plugins.ui.contract import hidden_part, part_display_key
  
@@ -1493,11 +1486,10 @@
      RUNTIME_STARTING,
      RUNTIME_STOPPING,
      Context,
--)
++    stop_spawned,
+ )
 -from plugins.ledger.contract import BINDINGS
 -from plugins.ledger.contract import MESSAGE_CATALOG, MessageReader
-+    stop_spawned,
-+)
  from agent.plugin_composition.tasks import ExternalRootPermit, RestartRejectedError
 -from plugins.ledger.contract import ContentPart, Input, Message, Output, ToolCall
 +from core.common.file_io import run_file_io
@@ -1516,8 +1508,6 @@
 -from plugins.delivery.contract import (
 -    DELIVERY_GUARDED_START, DELIVERY_SENDERS, FINAL_OUTPUT_DELIVERY,
 -    FinalOutputTurn, GuardedDeliveries,
--)
--from plugins.conversation.contract import CHECK_ORIGIN, OriginCheck
 +from plugins.ledger.contract import (
 +    BINDINGS,
 +    MESSAGE_CATALOG,
@@ -1528,7 +1518,8 @@
 +    MessageReader,
 +    Output,
 +    ToolCall,
-+)
+ )
+-from plugins.conversation.contract import CHECK_ORIGIN, OriginCheck
  from plugins.reply.contract import REPLY_COMPLETION
 +
  from .follow import follow
@@ -1606,14 +1597,14 @@
 -        if message.source not in config.sources or reader.attributes.visibility == "internal":
 +    async def select(reader: MessageReader, message: Message) -> tuple[Mapping[str, object], ...] | None:
 +        if message.source not in config.sources:
-             return None
--        route = origin(reader, message, config.sources, check_origin=origin_check)
++            return None
 +        def read_origin(view: MessageReader):
 +            return (view.attributes.visibility != "internal",
 +                    origin(view, message, config.sources, check_origin=origin_check))
 +        eligible, route = await reader.read_async(read_origin)
 +        if not eligible:
-+            return None
+             return None
+-        route = origin(reader, message, config.sources, check_origin=origin_check)
          if route is None:
              return ()
          name, address = route
@@ -1725,11 +1716,10 @@
          def create() -> SessionAttributes:
              stamp = datetime.now(UTC).isoformat()
              inserted = self._connection.execute(
-@@ -785,6 +800,14 @@
-             if self._heads is None and self._heads_epoch == epoch:
+@@ -786,6 +801,14 @@
                  self._heads = dict(heads)
          return heads
-+
+ 
 +    async def committed_heads_async(self, load: Callable[[], Mapping[str, int]]) -> Mapping[str, int]:
 +        """热水位不进入 I/O 队列；首次恢复目录在 worker 中读取并排空。"""
 +        with self._listener_lock:
@@ -1737,9 +1727,10 @@
 +                return dict(self._heads)
 +        self._check_async_operation()
 +        return await run_file_io(lambda: self.committed_heads(load))
- 
++
      def flush_notify(self) -> None:
          """交付异步提交欠下的唤醒；不同提交的消息类型在同一锁内合并。"""
+         with self._listener_lock:
 @@ -892,6 +915,14 @@
              sort_keys=True,
              allow_nan=False,
@@ -1814,21 +1805,43 @@
                  if heads != previous:
                      previous = heads
                      yield heads
+@@ -2295,6 +2338,21 @@
+             lambda: self._save(key, value, expected_version=expected_version)
+         )
+ 
++    def delete(self, key: str, *, expected_version: int) -> None:
++        """删除 owner 自有的派生索引项；与保存相同的版本 CAS，事实记录不应删除。"""
++        self._perform(lambda: self._delete(key, expected_version=expected_version))
++
++    def _delete(self, key: str, *, expected_version: int) -> None:
++        self._check_active()
++        if type(expected_version) is not int or expected_version < 0:
++            raise ValueError("状态版本必须是非负整数")
++        cursor = self._store._log._connection.execute(
++            "DELETE FROM owner_records WHERE owner=? AND key=? AND version=?",
++            (self._store._owner, key, expected_version),
++        )
++        if cursor.rowcount != 1:
++            raise MessageConflict("owner 记录版本已变化")
++
+     def _save(
+         self, key: str, value: Mapping[str, object], *, expected_version: int | None
+     ) -> OwnerRecord:
 --- a/plugins/markdown_memory/plugin.py
 +++ b/plugins/markdown_memory/plugin.py
 @@ -5,49 +5,61 @@
  import fcntl
  import json
  import logging
-+from collections.abc import Callable, Mapping
-+from contextlib import aclosing, asynccontextmanager
-+from dataclasses import dataclass, replace
-+from datetime import UTC, datetime
- from importlib import import_module
+-from importlib import import_module
 -from datetime import UTC, datetime
--from contextlib import aclosing, asynccontextmanager
- from pathlib import Path
--from dataclasses import dataclass, replace
++from collections.abc import Callable, Mapping
+ from contextlib import aclosing, asynccontextmanager
+-from pathlib import Path
+ from dataclasses import dataclass, replace
++from datetime import UTC, datetime
++from importlib import import_module
++from pathlib import Path
  from typing import TYPE_CHECKING, AsyncGenerator, cast
 -from collections.abc import Callable, Mapping
  
@@ -1837,9 +1850,9 @@
  from agent.plugin_composition import (
      RUNTIME_STARTED,
      RUNTIME_STOPPING,
-+    CompositionError,
-     Context,
--    CompositionError,
+-    Context,
+     CompositionError,
++    Context,
      FiberState,
      ServiceKey,
 +    stop_spawned,
@@ -2214,30 +2227,30 @@
  from collections.abc import (
      AsyncGenerator,
      Awaitable,
-@@ -27,32 +16,45 @@
+@@ -27,33 +16,46 @@
      Sequence,
  )
  from contextlib import (
-+    AbstractAsyncContextManager,
-     asynccontextmanager,
--    AbstractAsyncContextManager,
- )
+-    asynccontextmanager,
+     AbstractAsyncContextManager,
++    asynccontextmanager,
++)
 +from dataclasses import (
 +    asdict,
 +    dataclass,
 +    field,
 +    replace,
-+)
+ )
 +from types import MappingProxyType
  from typing import (
 -    cast,
 +    Any,
      AsyncContextManager,
      Literal,
-+    Protocol,
-     TypeAlias,
+-    TypeAlias,
 -    Any,
--    Protocol,
+     Protocol,
++    TypeAlias,
 +    cast,
  )
 -from plugins.ledger.contract import Bindings
@@ -2249,10 +2262,10 @@
      Effect,
  )
 -from plugins.ledger.contract import ArtifactRead
-+from agent.plugin_composition.model import ServiceKey
+-from plugins.channels.contract import AttachmentRef
+ from agent.plugin_composition.model import ServiceKey
 +from core.common.frozen_json import freeze_json
- from plugins.channels.contract import AttachmentRef
--from agent.plugin_composition.model import ServiceKey
++from plugins.channels.contract import AttachmentRef
  from plugins.ledger.contract import (
 +    ArtifactRead,
 +    Bindings,
@@ -2264,9 +2277,10 @@
 +from plugins.ledger.contract import (
      ToolCall as MessageToolCall,
  )
--
  
+-
  UsageCoverage: TypeAlias = Literal["exact", "partial", "unavailable"]
+ 
  
 @@ -490,13 +492,17 @@
          messages: Sequence[Message],
@@ -2310,7 +2324,7 @@
  from plugins.ledger.contract import (
      CallRef,
      ContentPart,
-@@ -23,18 +16,29 @@
+@@ -23,19 +16,30 @@
      Control,
      Input,
      Message,
@@ -2321,28 +2335,29 @@
      json_value,
  )
  from plugins.models.contract import (
-+    MODEL_CALLS as MODEL_CALLS,
+-    ContentTransform,
+-    PrepareContent,
+-    RenderedContent,
+     MODEL_CALLS as MODEL_CALLS,
 +)
 +from plugins.models.contract import (
-+    MODEL_CHECKS as MODEL_MESSAGE_CHECKS,  # noqa: F401 - 显式再导出给本插件消费者。
+     MODEL_CHECKS as MODEL_MESSAGE_CHECKS,  # noqa: F401 - 显式再导出给本插件消费者。
 +)
 +from plugins.models.contract import (
-+    MODEL_PROJECTION as MODEL_PROJECTION,
-+)
+     MODEL_PROJECTION as MODEL_PROJECTION,
+ )
 +from plugins.models.contract import (
 +    BoundChatModel,
-     ContentTransform,
++    ContentTransform,
 +    LLMResponse,
 +    ModelContinuation,
 +    ModelRequest,
-     PrepareContent,
-     RenderedContent,
--    MODEL_CALLS as MODEL_CALLS,
--    MODEL_CHECKS as MODEL_MESSAGE_CHECKS,  # noqa: F401 - 显式再导出给本插件消费者。
--    MODEL_PROJECTION as MODEL_PROJECTION,
- )
++    PrepareContent,
++    RenderedContent,
++)
  from plugins.ui.contract import ThinkingDisplay
  
+ from .store import ModelCallReader
 @@ -302,11 +306,13 @@
          messages: Sequence[Message],
          *,
@@ -2506,13 +2521,12 @@
 +import asyncio
 +import json
  from collections.abc import Awaitable, Callable, Mapping, Sequence
-+from contextlib import AbstractAsyncContextManager, AbstractContextManager
+-from typing import Any, Literal, cast
+ from contextlib import AbstractAsyncContextManager, AbstractContextManager
 +from functools import partial
- from typing import Any, Literal, cast
--from contextlib import AbstractAsyncContextManager, AbstractContextManager
--
++from typing import Any, Literal, cast
 +from uuid import uuid4
-+
+ 
 +from agent.plugin_composition import Context
 +from agent.plugin_composition.tasks import Task
  from core.common.diagnostic_log import log_timing
@@ -2546,12 +2560,6 @@
      BoundChatModel,
 +    CallReader,
      ChatModels,
--)
--from agent.plugin_composition.tasks import Task
--from plugins.context.contract import MaterialView, ReductionStatus
--from plugins.models.contract import PrepareContent
--from plugins.ledger.contract import ContentPart, Control, Input, Message, Output
--
 +    ContentRenderer,
 +    ContextModel,
 +    ModelChecks,
@@ -2561,7 +2569,12 @@
 +    ModelSelection,
 +    PrepareContent,
 +    StreamCallback,
-+)
+ )
+-from agent.plugin_composition.tasks import Task
+-from plugins.context.contract import MaterialView, ReductionStatus
+-from plugins.models.contract import PrepareContent
+-from plugins.ledger.contract import ContentPart, Control, Input, Message, Output
+-
  from plugins.sources.contract import (
      SourceGuard,
  )
@@ -2807,9 +2820,8 @@
              )
              await self._app.bot.set_my_commands(
 -                [BotCommand("stop", "中断当前回复")]
--            )
 +                [BotCommand("stop", "中断当前回复"), BotCommand("new", "新对话，保留历史与长期记忆")]
-+            )
+             )
 +            if self._draft_deliveries is not None:
 +                identity = hashlib.sha256(token.encode()).hexdigest()
 +                self._unregister_drafts = self._draft_deliveries.register(identity, self._drafts)
@@ -2886,11 +2898,10 @@
  Config = TelegramChannelConfig
  
  
-@@ -34,6 +37,15 @@
-         return
+@@ -35,6 +38,15 @@
      # python-telegram-bot 只在启用后加载；停用时不进入插件启动成本。
      from .channel import build_telegram_channel
-+
+ 
 +    async def start_previews(drafts):
 +        # Optional feature, explicit lifetime dependency: when Reply unloads,
 +        # cancel its readers before Reply waits for borrowed scopes to drain.
@@ -2899,9 +2910,10 @@
 +            await child.spawn(drafts.run(), name="telegram-reply-previews")
 +
 +        await ctx.inject((REPLY_STATUS,), follow, name="reply-previews")
- 
++
      async def interrupt(raw: RawInbound) -> bool:
          """先通过来源提交 pause 并等待旧工作，再由原 binding 发送 ack。"""
+         session_id = f"telegram:{raw.message.chat_id}"
 @@ -48,8 +60,11 @@
              capabilities=frozenset(
                  {ChannelCapability.INBOUND, ChannelCapability.OUTBOUND, ChannelCapability.CONTROL}
@@ -2979,13 +2991,13 @@
  from telegramify_markdown.converter import convert_with_segments
  from telegramify_markdown.entity import MessageEntity, split_entities
 -from plugins.ledger.contract import ArtifactRead
-+
-+from core.common.diagnostic_log import log_timing
-+from core.common.file_io import run_file_io
- from plugins.channels.contract import AttachmentKind, AttachmentRef
+-from plugins.channels.contract import AttachmentKind, AttachmentRef
 -from plugins.ledger.contract import MessageCatalog
 -from plugins.ledger.contract import ContentPart, Control, Message
--
+ 
++from core.common.diagnostic_log import log_timing
++from core.common.file_io import run_file_io
++from plugins.channels.contract import AttachmentKind, AttachmentRef
 +from plugins.ledger.contract import (
 +    ArtifactRead,
 +    ContentPart,

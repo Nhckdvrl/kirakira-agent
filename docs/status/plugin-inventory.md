@@ -27,6 +27,7 @@
 | followups | 发行扩展 | 是 |
 | gateway | 运行组件 | 是 |
 | gemini | 运行组件 | 可选 |
+| goal | 发行扩展 | 可选 |
 | host_execution | 运行组件 | 是 |
 | jobs | 运行组件 | 是 |
 | ledger | 运行组件 | 是 |
