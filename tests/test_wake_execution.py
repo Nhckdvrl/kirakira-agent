@@ -188,3 +188,52 @@ async def test_pause_after_lost_handoff_ack_withdraws_only_unclaimed_proposals(t
             assert domain.proposal_status(identity, "r1") == ("selected" if claimed else "invalidated")
     finally:
         log.close()
+
+
+def test_proactive_paths_prefer_their_own_model_over_the_global_default(tmp_path):
+    """An unattended investigation or idle plan may run on a cheaper model.
+
+    The configured choice wins over the reporting conversation's own selection
+    and over the global default, an unknown id is reported rather than silently
+    replaced by the default, and clearing it returns to the default.
+    """
+    from types import SimpleNamespace
+
+    from plugins.drift.plugin import FIELDS as DRIFT_FIELDS
+    from plugins.drift.producer import Config as DriftConfig
+    from plugins.models.contract import MODEL_CATALOG, ModelCatalogSnapshot
+    from plugins.wake.api import Config as WakeConfig
+    from plugins.wake.runtime import Runtime
+
+    # Both proactive paths accept and persist their own model choice.
+    assert "model_id" in DRIFT_FIELDS
+    assert DriftConfig(model_id="cheap").model_id == "cheap"
+    assert DriftConfig().model_id is None
+    assert WakeConfig(model_id="cheap").model_id == "cheap"
+    assert WakeConfig().model_id is None
+
+    def catalog(*model_ids, available="cheap"):
+        models = tuple(SimpleNamespace(model_id=name,
+                                       availability="available" if name == available else "disabled")
+                       for name in model_ids)
+        return ModelCatalogSnapshot(revision=1, connections=(), models=models,
+                                    role_bindings={"default": "expensive"},
+                                    default_embedding_model_id=None)
+
+    def gate(config, snapshot):
+        runtime = Runtime.__new__(Runtime)
+        runtime.config = config
+        runtime.ctx = SimpleNamespace(require=lambda key: (
+            SimpleNamespace(snapshot=lambda: snapshot) if key is MODEL_CATALOG
+            else SimpleNamespace(status=lambda: None)))
+        return runtime._blocked(require_interest=False)
+
+    # The configured model is checked instead of the global default.
+    assert gate(WakeConfig(model_id="cheap"), catalog("cheap", "expensive")) is None
+    # A configured model that is not available blocks, naming the choice.
+    blocked = gate(WakeConfig(model_id="cheap"), catalog("cheap", "expensive", available="expensive"))
+    assert blocked is not None and "主动联系" in blocked
+    # An unknown id is an error, not a silent fall back to the default.
+    assert gate(WakeConfig(model_id="missing"), catalog("cheap", "expensive")) is not None
+    # Without a choice the global default still governs.
+    assert gate(WakeConfig(), catalog("cheap", "expensive", available="expensive")) is None

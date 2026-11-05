@@ -5,6 +5,7 @@ from plugins.models.contract import MODEL_CATALOG
 import asyncio
 import hashlib
 from collections.abc import Callable, Mapping
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import cast
 
@@ -200,6 +201,10 @@ class Runtime:
                 history_check_required = True
         metadata = messages.reader(context_session or target.session_id).metadata()
         model = ctx.require(MODEL_SELECTION).read_saved(metadata if metadata is not None else {})
+        if self.config.model_id is not None:
+            # An explicit investigation model overrides the reporting
+            # conversation's own selection; effort stays with that selection.
+            model = replace(model, model_id=self.config.model_id)
         catalog = ctx.require(TOOLS)
         allowed = set(self.config.investigation_tools)
         if owner == "alert":
@@ -256,9 +261,11 @@ class Runtime:
             if reason is not None:
                 return reason
         catalog = self.ctx.require(MODEL_CATALOG).snapshot()
-        model_id = catalog.role_bindings.get("default")
-        if model_id is None or catalog.model(model_id).availability != 'available':
-            return "默认聊天模型不可用"
+        model_id = self.config.model_id or catalog.role_bindings.get("default")
+        if model_id is None or model_id not in {model.model_id for model in catalog.models}:
+            return "主动联系所选聊天模型不可用"
+        if catalog.model(model_id).availability != 'available':
+            return "主动联系所选聊天模型不可用" if self.config.model_id else "默认聊天模型不可用"
         return None
 
     async def _due(self) -> None:

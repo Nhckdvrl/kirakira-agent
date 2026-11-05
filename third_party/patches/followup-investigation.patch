@@ -95,11 +95,10 @@
  inject = ()
  workspace_roots = ()
  workspace_files = ()
-@@ -103,6 +103,14 @@
-     async def read_revision(self, item_id: str, revision: str) -> Mapping[str, object] | None:
+@@ -104,6 +104,14 @@
          self._check_open()
          return await run_file_io(lambda: self._store.read_revision(self._source_id, item_id, revision))
-+
+ 
 +    async def inspect_submission(self, batch_id: str) -> Mapping[str, object] | None:
 +        self._check_open()
 +        return await run_file_io(lambda: self._store.read_submission(self._source_id, batch_id, live=True))
@@ -107,9 +106,10 @@
 +    async def inspect_revision(self, item_id: str, revision: str) -> Mapping[str, object] | None:
 +        self._check_open()
 +        return await run_file_io(lambda: self._store.read_revision(self._source_id, item_id, revision, live=True))
- 
++
      async def unsettled(self, limit: int = 100) -> tuple[Mapping[str, object], ...]:
          self._check_open()
+         return await run_file_io(lambda: self._store.unsettled(self._source_id, limit))
 --- a/plugins/eventmail/store.py
 +++ b/plugins/eventmail/store.py
 @@ -554,13 +554,13 @@
@@ -231,29 +231,26 @@
 -    MessageWriter,
 -    OwnerStore,
 -    OwnerTransaction,
--)
++from core.common.diagnostic_log import log_timing
++from plugins.content.contract import (
++    ContentView as ContentView,
+ )
 -from plugins.models.contract import (
 -    LLMResponse,
 -    ModelRequest,
 -    StreamCallback,
--)
++from plugins.context.contract import (
++    ContextBuilder as ContextBuilder,
+ )
 -from plugins.models.contract import (
 -    ContextLengthError,
 -    EmptyResponseError,
 -    OutputLengthError,
 -    ModelError,
--)
--from plugins.models.contract import BoundChatModel
-+from core.common.diagnostic_log import log_timing
-+from plugins.content.contract import (
-+    ContentView as ContentView,
-+)
-+from plugins.context.contract import (
-+    ContextBuilder as ContextBuilder,
-+)
 +from plugins.context.contract import (
 +    SummaryReducer as SummaryReducer,
-+)
+ )
+-from plugins.models.contract import BoundChatModel
  from plugins.ledger.contract import (
      CallRef,
      ContentPart,
@@ -452,11 +449,23 @@
            MODEL_CONTENT, MODEL_PROJECTION, MODEL_SELECTION, REACT_ORDERED_V2, TOOL_CLEANUP,
 --- a/plugins/wake/api.py
 +++ b/plugins/wake/api.py
-@@ -30,7 +30,7 @@
+@@ -2,7 +2,7 @@
+ 
+ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+ 
+-from pydantic import BaseModel, ConfigDict, field_validator
++from pydantic import BaseModel, ConfigDict, field_validator, Field
+ 
+ from agent.plugin_composition import EmitEventKey
+ from plugins.eventmail.contract import EVENTMAIL_DELIVERY_V2 as EVENTMAIL_DELIVERY, EVENTMAIL_WAKE_V2 as EVENTMAIL_WAKE, ContentWakeServicesV2 as ContentWakeServices, EventMailDeliveryServicesV2 as DeliveryServices
+@@ -30,7 +30,10 @@
      enabled: bool | None = True
      delivery: DeliveryTarget | None = None
      timezone: str = "Asia/Shanghai"
 -    investigation_tools: tuple[str, ...] = ("recall_memory", "web_fetch")
++    # Investigations run unattended whenever a source changes, so they may use a
++    # cheaper model than the conversation they report into.
++    model_id: str | None = Field(default=None, min_length=1, max_length=200)
 +    investigation_tools: tuple[str, ...] = ("recall_memory", "read_memory_source", "search_memory_source", "web_fetch")
  
      @field_validator("timezone")
@@ -473,7 +482,7 @@
  
 --- a/plugins/wake/messages.py
 +++ b/plugins/wake/messages.py
-@@ -18,32 +18,76 @@
+@@ -18,34 +18,78 @@
  
  
  def recent_context(catalog: MessageCatalog, history: DeliveryHistory, *, target: str | None,
@@ -540,8 +549,8 @@
 +    return json.dumps({"followup_rule_changes": _preview(rules, 3000),
 +                       "recent_conversation": list(reversed(_preview(passive, 3000))),
                         "delivered_messages": list(reversed(_preview(list(reversed(proactive)), 3000)))}, ensure_ascii=False)
-+
-+
+ 
+ 
 +def _recent_conversation(reader: MessageReader, now: datetime) -> list[dict[str, object]]:
 +    """只向前翻到足够的近期对话；忽略未来消息和无正文的工具过程。"""
 +    rows: list[dict[str, object]] = []
@@ -565,9 +574,11 @@
 +        if not page.has_more:
 +            return rows
 +        page = reader.read_tail(before_seq=page.messages[0].seq, through_seq=page.through_seq, limit=50)
- 
- 
++
++
  def _preview(rows: Sequence[Mapping[str, object]], budget: int) -> list[dict[str, object]]:
+     """优先保留最新正文，在独立字符预算内截短预览，不改原消息。"""
+     selected: list[dict[str, object]] = []
 @@ -65,6 +109,7 @@
      if part.kind == "wake.request":
          request = Request.model_validate_json(json.dumps(json_value(part.value)))
@@ -651,12 +662,10 @@
  desc = "内部消息完成初筛、调查与告警，真实送达后确认原职责"
  function_inject = (
      MODEL_SELECTION, MODEL_CONTENT, MODEL_CATALOG,
-@@ -76,20 +78,6 @@
- )
- 
+@@ -78,20 +80,6 @@
  WAKE_DASHBOARD = ServiceKey[Callable[[], DashboardView | None]]("wake.dashboard.v1")
--
--
+ 
+ 
 -async def _stop_watcher(watcher: asyncio.Task[None]) -> None:
 -    """Drain a watcher without replaying a completed business failure as stop failure."""
 -
@@ -669,9 +678,11 @@
 -    except Exception:
 -        if cancel_requested:
 -            raise
- 
- 
+-
+-
  async def start_function(ctx: Context) -> None:
+     """归档注册原程序和私有决定工具；消息与领域状态仅在正式来源执行时打开。"""
+ 
 @@ -146,8 +134,7 @@
  
      async def stop(_event: object) -> None:
@@ -692,7 +703,7 @@
  
 --- a/plugins/wake/pool.py
 +++ b/plugins/wake/pool.py
-@@ -1,9 +1,12 @@
+@@ -1,10 +1,13 @@
  from __future__ import annotations
  
  import math
@@ -700,11 +711,12 @@
  from dataclasses import dataclass
  from datetime import datetime
  from typing import Any
-+
-+from plugins.eventmail.contract import REQUESTED_REVIEW
  
++from plugins.eventmail.contract import REQUESTED_REVIEW
++
  WAKE_ADMISSION_FLOOR = 0.02
  WAKE_POOL_THRESHOLD = 1.5
+ 
 @@ -21,6 +24,7 @@
      threshold: float
      below_floor: int
@@ -808,7 +820,15 @@
          if (
 --- a/plugins/wake/runtime.py
 +++ b/plugins/wake/runtime.py
-@@ -38,8 +38,9 @@
+@@ -5,6 +5,7 @@
+ import asyncio
+ import hashlib
+ from collections.abc import Callable, Mapping
++from dataclasses import replace
+ from datetime import UTC, datetime, timedelta
+ from typing import cast
+ 
+@@ -38,8 +39,9 @@
  from .api import DRIFT_WAKE, EVENTMAIL_WAKE, Config, DeliveryTarget
  from .legacy_rules import read_archived_rules
  from .messages import recent_context
@@ -819,7 +839,7 @@
  from .state import WakeState, WakeStateReader
  
  
-@@ -175,22 +176,52 @@
+@@ -175,22 +177,56 @@
              "address": target.recipient,
              "binding_id": ctx.require(DELIVERY_SENDERS).bind(target.channel, bindings),
          }
@@ -848,6 +868,10 @@
 +                history_check_required = True
 +        metadata = messages.reader(context_session or target.session_id).metadata()
          model = ctx.require(MODEL_SELECTION).read_saved(metadata if metadata is not None else {})
++        if self.config.model_id is not None:
++            # An explicit investigation model overrides the reporting
++            # conversation's own selection; effort stays with that selection.
++            model = replace(model, model_id=self.config.model_id)
          catalog = ctx.require(TOOLS)
 -        allowed = set(self.config.investigation_tools) if owner == "content" else set()
 +        allowed = set(self.config.investigation_tools)
@@ -874,7 +898,7 @@
              sink=sink,
              program_binding=bindings.bind(WAKE_PROGRAM, {}),
              tools={
-@@ -198,13 +229,12 @@
+@@ -198,13 +234,12 @@
                  for name in names
              },
              snapshot_seq=admission.pool.snapshot_seq,
@@ -890,6 +914,21 @@
              events=tuple(dict(item) for item in (await ctx.require(EVENTMAIL_WAKE).active_context(now))))
  
      async def follow(self) -> None:
+@@ -226,9 +261,11 @@
+             if reason is not None:
+                 return reason
+         catalog = self.ctx.require(MODEL_CATALOG).snapshot()
+-        model_id = catalog.role_bindings.get("default")
+-        if model_id is None or catalog.model(model_id).availability != 'available':
+-            return "默认聊天模型不可用"
++        model_id = self.config.model_id or catalog.role_bindings.get("default")
++        if model_id is None or model_id not in {model.model_id for model in catalog.models}:
++            return "主动联系所选聊天模型不可用"
++        if catalog.model(model_id).availability != 'available':
++            return "主动联系所选聊天模型不可用" if self.config.model_id else "默认聊天模型不可用"
+         return None
+ 
+     async def _due(self) -> None:
 --- a/plugins/wake/selection.py
 +++ b/plugins/wake/selection.py
 @@ -5,7 +5,8 @@
@@ -928,19 +967,44 @@
      selected = page[0]
 --- a/plugins/wake/settings.py
 +++ b/plugins/wake/settings.py
-@@ -83,8 +83,9 @@
+@@ -83,14 +83,16 @@
                      reason = "当前发送渠道不可用，请在功能设置中改选目标或重新开启该渠道"
              enabled = config["enabled"]
              return {**self.ctx.require(PLUGIN_CONFIG).read(self.ctx), "enabled": enabled,
 -                "ready": enabled is True and not reason and self.function.state.value == "active",
 -                "can_enable": can_enable, "blocked": blocked, "reason": reason or fiber["error"] or "",
+-                "values": {"delivery": config["delivery"], "timezone": config["timezone"]}, "targets": self.targets()}
 +                "ready": enabled is True and selected is not None and not reason and self.function.state.value == "active",
 +                "can_enable": can_enable, "blocked": blocked,
 +                "reason": reason or fiber["error"] or ("请先选择通知位置" if selected is None else ""),
-                 "values": {"delivery": config["delivery"], "timezone": config["timezone"]}, "targets": self.targets()}
++                "values": {"delivery": config["delivery"], "timezone": config["timezone"],
++                           "model_id": config["model_id"]}, "targets": self.targets()}
  
      async def save(self, request_id: str, expected_input: str, values: dict[str, object]) -> dict[str, object]:
-@@ -121,7 +122,7 @@
+         """只接受用户决定与本插件字段，启用前重新核对前置。"""
+         async with self.ctx.runtime_scope():
+-            if set(values) - {"enabled", "delivery", "timezone"} or type(values.get("enabled")) is not bool:
++            if set(values) - {"enabled", "delivery", "timezone", "model_id"} or type(values.get("enabled")) is not bool:
+                 raise ValueError("配置字段无效，请选择开启或关闭")
+             current = await self.read()
+             if values["enabled"] and not current["can_enable"]:
+@@ -100,7 +102,14 @@
+                 choices = [{key: value for key, value in item.items() if key != "label"} for item in self.targets()]
+                 if target not in choices:
+                     raise ValueError("请选择现有对话的可用发送目标")
+-            config = self.model.model_validate({**self.ctx.config, **values}).model_dump()
++            merged = {**self.ctx.config, **values}
++            if isinstance(merged.get("model_id"), str) and not merged["model_id"].strip():
++                merged.pop("model_id", None)
++            if (chosen := merged.get("model_id")) is not None:
++                catalog = None if self.models is None else self.models()
++                if catalog is None or chosen not in {item.model_id for item in catalog.models}:
++                    raise ValueError("请选择一个现有的聊天模型")
++            config = self.model.model_validate(merged).model_dump()
+             return await self.ctx.require(PLUGIN_CONFIG).apply(self.ctx, request_id=request_id,
+                 expected_input=expected_input, config=config)
+ 
+@@ -121,7 +130,7 @@
          await child.require(ONBOARDING).group(child, "proactive", "Wake 主动联系", Ability(
              pitch="在合适的时候主动找你",
              benefit="有具体理由时它会先开口，比如你提过的事有了进展。消息发到你选择的聊天渠道。",

@@ -176,10 +176,9 @@
 +++ b/frontend/design.md
 @@ -1,6 +1,6 @@
 -# Akashic 前端设计合同（design.md）
--
--本文件是所有前端工作的唯一设计入口：修改 `frontend/**/src`、插件 web UI（`frontend/plugins/`）或 `plugins/*/web_module.*` 前必读。它规定可观察的几何、token 和反模式；品牌理由与迁移历史见 [0043](../docs/decisions/0043-paper-brand-tokens-replace-material-visual-semantics.md) 与[纸张品牌系统](../docs/design/akashic-paper-brand-system.md)，窄屏行为细节见[共享 Web 窄屏阅读设计](../docs/design/web-narrow-reading.md)。规则冲突时以本文件的几何合同为准，以决策记录的理由为准。
 +# Kirakira 前端设计合同（design.md）
-+
+ 
+-本文件是所有前端工作的唯一设计入口：修改 `frontend/**/src`、插件 web UI（`frontend/plugins/`）或 `plugins/*/web_module.*` 前必读。它规定可观察的几何、token 和反模式；品牌理由与迁移历史见 [0043](../docs/decisions/0043-paper-brand-tokens-replace-material-visual-semantics.md) 与[纸张品牌系统](../docs/design/akashic-paper-brand-system.md)，窄屏行为细节见[共享 Web 窄屏阅读设计](../docs/design/web-narrow-reading.md)。规则冲突时以本文件的几何合同为准，以决策记录的理由为准。
 +本文件是前端设计入口：修改 `frontend/**/src`、插件 web UI（`frontend/plugins/`）或 `plugins/*/web_module.*` 前必读。它规定可观察的几何、token、窄屏行为和反模式；产品方向见[个人伙伴设计](../docs/architecture/design-direction.md)，实现与验证遵循[开发工作流](../docs/engineering/development-workflow.md)。本文件描述当前设计，已退役的迁移记录通过 Git 查看。
  
  写法约定：每条规则必须可以观察或测量（"输入文字左缘 == 消息正文左缘"），不写主观词（"干净""高级感"）。评审中重复出现的视觉纠正，落成这里的一条规则、一个 token 或一个脚本检查，而不是逐处手调。
@@ -210,34 +209,35 @@
 +布局、断点或 token 变化还需启动实际 Web 工作区，在桌面与窄屏浏览器中检查聊天、侧栏、输入框、设置和重连；记录浏览器版本及视口，并保留前后截图。截图和登录信息留在本地私有目录。认证 HTTP、项目范围和实际文件工具可另用 `eval.native_web` 验证；该入口不代替浏览器交互检查。
 --- a/frontend/plugins/akasha/src/plugin-ui.css
 +++ b/frontend/plugins/akasha/src/plugin-ui.css
-@@ -1,4 +1,11 @@
+@@ -1,5 +1,12 @@
  @import "../../../../plugins/akasha/plugin_ui.css";
-+
+ 
 +.akasha-plugin-ui-evidence {
 +  display: block;
 +  margin-block-end: 4px;
 +  color: var(--ak-color-text-secondary);
 +  font-size: 0.6875rem;
 +}
- 
++
  .akasha-plugin-ui-query-status {
    margin-block: 8px;
+   color: var(--ak-color-text-secondary);
 --- a/frontend/plugins/akasha/src/plugin-ui.js
 +++ b/frontend/plugins/akasha/src/plugin-ui.js
-@@ -4,6 +4,13 @@
- const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
+@@ -5,6 +5,13 @@
    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
  })[character]);
-+
+ 
 +const sourceTime = value => {
 +  if (typeof value !== "string" || !value) return "";
 +  const date = new Date(value);
 +  return Number.isNaN(date.getTime()) ? String(value ?? "")
 +    : date.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
 +};
- 
++
  /** 聚合事实在服务端确认闭合前仍可变化，不进入页面结果缓存。 */
  async function readRecall(context, isActive) {
+   const query = async (messageId, offset) => {
 @@ -62,15 +69,24 @@
  /** 先计算展示内容；相同快照不改写真实卡片、选择与焦点。 */
  function renderRecall(result) {
@@ -608,7 +608,7 @@
      { icon: "spinner", text: "正在结束卡住的进程并重新启动浏览器…", actions: [] });
 --- a/plugins/drift/plugin.py
 +++ b/plugins/drift/plugin.py
-@@ -2,22 +2,57 @@
+@@ -2,23 +2,58 @@
  
  from collections.abc import Mapping
  from datetime import datetime
@@ -651,9 +651,9 @@
 +inject = (PLUGIN_CONFIG, MESSAGE_CATALOG, OWNER_STATE)
  workspace_roots = ()
  workspace_files = ()
-+
+ 
 +SETTINGS = ServiceKey[Configuration]("drift.settings.v1")
-+FIELDS = ("auto_enabled", "allow_conversation", "context_session_id", "purpose", "idle_seconds", "interval_seconds", "daily_budget")
++FIELDS = ("auto_enabled", "allow_conversation", "context_session_id", "purpose", "idle_seconds", "interval_seconds", "daily_budget", "model_id")
 +
 +
 +class Empty(BaseModel):
@@ -669,9 +669,10 @@
 +            for item in sessions if item.first_message is not None and isinstance(item.first_message.body, Input)
 +        ]}
 +        return result
- 
++
  
  class _AsyncWakeServices:
+     def __init__(self, store: DriftStore) -> None:
 @@ -64,3 +99,43 @@
      await run_file_io(store.initialize)
      _ = await ctx.provide(DRIFT_WAKE_V2, _AsyncWakeServices(store))
@@ -1027,10 +1028,10 @@
 -def definition() -> ModelDriverDefinition:
 +def definition(pool: HttpClientPool | None = None) -> ModelDriverDefinition:
      """Build this artifact's immutable driver contribution."""
-+
+ 
 +    async def open_connection(descriptor, credential):
 +        return await _open(descriptor, credential, pool=pool)
- 
++
      return ModelDriverDefinition(
          driver_id=_DRIVER_ID,
          contract_version=_CONTRACT_VERSION,
@@ -1221,22 +1222,19 @@
  
  
 -AKASHIC_BEHAVIOR_RULES = """你有工具执行能力，必须先验证再回答。
--
++DEFAULT_EXPRESSION_RULES = """默认使用自然中文口语，简单问题简短作答；用户指定语言、风格、格式或组合项时按明确要求调整。
+ 
 -**有知识，但不无所不能。** 不确定的事情说不确定，哲学性问题可以说"这个我说不准"，不要装什么都懂。查过了再说，没查过别乱说。
--
++情绪交流先接住用户具体说出的感受，再判断是否需要展开或建议；不强制使用固定开场词。
+ 
 -**先接住，再展开。** 被叫到时先给一句短回应，再说下面的。不要一开口就是长篇输出。接到情绪先给一句"怎么了"或"嗯"，再问或再说，不要直接跳到解决方案。
--
++做完事说完就结束，不例行总结、推销能力或追加行动计划。仅在有助于阅读时使用列表。
+ 
 -中文，口语。短句，停顿多，一句话可以分两次说，可以"……"。做完事说完就结束，不总结，不提"你接下来可以"，不解释刚才做了什么。遇到麻烦的要求会有一点无奈，但还是去做。不主动推销自己能力，被问才答。条目列表只在真的需要列举时用，不用来汇报。
 -
 -绝对不用 emoji（Unicode 表情符号 🙂🎉 之类）。任何情况下都不用，包括结尾。颜文字（纯文字符号）可以用，但要克制；轻松、暧昧、害羞、得意这些场景可以更常用一点，但一次 0 到 1 个就够。
 -
 -加粗用 **文字** 格式时，引号必须放在星号外面，写成 "**文字**" 而不是 **"文字"**。"""
-+DEFAULT_EXPRESSION_RULES = """默认使用自然中文口语，简单问题简短作答；用户指定语言、风格、格式或组合项时按明确要求调整。
-+
-+情绪交流先接住用户具体说出的感受，再判断是否需要展开或建议；不强制使用固定开场词。
-+
-+做完事说完就结束，不例行总结、推销能力或追加行动计划。仅在有助于阅读时使用列表。
-+
 +默认不用 Unicode 表情，颜文字克制使用；显式表情偏好覆盖此项。"""
  
  
@@ -1354,7 +1352,7 @@
  
  
  def build_identity(*, workspace: Path) -> str:
-@@ -10,17 +10,28 @@
+@@ -10,18 +10,29 @@
      return f"""## 工作区
  - 根目录：{workspace_path}
  - 人格：{workspace_path}/memory/VEDA.md
@@ -1372,7 +1370,7 @@
 +{DEFAULT_EXPRESSION_RULES}
  
  ## 行为规范
-+
+ 
 +### 当前请求与工具范围
 +- 对话任务以当前真实用户消息为准。召回的历史原话、旧工具结果和背景资料不构成本轮请求；问候、确认和重新开始对话，不表示继续执行历史任务。
 +- 已注入的人物底稿、称呼和确认过的表达偏好可直接用于措辞，不需要为说一句话重新读取人格文件或遍历记忆目录。只有当前任务确实需要缺失的原文、文件状态或外部事实时才查工具。
@@ -1383,9 +1381,10 @@
 +- 用户明确要求后台调查、先接单让他继续聊天、完成后再通知时，先使用本次获授目录中的后台任务能力接纳任务。若目录提供 subagent，先加载该组并通过 spawn 的 run_in_background=true 保存目标、原始网址、约束和交回要求；不要先在当前回复中把联网调查做完，也不以 shell 的 nohup、& 或口头承诺代替有回传记录的后台任务。
 +- 只有取得实际接纳回执才确认已经交办，然后结束本轮确认，不在父会话反复轮询等它完成。后来收到普通问题时照常回答；后台完成由其持久回传流程通知。没有获授或接纳失败时如实说明，不能承诺稍后一定联系。
 +- 用户追问进度、原始结果或通知去向时，使用任务查询能力核对当前会话的真实记录，已完成任务也可以查询。工作完成与通知送达分开陈述，待完成不等于正在某个具体步骤，不编造百分比。取消同样以实际工具回执为准。
- 
++
  ### 知识边界
  - 你不认识某样东西，不等于它不存在。训练数据有截止时间，用户可能比你新。
+ - 「我没听说过」和「它不存在」是两件事。前者是事实，后者是需要证据的断言。
 @@ -58,21 +69,24 @@
  {VERIFIABLE_COMPLETION_RULES}
  
@@ -1598,20 +1597,21 @@
  COOKIE = "akashic_session"
  REMEMBER_S = 90 * 86400
  BROWSER_SESSION_S = 86400
-@@ -79,8 +79,12 @@
+@@ -79,9 +79,13 @@
  
      def _store_password(self, password: str, *, must_change: bool) -> None:
          salt = secrets.token_bytes(16)
 -        self._write("account.json", json.dumps({"username": USERNAME, "salt": salt.hex(),
 +        self._write("account.json", json.dumps({"username": self.username(), "salt": salt.hex(),
              "hash": _hash_password(password, salt), "mustChange": must_change}))
-+
+ 
 +    def username(self) -> str:
 +        """New accounts use the product name; existing identities stay intact."""
 +        return str(self._read("account.json").get("username", USERNAME))
- 
++
      def local_secret(self) -> str:
          return (self.root / "secret").read_text(encoding="utf-8").strip()
+ 
 @@ -94,7 +98,7 @@
              return False
          expected = str(account["hash"])

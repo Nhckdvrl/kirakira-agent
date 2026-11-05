@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, Field
 
 from agent.plugin_composition import EmitEventKey
 from plugins.eventmail.contract import EVENTMAIL_DELIVERY_V2 as EVENTMAIL_DELIVERY, EVENTMAIL_WAKE_V2 as EVENTMAIL_WAKE, ContentWakeServicesV2 as ContentWakeServices, EventMailDeliveryServicesV2 as DeliveryServices
@@ -30,6 +30,9 @@ class Config(BaseModel):
     enabled: bool | None = True
     delivery: DeliveryTarget | None = None
     timezone: str = "Asia/Shanghai"
+    # Investigations run unattended whenever a source changes, so they may use a
+    # cheaper model than the conversation they report into.
+    model_id: str | None = Field(default=None, min_length=1, max_length=200)
     investigation_tools: tuple[str, ...] = ("recall_memory", "read_memory_source", "search_memory_source", "web_fetch")
 
     @field_validator("timezone")

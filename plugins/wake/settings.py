@@ -86,12 +86,13 @@ class Settings:
                 "ready": enabled is True and selected is not None and not reason and self.function.state.value == "active",
                 "can_enable": can_enable, "blocked": blocked,
                 "reason": reason or fiber["error"] or ("请先选择通知位置" if selected is None else ""),
-                "values": {"delivery": config["delivery"], "timezone": config["timezone"]}, "targets": self.targets()}
+                "values": {"delivery": config["delivery"], "timezone": config["timezone"],
+                           "model_id": config["model_id"]}, "targets": self.targets()}
 
     async def save(self, request_id: str, expected_input: str, values: dict[str, object]) -> dict[str, object]:
         """只接受用户决定与本插件字段，启用前重新核对前置。"""
         async with self.ctx.runtime_scope():
-            if set(values) - {"enabled", "delivery", "timezone"} or type(values.get("enabled")) is not bool:
+            if set(values) - {"enabled", "delivery", "timezone", "model_id"} or type(values.get("enabled")) is not bool:
                 raise ValueError("配置字段无效，请选择开启或关闭")
             current = await self.read()
             if values["enabled"] and not current["can_enable"]:
@@ -101,7 +102,14 @@ class Settings:
                 choices = [{key: value for key, value in item.items() if key != "label"} for item in self.targets()]
                 if target not in choices:
                     raise ValueError("请选择现有对话的可用发送目标")
-            config = self.model.model_validate({**self.ctx.config, **values}).model_dump()
+            merged = {**self.ctx.config, **values}
+            if isinstance(merged.get("model_id"), str) and not merged["model_id"].strip():
+                merged.pop("model_id", None)
+            if (chosen := merged.get("model_id")) is not None:
+                catalog = None if self.models is None else self.models()
+                if catalog is None or chosen not in {item.model_id for item in catalog.models}:
+                    raise ValueError("请选择一个现有的聊天模型")
+            config = self.model.model_validate(merged).model_dump()
             return await self.ctx.require(PLUGIN_CONFIG).apply(self.ctx, request_id=request_id,
                 expected_input=expected_input, config=config)
 

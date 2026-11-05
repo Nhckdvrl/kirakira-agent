@@ -37,6 +37,9 @@ class Config(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     auto_enabled: bool = False
     allow_conversation: bool = False
+    # Idle planning runs unattended and far more often than a reply, so it may
+    # use a cheaper model than the one the reference conversation is set to.
+    model_id: str | None = Field(default=None, min_length=1, max_length=200)
     context_session_id: str | None = Field(default=None, min_length=1, max_length=512)
     purpose: str = Field(default="结合近期相处与长期记忆，接续关心的话题、协助未完事项或探索有价值的发现；没有合适理由就保持安静。", min_length=1, max_length=1000)
     idle_seconds: int = Field(default=300, ge=0, le=86400)
@@ -206,8 +209,13 @@ class Producer:
                 return {"status": "unavailable_context"}
             selection = self.ctx.require(MODEL_SELECTION).read_saved(reader.metadata() or {})
             models = self.ctx.require(MODEL_CATALOG).snapshot()
-            selected_model = selection.model_id or models.role_bindings.get("default")
-            if selected_model is None or models.model(selected_model).availability != "available":
+            # An explicit idle-planning choice wins over whatever the reference
+            # conversation happens to be set to; an unknown id is a real error
+            # rather than a silent fall back to an expensive default.
+            selected_model = self.config.model_id or selection.model_id or models.role_bindings.get("default")
+            if selected_model is None or selected_model not in {m.model_id for m in models.models}:
+                return {"status": "model_unavailable"}
+            if models.model(selected_model).availability != "available":
                 return {"status": "model_unavailable"}
             if self.ctx.require(SEMANTIC_INTEREST).status() is not None:
                 return {"status": "memory_unavailable"}
@@ -286,7 +294,8 @@ class Producer:
                             "allowed_initiatives": ["assist", "research", *(["conversation"] if self.config.allow_conversation else [])],
                             "memory": recall.material, "retrieval_ref": recall.retrieval_ref}
                 async with self.ctx.require(CHAT_MODELS).independent_execution(
-                    model_id=selection.model_id, reasoning_effort=selection.reasoning_effort,
+                    model_id=self.config.model_id or selection.model_id,
+                    reasoning_effort=selection.reasoning_effort,
                 ) as execution:
                     response = await execution.chat("default").complete(ModelRequest(
                         messages=({"role": "system", "content": PROMPT},
