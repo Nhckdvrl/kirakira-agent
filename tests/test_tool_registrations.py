@@ -51,7 +51,10 @@ def _generators_without_the_decorator(tree: ast.Module, names: set[str]) -> list
     return offenders
 
 
-@pytest.mark.parametrize("keyword", ["open", "open_recall"])
+# Every keyword this repository uses to hand a context manager to something
+# else. A new one should be added here rather than discovered in production.
+@pytest.mark.parametrize("keyword", ["open", "open_recall", "open_session",
+                                     "open_embedding", "live", "scope", "session"])
 def test_everything_opened_as_a_context_manager_is_one(keyword: str) -> None:
     """`async with` on a bare async generator raises only when it is opened.
 
