@@ -12,12 +12,13 @@
   "ours_identical_after_index_growth": "25/25",
   "stock_identical_after_index_growth": "16/25",
   "paired_mcnemar_p": 0.00391,
+  "stock_cached_identical_after_index_growth": "25/25",
   "stock_drift_examples": [
    {
     "turn": 0,
     "chars_before": 187,
-    "chars_after": 157,
-    "changed_chars": 151
+    "chars_after": 158,
+    "changed_chars": 150
    },
    {
     "turn": 1,
@@ -38,13 +39,24 @@
     "changed_chars": 29
    },
    {
-    "turn": 5,
-    "chars_before": 113,
-    "chars_after": 117,
-    "changed_chars": 59
+    "turn": 6,
+    "chars_before": 189,
+    "chars_after": 123,
+    "changed_chars": 125
    }
   ],
   "note": "其余各项是结构性性质而非抽样估计：分母表示检查了多少次，每次都成立；出现一次反例即为缺陷，不是统计波动。"
+ },
+ "cache_keyed_by_request_text_collides": {
+  "checked": 1,
+  "stock_cached_served_an_earlier_turns_material": 1,
+  "ours_served_an_earlier_turns_material": 0,
+  "note": "最后一轮刻意重复第一轮的问法，但它的对话窗口已经前移。按请求文本做键的缓存会把第一轮的材料发给它；回执按请求本身做键，两轮的 identity 不同，不会串。这是直接加个缓存这种修法的正确性陷阱，不只是存储代价。"
+ },
+ "cost_of_buying_replay_by_caching": {
+  "stock_cached_material_bytes": 3971,
+  "ours_receipt_bytes": 174222,
+  "note": "缓存确实买回了重放，而且在存储上更便宜：它只存输出字节。回执更大，因为它记录的是整个检索决策——考虑过哪些候选、withhold 了什么、索引了什么、各段落在原文的哪个字符区间——而不只是最终给了什么。这些正是缓存买不到的东西：准入判定、来源归属、字符级出处，以及按同一次检索换一种呈现重渲染的能力。"
  },
  "read_confinement": {
   "illegal_attempts": 75,

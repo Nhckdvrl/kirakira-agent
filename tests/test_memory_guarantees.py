@@ -45,6 +45,22 @@ async def test_receipt_design_holds_its_three_properties() -> None:
     # rather than a bare count; the rest are structural and a single
     # counter-example would be a defect, not sampling noise.
     assert 0.0 <= repro["paired_mcnemar_p"] <= 1.0
+    # The fair upgrade has to be reported as the tie it is: a baseline that
+    # caches per request matches us on replay. If this ever stops holding the
+    # baseline has become a straw man, and the comparison stops being worth
+    # publishing.
+    cached, _, cached_total = repro["stock_cached_identical_after_index_growth"].partition("/")
+    assert cached == cached_total, "a per-request cache must reproduce; say so"
+    cost = report["cost_of_buying_replay_by_caching"]
+    assert cost["stock_cached_material_bytes"] > 0 and cost["ours_receipt_bytes"] > 0
+
+    # Keying a cache by request text is the natural way to write one, and it
+    # serves an earlier turn's material to a later turn that repeats the
+    # wording. A receipt is keyed by the request, so it cannot collide.
+    collision = report["cache_keyed_by_request_text_collides"]
+    assert collision["checked"] == 1
+    assert collision["stock_cached_served_an_earlier_turns_material"] == 1
+    assert collision["ours_served_an_earlier_turns_material"] == 0
 
     confinement = report["read_confinement"]
     assert confinement["illegal_attempts"] > 0

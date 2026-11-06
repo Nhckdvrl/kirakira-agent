@@ -125,6 +125,32 @@ class StockMemory:
         return self.texts.get(message_id)
 
 
+@dataclass
+class CachedStockMemory(StockMemory):
+    """The fair upgrade: the same stack, but it keeps what it showed each turn.
+
+    The obvious answer to the reproducibility gap is "we would just cache the
+    rendered text per request", and that answer is correct as far as it goes --
+    so it is measured here rather than conceded in prose. Caching buys back
+    byte-identical replay. What it does not buy is the rest: a cache says what
+    was shown, not which originals the turn was entitled to re-read, who asked
+    for the retrieval, or where in a real message a passage came from. And it
+    pays for replay by storing a copy of the material, where a receipt stores
+    identities and character ranges and reads the bytes back from the ledger.
+    """
+
+    cache: dict[str, str] = field(default_factory=dict)
+
+    def render(self, query: str) -> str:
+        if query not in self.cache:
+            self.cache[query] = super().render(query)
+        return self.cache[query]
+
+    @property
+    def cached_chars(self) -> int:
+        return sum(len(text) for text in self.cache.values())
+
+
 @asynccontextmanager
 async def _memory(path: Path) -> AsyncIterator[tuple]:
     log = MessageLog(path / "sessions.db")
@@ -176,7 +202,10 @@ def _append(log, embeddings, learning, session, name, author, kind, body_text):
 
 async def measure(*, seed_turns: int, live_turns: int) -> dict[str, object]:
     stock = StockMemory()
-    reproducible = {"ours": 0, "stock": 0, "turns": 0, "drift": []}
+    # The same stack with the obvious fix applied, so the concession is measured.
+    cached = CachedStockMemory()
+    reproducible = {"ours": 0, "stock": 0, "stock_cached": 0, "turns": 0, "drift": []}
+    storage = {"ours_receipt_bytes": 0, "stock_cached_bytes": 0}
     confinement = {"ours_refused": 0, "ours_allowed_control": 0, "stock_refused": 0,
                    "attempts": 0, "refusals": []}
     repetition = {"ours_duplicate_bodies": 0, "stock_duplicate_bodies": 0, "turns": 0}
@@ -192,6 +221,7 @@ async def measure(*, seed_turns: int, live_turns: int) -> dict[str, object]:
             _append(log, embeddings, learning, OTHER_SESSION, "other-assistant",
                     "assistant", Output, "已记录。")
             stock.remember(secret.message_id, "另一个会话里的私密条件：体检结果 HBA1C=7.8，不要对外提起。")
+            cached.remember(secret.message_id, "另一个会话里的私密条件：体检结果 HBA1C=7.8，不要对外提起。")
 
             for number in range(seed_turns):
                 text = (f"第 {number} 次讨论：场地、预算与时间安排。"
@@ -199,28 +229,40 @@ async def measure(*, seed_turns: int, live_turns: int) -> dict[str, object]:
                 message = _append(log, embeddings, learning, SESSION, f"user-{number}",
                                   "user", Input, text)
                 stock.remember(message.message_id, text)
+                cached.remember(message.message_id, text)
                 reply = f"第 {number} 次讨论已记录。"
                 answer = _append(log, embeddings, learning, SESSION, f"assistant-{number}",
                                  "assistant", Output, reply)
                 stock.remember(answer.message_id, reply)
+                cached.remember(answer.message_id, reply)
             await memory.consume()
 
             inputs = log.writer(SESSION, author="user", source=SOURCE,
                                 body_types=(Input,), content={"text": check_text})
             turns = []
+            # The last turn deliberately repeats the first turn's wording. A cache
+            # keyed by request text -- the obvious way to write one -- then serves
+            # the earlier turn's material for a later turn whose window has moved
+            # on. A receipt is keyed by the request itself, so it cannot collide.
+            repeated_query = "项目 0 的预算是多少？第 0 次追问"
             for turn in range(live_turns):
-                query = f"项目 {turn % max(seed_turns, 1)} 的预算是多少？第 {turn} 次追问"
+                query = (repeated_query if turn == live_turns - 1
+                         else f"项目 {turn % max(seed_turns, 1)} 的预算是多少？第 {turn} 次追问")
                 message = inputs.append(f"live-{turn}", Input((ContentPart("text", query),)))
                 stock.remember(message.message_id, query)
+                cached.remember(message.message_id, query)
                 snapshot = log.reader(SESSION).snapshot()
                 material = await memory.prepare(snapshot, SOURCE)
                 ours = "\n\n".join(item["text"] for item in material.get("reminders", ())
                                    if item.get("replay") is False)
                 identity = context_identity(SESSION, SOURCE, message.message_id)
                 receipt = records.read(identity)
+                if receipt is not None:
+                    storage["ours_receipt_bytes"] += len(receipt.model_dump_json())
                 turns.append({"turn": turn, "query": query, "identity": identity,
                               "snapshot": snapshot, "ours": ours,
-                              "stock": stock.render(query), "receipt": receipt,
+                              "stock": stock.render(query),
+                              "stock_cached": cached.render(query), "receipt": receipt,
                               "references": tuple(material.get("references", ())),
                               "window": {m.message_id for m in snapshot}})
 
@@ -258,6 +300,8 @@ async def measure(*, seed_turns: int, live_turns: int) -> dict[str, object]:
                                          if item.get("replay") is False)
                 if ours_again == row["ours"]:
                     reproducible["ours"] += 1
+                if cached.render(row["query"]) == row["stock_cached"]:
+                    reproducible["stock_cached"] += 1
                 stock_again = stock.render(row["query"])
                 if stock_again == row["stock"]:
                     reproducible["stock"] += 1
@@ -268,6 +312,17 @@ async def measure(*, seed_turns: int, live_turns: int) -> dict[str, object]:
                         "changed_chars": sum(1 for a, b in zip(row["stock"], stock_again,
                                                                strict=False) if a != b)
                                           + abs(len(row["stock"]) - len(stock_again))})
+
+            # 1b. Does the obvious cache collide? The repeated wording belongs to a
+            #     later turn with a larger window, so serving the first turn's
+            #     material for it is stale, not merely cheap.
+            collision = {"checked": 0, "stock_cached_served_stale": 0, "ours_served_stale": 0}
+            if live_turns >= 2 and turns[0]["query"] == turns[-1]["query"]:
+                collision["checked"] = 1
+                if turns[-1]["stock_cached"] == turns[0]["stock_cached"]:
+                    collision["stock_cached_served_stale"] = 1
+                if turns[-1]["identity"] == turns[0]["identity"]:
+                    collision["ours_served_stale"] = 1
 
             # 2. Read confinement, exercised against a live receipt.
             queries = MemoryQueries(capture=lambda _: {}, open_recall=None,
@@ -358,9 +413,30 @@ async def measure(*, seed_turns: int, live_turns: int) -> dict[str, object]:
             "paired_mcnemar_p": round(mcnemar_exact(
                 reproducible["ours"] - min(reproducible["ours"], reproducible["stock"]),
                 reproducible["stock"] - min(reproducible["ours"], reproducible["stock"])), 5),
+            "stock_cached_identical_after_index_growth":
+                f"{reproducible['stock_cached']}/{reproducible['turns']}",
             "stock_drift_examples": reproducible["drift"][:5],
             "note": ("其余各项是结构性性质而非抽样估计：分母表示检查了多少次，"
                      "每次都成立；出现一次反例即为缺陷，不是统计波动。"),
+        },
+        "cache_keyed_by_request_text_collides": {
+            "checked": collision["checked"],
+            "stock_cached_served_an_earlier_turns_material": collision["stock_cached_served_stale"],
+            "ours_served_an_earlier_turns_material": collision["ours_served_stale"],
+            "note": ("最后一轮刻意重复第一轮的问法，但它的对话窗口已经前移。"
+                     "按请求文本做键的缓存会把第一轮的材料发给它；回执按请求本身做键，"
+                     "两轮的 identity 不同，不会串。这是直接加个缓存这种修法的正确性陷阱，"
+                     "不只是存储代价。"),
+        },
+        "cost_of_buying_replay_by_caching": {
+            # Measured rather than assumed, and it does not go our way on size.
+            "stock_cached_material_bytes": cached.cached_chars,
+            "ours_receipt_bytes": storage["ours_receipt_bytes"],
+            "note": ("缓存确实买回了重放，而且在存储上更便宜：它只存输出字节。"
+                     "回执更大，因为它记录的是整个检索决策——考虑过哪些候选、"
+                     "withhold 了什么、索引了什么、各段落在原文的哪个字符区间——"
+                     "而不只是最终给了什么。这些正是缓存买不到的东西：准入判定、"
+                     "来源归属、字符级出处，以及按同一次检索换一种呈现重渲染的能力。"),
         },
         "read_confinement": {
             "illegal_attempts": confinement["attempts"] - len(turns),
