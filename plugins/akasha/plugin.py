@@ -508,7 +508,6 @@ async def run(ctx: Context, interest: Interest) -> None:
             return RecallBinding(embedding_binding=None, unavailable=str(error)).model_dump()
         return RecallBinding(embedding_binding=identity, unavailable=None).model_dump()
 
-    @asynccontextmanager
     # 显式召回优先查询运行中的图：副本完整恢复要重新解码全部已学原消息。
     @asynccontextmanager
     async def live_graph(session_id, space):
