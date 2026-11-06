@@ -123,7 +123,15 @@ uv run --frozen --no-sync python -m eval.memory_guarantees --seed-turns 30 --liv
 
 最后一行是诚实的边界：**注入文本确实能让模型去查新东西。** 但它拿到的是一份新回执，带 `ToolSource` 和发起那次工具调用的 `call_ref`。
 
-> 这条路径在 2026-10-20 的一次重构后其实是坏的：`open_recall` 少了 `@asynccontextmanager`，`recall_memory` 工具一打开就抛 `TypeError`。本轮跑邮件评测时撞上并修好了（`plugins/akasha/plugin.py`）。之所以一直没被发现，是因为显式召回那条行为测试**自己定义了一份带装饰器的 `open_recall`** 去测——验证的是测试自己写的副本，不是插件注册的那一份。现在有一条回归直接读插件源码，检查所有以 `open=` 注册的协程是不是真的异步上下文管理器（`tests/test_tool_registrations.py`，突变验证过）。
+> **这条路径前一天刚坏过，而第一次修它还修错了一半。原样记在这里。**
+>
+> 2026-11-05 一个性能提交把新函数 `live_graph` 插进了 `open_recall` 和它的 `@asynccontextmanager` 之间，而新函数自带一个装饰器。一次插入造成两处故障：`open_recall` 丢了装饰器（打开时 `'async_generator' object does not support the asynchronous context manager protocol`），`live_graph` 叠了两个（打开时 `'_AsyncGeneratorContextManager' object is not an async iterator`）。
+>
+> 跑邮件评测时撞上了第一处。我当天修了它，并在提交信息里写"自 2026-10-20 起就坏了"——**那个日期是错的**，真实窗口是从前一天的那个提交到被发现，不到一天。更要紧的是，第二处还在：于是下一轮 48 例邮件决策试验**全部在 240 秒验收上限超时**，因为召回这次真的打开了，然后在活图查找里立刻失败。两处都修在 `plugins/akasha/plugin.py`。
+>
+> 为什么单元测试没抓到：显式召回那条行为测试**自己定义了一份带装饰器的 `open_recall`** 去测——验证的是测试自己写的副本，不是插件注册的那一份。类型标注两种写法都是 `AsyncGenerator`，静态检查看不出来。
+>
+> 现在的回归直接读插件源码，要求装饰器**恰好一个**而不是"至少一个"，并单独拒绝 `plugins/` 下任何位置的叠加写法（`tests/test_tool_registrations.py`）。突变双向验证：把重复那行加回去，三项检查按文件行号失败；去掉，九项通过。**但源码检查不打开任何东西**——真正发现这两处的是邮件评测本身，这是行为级证据和形态级护栏的分工。
 
 所以准确的说法不是"防注入"，而是：**注入指令无法悄悄扩大模型的接触面——要么被拒，要么留下可追责的记录。** 事后能回答"这条记忆是被谁、在哪次调用里取用的"，而不是只能看到它出现在了上下文里。这是一个可审计性保证，不是一个安全边界，两者不能混为一谈。
 
