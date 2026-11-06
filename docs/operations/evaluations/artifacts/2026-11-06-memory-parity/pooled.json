@@ -1,0 +1,236 @@
+{
+ "kind": "pooled re-test of disjoint runs, no reader or judge calls",
+ "systems": {
+  "first": "akasha-fused-excerpts",
+  "second": "dense-excerpts"
+ },
+ "runs": [
+  {
+   "path": "docs/operations/evaluations/artifacts/2026-11-06-memory-parity/evidence.json",
+   "questions": 140
+  },
+  {
+   "path": "docs/operations/evaluations/artifacts/2026-11-06-memory-parity/heldout.json",
+   "questions": 170
+  }
+ ],
+ "questions_answered_by_only_one_run": 0,
+ "answerable_only": {
+  "paired_questions": 280,
+  "both_correct": 143,
+  "neither_correct": 99,
+  "only_first": 18,
+  "only_second": 20,
+  "discordant": 38,
+  "p_value": 0.8714,
+  "separates": false,
+  "first_correct": 161,
+  "second_correct": 163,
+  "first_wilson_95": [
+   0.5165,
+   0.6315
+  ],
+  "difference_points": -0.71,
+  "difference_95_points": [
+   -5.03,
+   3.6
+  ]
+ },
+ "transport_failures": {
+  "questions_where_either_arm_failed": 11,
+  "rows_with_error": 16,
+  "note": "网络失败被记为答错，而且 --resume 不允许替换已存的失败（只重跑失败项正是结果被修饰的方式）。因此这里并列给出剔除这些题后的结果。"
+ },
+ "answerable_excluding_transport_failures": {
+  "paired_questions": 270,
+  "both_correct": 143,
+  "neither_correct": 92,
+  "only_first": 16,
+  "only_second": 19,
+  "discordant": 35,
+  "p_value": 0.7359,
+  "separates": false,
+  "first_correct": 159,
+  "second_correct": 162,
+  "first_wilson_95": [
+   0.5294,
+   0.6459
+  ],
+  "difference_points": -1.11,
+  "difference_95_points": [
+   -5.41,
+   3.18
+  ]
+ },
+ "all_questions": {
+  "paired_questions": 310,
+  "both_correct": 167,
+  "neither_correct": 101,
+  "only_first": 21,
+  "only_second": 21,
+  "discordant": 42,
+  "p_value": 1.0,
+  "separates": false,
+  "first_correct": 188,
+  "second_correct": 188,
+  "first_wilson_95": [
+   0.5511,
+   0.6592
+  ],
+  "difference_points": 0.0,
+  "difference_95_points": [
+   -4.1,
+   4.1
+  ]
+ },
+ "by_category": {
+  "abstention": {
+   "paired_questions": 30,
+   "both_correct": 24,
+   "neither_correct": 2,
+   "only_first": 3,
+   "only_second": 1,
+   "discordant": 4,
+   "p_value": 0.625,
+   "separates": false,
+   "first_correct": 27,
+   "second_correct": 25,
+   "first_wilson_95": [
+    0.7438,
+    0.9654
+   ],
+   "difference_points": 6.67,
+   "difference_95_points": [
+    -6.4,
+    19.73
+   ]
+  },
+  "knowledge-update": {
+   "paired_questions": 50,
+   "both_correct": 34,
+   "neither_correct": 9,
+   "only_first": 2,
+   "only_second": 5,
+   "discordant": 7,
+   "p_value": 0.4531,
+   "separates": false,
+   "first_correct": 36,
+   "second_correct": 39,
+   "first_wilson_95": [
+    0.5833,
+    0.8253
+   ],
+   "difference_points": -6.0,
+   "difference_95_points": [
+    -16.37,
+    4.37
+   ]
+  },
+  "multi-session": {
+   "paired_questions": 50,
+   "both_correct": 17,
+   "neither_correct": 21,
+   "only_first": 3,
+   "only_second": 9,
+   "discordant": 12,
+   "p_value": 0.146,
+   "separates": false,
+   "first_correct": 20,
+   "second_correct": 26,
+   "first_wilson_95": [
+    0.2761,
+    0.5382
+   ],
+   "difference_points": -12.0,
+   "difference_95_points": [
+    -25.58,
+    1.58
+   ]
+  },
+  "single-session-assistant": {
+   "paired_questions": 50,
+   "both_correct": 23,
+   "neither_correct": 19,
+   "only_first": 5,
+   "only_second": 3,
+   "discordant": 8,
+   "p_value": 0.7266,
+   "separates": false,
+   "first_correct": 28,
+   "second_correct": 26,
+   "first_wilson_95": [
+    0.4231,
+    0.6884
+   ],
+   "difference_points": 4.0,
+   "difference_95_points": [
+    -7.09,
+    15.09
+   ]
+  },
+  "single-session-preference": {
+   "paired_questions": 30,
+   "both_correct": 2,
+   "neither_correct": 25,
+   "only_first": 3,
+   "only_second": 0,
+   "discordant": 3,
+   "p_value": 0.25,
+   "separates": false,
+   "first_correct": 5,
+   "second_correct": 2,
+   "first_wilson_95": [
+    0.0734,
+    0.3356
+   ],
+   "difference_points": 10.0,
+   "difference_95_points": [
+    -1.32,
+    21.32
+   ]
+  },
+  "single-session-user": {
+   "paired_questions": 50,
+   "both_correct": 42,
+   "neither_correct": 5,
+   "only_first": 2,
+   "only_second": 1,
+   "discordant": 3,
+   "p_value": 1.0,
+   "separates": false,
+   "first_correct": 44,
+   "second_correct": 43,
+   "first_wilson_95": [
+    0.7619,
+    0.9438
+   ],
+   "difference_points": 2.0,
+   "difference_95_points": [
+    -4.79,
+    8.79
+   ]
+  },
+  "temporal-reasoning": {
+   "paired_questions": 50,
+   "both_correct": 25,
+   "neither_correct": 20,
+   "only_first": 3,
+   "only_second": 2,
+   "discordant": 5,
+   "p_value": 1.0,
+   "separates": false,
+   "first_correct": 28,
+   "second_correct": 27,
+   "first_wilson_95": [
+    0.4231,
+    0.6884
+   ],
+   "difference_points": 2.0,
+   "difference_95_points": [
+    -6.77,
+    10.77
+   ]
+  }
+ },
+ "note": "剔除 abstention 后再读主结果：不给历史的系统天然会弃答，把弃答题混进总分会让它虚高。"
+}
