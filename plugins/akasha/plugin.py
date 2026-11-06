@@ -525,6 +525,7 @@ async def run(ctx: Context, interest: Interest) -> None:
             async with memory.view(space) as view:
                 yield view
 
+    @asynccontextmanager
     async def open_recall(captured: Mapping[str, object]) -> AsyncGenerator[RecallTool]:
         selected = RecallBinding.model_validate(dict(captured))
         bindings = ctx.require(BINDINGS)
