@@ -223,6 +223,18 @@ uv run --frozen --no-sync python -m eval.proactive_guarantees --limit 40
 
 注意边界那一组和行为那一组**证明的是不同的东西**：边界是穷举的纯函数性质，行为是小样本的判断质量。前者已经站住，后者没有，不能互相代替。
 
+## 一条命令把整页数字重算出来
+
+这一页上**所有不需要密钥的数字**（第二节那张表、第四节的反馈边界、每轮注入开销），由一条命令一起重算：
+
+```sh
+uv run --frozen --no-sync python -m eval.offline_evidence
+```
+
+它把三组套件跑一遍排成一张表，每格带对照臂，输出里保留三份原始报告供逐项核对。不需要 API 密钥、不调用任何聊天模型。
+
+唯一需要密钥的是第一节的公开基准对照（`eval.memory`），那是**唯一一处我们不占优的地方**，所以它单独放，不混进这条命令里。
+
 ## 复现与证据
 
 - 本页第二节那张表：[`eval/memory_guarantees.py`](../../eval/memory_guarantees.py)，证据在 [`artifacts/2026-11-06-memory-guarantees/`](../operations/evaluations/artifacts/2026-11-06-memory-guarantees/evidence.json)，回归在 `tests/test_memory_guarantees.py`。

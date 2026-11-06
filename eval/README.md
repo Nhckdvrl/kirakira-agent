@@ -43,7 +43,20 @@ uv run --frozen --no-sync python -m eval.recall_cost \
 
 它只衡量开销，不衡量回答质量：注入变少不等于模型仍能找到所需原文，两者分别验收。
 
-## 一条命令跑完全部免模型测量
+## 一条命令重算全部免密钥证据
+
+[为什么不用现成的](../docs/architecture/why-not-off-the-shelf.md)那一页上所有不需要密钥的数字，由一条命令重算出来——设计性质对照、主动交互的反馈边界、以及每轮召回开销：
+
+```sh
+uv run --frozen --no-sync python -m eval.offline_evidence \
+  --output /local-disk/eval/offline-evidence.json
+```
+
+它不自己做测量，只把三组现成的套件跑一遍并排成一张表（`memory_guarantees`、`proactive_guarantees`、`cost_report`），每格都带对照臂，输出里同时保留三份原始报告供逐项核对。`--learn-turns` / `--queries` 控制其中唯一昂贵的引擎那段，机器忙时可以调小。
+
+**它量的是设计性质与开销，不是回答质量**：公开基准上本项目与朴素向量检索等价，那条线由 `eval.memory` 用真实模型单独跑。
+
+### 只要开销那一段
 
 不需要 API 密钥、聊天模型或私有工作区；固定向量与真实记忆组件，每项重复若干次并给出中位数与范围：
 

@@ -39,6 +39,18 @@ def scores(rows: list[dict], system: str) -> dict[str, bool]:
             for row in rows if row["system"] == system}
 
 
+def failed_questions(rows: list[dict]) -> set[str]:
+    """Questions where either arm never reached the model.
+
+    A transient network failure is recorded as an incorrect answer, and the
+    harness refuses to replace a stored failure -- which is the right call,
+    since retrying only the trials that went badly is how a result gets
+    massaged. The sensitivity check is the honest alternative: report the
+    comparison again with those questions dropped, and let both numbers stand.
+    """
+    return {row["question_id"] for row in rows if row.get("error")}
+
+
 def compare(ours: dict[str, bool], theirs: dict[str, bool]) -> dict[str, object]:
     shared = sorted(set(ours) & set(theirs))
     first = {key: ours[key] for key in shared}
@@ -78,6 +90,7 @@ def pool(paths: list[Path], first: str, second: str) -> dict[str, object]:
 
     ours, theirs = scores(rows, first), scores(rows, second)
     categories = {row["question_id"]: row["category"] for row in rows}
+    failed = failed_questions(rows)
     # A question only one arm reached cannot enter a paired test.
     unpaired = sorted(set(ours) ^ set(theirs))
     answerable = {key for key, kind in categories.items() if kind != "abstention"}
@@ -94,6 +107,15 @@ def pool(paths: list[Path], first: str, second: str) -> dict[str, object]:
         "questions_answered_by_only_one_run": len(unpaired),
         "answerable_only": compare({k: v for k, v in ours.items() if k in answerable},
                                    {k: v for k, v in theirs.items() if k in answerable}),
+        "transport_failures": {
+            "questions_where_either_arm_failed": len(failed),
+            "rows_with_error": sum(1 for row in rows if row.get("error")),
+            "note": ("网络失败被记为答错，而且 --resume 不允许替换已存的失败"
+                     "（只重跑失败项正是结果被修饰的方式）。因此这里并列给出剔除这些题后的结果。"),
+        },
+        "answerable_excluding_transport_failures": compare(
+            {k: v for k, v in ours.items() if k in answerable and k not in failed},
+            {k: v for k, v in theirs.items() if k in answerable and k not in failed}),
         "all_questions": compare(ours, theirs),
         "by_category": by_category,
         "note": ("剔除 abstention 后再读主结果：不给历史的系统天然会弃答，"
