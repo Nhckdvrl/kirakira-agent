@@ -113,6 +113,7 @@ uv run --frozen --no-sync kirakira-agent gateway --config "$HOME/.kirakira/works
 | 沿记忆线索继续查原文是否有帮助？ | 长原文中部、末页困难题，有依据的正确回答 **0/8 → 5/8** | 初始材料相同，查原文增加材料和模型调用。[记忆场景实验](docs/operations/evaluations/2026-10-22-memory-scenarios.md) |
 | 过去的个人条件能否影响新事件判断？ | 对应历史呈现 **12/12**，分享或跳过判断正确 **11/12** | 受控邮箱场景，保留首轮误判。[历史参与行动](docs/operations/evaluations/2026-10-21-mail-followups.md) |
 | 能否从聊天交办，再按我的新要求调整？ | 两组生活场景各 **12/12 功能检查** | 历史更正、改规则后跳过、依据查询、暂停与重启恢复。[聊天交办实测](docs/operations/evaluations/2026-10-23-personal-assistant.md) |
+| 主动交互会不会被反馈带跑偏？ | 穷举 1,680 个评价状态：权重归零 **0 次**（朴素比例策略 40 次，归零即永久消音）；朴素策略上限恰等于中性值，**只能压低不能抬高**；8/8 构造 payload 判为中性 | 能被训练成沉默或噪音的主动系统都没用；边界与单调性免模型可复现。[为什么不用现成的](docs/architecture/why-not-off-the-shelf.md) |
 | 能否接续日常话题，并在结束后停下？ | 四类受邀话题，**32/32 验收断言** | 实际等待空闲，检查出处、投递、去重和停止。[伙伴体验实测](docs/operations/evaluations/2026-10-22-companion-personality.md) |
 | 真实模型下执行主链是否跑通？ | **13/13 主链场景** | 文件、Shell、MCP、子任务、中断与恢复。[验证记录](docs/operations/verification.md) |
 | 召回每轮花多少，能不能降下来？ | 每轮实时注入 **2393 → 757 字**；学习 150 轮 **47.66 → 20.34 s**；单次检索 **47.96 → 11.62 ms** | 各跑三次取中位数，[`eval.cost_report`](eval/cost_report.py) 无需密钥即可全部复现 |

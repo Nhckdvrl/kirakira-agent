@@ -1,0 +1,98 @@
+{
+ "kind": "bounds on proactive attention, swept exhaustively against an unbounded policy",
+ "conditions": {
+  "ratings_per_side_up_to": 40,
+  "rating_states": 1680,
+  "chat_model": null,
+  "api_key_required": false,
+  "bounds": [
+   0.5,
+   1.5
+  ],
+  "wake_threshold": 1.5,
+  "ratings_required_before_adjusting": 4,
+  "baseline": "weight = useful / rated, used directly"
+ },
+ "cannot_be_trained_into_silence": {
+  "ours_states_reaching_zero": 0,
+  "naive_states_reaching_zero": 40,
+  "note": "权重为 0 的来源再也无法越过唤醒阈值，等于被永久消音。本项目的下界把它挡住：再多负面反馈也只能压到 0.5，不能归零。"
+ },
+ "can_promote_as_well_as_suppress": {
+  "ours_range": [
+   0.5,
+   1.5
+  ],
+  "naive_range": [
+   0.0,
+   1.0
+  ],
+  "neutral": 1.0,
+  "naive_can_exceed_neutral": false,
+  "note": "朴素策略的上限恰好等于中性值，所以它只能压低、不能抬高——好评最多把来源还原到默认，差评却能一路压到零。"
+ },
+ "states_outside_our_bounds": {
+  "ours": 0,
+  "naive": 820,
+  "caveat": "以本项目的区间去量另一种策略，这个计数有定义性成分，不作为主结论。"
+ },
+ "waits_for_evidence": {
+  "ours_states_moving_before_minimum_ratings": 0,
+  "naive_states_moving_before_minimum_ratings": 6,
+  "minimum": 4
+ },
+ "monotone_in_the_useful_share": {
+  "violations": 0
+ },
+ "hostile_payloads_cannot_raise_attention": [
+  {
+   "payload": "far above the ceiling",
+   "ours_resolved_weight": 1.0,
+   "neutralised": true,
+   "naive_would_use": "1000000"
+  },
+  {
+   "payload": "just above the ceiling",
+   "ours_resolved_weight": 1.0,
+   "neutralised": true,
+   "naive_would_use": "1.501"
+  },
+  {
+   "payload": "negative",
+   "ours_resolved_weight": 1.0,
+   "neutralised": true,
+   "naive_would_use": "-5.0"
+  },
+  {
+   "payload": "infinite",
+   "ours_resolved_weight": 1.0,
+   "neutralised": true,
+   "naive_would_use": "inf"
+  },
+  {
+   "payload": "not a number",
+   "ours_resolved_weight": 1.0,
+   "neutralised": true,
+   "naive_would_use": "nan"
+  },
+  {
+   "payload": "boolean true",
+   "ours_resolved_weight": 1.0,
+   "neutralised": true,
+   "naive_would_use": "True"
+  },
+  {
+   "payload": "string",
+   "ours_resolved_weight": 1.0,
+   "neutralised": true,
+   "naive_would_use": "'1.5'"
+  },
+  {
+   "payload": "missing",
+   "ours_resolved_weight": 1.0,
+   "neutralised": true,
+   "naive_would_use": "1.0 (neutral)"
+  }
+ ],
+ "claim_limits": "这一组量的是边界与单调性，不是判断质量。主动联系该不该发、依据对不对，由受控邮件实验单独衡量，那边的分母仍然很小。"
+}
