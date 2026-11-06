@@ -501,6 +501,17 @@ uv run --frozen --no-sync python -m eval.memory   --dataset /local-disk/data/lon
 
 选 `akasha-fused-excerpts` 是因为自动上下文召回在 `plugins/akasha/runtime.py` 里写死 `selection="fused", presentation="excerpts"`——那才是日常对话里真正生效的配置，`akasha`（lanes/whole）只是召回工具的字段默认值。
 
+样本是分批长出来的：先发布一批，在里面看到一条线索，再抽一批**与之不重叠**的来检验那条线索——检验用的数据不能参与过"发现它"。两批最后要合起来读，而手工合并正是样本悄悄变成挑样的地方，所以合并是一条带规则的命令：
+
+```sh
+uv run --frozen --no-sync python -m eval.pool_reports \
+  docs/operations/evaluations/artifacts/2026-11-06-memory-parity/evidence.json \
+  /local-disk/eval/parity-held-out/result.json \
+  --output /local-disk/eval/pooled.json
+```
+
+它强制两条：**输入不得重叠**（否则同一题被数两次，直接报错），**只有两臂都答过的题才进配对检验**（单臂答过的被剔除并计数）。它只读已保存的报告重算，不调用任何模型。
+
 读结果时**先剔除 abstention**：不给历史的系统没有任何可用信息，天然会答"不知道"，20 道弃答题它对 19 道；混进总分会让它看起来有 13.6% 的成绩，而它在可回答题上是 0。结论与完整条件见[公开基准 140 题](../docs/operations/evaluations/2026-11-06-memory-parity.md)。
 
 所有方案共用编码器、reader、judge、候选上限和包含说明的字符上限。向量基线直接检索闭段的消息向量；混合基线对向量和 BM25 排名融合。原通道、融合与摘录分别保留，不能把加大材料预算当作算法改进。无记忆和近期历史也保留，以检查收益究竟来自哪里。
