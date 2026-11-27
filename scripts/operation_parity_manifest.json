@@ -1,17 +1,14 @@
 {
-  "comment": "UI entries with no agent-callable operation yet. This list may only shrink: mirror an entry and delete its line. Adding a new unmirrored entry fails scripts/check_operation_parity.py until it is mirrored or recorded here with a reason.",
-  "unmirrored": [
-    "ui:akasha/recall.turn",
-    "ui:akasha/scope.policy.set",
-    "ui:host_execution/bridge.state",
-    "ui:jobs/job.stop",
-    "ui:projects/directory.browse",
-    "ui:projects/project.archive",
-    "ui:projects/project.bind_directory",
-    "ui:projects/project.create",
-    "ui:projects/project.directory",
-    "ui:projects/project.list",
-    "ui:projects/project.rename",
-    "ui:workspace_changes/turn.message"
-  ]
+  "comment": "UI entries with no agent-callable operation, each with the reason. This set may only shrink: mirror an entry and delete its line. A new unmirrored entry fails scripts/check_operation_parity.py until it is mirrored or recorded here, and the reason may not be empty.",
+  "unmirrored": {
+    "ui:akasha/recall.turn": "界面投影：按已渲染的轮次取召回卡片。Agent 访问记忆走 recall_memory 与 read_memory_source，且那条路径带回执准入；再镜像一个按 turn 取的渲染投影不增加能力。",
+    "ui:akasha/scope.policy.set": "写操作：改的是记忆的准入边界（学习与召回策略）。让 Agent 自助修改需要单独的授权设计，不随只读镜像一起放开。",
+    "ui:jobs/job.stop": "写操作：停止后台任务会中断用户交办的工作。Agent 停自己派出的子任务已有 spawn_manage，这里是用户侧的任务板。",
+    "ui:projects/directory.browse": "能力重复：Agent 浏览目录走 FILES 与 working_directory 的既有工具，不需要经项目界面这条路由。",
+    "ui:projects/project.archive": "写操作：归档会改变项目可见性。授权设计未定。",
+    "ui:projects/project.bind_directory": "写操作：把项目绑到目录会改变后续会话的工作目录。授权设计未定。",
+    "ui:projects/project.create": "写操作：创建项目会新增会话维度取值。授权设计未定。",
+    "ui:projects/project.rename": "写操作：重命名影响用户侧导航的稳定标识。授权设计未定。",
+    "ui:workspace_changes/turn.message": "界面投影：按 message_id 取改动摘要，用于答案下方展示。Agent 自己就是产生这些改动的一方，不需要读回展示用的摘要。"
+  }
 }

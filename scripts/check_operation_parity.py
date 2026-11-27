@@ -11,11 +11,13 @@ entries it mirrors; this reads the plugin sources and holds two rules:
    gate by pointing at a neighbour's entry, which proves nothing about whether
    its own action is reachable both ways. Without either rule `mirrors` decays
    into a comment, which is what this gate exists to prevent.
-2. **Every UI entry is either mirrored or listed as not yet mirrored.** The
-   backlog lives in `scripts/operation_parity_manifest.json`, so the set can
-   only shrink: mirroring an entry means deleting its line, and adding a new
-   unmirrored UI entry fails until it is either mirrored or recorded with a
-   reason.
+2. **Every UI entry is either mirrored or listed with a reason it is not.** The
+   backlog lives in `scripts/operation_parity_manifest.json` as entry -> reason,
+   so the set can only shrink: mirroring an entry means deleting its line, and
+   adding a new unmirrored UI entry fails until it is either mirrored or
+   recorded. The reason is required and must be non-empty, because "we will get
+   to it" and "the agent should never have this" are different states and a bare
+   list cannot tell them apart.
 
 Rule 2 starts with a long backlog on purpose. A gate that demanded full parity
 on day one would have to be switched off, and a gate that is off checks nothing.
@@ -118,20 +120,34 @@ def main() -> int:
     claimed = {name for names, _owner in mirrors.values() for name in names}
 
     if args.write_manifest:
-        backlog = sorted(name for name in entries if name not in claimed)
+        existing = (json.loads(MANIFEST.read_text(encoding="utf-8")).get("unmirrored", {})
+                    if MANIFEST.is_file() else {})
+        if isinstance(existing, list):
+            existing = {name: "" for name in existing}
+        backlog = {name: existing.get(name, "")
+                   for name in sorted(entries) if name not in claimed}
         MANIFEST.write_text(json.dumps({
-            "comment": ("UI entries with no agent-callable operation yet. This list may only "
-                        "shrink: mirror an entry and delete its line. Adding a new unmirrored "
-                        "entry fails scripts/check_operation_parity.py until it is mirrored or "
-                        "recorded here with a reason."),
+            "comment": ("UI entries with no agent-callable operation, each with the reason. "
+                        "This set may only shrink: mirror an entry and delete its line. A new "
+                        "unmirrored entry fails scripts/check_operation_parity.py until it is "
+                        "mirrored or recorded here, and the reason may not be empty."),
             "unmirrored": backlog,
         }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        print(f"recorded {len(backlog)} unmirrored entries")
+        missing = [name for name, reason in backlog.items() if not reason.strip()]
+        print(f"recorded {len(backlog)} unmirrored entries; {len(missing)} need a reason")
         return 0
 
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8")) if MANIFEST.is_file() else {}
-    allowed = set(manifest.get("unmirrored", []))
+    recorded = manifest.get("unmirrored", {})
+    if isinstance(recorded, list):
+        recorded = {name: "" for name in recorded}
+    allowed = set(recorded)
     problems: list[str] = []
+
+    for name in sorted(allowed):
+        if not str(recorded[name]).strip():
+            problems.append(f"{name} sits in the backlog with no reason; say why the agent "
+                            f"does not reach it, or mirror it")
 
     for operation, (names, owner) in sorted(mirrors.items()):
         for name in names:

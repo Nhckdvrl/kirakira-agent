@@ -6,6 +6,12 @@ import hashlib
 import os
 from pathlib import Path
 from agent.plugin_composition import Context
+from plugins.operations.contract import (
+    OPERATIONS_V1,
+    OperationRequest,
+    OperationResult,
+    OperationSpec,
+)
 from agent.plugin_composition.execution import EXECUTION
 from agent.plugin_composition.host import HOST_INFO
 from core.common.file_io import run_file_io
@@ -109,3 +115,20 @@ async def start_monitor(ctx: Context) -> None:
             child, PluginUiDefinition(module="plugin_ui.js", slots=("chat.notice",)), query=query)
 
     _ = await ctx.inject((UI_SLOTS, HOST_STATUS), register_notice, name="host-status-notice")
+
+    # 宿主桥是否连通决定了 Agent 的 Shell 能不能真的落到宿主上。界面有这条提示，Agent
+    # 过去只能试一次失败才知道；镜像之后它可以先问。
+    async def register_ops(child: Context) -> None:
+        host_status = child.require(HOST_STATUS)
+
+        async def handle_state(_request: OperationRequest) -> OperationResult:
+            snapshot = host_status.snapshot()
+            return OperationResult(True, f"宿主桥状态: {snapshot.get('state', '未知')}",
+                                   data=dict(snapshot))
+
+        _ = await child.require(OPERATIONS_V1).register(child, OperationSpec(
+            operation_id="host_execution.bridge_state", path=("host", "bridge"),
+            summary="读取宿主桥当前连通状态", handler=handle_state,
+            mirrors=("ui:host_execution/bridge.state",)))
+
+    _ = await ctx.inject((OPERATIONS_V1, HOST_STATUS), register_ops, name="operations")

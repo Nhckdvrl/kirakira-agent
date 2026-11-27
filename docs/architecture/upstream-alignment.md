@@ -161,25 +161,42 @@ operation 用 `mirrors` 声明它镜像的正是上面那个界面入口。
 还有第三条，堵一个真实的漏洞：**声明的镜像必须属于声明它的那个插件**。否则一个自己
 没有 Agent 路径的插件，可以指着邻居的界面入口通过门禁——那什么也没证明。
 
-当前状态：**15 个界面入口，3 个已镜像，12 个在待办**。待办一开始就很长是故意的——
+第四条：**待办里的每一项必须写出理由，不能是空字符串**。"还没排到"和"Agent 永远不该有
+这个"是两种不同的状态，一个裸列表分不出来——而分不出来的待办迟早变成"总有一天全镜像"
+的隐含承诺。
+
+当前状态：**15 个界面入口，6 个已镜像，9 个在待办且都有理由**。待办一开始就长是故意的——
 第一天就要求全量对齐的门禁只能被关掉，而关掉的门禁什么都不检查。
 
-突变四向验证，且**核对了退出码**（不是只看输出）：镜像一个不存在的入口、去掉 `mirrors`、
-把已镜像的入口留在待办里、指向别的插件的入口，四种都 exit 1，干净时 exit 0。
+突变五向验证，且**核对了退出码**（不是只看输出）：镜像一个不存在的入口、去掉 `mirrors`、
+把已镜像的入口留在待办里、指向别的插件的入口、把某项理由清空，五种都 exit 1，干净时 exit 0。
 
-### 已镜像的三个纵切
+### 已镜像的六个纵切
 
 | 界面入口 | Agent 入口 | 同一个领域方法 |
 | --- | --- | --- |
 | `ui:working_directory/directory.current` | `self ["wd","current"]` | `WorkingDirectories.current_info` |
 | `ui:skills/skills.list` | `self ["skills","list"]` | `skills.list_skills` |
 | `ui:akasha/scope.policy.get` | `self ["memory","scope"]` | `policies.read` / `recall_enabled` |
+| `ui:projects/project.list` | `self ["project","list"]` | `Projects.list` |
+| `ui:projects/project.directory` | `self ["project","directory"]` | `Projects.directory` |
+| `ui:host_execution/bridge.state` | `self ["host","bridge"]` | `HostBridgeStatus.snapshot` |
 
-三个都**直接调领域方法，而不是去调界面那条 query**，所以无界面的 headless profile 也
+六个都**直接调领域方法，而不是去调界面那条 query**，所以无界面的 headless profile 也
 能用；`mirrors` 负责记录对应关系，由门禁核对。
 
-**`scope.policy.set` 故意没镜像**：它改的是记忆的准入边界，让 Agent 自助修改需要单独的
-授权设计，不和这一轮的只读镜像一起放开。待办里留着它，等那个设计。
+### 剩下 9 项为什么不镜像
+
+**不是"还没做完"，是三类不同的判断**，逐项写在 `scripts/operation_parity_manifest.json`：
+
+| 类别 | 项 | 理由 |
+| --- | --- | --- |
+| 写操作，待授权设计 | `scope.policy.set`、`job.stop`、`project.create` / `rename` / `archive` / `bind_directory` | 分别改记忆准入边界、用户交办的任务、会话维度与目录绑定。让 Agent 自助改需要单独设计，不随只读镜像放开 |
+| 界面投影，不是能力缺口 | `akasha/recall.turn`、`workspace_changes/turn.message` | 前者按已渲染轮次取召回卡片，而 Agent 访问记忆走 `recall_memory` / `read_memory_source` 且带回执准入；后者是答案下方的改动摘要，Agent 本来就是产生这些改动的一方 |
+| 能力重复 | `projects/directory.browse` | Agent 浏览目录走 FILES 与 working_directory 的既有工具 |
+
+**这一节是对"全镜像"这个目标的明确否定**：有些界面入口按设计就不该有 Agent 路径。门禁
+因此检查的是"每一项都有判断"，不是"数字归零"。
 
 **尚未移植**：`session-handoff` 及其 `SessionOperations`（挂在上游 Operation Bus 的
 会话交接机制上），以及上游 Parity 门禁 v2 里基于运行实例采集的那部分。

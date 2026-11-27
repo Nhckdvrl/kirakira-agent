@@ -10,6 +10,13 @@ from core.common.file_io import run_file_io
 from plugins.working_directory.contract import WORKING_DIRECTORY
 
 from agent.plugin_composition import Context
+from plugins.operations.contract import (
+    OPERATIONS_V1,
+    OperationRequest,
+    OperationResult,
+    OperationSpec,
+    OptionSpec,
+)
 from plugins.ui.contract import UI_SLOTS, PluginUiDefinition, PluginUiRpcInvalidRequest
 from plugins.ledger.contract import (
     OWNER_STATE,
@@ -220,3 +227,34 @@ async def apply(ctx: Context) -> None:
     _ = await ctx.require(UI_SLOTS).register_plugin_ui(
         ctx, PluginUiDefinition(module="plugin_ui.js", stylesheet="plugin_ui.css", slots=("navigation.groups",)), query=query,
     )
+
+    # 侧栏能列出项目、看到项目绑定的目录；Agent 两样都没有路径。读取镜像成 operation，
+    # 调的是同一个 Projects 读取。写入（create / rename / archive / bind_directory）不在
+    # 这一轮：它们改会话维度与目录绑定，要单独的授权设计。
+    async def register_ops(child: Context) -> None:
+        async def handle_list(_request: OperationRequest) -> OperationResult:
+            items = await run_file_io(projects.list)
+            return OperationResult(True, f"{len(items)} 个项目",
+                                   data={"dimension": DIMENSION, "items": items})
+
+        async def handle_directory(request: OperationRequest) -> OperationResult:
+            project_id = str(request.args.get("project_id", ""))
+            if not project_id:
+                return OperationResult(False, "需要 project_id", error_code="invalid_arguments")
+            path = await run_file_io(lambda: projects.directory(project_id))
+            if path is None:
+                return OperationResult(True, "该项目没有关联目录", data={"path": None})
+            return OperationResult(True, f"项目目录: {path}", data={"path": path})
+
+        operations = child.require(OPERATIONS_V1)
+        _ = await operations.register(child, OperationSpec(
+            operation_id="projects.list", path=("project", "list"),
+            summary="列出全部项目", handler=handle_list,
+            mirrors=("ui:projects/project.list",)))
+        _ = await operations.register(child, OperationSpec(
+            operation_id="projects.directory", path=("project", "directory"),
+            summary="读取某个项目关联的目录", handler=handle_directory,
+            options=(OptionSpec("project_id", "项目标识", required=True),),
+            mirrors=("ui:projects/project.directory",)))
+
+    _ = await ctx.inject((OPERATIONS_V1,), register_ops, name="operations")

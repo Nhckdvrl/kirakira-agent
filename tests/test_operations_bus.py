@@ -366,16 +366,22 @@ def test_the_parity_gate_holds_and_its_backlog_only_shrinks():
 
     manifest = json.loads(Path("scripts/operation_parity_manifest.json").read_text(encoding="utf-8"))
     backlog = manifest["unmirrored"]
-    assert backlog == sorted(set(backlog)), "the backlog must be sorted and unique"
+    # entry -> reason, kept sorted so a diff to this file reads as one line added
+    # or removed rather than a reshuffle.
+    assert isinstance(backlog, dict)
+    assert list(backlog) == sorted(backlog), "the backlog must be sorted by entry"
     # Every slice already on the bus must be gone from the backlog, which is the
     # ratchet: mirroring an entry and leaving its line in place fails the gate.
     for mirrored in ("ui:working_directory/directory.current", "ui:skills/skills.list",
-                     "ui:akasha/scope.policy.get"):
+                     "ui:akasha/scope.policy.get", "ui:projects/project.list",
+                     "ui:projects/project.directory", "ui:host_execution/bridge.state"):
         assert mirrored not in backlog, mirrored
     # The backlog only shrinks. If this number goes up, a UI entry was added
     # without an agent-callable path and recorded instead of mirrored -- which is
     # allowed, but it should be a deliberate edit to this line.
-    assert len(backlog) <= 12, f"backlog grew to {len(backlog)}"
+    assert len(backlog) <= 9, f"backlog grew to {len(backlog)}"
+    # Every entry has to say why, so the backlog cannot hide a silent decision.
+    assert all(str(reason).strip() for reason in backlog.values()), backlog
 
 
 def test_a_mirror_claim_cannot_point_at_another_plugins_entry():
