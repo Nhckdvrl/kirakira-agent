@@ -1,3 +1,39 @@
+--- a/plugins/skills/plugin.py
++++ b/plugins/skills/plugin.py
+@@ -1,5 +1,11 @@
+ """技能：内置、工作区与用户目录中的 Skill 目录、提示词材料、load_skill 工具和输入框技能建议。"""
+ from agent.plugin_composition import Context
++from plugins.operations.contract import (
++    OPERATIONS_V1,
++    OperationRequest,
++    OperationResult,
++    OperationSpec,
++)
+ from plugins.assets.contract import INSTALLED_ASSETS
+ from plugins.context.contract import MATERIALS_V4
+ from plugins.host_execution.contract import PROCESSES
+@@ -33,3 +39,21 @@
+         )
+ 
+     _ = await ctx.inject((UI_SLOTS,), plugin_ui, name="plugin-ui")
++
++    # 技能目录原来只有输入框的建议界面能读。Agent 想知道"我现在有哪些技能"要么靠
++    # 提示词里写死，要么没有路径；镜像成 operation 之后两边读同一个 list_skills。
++    async def register_ops(child: Context) -> None:
++        async def handle_list(_request: OperationRequest) -> OperationResult:
++            items = list(await skills.list_skills())
++            return OperationResult(True, f"已装载 {len(items)} 个技能",
++                                   data={"items": items})
++
++        _ = await child.require(OPERATIONS_V1).register(child, OperationSpec(
++            operation_id="skills.list",
++            path=("skills", "list"),
++            summary="列出当前已装载的技能目录",
++            handler=handle_list,
++            mirrors=("ui:skills/skills.list",),
++        ))
++
++    _ = await ctx.inject((OPERATIONS_V1,), register_ops, name="operations")
 --- a/plugins/working_directory/plugin.py
 +++ b/plugins/working_directory/plugin.py
 @@ -5,6 +5,12 @@

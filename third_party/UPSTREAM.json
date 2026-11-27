@@ -1347,7 +1347,7 @@
       "reason": "Upstream Akasha engine through 5ddd5ebb: blocked graph capacity, incremental basin structure with a resident index, lazy-heap Residual Push with an optional compiled kernel, matrix-backed resident feature pool, in-place incremental checkpoint publication with schema v3, tokenizer and vector reuse on restore, and incremental interest prototypes. Local changes keep an empty graph publishable, keep the consumption read and member routing off the event loop, and refuse a pre-v3 checkpoint instead of republishing an unreplayed graph as v3."
     },
     "plugins/akasha/plugin.py": {
-      "sha256": "13b4bb7707ee167dd98d475c5991189e046c33da09cdc08fb3c98fc2cf165949",
+      "sha256": "ece56cd6b2f37f02df5c0167e3edde0309e7ad3c8949619664e0cf2b3cf54ec6",
       "patch": "third_party/patches/memory-query-api.patch",
       "patch_sha256": "68ff9b35ea3b2d973b5918c80836526eed5d70f2a9372d862505410df52feb11",
       "reason": "Drain spawned workers without rethrowing already reported failures; preserve new cleanup failures and caller cancellation."
@@ -2129,7 +2129,13 @@
     "plugins/working_directory/plugin.py": {
       "sha256": "e6fd54788b33daa1899f5f7b93a5c2bd139f251ec5572ecc5dddcb713659ba13",
       "patch": "third_party/patches/operation-bus.patch",
-      "patch_sha256": "72e88c1b64a668e0d8ddb5bb3c798e31480268866d4340f71b66d333809937b8",
+      "patch_sha256": "81aba52ffbd7a5cc1e5a41bf004274bc25baa5412f675b3fa9d30c826cfdd63f",
+      "reason": "fork change; see the artifact for the diff"
+    },
+    "plugins/skills/plugin.py": {
+      "sha256": "fd639d0ad70c0dc5dc630dfe7cf1caad4ddd5a486d4dbc5e58978fe37952f5a3",
+      "patch": "third_party/patches/operation-bus.patch",
+      "patch_sha256": "81aba52ffbd7a5cc1e5a41bf004274bc25baa5412f675b3fa9d30c826cfdd63f",
       "reason": "fork change; see the artifact for the diff"
     }
   },

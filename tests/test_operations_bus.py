@@ -367,5 +367,30 @@ def test_the_parity_gate_holds_and_its_backlog_only_shrinks():
     manifest = json.loads(Path("scripts/operation_parity_manifest.json").read_text(encoding="utf-8"))
     backlog = manifest["unmirrored"]
     assert backlog == sorted(set(backlog)), "the backlog must be sorted and unique"
-    # The one slice migrated onto the bus must not also sit in the backlog.
-    assert "ui:working_directory/directory.current" not in backlog
+    # Every slice already on the bus must be gone from the backlog, which is the
+    # ratchet: mirroring an entry and leaving its line in place fails the gate.
+    for mirrored in ("ui:working_directory/directory.current", "ui:skills/skills.list",
+                     "ui:akasha/scope.policy.get"):
+        assert mirrored not in backlog, mirrored
+    # The backlog only shrinks. If this number goes up, a UI entry was added
+    # without an agent-callable path and recorded instead of mirrored -- which is
+    # allowed, but it should be a deliberate edit to this line.
+    assert len(backlog) <= 12, f"backlog grew to {len(backlog)}"
+
+
+def test_a_mirror_claim_cannot_point_at_another_plugins_entry():
+    """Pointing at a neighbour's UI entry would satisfy the gate while proving nothing.
+
+    The declaring plugin has to own the entry it mirrors, or a plugin with no
+    agent-callable path could borrow one and look compliant.
+    """
+    import sys
+    sys.path.insert(0, "scripts")
+    from check_operation_parity import declared_mirrors, ui_entries
+
+    entries = ui_entries()
+    for operation, (names, owner) in declared_mirrors().items():
+        for name in names:
+            assert name in entries, f"{operation} mirrors a non-existent {name}"
+            assert name.removeprefix("ui:").split("/", 1)[0] == owner, (
+                f"{operation} is declared by {owner} but mirrors {name}")

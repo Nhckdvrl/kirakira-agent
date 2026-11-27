@@ -2,7 +2,6 @@
   "comment": "UI entries with no agent-callable operation yet. This list may only shrink: mirror an entry and delete its line. Adding a new unmirrored entry fails scripts/check_operation_parity.py until it is mirrored or recorded here with a reason.",
   "unmirrored": [
     "ui:akasha/recall.turn",
-    "ui:akasha/scope.policy.get",
     "ui:akasha/scope.policy.set",
     "ui:host_execution/bridge.state",
     "ui:jobs/job.stop",
@@ -13,7 +12,6 @@
     "ui:projects/project.directory",
     "ui:projects/project.list",
     "ui:projects/project.rename",
-    "ui:skills/skills.list",
     "ui:workspace_changes/turn.message"
   ]
 }

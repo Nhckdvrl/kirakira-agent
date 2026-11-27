@@ -77,6 +77,13 @@ from .source_tool import SourceTool, SourceSearchTool, check_source
 from plugins.gateway.contract import RpcMethod
 from .runtime import MessageMemory, prepare_materials
 from .tools import FeedbackArguments, FeedbackTool, check_feedback
+from plugins.operations.contract import (
+    OPERATIONS_V1,
+    OperationRequest,
+    OperationResult,
+    OperationSpec,
+    OptionSpec,
+)
 from .scopes import DEFAULT_GRAPH, LEARN_POLICIES, LearnPolicy, MemoryDisabled, PolicyLocked, ScopePolicies, ensure_graph_directory, graph_path
 
 logger = logging.getLogger(__name__)
@@ -322,6 +329,37 @@ async def run(ctx: Context, interest: Interest) -> None:
                                     slots=("turn.before_reasoning", "scope.fields", "scope.badge")), query=query,
         )
     _ = await ctx.inject((UI_SLOTS, AKASHA_RECORDS_VIEW), register_plugin_ui, name="plugin-ui")
+
+    # 记忆范围策略原来只有设置界面能读；Agent 问"这个范围现在是什么策略"没有路径。
+    # 这里把读取镜像成 operation，调的是同一个 policies 读取而不是界面那条 query，
+    # 所以无界面的 headless 也能用。写入（scope.policy.set）故意不镜像：它改的是
+    # 记忆的准入边界，经 Agent 自助修改需要单独的授权设计，不随这一轮一起放开。
+    async def register_ops(child: Context) -> None:
+        async def handle_policy_get(request: OperationRequest) -> OperationResult:
+            dimension = str(request.args.get("dimension", ""))
+            value = str(request.args.get("value", ""))
+            if not dimension or not value:
+                return OperationResult(False, "记忆策略需要维度和取值",
+                                       error_code="invalid_arguments")
+            learn = policies.read(dimension, value)
+            recall = policies.recall_enabled(dimension, value)
+            return OperationResult(
+                True, f"{dimension}={value} 学习策略 {learn}，召回{'开' if recall else '关'}",
+                data={"learn": learn, "recall": recall, "choices": list(LEARN_POLICIES)})
+
+        _ = await child.require(OPERATIONS_V1).register(child, OperationSpec(
+            operation_id="akasha.scope_policy_get",
+            path=("memory", "scope"),
+            summary="读取某个记忆范围当前的学习与召回策略",
+            handler=handle_policy_get,
+            options=(
+                OptionSpec("dimension", "范围维度，例如 project", required=True),
+                OptionSpec("value", "该维度上的取值", required=True),
+            ),
+            mirrors=("ui:akasha/scope.policy.get",),
+        ))
+
+    _ = await ctx.inject((OPERATIONS_V1,), register_ops, name="operations")
 
     def select_learning() -> tuple[str, LearningConfig, str]:
         try:

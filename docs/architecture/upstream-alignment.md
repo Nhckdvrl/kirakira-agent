@@ -158,11 +158,28 @@ operation 用 `mirrors` 声明它镜像的正是上面那个界面入口。
    这个集合只能变小：镜像一个就删掉它那行；新增一个未镜像的界面入口会失败，直到它被
    镜像或带理由登记。
 
-当前状态：**15 个界面入口，1 个已镜像，14 个在待办**。待办一开始就很长是故意的——
+还有第三条，堵一个真实的漏洞：**声明的镜像必须属于声明它的那个插件**。否则一个自己
+没有 Agent 路径的插件，可以指着邻居的界面入口通过门禁——那什么也没证明。
+
+当前状态：**15 个界面入口，3 个已镜像，12 个在待办**。待办一开始就很长是故意的——
 第一天就要求全量对齐的门禁只能被关掉，而关掉的门禁什么都不检查。
 
-突变三向验证，且**核对了退出码**（不是只看输出）：镜像一个不存在的入口、去掉 `mirrors`、
-把已镜像的入口留在待办里，三种都 exit 1，干净时 exit 0。
+突变四向验证，且**核对了退出码**（不是只看输出）：镜像一个不存在的入口、去掉 `mirrors`、
+把已镜像的入口留在待办里、指向别的插件的入口，四种都 exit 1，干净时 exit 0。
+
+### 已镜像的三个纵切
+
+| 界面入口 | Agent 入口 | 同一个领域方法 |
+| --- | --- | --- |
+| `ui:working_directory/directory.current` | `self ["wd","current"]` | `WorkingDirectories.current_info` |
+| `ui:skills/skills.list` | `self ["skills","list"]` | `skills.list_skills` |
+| `ui:akasha/scope.policy.get` | `self ["memory","scope"]` | `policies.read` / `recall_enabled` |
+
+三个都**直接调领域方法，而不是去调界面那条 query**，所以无界面的 headless profile 也
+能用；`mirrors` 负责记录对应关系，由门禁核对。
+
+**`scope.policy.set` 故意没镜像**：它改的是记忆的准入边界，让 Agent 自助修改需要单独的
+授权设计，不和这一轮的只读镜像一起放开。待办里留着它，等那个设计。
 
 **尚未移植**：`session-handoff` 及其 `SessionOperations`（挂在上游 Operation Bus 的
 会话交接机制上），以及上游 Parity 门禁 v2 里基于运行实例采集的那部分。

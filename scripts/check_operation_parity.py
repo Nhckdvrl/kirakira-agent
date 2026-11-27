@@ -4,10 +4,13 @@ The Operation Bus is only worth its weight if "the user and the agent reach the
 same action" is checked rather than asserted. Each `OperationSpec` names the UI
 entries it mirrors; this reads the plugin sources and holds two rules:
 
-1. **Every declared mirror must exist.** An operation claiming to mirror
-   `ui:working_directory/directory.current` fails if no plugin UI serves that
-   method. Otherwise `mirrors` decays into a comment, which is exactly what this
-   gate exists to prevent.
+1. **Every declared mirror must exist, and belong to the declaring plugin.** An
+   operation claiming to mirror `ui:working_directory/directory.current` fails
+   if no plugin UI serves that method, and fails again if the operation is
+   registered by a different plugin -- otherwise one plugin could satisfy the
+   gate by pointing at a neighbour's entry, which proves nothing about whether
+   its own action is reachable both ways. Without either rule `mirrors` decays
+   into a comment, which is what this gate exists to prevent.
 2. **Every UI entry is either mirrored or listed as not yet mirrored.** The
    backlog lives in `scripts/operation_parity_manifest.json`, so the set can
    only shrink: mirroring an entry means deleting its line, and adding a new
@@ -80,9 +83,9 @@ def ui_entries() -> dict[str, str]:
     return found
 
 
-def declared_mirrors() -> dict[str, list[str]]:
-    """operation_id -> the UI entries it says it mirrors."""
-    found: dict[str, list[str]] = {}
+def declared_mirrors() -> dict[str, tuple[list[str], str]]:
+    """operation_id -> (the UI entries it says it mirrors, the declaring plugin)."""
+    found: dict[str, tuple[list[str], str]] = {}
     for path in sorted(PLUGINS.rglob("*.py")):
         if any(part in SKIP for part in path.parts):
             continue
@@ -99,7 +102,8 @@ def declared_mirrors() -> dict[str, list[str]]:
             if not (isinstance(identity, ast.Constant) and isinstance(identity.value, str)):
                 continue
             mirrors = fields.get("mirrors")
-            found[identity.value] = sorted(_string_constants(mirrors)) if mirrors is not None else []
+            names = sorted(_string_constants(mirrors)) if mirrors is not None else []
+            found[identity.value] = (names, _plugin_id(path))
     return found
 
 
@@ -111,7 +115,7 @@ def main() -> int:
 
     entries = ui_entries()
     mirrors = declared_mirrors()
-    claimed = {name for names in mirrors.values() for name in names}
+    claimed = {name for names, _owner in mirrors.values() for name in names}
 
     if args.write_manifest:
         backlog = sorted(name for name in entries if name not in claimed)
@@ -129,11 +133,17 @@ def main() -> int:
     allowed = set(manifest.get("unmirrored", []))
     problems: list[str] = []
 
-    for operation, names in sorted(mirrors.items()):
+    for operation, (names, owner) in sorted(mirrors.items()):
         for name in names:
             if name not in entries:
                 problems.append(
                     f"{operation} claims to mirror {name}, but no plugin UI serves it")
+                continue
+            declared_plugin = name.removeprefix("ui:").split("/", 1)[0]
+            if declared_plugin != owner:
+                problems.append(
+                    f"{operation} is registered by {owner} but claims to mirror "
+                    f"{name}, which belongs to {declared_plugin}")
 
     for name in sorted(entries):
         if name not in claimed and name not in allowed:
