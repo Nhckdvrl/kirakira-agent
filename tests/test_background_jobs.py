@@ -325,7 +325,7 @@ async def test_native_subagent_status_and_original_result_remain_scoped_after_re
     from plugins.subagent.inputs import DELIVERY
     from plugins.subagent.request import Request, PROFILE_TOOLS, check_request
     from plugins.subagent.runtime import Subagents, MESSAGE_CATALOG, OWNER_STATE
-    from plugins.subagent.tools import Manage
+    from plugins.subagent.tools import Manage, Read
     from plugins.tools.contract import CallSource
 
     path = tmp_path / "messages.db"
@@ -402,6 +402,41 @@ async def test_native_subagent_status_and_original_result_remain_scoped_after_re
             assert outcome == "error" and "不属于当前会话" in payload and "SECRET" not in payload
         assert isinstance(await manage.prepare({"action": "list", "parent_session_id": "other"}, source), str)
         assert isinstance(await manage.prepare({"action": "list"}), str)
+        # subagent_read answers "what did it do step by step", under the same
+        # parent scoping spawn_manage uses -- the gap this closes is that the
+        # parent could previously read only the status and the final result.
+        read = Read(jobs)
+        async def read_invoke(arguments):
+            prepared = await read.prepare(arguments, source)
+            assert isinstance(prepared, dict), prepared
+            response = await read.invoke("read", prepared)
+            return response.outcome, str(response.parts[0].value)
+        outcome, payload = await read_invoke({"job_id": done.job_id})
+        progress = json.loads(payload)
+        assert outcome == "success" and progress["job_id"] == done.job_id
+        assert {row["body_kind"] for row in progress["messages"]} >= {"input", "output"}
+        answer = next(row for row in progress["messages"] if row["body_kind"] == "output")
+        # The body is truncated with its real length stated, and every row still
+        # points back at the original message, so a reader can go and check it.
+        assert answer["text"] == original[:2000] and answer["truncated"]
+        assert answer["source_chars"] == len(original)
+        assert answer["message_id"] == "answer-" + done.job_id
+        assert answer["session_id"] == done.session_id
+        tail = json.loads((await read_invoke(
+            {"job_id": done.job_id, "after_seq": answer["seq"]}))[1])
+        assert all(row["seq"] > answer["seq"] for row in tail["messages"])
+        # A cancelled run explains itself through the control reason.
+        stopped = json.loads((await read_invoke({"job_id": cancelled.job_id}))[1])
+        assert any(row["body_kind"] == "control" and row["text"] == "原始取消原因"
+                   for row in stopped["messages"])
+        # Another session's job is refused, and its body never appears anywhere.
+        outcome, payload = await read_invoke({"job_id": f"{2:032x}"})
+        assert outcome == "error" and "不属于当前会话" in payload and "SECRET" not in payload
+        # An unknown job is an error, not an empty success that reads as "it did nothing".
+        assert (await read_invoke({"job_id": f"{99:032x}"}))[0] == "error"
+        # Like spawn_manage, it refuses to run without a real calling message.
+        assert isinstance(await read.prepare({"job_id": done.job_id}), str)
+        assert isinstance(await read.prepare({"job_id": ""}, source), str)
         exhausted = seed(5, "parent", control="abandon", reason="执行步数耗尽")
         exhausted_reader = log.reader(exhausted.session_id)
         assert await jobs.outcome(exhausted_reader, through_seq=0) is None

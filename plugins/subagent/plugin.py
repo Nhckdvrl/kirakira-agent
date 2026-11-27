@@ -49,7 +49,7 @@ from .inputs import (
 from .prompts import build_spawn_subagent_prompt
 from .request import PROFILE_TOOLS, Request, SpawnInput
 from .runtime import DEFAULT_MAX_ACTIVE, DEFAULT_RESULT_CHARS, SUBAGENT_PROGRAM, Subagents
-from .tools import Manage, ManageInput, Spawn
+from .tools import Manage, ManageInput, Read, ReadInput, Spawn
 
 api_version = 3
 name = "subagent"
@@ -130,6 +130,10 @@ async def apply(ctx: Context) -> None:
     async def open_manage(_state: Mapping[str, object]) -> AsyncGenerator[Manage]:
         yield Manage(jobs)
 
+    @asynccontextmanager
+    async def open_read(_state: Mapping[str, object]) -> AsyncGenerator[Read]:
+        yield Read(jobs)
+
     _ = await catalog.register(
         ctx,
         name="spawn",
@@ -153,6 +157,16 @@ async def apply(ctx: Context) -> None:
                      "没有终态只返回pending，不假定任务已完成。cancel/stop取消原任务。"),
         parameters=ManageInput.model_json_schema(),
         open=open_manage,
+        idempotent=True,
+    )
+    _ = await catalog.register(
+        ctx,
+        name="subagent_read",
+        description=("只读查看本会话派出的子任务的会话过程：它一步步做了什么。"
+                     "spawn_manage 回答状态与最终结果，这个工具回答中间过程；"
+                     "after_seq 增量续读，默认读最近一段。不属于当前会话的 job_id 会被拒绝。"),
+        parameters=ReadInput.model_json_schema(),
+        open=open_read,
         idempotent=True,
     )
 

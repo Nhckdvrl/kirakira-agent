@@ -38,6 +38,58 @@ class PreparedManage(ManageInput):
     parent_session_id: str = Field(min_length=1)
 
 
+class ReadInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    job_id: str = Field(min_length=1, description="目标子任务 job_id")
+    after_seq: int = Field(default=-1, ge=-1,
+                           description="只读取序号大于 after_seq 的消息；默认 -1 读取最近一段")
+    limit: int = Field(default=50, ge=1, le=200, description="最多返回的消息条数")
+    length: int = Field(default=2000, ge=1, le=6000, description="单条正文的截断上限")
+
+
+class PreparedRead(ReadInput):
+    parent_session_id: str = Field(min_length=1)
+
+
+class Read:
+    """只读查看子任务的会话过程。
+
+    `spawn_manage` 回答"状态和最终结果是什么"；这个工具回答"它一步步做了什么"，
+    父会话归属检查与 `spawn_manage` 共用同一条，所以填别人的 job_id 读不到东西。
+    """
+
+    idempotent = True
+
+    def __init__(self, jobs: Subagents):
+        self.jobs = jobs
+
+    async def prepare(self, arguments: Mapping[str, object], source: CallSource | None = None) -> Mapping[str, object] | str:
+        try:
+            args = ReadInput.model_validate(dict(arguments))
+        except ValidationError as error:
+            return str(error)
+        if source is None:
+            return '读取子任务过程需要当前会话的实际工具调用'
+        caller = next((message for message in source.messages
+                       if message.message_id == source.call_ref.message_id), None)
+        if caller is None:
+            return '读取子任务过程缺少实际调用消息'
+        return {**args.model_dump(), "parent_session_id": caller.session_id}
+
+    async def invoke(self, key: str, arguments: Mapping[str, object]) -> Result:
+        args = PreparedRead.model_validate(json_value(arguments))
+        try:
+            value = await self.jobs.read_child_messages(
+                args.parent_session_id, args.job_id,
+                after_seq=args.after_seq, limit=args.limit, length=args.length)
+        except (PermissionError, LookupError, ValueError) as error:
+            return Result("error", (ContentPart("text", str(error)),))
+        return Result("success", (ContentPart("text", json.dumps(value, ensure_ascii=False)),))
+
+    async def query(self, key: str) -> Result | None:
+        return None
+
+
 class Spawn:
     """固定请求与工具权限；相同效果 key 只接纳一次，不复制最终正文。"""
 

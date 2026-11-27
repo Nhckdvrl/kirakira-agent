@@ -148,6 +148,67 @@ class Subagents:
 
         return await run_file_io(lambda: state.snapshot(read))
 
+    async def read_child_messages(
+        self, parent_session_id: str, job_id: str, *, after_seq: int = -1, limit: int = 50,
+        length: int = 2000,
+    ) -> dict[str, object]:
+        """只读子任务会话的消息过程；父会话之外的 job 一律拒绝。
+
+        与 `inspect` 的分工：`inspect` 回答"状态和最终结果是什么"，这里回答
+        "它一步步做了什么"。父会话归属检查与 `inspect` 用同一条，所以把别人的
+        job_id 填进来读不到东西，而不是读到别的会话的过程。
+
+        正文按 `length` 截断并标注，出处仍引用原消息（session_id / message_id /
+        seq / recorded_at），所以读到的每一行都能回源核对。
+        """
+        if not parent_session_id or not job_id:
+            raise ValueError("子任务消息读取需要父会话与 job_id")
+        if not 1 <= limit <= 200 or after_seq < -1 or not 1 <= length <= 6000:
+            raise ValueError("子任务消息读取范围无效")
+        state = self.ctx.require(OWNER_STATE).open(self.ctx)
+        catalog = self.ctx.require(MESSAGE_CATALOG)
+
+        def read() -> dict[str, object]:
+            for key, record in state.list():
+                session_id, _, settled = _pointer(record)
+                if session_id != "subagent:" + job_id:
+                    continue
+                found = self._read(state, catalog, key)
+                assert found is not None
+                _record, request, reader = found
+                if request.parent_session_id != parent_session_id:
+                    raise PermissionError("子任务不属于当前会话")
+                head = reader.head()
+                # after_seq < 0 means "the most recent window", so start the read
+                # far enough back that the newest `limit` rows are the ones returned.
+                start = max(head - limit, -1) if after_seq < 0 else after_seq
+                rows = reader.read(after_seq=start, through_seq=head, limit=limit)
+                messages = []
+                for message in rows:
+                    if isinstance(message.body, Control):
+                        # A control row has no parts, and its reason is the only
+                        # thing that explains why the run stopped.
+                        text = message.body.reason or ""
+                    else:
+                        text = "\n".join(
+                            cast(str, part.value) for part in getattr(message.body, "parts", ())
+                            if isinstance(part, ContentPart) and part.kind == "text")
+                    truncated = len(text) > length
+                    messages.append({
+                        **_message_ref(message),
+                        "author": message.author,
+                        "source": message.source,
+                        "text": text[:length],
+                        "truncated": truncated,
+                        "source_chars": len(text),
+                    })
+                return {"job_id": job_id, "session_id": session_id, "settled": settled,
+                        "head_seq": head, "after_seq": start, "limit": limit,
+                        "returned": len(messages), "messages": tuple(messages)}
+            raise KeyError("子任务不存在")
+
+        return await run_file_io(read)
+
     async def accept(self, key: str, request: Request, text: str) -> None:
         """同一来源准入锁覆盖容量检查与持久提交，重放不再占额。"""
         ctx = self.ctx
