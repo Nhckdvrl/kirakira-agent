@@ -1,0 +1,251 @@
+{
+  "scope": "paired history intervention over 12 fixture families; within a family the mail body is byte-identical and the two stored conditions demand opposite actions, so a correct decision can only come from memory. Not a population quality estimate.",
+  "run": {
+    "started_at": "2026-11-06T13:44:48+00:00",
+    "trials_designed": 48,
+    "trials_run": 48,
+    "trials_without_a_terminal_observation": 11
+  },
+  "present": {
+    "observations": 18,
+    "designed": 24,
+    "correct": 16,
+    "wilson_95": [
+      0.672,
+      0.969
+    ],
+    "profile_source_presented": 18
+  },
+  "withheld": {
+    "observations": 19,
+    "designed": 24,
+    "correct": 7,
+    "wilson_95": [
+      0.1915,
+      0.5896
+    ],
+    "profile_source_presented": 0
+  },
+  "paired": {
+    "paired_questions": 17,
+    "both_correct": 7,
+    "neither_correct": 2,
+    "only_first": 8,
+    "only_second": 0,
+    "discordant": 8,
+    "p_value": 0.0078,
+    "separates": true
+  },
+  "attrition": {
+    "note": "Not random. Nine timeouts at the 240s acceptance bound plus two provider errors, clustered at positions 25-37; mean trial duration 177s over the first half against 279s over the second, then recovering. Whole families are partly missing, so the arm totals are over a biased subset and only the 17 surviving pairs are sound.",
+    "first_half_mean_seconds": 177.0,
+    "second_half_mean_seconds": 278.9,
+    "first_half_failures": 3,
+    "second_half_failures": 10,
+    "lost_trials": [
+      {
+        "case": "lecture_present_0",
+        "position": 9,
+        "error": "TimeoutError",
+        "seconds": 419.0
+      },
+      {
+        "case": "evening_present_1",
+        "position": 26,
+        "error": "TimeoutError",
+        "seconds": 363.7
+      },
+      {
+        "case": "evening_withheld_0",
+        "position": 27,
+        "error": "TimeoutError",
+        "seconds": 321.8
+      },
+      {
+        "case": "evening_withheld_1",
+        "position": 28,
+        "error": "TimeoutError",
+        "seconds": 292.6
+      },
+      {
+        "case": "classsize_present_0",
+        "position": 29,
+        "error": "RuntimeError",
+        "seconds": 655.0
+      },
+      {
+        "case": "classsize_present_1",
+        "position": 30,
+        "error": "TimeoutError",
+        "seconds": 281.5
+      },
+      {
+        "case": "classsize_withheld_0",
+        "position": 31,
+        "error": "TimeoutError",
+        "seconds": 499.0
+      },
+      {
+        "case": "classsize_withheld_1",
+        "position": 32,
+        "error": "TimeoutError",
+        "seconds": 512.9
+      },
+      {
+        "case": "allergen_present_0",
+        "position": 33,
+        "error": "TimeoutError",
+        "seconds": 574.9
+      },
+      {
+        "case": "allergen_withheld_0",
+        "position": 35,
+        "error": "RuntimeError",
+        "seconds": 112.9
+      },
+      {
+        "case": "language_present_0",
+        "position": 37,
+        "error": "TimeoutError",
+        "seconds": 338.7
+      }
+    ]
+  },
+  "present_arm_errors": [
+    {
+      "pair": "cloud_v1",
+      "expected": "share_content",
+      "decision": "skip_content"
+    },
+    {
+      "pair": "region_v1",
+      "expected": "share_content",
+      "decision": "skip_content"
+    }
+  ],
+  "withheld_arm_decision_spread": {
+    "share_content": 6,
+    "skip_content": 13
+  },
+  "pairs": [
+    {
+      "family": "allergen",
+      "variant": 1,
+      "expected": "share_content",
+      "present": "share_content",
+      "withheld": "skip_content"
+    },
+    {
+      "family": "book",
+      "variant": 0,
+      "expected": "skip_content",
+      "present": "skip_content",
+      "withheld": "skip_content"
+    },
+    {
+      "family": "book",
+      "variant": 1,
+      "expected": "share_content",
+      "present": "share_content",
+      "withheld": "skip_content"
+    },
+    {
+      "family": "cloud",
+      "variant": 0,
+      "expected": "skip_content",
+      "present": "skip_content",
+      "withheld": "share_content"
+    },
+    {
+      "family": "cloud",
+      "variant": 1,
+      "expected": "share_content",
+      "present": "skip_content",
+      "withheld": "skip_content"
+    },
+    {
+      "family": "invoice",
+      "variant": 0,
+      "expected": "skip_content",
+      "present": "skip_content",
+      "withheld": "skip_content"
+    },
+    {
+      "family": "invoice",
+      "variant": 1,
+      "expected": "share_content",
+      "present": "share_content",
+      "withheld": "share_content"
+    },
+    {
+      "family": "job",
+      "variant": 0,
+      "expected": "skip_content",
+      "present": "skip_content",
+      "withheld": "skip_content"
+    },
+    {
+      "family": "job",
+      "variant": 1,
+      "expected": "share_content",
+      "present": "share_content",
+      "withheld": "skip_content"
+    },
+    {
+      "family": "language",
+      "variant": 1,
+      "expected": "share_content",
+      "present": "share_content",
+      "withheld": "skip_content"
+    },
+    {
+      "family": "lecture",
+      "variant": 1,
+      "expected": "share_content",
+      "present": "share_content",
+      "withheld": "share_content"
+    },
+    {
+      "family": "license",
+      "variant": 0,
+      "expected": "skip_content",
+      "present": "skip_content",
+      "withheld": "skip_content"
+    },
+    {
+      "family": "license",
+      "variant": 1,
+      "expected": "share_content",
+      "present": "share_content",
+      "withheld": "skip_content"
+    },
+    {
+      "family": "refund",
+      "variant": 0,
+      "expected": "skip_content",
+      "present": "skip_content",
+      "withheld": "skip_content"
+    },
+    {
+      "family": "refund",
+      "variant": 1,
+      "expected": "share_content",
+      "present": "share_content",
+      "withheld": "skip_content"
+    },
+    {
+      "family": "region",
+      "variant": 0,
+      "expected": "skip_content",
+      "present": "skip_content",
+      "withheld": "share_content"
+    },
+    {
+      "family": "region",
+      "variant": 1,
+      "expected": "share_content",
+      "present": "skip_content",
+      "withheld": "skip_content"
+    }
+  ]
+}
