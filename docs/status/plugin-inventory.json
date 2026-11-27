@@ -300,6 +300,14 @@
       "pinned_files": 5
     },
     {
+      "id": "operations",
+      "directory": "plugins/operations",
+      "api_version": 3,
+      "upstream": false,
+      "headless_selected": true,
+      "pinned_files": 0
+    },
+    {
       "id": "plugin_update",
       "directory": "plugins/plugin_update",
       "api_version": 3,

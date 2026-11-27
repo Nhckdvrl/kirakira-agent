@@ -20,7 +20,7 @@ from core.net.http import (
 
 ROOT = Path(__file__).resolve().parents[1]
 HEADLESS = frozenset({
-    "ledger", "timer", "channels", "gateway", "host_execution", "workloads",
+    "ledger", "operations", "timer", "channels", "gateway", "host_execution", "workloads",
     "managed_processes", "mcp", "commands", "projects", "models", "content",
     "context", "turn_projection", "sources", "tools", "tool_search", "assets",
     "working_directory", "vision", "skills", "shell", "files", "runtime_inspection",

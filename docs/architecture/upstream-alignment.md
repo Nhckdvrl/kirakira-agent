@@ -82,6 +82,69 @@ python3 scripts/diff_upstream_tools.py <upstream-core> <upstream-extra>
 
 突变四向验证，全部按文件行号失败：去掉回合末排空（静默丢消息）、让取消也排空、去掉父会话归属检查、让 `_terminal` 忽略更晚的 `Input`。
 
+## 架构对齐：Operation Bus
+
+工具面补齐之后，剩下的落后不在"少几个工具"，而在**设计逻辑**。上游 11 月做的
+Self-CLI Operation Bus（`plugins/operations`，提交 `0af31c5c`）是其中最值得采纳的一条，
+已移植。
+
+**它解决什么**：一个领域动作过去可能有两条路径——界面一条 RPC，Agent 一条工具——各自
+改同一份状态。总线把"谁拥有这个动作"收敛成一处 `OperationSpec`，用户和 Agent 用同一个
+`actor` 参数走同一个 handler。
+
+**为什么这条特别值得我们采纳**：本项目的主张是"每次取用都说得出是谁要的"。如果界面和
+Agent 各走私有路径去改状态，那句话在写操作上就是空的。而 `mirrors` 把"界面入口 ↔ Agent
+可调用操作"的一对一关系变成**可核对的声明**，不是一句说法。
+
+已移植（`plugins/operations/`）：
+
+| | |
+| --- | --- |
+| `contract.py` | `OperationSpec` / `OptionSpec` / `ExtensionSpec` / `OperationRequest` / `OperationResult`、`OPERATIONS_V1`、`cli_node_key`、`register_query_mirrors` |
+| `registry.py` | 注册、正交扩展解析、`describe` / `render_help`、argv 解析与类型强制、幂等执行与回执 |
+| `plugin.py` | 发布 `OPERATIONS_V1`；只依赖 ledger 契约，处在依赖图底层，业务插件可软挂载而不成环 |
+
+两条设计细节值得单独记，因为它们是这条总线比"各写一个 handler"强的地方：
+
+- **回执绑定调用指纹**（actor、session、argv）。同一个 `request_id` 换了身份或换了参数
+  是 `conflict`，不是"拿到别人的结果"；进行中的同一调用共享同一个 future，所以重试不会
+  把副作用做第二遍。
+- **handler 在注册者自己的作用域里运行**（`context.runtime_scope()`）。能力借用和 owner
+  身份不经总线转手，总线只做路由。
+
+**与上游的一处明确差异**：上游的 `ExtensionSpec` 还有 `stage`，让多个 owner 在同一个
+联合事务里各自交出写入（上游为此在 ledger 加了 `OwnerWrite` 与多 owner 联合事务，提交
+`928478b0`）。**我们的 ledger 没有那个原语，所以没有移植 `stage`**——留一个不能真正原子
+提交的联合写入口，比没有更危险。扩展只有 `validate` 和 `apply`。
+
+**回归**：`tests/test_operations_bus.py`，8 项。覆盖一路径一 owner、路径合法性、卸载后
+路由消失、参数校验与类型强制（且 JSON 解析失败不回显原值，它可能是凭据）、回执归属与
+并发重试只执行一次、`user_only` 对 Agent 既不可见也不可达、正交扩展命名空间冲突与校验
+短路、handler 异常如实回报。突变四向验证，全部按测试名失败。
+
+**尚未移植**：`self_cli`（把总线挂成模型可调用的 CLI 工具）、`session-handoff` 及其
+`SessionOperations`、一对一 Parity 门禁 v2。门禁需要先有界面入口采集，排在下一步。
+
+## 维护：锁点摘要门禁的修复
+
+跟进过程中发现仓库自己的完整性门禁是红的：`scripts/check_upstream_kernel.py` 校验每个被
+改动的上游文件的 `sha256`，而**召回装饰器那次修复之后 `plugins/akasha/plugin.py` 一直没
+更新摘要**。补丁产物此前靠手工重新生成，所以一次普通修复就会让门禁留红。
+
+新增 `scripts/regenerate_upstream_patch.py`，两种模式分开，因为风险不同：
+
+- `--update-digests`：记录漂移文件的当前 `sha256`。这是有意改动上游文件之后需要的，也
+  正是仓库门禁实际检查的东西。
+- `--rebuild`：额外重写补丁产物。**12 个产物里只有 8 个能从锁点源码用 `diff -u` 逐字节
+  复现**，其余的生成过程仓库从未记录，重写它们会把几百 KB 改成同义的另一种写法，或者
+  静默丢掉没有上游原件的文件的 hunk。所以 `--rebuild` 对复现不出来的产物**默认拒绝**，
+  要 `--force` 才动。
+
+必须用 GNU `diff -u` 而不是 `difflib`：原产物是用它生成的，两者选的 hunk 边界不同
+（`@@` 行号差一），用 difflib 会重写全部补丁。拿本 fork 没碰过的产物验证过，逐字节复现。
+
+当前状态：漂移 0 个文件，8/12 产物可复现，`scripts/check_feature_alignment` 通过。
+
 ## 明确不跟的部分
 
 - `watch`：上游 ADR 0149 用它取代 Wake 和 Drift，依据是十四天生产数据（语义兴趣分日均 0.03）。我们保留 Wake + followups，理由与代价写在 [fork 对比](fork-vs-upstream.md#主动交互上游删掉了我们留着)。

@@ -41,6 +41,7 @@
 | onboarding | 运行组件 | 可选 |
 | openai-compatible | 运行组件 | 是 |
 | opencode-go | 运行组件 | 可选 |
+| operations | 发行扩展 | 是 |
 | plugin_update | 运行组件 | 是 |
 | programmatic | 运行组件 | 是 |
 | projects | 运行组件 | 是 |

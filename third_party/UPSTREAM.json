@@ -1011,13 +1011,13 @@
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "bundles/base.toml": {
-      "sha256": "454eb113878d61531ef28b090c10a08129b64be6c643e482b50d5b7d61bd60f7",
+      "sha256": "499c2a6338212eca7236c6eeef7489a8b57b6350ad6af711b2721d356fb91193",
       "patch": "third_party/patches/personal-assistant-experience.patch",
       "patch_sha256": "cf5ee8d9aa21e84910d420e963c9e658479fad66924f6fc4202bfed260a80380",
       "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."
     },
     "bundles/minimal.toml": {
-      "sha256": "f3920cd9b459ef81dd98e8615bde12f192ec76a9f0837287fb4491ca53718583",
+      "sha256": "c700d317c942e79a5e842ec83aa2a70c7fcbbb721c86199cfaa9bef8ce37a09f",
       "patch": "third_party/patches/personal-assistant-experience.patch",
       "patch_sha256": "cf5ee8d9aa21e84910d420e963c9e658479fad66924f6fc4202bfed260a80380",
       "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."
@@ -1347,7 +1347,7 @@
       "reason": "Upstream Akasha engine through 5ddd5ebb: blocked graph capacity, incremental basin structure with a resident index, lazy-heap Residual Push with an optional compiled kernel, matrix-backed resident feature pool, in-place incremental checkpoint publication with schema v3, tokenizer and vector reuse on restore, and incremental interest prototypes. Local changes keep an empty graph publishable, keep the consumption read and member routing off the event loop, and refuse a pre-v3 checkpoint instead of republishing an unreplayed graph as v3."
     },
     "plugins/akasha/plugin.py": {
-      "sha256": "3eb95c44e51d2e3b5de2b00e27d25f4642d4a6bbc2c03e5c423873c835bd2927",
+      "sha256": "13b4bb7707ee167dd98d475c5991189e046c33da09cdc08fb3c98fc2cf165949",
       "patch": "third_party/patches/memory-query-api.patch",
       "patch_sha256": "68ff9b35ea3b2d973b5918c80836526eed5d70f2a9372d862505410df52feb11",
       "reason": "Drain spawned workers without rethrowing already reported failures; preserve new cleanup failures and caller cancellation."
@@ -1943,19 +1943,19 @@
     "plugins/subagent/plugin.py": {
       "patch": "third_party/patches/personal-assistant-experience.patch",
       "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
-      "sha256": "d5306f8fb6acc159dcf79b424ada062e9a1bd2e15e23db5020a65d86f9d5c83d",
+      "sha256": "437840be8ced77a3ccec79ef8c54d4e2df2053105c98eea9f4d21ad367a4c6c3",
       "patch_sha256": "cf5ee8d9aa21e84910d420e963c9e658479fad66924f6fc4202bfed260a80380"
     },
     "plugins/subagent/runtime.py": {
       "patch": "third_party/patches/personal-assistant-experience.patch",
       "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
-      "sha256": "a66e8b308aa41039eb86a36a398e2714c12208104a7c339839b9ebcad9d5654d",
+      "sha256": "7cee5bad2ffabb9a6440c23cecb46292b965783731e4a6defbba6e634012cc86",
       "patch_sha256": "cf5ee8d9aa21e84910d420e963c9e658479fad66924f6fc4202bfed260a80380"
     },
     "plugins/subagent/tools.py": {
       "patch": "third_party/patches/personal-assistant-experience.patch",
       "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component.",
-      "sha256": "8ec1c1a5b3f015fa629947bf59412e0a39677d78324f8658e6aba7f29129d90c",
+      "sha256": "04e56ba3bf9dca2cc1f9ae76903822da00ec882ef0a1582b745561aa32f02924",
       "patch_sha256": "cf5ee8d9aa21e84910d420e963c9e658479fad66924f6fc4202bfed260a80380"
     },
     "plugins/telegram_channel/channel.py": {
