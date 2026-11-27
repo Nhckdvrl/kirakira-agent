@@ -20,6 +20,8 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
+from pydantic import BaseModel, ConfigDict, Field
+
 from agent.plugin_composition.context import Context
 from agent.plugin_composition.effect import Effect
 from agent.plugin_composition.model import ServiceKey
@@ -29,6 +31,29 @@ from plugins.ledger.contract import ContentPart
 ActorKind = Literal["agent", "user"]
 AudienceKind = Literal["agent_and_user", "user_only"]
 OptionValueType = Literal["string", "bool", "int", "json"]
+# 一个操作是只读还是会改状态。写操作由 Agent 发起时，总线有额外要求，见
+# `OperationProof` 与 registry 里的两条规则。
+EffectKind = Literal["read", "write"]
+
+
+class OperationProof(BaseModel):
+    """Agent 发起的一次写操作的出处，随结果进入账本。
+
+    和 `akasha.source` 的 `SourceProof` 是同一个形状和同一个意图：不可变、带判别、
+    说得出"这次改动是谁在哪次调用里做的"。总线自己补上这一片，不依赖各个 handler
+    记得写——一个靠约定的审计记录等于没有。
+
+    注意它证明的是**可追溯**，不是**已授权**。回执让一次写改得清楚、查得到、不会重复
+    执行；它不代表用户同意过这件事。需要用户同意的写操作仍然留在 `user_only`，或留在
+    一对一门禁的待办里等授权设计。
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+    operation_id: str
+    actor: ActorKind
+    request_id: str
+    session_id: str | None = None
+    args: Mapping[str, object] = Field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,6 +111,10 @@ class OperationSpec:
     options: tuple[OptionSpec, ...] = ()
     extension_points: tuple[str, ...] = ()
     audience: AudienceKind = "agent_and_user"
+    # 只读还是会改状态。声明成 write 的操作由 Agent 调用时，总线要求带 request_id
+    # 并在结果里补一片 OperationProof；默认是 read，所以忘了声明不会悄悄放过写操作——
+    # 它会在回归里被 test_every_write_operation_declares_itself 抓到。
+    effect: EffectKind = "read"
     # 本操作对应的用户界面入口 ID，供一对一门禁核对；见 scripts/check_operation_parity.py。
     mirrors: tuple[str, ...] = ()
 

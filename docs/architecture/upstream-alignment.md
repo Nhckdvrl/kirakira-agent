@@ -198,6 +198,71 @@ operation 用 `mirrors` 声明它镜像的正是上面那个界面入口。
 **这一节是对"全镜像"这个目标的明确否定**：有些界面入口按设计就不该有 Agent 路径。门禁
 因此检查的是"每一项都有判断"，不是"数字归零"。
 
+### 门禁原来只看见一半的用户入口
+
+斜杠命令和界面按钮一样是用户入口：如果 Agent 到不了同一个动作，那正是这条门禁要查的
+不对称。但第一版只采集 `register_plugin_ui` 的查询方法，**5 条斜杠命令完全没进视野**，
+于是"界面入口已全部分类"这句话当时是假的。现在两类都采集：
+
+| 类别 | 命名 | 数量 |
+| --- | --- | ---: |
+| 插件界面查询 | `ui:<插件>/<method>` | 15 |
+| 斜杠命令 | `slash:<名字>` | 5 |
+
+5 条斜杠命令逐条给了理由，而且多数不是"还没排到"：`abandon` / `new` / `goal` 都是**用户
+收回控制权的指令**（Agent 自己调用等于自己决定放弃用户交办的工作、或自己改掉约束自己的
+目标），`stable` 是纯界面状态，`akasha_reindex` 是需要用户同意的运维重活。
+
+**上游还有第三类 `ws:`**（websocket 客户端面），它的 session 操作就镜像在那上面。本门禁
+还不采集这一类——所以任何 mirror 指向 `ws:` 的移植都要先补采集，否则那条声明会悄悄违反
+规则 1。写在这里，而不是等移植时再发现。
+
+## 写操作：Agent 发起时的两条额外规则
+
+上游在这件事上没有给出答案（ADR 0149 的未决问题正是"后台回合的对外动作是否需要更窄的
+授权"），所以这部分按本项目自己的可追溯原则设计。
+
+`OperationSpec.effect`（`read` / `write`，默认 `read`）。声明成 `write` 的操作由 Agent
+调用时，总线强制两件事：
+
+1. **必须带 `request_id`**。没有它就没有回执，工具重试会把这次改动做第二遍。`self` 工具
+   把调用的 `key` 直接当 `request_id`，所以这条总能满足；满足不了的调用会被拒绝，而不是
+   悄悄放过一次可能重复的写。
+2. **结果里由总线补一片 `OperationProof`**（operation_id / actor / request_id /
+   session_id / args，frozen）。它随结果进入账本，和 `akasha.source` 的 `SourceProof`
+   走同一条路——**不依赖各个 handler 记得写，因为靠约定的审计记录等于没有**。
+
+**必须把这件事说准：回执证明的是"可追溯"，不是"已授权"。** 它让一次写改得清楚、查得到、
+不会重复执行；它不代表用户同意过。所以需要用户同意的写操作仍然留在待办里，理由写的是
+"需要用户明确同意"，而不是"还没做"。
+
+第一个放开的写操作是 `projects.rename`，选它是因为代价最小：可逆、不改会话维度取值也不改
+目录绑定。其余 6 项写操作的待办理由已改写成"需要用户明确同意，总线的 OperationProof 只
+保证可追溯与不重复执行，不代表已授权"。
+
+突变三向验证：去掉 `request_id` 要求、不补出处、给只读操作也补出处，三种都按测试名失败。
+另有一条回归把"声明成 write 的操作集合"按名字钉住——默认是 `read`，所以漏声明不会悄悄
+放过一个写操作。
+
+## `session-handoff`：为什么这一轮没有做
+
+查清了它的真实依赖，结论是**不做比半做好**，理由具体：
+
+`session-handoff` 是一条上下文材料，数据来自 `conversation.session_open`——Agent 开一个
+用户可在侧栏接手的正式会话并写好交接卡。只移植材料和读取，就是一条**永远不触发的提醒**，
+而这正是本页开头批评过的形状。
+
+要做就得移植 `SessionOperations` 全套（open / send / steer / withdraw / stop / abandon，
+399 行），它需要：
+
+- `SessionPorts` 的 6 个入口。我们已有 5 个（`SourceSession`、`stage`、`withdraw` 在
+  `plugins/conversation/steer.py`，`abandon` 在 `plugin.py`），**缺 `open_automated`**。
+- 一条创建会话的路径，它的 mirror 是 `ws:akashic_clients/session.create`——**而本门禁还
+  不采集 `ws:` 这一类**（见上）。
+- `session_steer` 等的 mirror 同样指向 `ws:` 与 `slash:`。
+
+所以前置是：补 `ws:` 入口采集 + `open_automated`。两件都不大，但都不是"顺手"，排下一轮。
+
 **尚未移植**：`session-handoff` 及其 `SessionOperations`（挂在上游 Operation Bus 的
 会话交接机制上），以及上游 Parity 门禁 v2 里基于运行实例采集的那部分。
 

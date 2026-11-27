@@ -2129,25 +2129,25 @@
     "plugins/working_directory/plugin.py": {
       "sha256": "e6fd54788b33daa1899f5f7b93a5c2bd139f251ec5572ecc5dddcb713659ba13",
       "patch": "third_party/patches/operation-bus.patch",
-      "patch_sha256": "c689060a5366de8fb8d7c2a77c399018a25cc06bcc1a5f104102fce0bb97a687",
+      "patch_sha256": "4d6e6440f2871cdd59426422be10b9682e8408a25be21036dd071f5b3573f45d",
       "reason": "fork change; see the artifact for the diff"
     },
     "plugins/skills/plugin.py": {
       "sha256": "fd639d0ad70c0dc5dc630dfe7cf1caad4ddd5a486d4dbc5e58978fe37952f5a3",
       "patch": "third_party/patches/operation-bus.patch",
-      "patch_sha256": "c689060a5366de8fb8d7c2a77c399018a25cc06bcc1a5f104102fce0bb97a687",
+      "patch_sha256": "4d6e6440f2871cdd59426422be10b9682e8408a25be21036dd071f5b3573f45d",
       "reason": "fork change; see the artifact for the diff"
     },
     "plugins/host_execution/plugin.py": {
       "sha256": "0dbba7975e4ff90df5593ec16507740bc27030b606e8cc9e83158705056e56cb",
       "patch": "third_party/patches/operation-bus.patch",
-      "patch_sha256": "c689060a5366de8fb8d7c2a77c399018a25cc06bcc1a5f104102fce0bb97a687",
+      "patch_sha256": "4d6e6440f2871cdd59426422be10b9682e8408a25be21036dd071f5b3573f45d",
       "reason": "fork change; see the artifact for the diff"
     },
     "plugins/projects/plugin.py": {
-      "sha256": "3a1c6a99450a4c0db22a13ccc776238fe53beb558a74921bc35b2d0f0d8fade2",
+      "sha256": "dafc95211abc4e3d36bf52adcca26306bcfbc0a311d838580036ad7040411eb0",
       "patch": "third_party/patches/operation-bus.patch",
-      "patch_sha256": "c689060a5366de8fb8d7c2a77c399018a25cc06bcc1a5f104102fce0bb97a687",
+      "patch_sha256": "4d6e6440f2871cdd59426422be10b9682e8408a25be21036dd071f5b3573f45d",
       "reason": "fork change; see the artifact for the diff"
     }
   },

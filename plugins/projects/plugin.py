@@ -257,4 +257,24 @@ async def apply(ctx: Context) -> None:
             options=(OptionSpec("project_id", "项目标识", required=True),),
             mirrors=("ui:projects/project.directory",)))
 
+        # 第一个放开给 Agent 的写操作，选它是因为代价最小：改名可逆、不改变会话维度
+        # 取值或目录绑定，而且 effect="write" 让总线强制带 request_id（重试不会改两次）
+        # 并补一片 OperationProof 进账本。注意这解决的是**可追溯与不重复**，不是
+        # **已授权**——需要用户同意的写操作仍留在一对一门禁的待办里。
+        async def handle_rename(request: OperationRequest) -> OperationResult:
+            project_id = str(request.args.get("project_id", ""))
+            name = str(request.args.get("name", "")).strip()
+            if not project_id or not name:
+                return OperationResult(False, "改名需要 project_id 与 name",
+                                       error_code="invalid_arguments")
+            row = await run_file_io(lambda: projects.update(project_id, name=name))
+            return OperationResult(True, f"项目已改名为 {name}", data=dict(row))
+
+        _ = await operations.register(child, OperationSpec(
+            operation_id="projects.rename", path=("project", "rename"),
+            summary="重命名一个项目", handler=handle_rename, effect="write",
+            options=(OptionSpec("project_id", "项目标识", required=True),
+                     OptionSpec("name", "新名字", required=True)),
+            mirrors=("ui:projects/project.rename",)))
+
     _ = await ctx.inject((OPERATIONS_V1,), register_ops, name="operations")

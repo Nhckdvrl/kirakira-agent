@@ -18,6 +18,7 @@ import pytest
 
 from plugins.operations.contract import (
     ExtensionSpec,
+    OperationProof,
     OperationRequest,
     OperationResult,
     OperationSpec,
@@ -360,6 +361,9 @@ def test_the_parity_gate_holds_and_its_backlog_only_shrinks():
     done = subprocess.run([sys.executable, "scripts/check_operation_parity.py"],
                           capture_output=True, text=True)
     assert done.returncode == 0, done.stdout + done.stderr
+    # Both classes of user entry are collected; a gate blind to slash commands
+    # would have called the surface fully triaged while five were unexamined.
+    assert "slash" in done.stdout, done.stdout
 
     import json
     from pathlib import Path
@@ -374,12 +378,13 @@ def test_the_parity_gate_holds_and_its_backlog_only_shrinks():
     # ratchet: mirroring an entry and leaving its line in place fails the gate.
     for mirrored in ("ui:working_directory/directory.current", "ui:skills/skills.list",
                      "ui:akasha/scope.policy.get", "ui:projects/project.list",
-                     "ui:projects/project.directory", "ui:host_execution/bridge.state"):
+                     "ui:projects/project.directory", "ui:host_execution/bridge.state",
+                     "ui:projects/project.rename"):
         assert mirrored not in backlog, mirrored
     # The backlog only shrinks. If this number goes up, a UI entry was added
     # without an agent-callable path and recorded instead of mirrored -- which is
     # allowed, but it should be a deliberate edit to this line.
-    assert len(backlog) <= 9, f"backlog grew to {len(backlog)}"
+    assert len(backlog) <= 13, f"backlog grew to {len(backlog)}"
     # Every entry has to say why, so the backlog cannot hide a silent decision.
     assert all(str(reason).strip() for reason in backlog.values()), backlog
 
@@ -400,3 +405,92 @@ def test_a_mirror_claim_cannot_point_at_another_plugins_entry():
             assert name in entries, f"{operation} mirrors a non-existent {name}"
             assert name.removeprefix("ui:").split("/", 1)[0] == owner, (
                 f"{operation} is declared by {owner} but mirrors {name}")
+
+
+@pytest.mark.asyncio
+async def test_an_agent_write_must_be_receiptable_and_leaves_a_proof():
+    """A write the agent performs has to be repeat-safe and traceable.
+
+    Both are structural rather than left to each handler: a convention-based
+    audit record is no audit record. The proof says who did it in which call --
+    it does not say anyone authorised it, which is why writes needing consent
+    stay user_only or stay in the parity backlog.
+    """
+    registry, ctx = OperationRegistry(), _Ctx()
+    runs: list[OperationRequest] = []
+
+    async def handler(request: OperationRequest) -> OperationResult:
+        runs.append(request)
+        return OperationResult(True, "renamed", data={"name": request.args.get("name")})
+
+    await registry.register(ctx, OperationSpec(
+        operation_id="fixture.rename", path=("thing", "rename"), summary="改名",
+        handler=handler, effect="write",
+        options=(OptionSpec("name", "新名字", required=True),)))
+
+    # Without a request id there is no receipt, so a retry would write twice.
+    refused = await registry.invoke(["thing", "rename", "--name", "甲"], actor="agent")
+    assert not refused.ok and refused.error_code == "request_id_required"
+    assert runs == []
+
+    ok = await registry.invoke(["thing", "rename", "--name", "甲"], actor="agent",
+                               session_id="s1", request_id="r1")
+    assert ok.ok and len(runs) == 1
+    proofs = [part for part in ok.parts if part.kind == "operation.proof"]
+    assert len(proofs) == 1, ok.parts
+    proof = OperationProof.model_validate(proofs[0].value)
+    assert proof.operation_id == "fixture.rename" and proof.actor == "agent"
+    assert proof.request_id == "r1" and proof.session_id == "s1"
+    assert proof.args == {"name": "甲"}
+
+    # The user side is not forced through a request id -- the UI already has its
+    # own call identity -- and carries no agent proof.
+    as_user = await registry.invoke(["thing", "rename", "--name", "乙"], actor="user")
+    assert as_user.ok and not [p for p in as_user.parts if p.kind == "operation.proof"]
+
+    # A read operation gets no proof, so the part means what it says.
+    await registry.register(ctx, OperationSpec(
+        operation_id="fixture.peek", path=("thing", "peek"), summary="看",
+        handler=lambda _request: _ok()))
+    peeked = await registry.invoke(["thing", "peek"], actor="agent", request_id="r2")
+    assert peeked.ok and not [p for p in peeked.parts if p.kind == "operation.proof"]
+
+
+async def _ok() -> OperationResult:
+    return OperationResult(True, "read")
+
+
+def test_every_write_operation_declares_itself():
+    """A handler that mutates must say `effect="write"`, or it skips both rules.
+
+    The default is read, which is the safe default for the bus but the unsafe
+    one for a careless registration -- so the set of operations whose UI entry
+    is a write is pinned here by name.
+    """
+    import ast
+    from pathlib import Path
+
+    declared: dict[str, str] = {}
+    for path in sorted(Path("plugins").rglob("*.py")):
+        if "__pycache__" in path.parts:
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8", errors="ignore"))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Call)
+                    and getattr(node.func, "id", getattr(node.func, "attr", "")) == "OperationSpec"):
+                continue
+            fields = {keyword.arg: keyword.value for keyword in node.keywords}
+            identity = fields.get("operation_id")
+            if not (isinstance(identity, ast.Constant) and isinstance(identity.value, str)):
+                continue
+            effect = fields.get("effect")
+            declared[identity.value] = (effect.value if isinstance(effect, ast.Constant)
+                                        else "read")
+
+    writes = {name for name, effect in declared.items() if effect == "write"}
+    # Mirrors of a write-shaped UI entry. Adding one without effect="write" means
+    # the bus will neither require a request id nor attach a proof.
+    assert writes == {"projects.rename"}, declared

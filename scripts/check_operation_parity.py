@@ -22,10 +22,18 @@ entries it mirrors; this reads the plugin sources and holds two rules:
 Rule 2 starts with a long backlog on purpose. A gate that demanded full parity
 on day one would have to be switched off, and a gate that is off checks nothing.
 
+Two classes of user entry are collected, both named so a mirror can point at
+them: `ui:<plugin>/<method>` for plugin-UI queries, and `slash:<name>` for slash
+commands. Upstream's own session operations mirror `ws:` entries too (the
+websocket client surface); this gate does not collect those yet, and porting
+anything whose mirror is a `ws:` entry needs that first -- stated here rather
+than discovered when the mirror silently fails rule 1.
+
 Source-reading, like the tool diff: it sees `register_plugin_ui(..., query=...)`
-handlers that dispatch on a `method` string, and `OperationSpec(...)` literals.
-It cannot see an entry assembled at runtime, and it does not check that two
-sides behave alike -- only that the correspondence is declared and real.
+handlers that dispatch on a `method` string, `CommandDefinition(name=...)`
+literals, and `OperationSpec(...)` literals. It cannot see an entry assembled at
+runtime, and it does not check that two sides behave alike -- only that the
+correspondence is declared and real.
 """
 
 from __future__ import annotations
@@ -85,6 +93,31 @@ def ui_entries() -> dict[str, str]:
     return found
 
 
+def slash_commands() -> dict[str, str]:
+    """`slash:<name>` -> the file that registers it.
+
+    A slash command is a user entry just as much as a UI button: if the agent
+    cannot reach the same action, that is the asymmetry this gate is about.
+    """
+    found: dict[str, str] = {}
+    for path in sorted(PLUGINS.rglob("*.py")):
+        if any(part in SKIP for part in path.parts):
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8", errors="ignore"))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Call) and getattr(
+                    node.func, "id", getattr(node.func, "attr", "")) == "CommandDefinition"):
+                continue
+            for keyword in node.keywords:
+                if (keyword.arg == "name" and isinstance(keyword.value, ast.Constant)
+                        and isinstance(keyword.value.value, str)):
+                    found[f"slash:{keyword.value.value}"] = str(path.relative_to(ROOT))
+    return found
+
+
 def declared_mirrors() -> dict[str, tuple[list[str], str]]:
     """operation_id -> (the UI entries it says it mirrors, the declaring plugin)."""
     found: dict[str, tuple[list[str], str]] = {}
@@ -115,7 +148,7 @@ def main() -> int:
                         help="record every currently unmirrored UI entry as the backlog")
     args = parser.parse_args()
 
-    entries = ui_entries()
+    entries = {**ui_entries(), **slash_commands()}
     mirrors = declared_mirrors()
     claimed = {name for names, _owner in mirrors.values() for name in names}
 
@@ -155,6 +188,10 @@ def main() -> int:
                 problems.append(
                     f"{operation} claims to mirror {name}, but no plugin UI serves it")
                 continue
+            if not name.startswith("ui:"):
+                # A slash command's name carries no plugin, so ownership cannot be
+                # checked from the string; rule 1 still applies.
+                continue
             declared_plugin = name.removeprefix("ui:").split("/", 1)[0]
             if declared_plugin != owner:
                 problems.append(
@@ -172,8 +209,11 @@ def main() -> int:
         problems.append(f"{name} is mirrored now; delete it from "
                         f"{MANIFEST.relative_to(ROOT)}")
 
-    print(f"{len(entries)} UI entries, {len(mirrors)} operations, "
-          f"{len(claimed)} mirrored, {len(allowed)} in the backlog")
+    print(f"{len(entries)} user entries "
+          f"({sum(1 for n in entries if n.startswith('ui:'))} UI, "
+          f"{sum(1 for n in entries if n.startswith('slash:'))} slash), "
+          f"{len(mirrors)} operations, {len(claimed)} mirrored, "
+          f"{len(allowed)} in the backlog")
     for problem in problems:
         print(f"  {problem}", file=sys.stderr)
     return 1 if problems else 0

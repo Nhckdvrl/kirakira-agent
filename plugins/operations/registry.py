@@ -3,7 +3,11 @@
 移植自上游 akashic `plugins/operations/registry.py`（提交 `0af31c5c`），去掉了依赖
 多 owner 联合事务的 `stage` 路径——我们的 ledger 还没有 `OwnerWrite`。
 
-两处值得单独说的设计，因为它们正是这条总线比"各写一个 handler"强的地方：
+Agent 发起的写操作另有两条规则，见 `_invoke`：**必须带 request_id**（否则没有回执，
+重试就会把改动做第二遍），并且**结果里由总线补一片 `OperationProof`**，不依赖各个
+handler 记得写。靠约定的审计记录等于没有。
+
+三处值得单独说的设计，因为它们正是这条总线比"各写一个 handler"强的地方：
 
 * **回执绑定调用指纹**（身份、会话、argv）。同一个 request_id 换了身份或换了参数就
   是 `conflict`，不是"拿到别人的结果"。进行中的同一调用共享同一个 future，所以重试
@@ -24,10 +28,13 @@ from typing import cast
 from agent.plugin_composition.context import Context
 from agent.plugin_composition.effect import Effect
 
+from plugins.ledger.contract import ContentPart
+
 from .contract import (
     ActorKind,
     CliNodeHandle,
     ExtensionSpec,
+    OperationProof,
     OperationRequest,
     OperationResult,
     OperationSpec,
@@ -40,6 +47,9 @@ logger = logging.getLogger(__name__)
 _Fingerprint = tuple[str, str | None, tuple[str, ...]]
 _ID_CONFLICT = OperationResult(
     False, "该请求 ID 已用于另一条调用；换一个 ID 重试", error_code="conflict")
+_WRITE_NEEDS_ID = OperationResult(
+    False, "写操作必须带 request_id：没有它就没有回执，重试会把这次改动做第二遍",
+    error_code="request_id_required")
 
 _IDENT = re.compile(r"^[a-z][a-z0-9_-]{0,47}$")
 
@@ -333,6 +343,10 @@ class OperationRegistry:
             except Exception as err:
                 return OperationResult(False, f"扩展 {ext.spec.namespace} 校验失败: {err}",
                                        error_code="validation_failed")
+        # 写操作由 Agent 发起时必须可回执：否则工具重试会重复执行副作用。
+        if spec.effect == "write" and actor == "agent" and not request_id:
+            return _WRITE_NEEDS_ID
+
         try:
             # 处理函数在注册者自己的作用域里运行：能力借用与 owner 身份不经总线转手。
             async with self._ops[op_id].context.runtime_scope():
@@ -352,7 +366,20 @@ class OperationRegistry:
                     applied = await ext.spec.apply(req, result, vals)
                 if applied is not None:
                     ext_outputs[ext.spec.namespace] = applied
-        return (OperationResult(True, result.summary,
-                                data={**dict(result.data), "extensions": ext_outputs},
-                                parts=result.parts)
-                if ext_outputs else result)
+        final = (OperationResult(True, result.summary,
+                                 data={**dict(result.data), "extensions": ext_outputs},
+                                 parts=result.parts)
+                 if ext_outputs else result)
+        if spec.effect == "write" and actor == "agent":
+            # 总线补出处，而不是信任 handler 自己记。这一片随结果进入账本，和
+            # `akasha.source` 走同一条路：事后能回答"这次改动是谁在哪次调用里做的"。
+            assert request_id is not None
+            proof = OperationProof(
+                operation_id=spec.operation_id, actor=actor, request_id=request_id,
+                session_id=session_id, args=dict(args))
+            final = OperationResult(
+                final.ok, final.summary, data=final.data,
+                parts=(*final.parts,
+                       ContentPart("operation.proof", proof.model_dump(mode="json"))),
+                error_code=final.error_code)
+        return final
