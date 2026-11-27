@@ -15,6 +15,12 @@ Two modes, deliberately separated, because they carry different risk:
 * `--update-digests` records the current sha256 of each file whose recorded
   digest no longer matches. This is what an intentional edit to a pinned file
   needs, and it is exactly what the repository's gate checks.
+* `--adopt <artifact>` assigns a pinned file that has drifted but has **no**
+  patch entry to that artifact, then records it. A pinned file with no patch
+  entry is expected to match upstream byte for byte, so editing one turns the
+  gate red with no way to make it green again -- the first version of this
+  script missed that class entirely, because it only looked at files that were
+  already patched.
 * `--rebuild` additionally rewrites the patch artifacts. **Only 5 of the 13
   artifacts reproduce byte for byte** from the pinned sources with `diff -u`;
   the rest were produced by a procedure this repository never recorded, and
@@ -110,19 +116,40 @@ def main() -> int:
                         help="write nothing; exit 1 if any recorded digest is stale")
     parser.add_argument("--update-digests", action="store_true",
                         help="record the current sha256 of every drifted file")
+    parser.add_argument("--adopt", default=None,
+                        help="artifact name for drifted pinned files that have no patch entry")
     parser.add_argument("--rebuild", action="append", default=[],
                         help="also rewrite this artifact, if it reproduces; repeatable")
     parser.add_argument("--force", action="store_true",
                         help="rewrite an artifact even if it does not reproduce")
     args = parser.parse_args()
-    if not (args.check or args.update_digests or args.rebuild):
-        parser.error("pass --check, --update-digests or --rebuild")
+    if not (args.check or args.update_digests or args.rebuild or args.adopt):
+        parser.error("pass --check, --update-digests, --adopt or --rebuild")
 
     pin = json.loads(PIN.read_text(encoding="utf-8"))
     commit = cast(str, pin["commit"])
     patches = cast(dict[str, dict[str, str]], pin["patches"])
     members = artifact_members(pin)
 
+    # Every pinned file, not only the patched ones: a file in `files` with no
+    # patch entry must match upstream exactly, so an edit to one is drift the
+    # gate reports and this script has to be able to resolve.
+    files = cast(dict[str, str], pin["files"])
+    # A built frontend artifact carries a second allowed digest under `generated`,
+    # which the repository's own gate honours; counting those as drift would
+    # report six false positives on a clean tree.
+    generated = cast(dict[str, dict[str, str]], pin.get("generated", {}))
+
+    def _settled(path: str) -> bool:
+        actual = _digest((ROOT / path).read_bytes())
+        allowed = {files[path]}
+        if path in generated:
+            allowed.add(generated[path]["sha256"])
+        return actual in allowed
+
+    unpatched_drift = [
+        path for path in sorted(files)
+        if path not in patches and (ROOT / path).is_file() and not _settled(path)]
     drifted = [path for path in sorted(patches)
                if patches[path]["sha256"] != _digest((ROOT / path).read_bytes())]
     reproduces: dict[str, bool] = {}
@@ -133,9 +160,13 @@ def main() -> int:
     if args.check:
         for path in drifted:
             print(f"stale digest: {path}", file=sys.stderr)
-        print(f"{len(drifted)} drifted file(s); "
+        for path in unpatched_drift:
+            print(f"pinned but unpatched, and changed: {path} "
+                  f"(resolve with --adopt <artifact>)", file=sys.stderr)
+        print(f"{len(drifted)} drifted patched file(s), "
+              f"{len(unpatched_drift)} drifted unpatched file(s); "
               f"{sum(reproduces.values())}/{len(reproduces)} artifacts reproduce")
-        return 1 if drifted else 0
+        return 1 if drifted or unpatched_drift else 0
 
     wanted = [name for name in sorted(members)
               if Path(name).name in {Path(value).name for value in args.rebuild}]
@@ -154,12 +185,32 @@ def main() -> int:
             patches[path]["patch_sha256"] = digest
         print(f"rewrote {artifact} ({len(members[artifact])} files, {len(text)} bytes)")
 
+    if args.adopt:
+        artifact = args.adopt if args.adopt.startswith("third_party/") else \
+            f"third_party/patches/{Path(args.adopt).name}"
+        for path in unpatched_drift:
+            patches[path] = {
+                "sha256": _digest((ROOT / path).read_bytes()),
+                "patch": artifact,
+                "patch_sha256": "",
+                "reason": "fork change; see the artifact for the diff",
+            }
+            print(f"adopted {path} into {artifact}")
+        members = artifact_members(pin)
+        text = build_patch(args.upstream, commit, members[artifact])
+        (ROOT / artifact).parent.mkdir(parents=True, exist_ok=True)
+        (ROOT / artifact).write_text(text, encoding="utf-8")
+        digest = _digest(text.encode("utf-8"))
+        for path in members[artifact]:
+            patches[path]["patch_sha256"] = digest
+        print(f"wrote {artifact} ({len(members[artifact])} files, {len(text)} bytes)")
+
     if args.update_digests:
         for path in drifted:
             patches[path]["sha256"] = _digest((ROOT / path).read_bytes())
             print(f"recorded new digest for {path}")
         if not drifted:
-            print("no drifted files")
+            print("no drifted patched files")
     PIN.write_text(json.dumps(pin, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"updated {PIN.relative_to(ROOT)}")
     return 0

@@ -122,8 +122,50 @@ Agent 各走私有路径去改状态，那句话在写操作上就是空的。�
 并发重试只执行一次、`user_only` 对 Agent 既不可见也不可达、正交扩展命名空间冲突与校验
 短路、handler 异常如实回报。突变四向验证，全部按测试名失败。
 
-**尚未移植**：`self_cli`（把总线挂成模型可调用的 CLI 工具）、`session-handoff` 及其
-`SessionOperations`、一对一 Parity 门禁 v2。门禁需要先有界面入口采集，排在下一步。
+### `self_cli`：两条入口在这里汇合
+
+总线本身没有使用者就是个空底座，所以同时移植了 `plugins/self_cli`（上游同名插件）。
+它和 `operations` 分成两个插件，是为了避免总线依赖工具目录而成环。
+
+| 入口 | actor |
+| --- | --- |
+| 模型工具 `self`（argv 数组） | `agent` |
+| RPC 方法 `self/invoke` | `user` |
+
+**差别只有 `actor`**，调的是同一个 `OPERATIONS_V1.invoke`。所以 `audience="user_only"`
+的操作天然只在用户侧可用，不需要在两套实现里各写一遍权限判断——那正是两条私有路径最
+容易写歪的地方。工具调用的 `key` 直接当作总线的 `request_id`，所以同一次工具调用重试
+会重放回执，而不是把写操作做第二遍。
+
+### 第一个纵切：工作目录
+
+光有总线和入口还不够，得有真实的领域操作挂上去。`plugins/working_directory` 原来只有
+界面能读当前目录（plugin UI 的 `directory.current` → `current_info`），Agent 没有这条
+路径。现在同一个 `current_info` 同时服务两边：
+
+- 界面：`ui:working_directory/directory.current`
+- Agent：`self ["wd", "current"]` → operation `working_directory.current`
+
+operation 用 `mirrors` 声明它镜像的正是上面那个界面入口。
+
+### 一对一门禁
+
+`scripts/check_operation_parity.py` 读插件源码，守两条规则：
+
+1. **声明的镜像必须真实存在**——某个 operation 说它镜像 `ui:x/y`，而没有界面提供
+   `y`，就失败。否则 `mirrors` 会退化成注释，而这条门禁存在的意义恰恰是防这个。
+2. **每个界面入口要么已被镜像，要么登记在待办里**（`scripts/operation_parity_manifest.json`）。
+   这个集合只能变小：镜像一个就删掉它那行；新增一个未镜像的界面入口会失败，直到它被
+   镜像或带理由登记。
+
+当前状态：**15 个界面入口，1 个已镜像，14 个在待办**。待办一开始就很长是故意的——
+第一天就要求全量对齐的门禁只能被关掉，而关掉的门禁什么都不检查。
+
+突变三向验证，且**核对了退出码**（不是只看输出）：镜像一个不存在的入口、去掉 `mirrors`、
+把已镜像的入口留在待办里，三种都 exit 1，干净时 exit 0。
+
+**尚未移植**：`session-handoff` 及其 `SessionOperations`（挂在上游 Operation Bus 的
+会话交接机制上），以及上游 Parity 门禁 v2 里基于运行实例采集的那部分。
 
 ## 维护：锁点摘要门禁的修复
 
@@ -143,7 +185,15 @@ Agent 各走私有路径去改状态，那句话在写操作上就是空的。�
 必须用 GNU `diff -u` 而不是 `difflib`：原产物是用它生成的，两者选的 hunk 边界不同
 （`@@` 行号差一），用 difflib 会重写全部补丁。拿本 fork 没碰过的产物验证过，逐字节复现。
 
-当前状态：漂移 0 个文件，8/12 产物可复现，`scripts/check_feature_alignment` 通过。
+**还修了这个工具自己的一个漏洞。** 第一版只检查"已经有补丁条目"的文件，而锁点里还有
+一类文件：在 `files` 里、没有补丁条目，因此被要求与上游逐字节一致。改动这类文件会让门禁
+变红而工具报不出来——移植纵切时改 `plugins/working_directory/plugin.py` 就撞上了。现在
+两类都报，并有 `--adopt <artifact>` 把这类文件收进一个产物。
+
+另外要尊重 `generated` 允许项：前端构建产物在锁点里有第二个合法摘要，不认它会在干净的
+树上报 6 个假阳性。
+
+当前状态：漂移 0 个文件，9/13 产物可复现，`scripts/check_feature_alignment` 通过。
 
 ## 明确不跟的部分
 

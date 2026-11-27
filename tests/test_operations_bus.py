@@ -313,3 +313,59 @@ def test_the_bus_is_actually_selected_by_the_distribution():
         rows = tomllib.loads(Path(f"bundles/{bundle}.toml").read_text(encoding="utf-8"))["rows"]
         assert "operations" in rows, f"{bundle} does not select the bus"
         assert rows["operations"]["plugin"].startswith("operations@")
+
+
+def test_the_self_tool_and_the_user_entry_share_one_operation_table():
+    """`self` and `self/invoke` must differ only by actor.
+
+    Two entry points that each reimplement the dispatch is the shape this bus
+    exists to remove, so the agent side and the user side are pinned to the same
+    `invoke`, and the user-only audience check is left to the bus rather than
+    duplicated in either caller.
+    """
+    import ast
+    from pathlib import Path
+
+    import tomllib
+
+    from agent.plugins.static_manifest import load_static_plugin_manifest
+    from kirakira_agent.runtime import HEADLESS
+
+    source = Path("plugins/self_cli/plugin.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    actors = sorted(
+        keyword.value.value
+        for node in ast.walk(tree) if isinstance(node, ast.Call)
+        and getattr(node.func, "attr", "") == "invoke"
+        for keyword in node.keywords
+        if keyword.arg == "actor" and isinstance(keyword.value, ast.Constant))
+    assert actors == ["agent", "user"], actors
+    # The tool call key is the bus request id, so a retried tool call replays
+    # the receipt instead of repeating the write.
+    assert "request_id=key" in source
+    assert "self/invoke" in source
+
+    manifest = load_static_plugin_manifest(Path("plugins/self_cli"))
+    assert manifest.name == "self_cli" and manifest.name in HEADLESS
+    for bundle in ("base", "minimal"):
+        rows = tomllib.loads(Path(f"bundles/{bundle}.toml").read_text(encoding="utf-8"))["rows"]
+        assert "self_cli" in rows, f"{bundle} does not select the self tool"
+
+
+def test_the_parity_gate_holds_and_its_backlog_only_shrinks():
+    """The gate is the point: `mirrors` has to be checkable, not decorative."""
+    import subprocess
+    import sys
+
+    done = subprocess.run([sys.executable, "scripts/check_operation_parity.py"],
+                          capture_output=True, text=True)
+    assert done.returncode == 0, done.stdout + done.stderr
+
+    import json
+    from pathlib import Path
+
+    manifest = json.loads(Path("scripts/operation_parity_manifest.json").read_text(encoding="utf-8"))
+    backlog = manifest["unmirrored"]
+    assert backlog == sorted(set(backlog)), "the backlog must be sorted and unique"
+    # The one slice migrated onto the bus must not also sit in the backlog.
+    assert "ui:working_directory/directory.current" not in backlog

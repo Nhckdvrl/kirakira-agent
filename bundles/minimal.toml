@@ -6,6 +6,9 @@ plugin = "ledger@release"
 
 [rows."operations"]
 plugin = "operations@release"
+
+[rows."self_cli"]
+plugin = "self_cli@release"
 disabled = true
 
 [rows."timer"]

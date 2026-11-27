@@ -1011,13 +1011,13 @@
       "reason": "Distribution presentation and default account branding; existing identities remain compatible."
     },
     "bundles/base.toml": {
-      "sha256": "499c2a6338212eca7236c6eeef7489a8b57b6350ad6af711b2721d356fb91193",
+      "sha256": "a3c8a8a7ca7d5593d990c3eecc94213c1cb4bc1ad761be3be022bca16b55440c",
       "patch": "third_party/patches/personal-assistant-experience.patch",
       "patch_sha256": "cf5ee8d9aa21e84910d420e963c9e658479fad66924f6fc4202bfed260a80380",
       "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."
     },
     "bundles/minimal.toml": {
-      "sha256": "c700d317c942e79a5e842ec83aa2a70c7fcbbb721c86199cfaa9bef8ce37a09f",
+      "sha256": "f4a8e8dc4917f93dc0c8b99bc3204c0320eab6cc629a547e9aa95e07cdcc7c77",
       "patch": "third_party/patches/personal-assistant-experience.patch",
       "patch_sha256": "cf5ee8d9aa21e84910d420e963c9e658479fad66924f6fc4202bfed260a80380",
       "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."
@@ -2125,6 +2125,12 @@
       "patch": "third_party/patches/personal-assistant-experience.patch",
       "patch_sha256": "cf5ee8d9aa21e84910d420e963c9e658479fad66924f6fc4202bfed260a80380",
       "reason": "Personal conversation continuity, reusable WebSocket sessions, scoped source expansion, bounded background reads, and selecting the persistent-goal component."
+    },
+    "plugins/working_directory/plugin.py": {
+      "sha256": "e6fd54788b33daa1899f5f7b93a5c2bd139f251ec5572ecc5dddcb713659ba13",
+      "patch": "third_party/patches/operation-bus.patch",
+      "patch_sha256": "72e88c1b64a668e0d8ddb5bb3c798e31480268866d4340f71b66d333809937b8",
+      "reason": "fork change; see the artifact for the diff"
     }
   },
   "source_paths": {
