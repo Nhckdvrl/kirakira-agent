@@ -10,6 +10,11 @@ Upstream split its plugins into core and extra (their ADR 0167), so both have
 to be passed: comparing against core alone reports capabilities as missing
 upstream when they only moved.
 
+A tool is identified by a `register(...)` call that passes `parameters` -- the
+schema the model is shown. The same `register(name=...)` shape is used for
+context materials and UI slots, and counting those reports gaps that are not
+tool gaps at all.
+
 This reads source, not a running instance. It cannot see a tool registered
 under a computed name, and it does not check that two tools sharing a name
 behave alike -- `fetch_messages` against our `read_memory_source` is exactly
@@ -44,6 +49,13 @@ def registered_tools(root: Path) -> dict[str, str]:
             name = (func.attr if isinstance(func, ast.Attribute)
                     else func.id if isinstance(func, ast.Name) else "")
             if name not in {"register", "register_tool"}:
+                continue
+            # `register(name=...)` is also how context materials, UI slots and web
+            # modules are registered. Only a model-callable tool carries the JSON
+            # schema the model is shown, so require it -- without this, upstream's
+            # `session-handoff` context material counts as a missing tool.
+            keywords = {keyword.arg for keyword in node.keywords}
+            if "parameters" not in keywords:
                 continue
             for keyword in node.keywords:
                 if (keyword.arg == "name" and isinstance(keyword.value, ast.Constant)

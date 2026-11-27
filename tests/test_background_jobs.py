@@ -827,3 +827,141 @@ async def test_jobs_unload_cancels_active_wake(tmp_path):
                 assert log.reader("test:room").snapshot() == original
             finally:
                 release.set()
+
+@pytest.mark.asyncio
+async def test_parent_interjection_is_queued_or_reopens_and_is_never_silently_dropped(tmp_path):
+    """subagent_send: 运行中排队，已结算则重开，回合末到达的不丢。
+
+    最要紧的一条是最后那个竞态：插话排队和结算必须互斥。父 Agent 收到 "queued"
+    之后消息必须真的落账，否则它以为插话送达了而子任务已经结束。
+    """
+    from types import SimpleNamespace
+    from plugins.ledger.contract import CallRef, ContentPart, ContentReferences, Control, SessionAttributes
+    from plugins.ledger.log import MessageLog
+    from plugins.subagent.inputs import CONTENT, DELIVERY
+    from plugins.subagent.request import Request, PROFILE_TOOLS, check_request
+    from plugins.subagent.runtime import Subagents, MESSAGE_CATALOG, MESSAGE_WRITERS, OWNER_STATE, _terminal
+    from plugins.subagent.tools import Send
+    from plugins.tools.contract import CallSource
+    from agent.plugin_composition.tasks import TASKS
+
+    log = MessageLog(tmp_path / "messages.db")
+    started: list[str] = []
+
+    class Slot:
+        current = None
+        def start(self, factory):
+            started.append("started")
+            return None
+
+    async def admit(_key, fn):
+        return fn(Slot())
+
+    try:
+        for binding in ("program", "sender", *PROFILE_TOOLS["research"]):
+            log.save_binding(binding, {"fixture": binding})
+        state, catalog = log.owner("subagent"), log.catalog()
+        services = {
+            OWNER_STATE: SimpleNamespace(open=lambda _ctx: state),
+            MESSAGE_CATALOG: catalog,
+            # MESSAGE_WRITERS.bind(ctx, **kw) returns a factory called with a session id.
+            MESSAGE_WRITERS: SimpleNamespace(
+                bind=lambda _ctx, **kw: (lambda sid: log.writer(sid, **kw))),
+            CONTENT: SimpleNamespace(check_text=lambda _part: ContentReferences()),
+            DELIVERY: SimpleNamespace(open=lambda _ctx: None),
+            TASKS: SimpleNamespace(open=lambda _ctx: SimpleNamespace(admit=admit)),
+        }
+        jobs = Subagents(SimpleNamespace(require=services.__getitem__))
+
+        def seed(number, parent, *, settled, text=None):
+            job_id = f"{number:032x}"
+            request = Request(job_id=job_id, label="资料研究", profile="research", background=False,
+                retry_count=0, parent_session_id=parent, parent_message_id="parent-call", parent_part_index=0,
+                origin={"channel": "test", "chat_id": parent, "sender": "user"},
+                sink={"name": "test", "binding_id": "sender", "address": parent},
+                program_binding="program", tools={name: name for name in PROFILE_TOOLS["research"]})
+            log.ensure_session(request.session_id, SessionAttributes(visibility="internal", learning="excluded"))
+            log.writer(request.session_id, author="subagent", source="subagent", body_types=(Input,),
+                content={"subagent.request": lambda part: check_request(part, check_origin=lambda _p: ContentReferences())}
+            ).append(request.input_id, Input((ContentPart("subagent.request", request.model_dump(mode="json")),)))
+            state.transact(lambda tx: tx.save("job-" + job_id,
+                {"session_id": request.session_id, "input_id": request.input_id, "settled": settled},
+                expected_version=None))
+            if text is not None:
+                log.writer(request.session_id, author="subagent", source="subagent", body_types=(Output,),
+                    content={"text": lambda _p: ContentReferences()}).append(
+                        "answer-" + job_id, Output((ContentPart("text", text),), "complete"))
+            return request
+
+        running = seed(1, "parent", settled=False)
+        done = seed(2, "parent", settled=True, text="第一轮结论")
+        foreign = seed(3, "other", settled=False)
+
+        # 1. Running job: the message queues as a steer, nothing is written yet.
+        value = await jobs.send("parent", running.job_id, "再查一下预算上限")
+        assert value["mode"] == "steered" and value["status"] == "queued"
+        assert jobs._steers[running.session_id] and started == []
+
+        # 2. before_step drains it into the child's own ledger, with provenance.
+        task = SimpleNamespace(active=True, boundary_hint=-1)
+        await jobs.steer_before_step(running.session_id, task=task)()
+        rows = [m for m in log.reader(running.session_id).snapshot()
+                if isinstance(m.body, Input) and m.message_id.startswith("steer:")]
+        assert len(rows) == 1 and rows[0].author == "parent" and rows[0].source == "subagent"
+        assert rows[0].body.parts[0].value == "再查一下预算上限"
+        assert task.boundary_hint == rows[0].seq and not jobs._steers.get(running.session_id)
+
+        # 3. A newer Input reopens a finished turn, so the program runs again and
+        #    inspect reports pending rather than completed.
+        assert await jobs.outcome(log.reader(done.session_id)) == ("completed", "第一轮结论")
+        value = await jobs.send("parent", done.job_id, "按新约束再算一遍")
+        assert value["mode"] == "resumed_sync" and started == ["started"]
+        assert state.read("job-" + done.job_id).value["settled"] is False
+        assert _terminal(log.reader(done.session_id), "subagent") is None
+        assert await jobs.outcome(log.reader(done.session_id)) is None
+        assert (await jobs.inspect("parent", job_id=done.job_id))["work_status"] == "pending"
+
+        # 4. The end-of-run race: a steer queued before the settle decision is
+        #    drained and the run continues, instead of being dropped.
+        jobs._steers.setdefault(running.session_id, []).append(("steer:late", "回合末插话"))
+        again = await jobs._drain_or_finish("job-" + running.job_id, running, task,
+                                           ("completed", "本轮结论"))
+        assert again is True
+        assert any(m.message_id == "steer:late" for m in log.reader(running.session_id).snapshot())
+        assert state.read("job-" + running.job_id).value["settled"] is False
+
+        # 5. With nothing queued it settles, and a user cancel discards queued steers.
+        assert await jobs._drain_or_finish("job-" + running.job_id, running, task,
+                                          ("completed", "本轮结论")) is False
+        assert state.read("job-" + running.job_id).value["settled"] is True
+        jobs._steers.setdefault(running.session_id, []).append(("steer:after-cancel", "取消之后"))
+        assert await jobs._drain_or_finish("job-" + running.job_id, running, task,
+                                          ("cancelled", "已取消")) is False
+        assert not jobs._steers.get(running.session_id)
+        assert not any(m.message_id == "steer:after-cancel"
+                       for m in log.reader(running.session_id).snapshot())
+
+        # 6. Another session's job is refused, and nothing reaches its ledger.
+        before = log.reader(foreign.session_id).snapshot()
+        with pytest.raises(PermissionError):
+            await jobs.send("parent", foreign.job_id, "越权插话")
+        assert log.reader(foreign.session_id).snapshot() == before
+        with pytest.raises(KeyError):
+            await jobs.send("parent", f"{99:032x}", "不存在")
+        for bad in ("", "   "):
+            with pytest.raises(ValueError):
+                await jobs.send("parent", running.job_id, bad)
+
+        # 7. The tool refuses without a real calling message, like its siblings.
+        send = Send(jobs)
+        assert isinstance(await send.prepare({"job_id": running.job_id, "message": "x"}), str)
+        log.writer("parent", author="agent", source="conversation", body_types=(Output,),
+                   content={}).append("send-call", Output((), "continue"))
+        caller = log.reader("parent").get("send-call")
+        source = CallSource(CallRef("send-call", 0), (caller,))
+        prepared = await send.prepare({"job_id": foreign.job_id, "message": "越权"}, source)
+        assert isinstance(prepared, dict)
+        response = await send.invoke("send", prepared)
+        assert response.outcome == "error" and "不属于当前会话" in str(response.parts[0].value)
+    finally:
+        log.close()

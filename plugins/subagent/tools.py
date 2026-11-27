@@ -38,6 +38,59 @@ class PreparedManage(ManageInput):
     parent_session_id: str = Field(min_length=1)
 
 
+class SendInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    job_id: str = Field(min_length=1, description="目标子任务 job_id")
+    message: str = Field(min_length=1, description="要发给该子任务的追问、补充约束或纠正说明")
+    run_in_background: bool = Field(
+        default=False,
+        description="仅在子任务已结束、需要唤醒继续时生效；运行中一律排队插话，不等待")
+
+
+class PreparedSend(SendInput):
+    parent_session_id: str = Field(min_length=1)
+
+
+class Send:
+    """向本会话派出的子任务继续发送消息。
+
+    运行中排队插话，子任务在下一步模型请求之前收到；已结算则沿用原上下文继续。
+    两种情况都把消息写进子会话的账本，所以 `subagent_read` 能读到它。
+    """
+
+    idempotent = False
+
+    def __init__(self, jobs: Subagents):
+        self.jobs = jobs
+
+    async def prepare(self, arguments: Mapping[str, object], source: CallSource | None = None) -> Mapping[str, object] | str:
+        try:
+            args = SendInput.model_validate(dict(arguments))
+        except ValidationError as error:
+            return str(error)
+        if not args.message.strip():
+            return '消息内容不能为空'
+        if source is None:
+            return '向子任务发送消息需要当前会话的实际工具调用'
+        caller = next((message for message in source.messages
+                       if message.message_id == source.call_ref.message_id), None)
+        if caller is None:
+            return '向子任务发送消息缺少实际调用消息'
+        return {**args.model_dump(), "parent_session_id": caller.session_id}
+
+    async def invoke(self, key: str, arguments: Mapping[str, object]) -> Result:
+        args = PreparedSend.model_validate(json_value(arguments))
+        try:
+            value = await self.jobs.send(args.parent_session_id, args.job_id, args.message,
+                                         background=args.run_in_background)
+        except (PermissionError, LookupError, ValueError, SubagentBusy) as error:
+            return Result("error", (ContentPart("text", str(error)),))
+        return Result("success", (ContentPart("text", json.dumps(value, ensure_ascii=False)),))
+
+    async def query(self, key: str) -> Result | None:
+        return None
+
+
 class ReadInput(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     job_id: str = Field(min_length=1, description="目标子任务 job_id")

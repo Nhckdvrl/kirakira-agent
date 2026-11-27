@@ -47,6 +47,11 @@ class Subagents:
         self.ctx = ctx
         self.max_active = max_active
         self.result_chars = result_chars
+        # Parent interjections waiting to be written into a child session, and the
+        # one lock that keeps queueing them exclusive with settling the run. Both
+        # paths run on this event loop, so an asyncio lock is the whole mutex.
+        self._steers: dict[str, list[tuple[str, str]]] = {}
+        self._steer_lock = asyncio.Lock()
 
     def read(self, key: str) -> tuple[OwnerRecord, Request, MessageReader] | None:
         return self._read(self.ctx.require(OWNER_STATE).open(self.ctx), self.ctx.require(MESSAGE_CATALOG), key)
@@ -147,6 +152,118 @@ class Subagents:
                     "jobs": rows[:limit], "has_more": len(rows) > limit}
 
         return await run_file_io(lambda: state.snapshot(read))
+
+    async def _drain_steers(self, session_id: str, *, task: Task | None = None) -> int:
+        """把排队的插话写成子会话的 Input，并把边界推到最新一条。
+
+        写进账本才算送达：父 Agent 的插话和子任务自己的消息走同一个账本，
+        所以它和其他每一轮一样可以被 `subagent_read` 读到和回源。
+        """
+        queued = self._steers.pop(session_id, [])
+        if not queued:
+            return 0
+        writer = self.ctx.require(MESSAGE_WRITERS).bind(
+            self.ctx, author="parent", source="subagent", body_types=(Input,),
+            content={"text": self.ctx.require(CONTENT).check_text})(session_id)
+        try:
+            for message_id, text in queued:
+                committed = await writer.append_async(message_id, Input((ContentPart("text", text),)))
+                if task is not None:
+                    task.boundary_hint = committed.seq
+        finally:
+            writer.expire()
+        return len(queued)
+
+    def steer_before_step(
+        self, session_id: str, *, task: Task | None = None,
+    ) -> Callable[[], Awaitable[None]]:
+        """交给回复程序的 before_step：每一步模型请求之前先收插话。"""
+
+        async def before_step() -> None:
+            _ = await self._drain_steers(session_id, task=task)
+
+        return before_step
+
+    async def _drain_or_finish(
+        self, key: str, request: Request, task: Task, outcome: tuple[str, str],
+    ) -> bool:
+        """在同一把锁里决定"还有插话要接着跑"还是"结算"。
+
+        这两件事必须互斥。否则一条正好在回合结束瞬间到达的插话会被丢掉，
+        而父 Agent 已经收到"queued"、以为它送达了——静默丢消息比拒绝更糟。
+
+        用户取消优先于插话：取消之后排队的插话一律丢弃并说明。
+        """
+        async with self._steer_lock:
+            if outcome[0] != "cancelled" and self._steers.get(request.session_id):
+                if await self._drain_steers(request.session_id, task=task) > 0:
+                    return True
+            _ = self._steers.pop(request.session_id, None)
+            if not request.background:
+                await self._settle(key)
+            return False
+
+    async def send(
+        self, parent_session_id: str, job_id: str, message: str, *, background: bool = False,
+    ) -> dict[str, object]:
+        """向本会话派出的子任务追加消息：运行中排队插话，已结算则沿用原上下文继续。"""
+        if not parent_session_id or not job_id:
+            raise ValueError("向子任务发送消息需要父会话与 job_id")
+        if not message.strip():
+            raise ValueError("消息内容不能为空")
+        state = self.ctx.require(OWNER_STATE).open(self.ctx)
+        catalog = self.ctx.require(MESSAGE_CATALOG)
+        target: tuple[str, Request] | None = None
+        for key, record in state.list():
+            session_id, _, _ = _pointer(record)
+            if session_id != "subagent:" + job_id:
+                continue
+            found = self._read(state, catalog, key)
+            assert found is not None
+            _record, request, _reader = found
+            if request.parent_session_id != parent_session_id:
+                raise PermissionError("子任务不属于当前会话")
+            target = (key, request)
+            break
+        if target is None:
+            raise KeyError("子任务不存在")
+        key, request = target
+
+        async with self._steer_lock:
+            current = state.read(key)
+            assert current is not None
+            if not current.value["settled"]:
+                self._steers.setdefault(request.session_id, []).append(
+                    ("steer:" + uuid4().hex, message))
+                return {"job_id": job_id, "mode": "steered", "status": "queued"}
+            writer = self.ctx.require(MESSAGE_WRITERS).bind(
+                self.ctx, author="parent", source="subagent", body_types=(Input,),
+                content={"text": self.ctx.require(CONTENT).check_text})(request.session_id)
+            try:
+                prepared = await writer.prepare_async(
+                    "subagent-send:" + uuid4().hex, Input((ContentPart("text", message),)))
+
+                def commit(tx: OwnerTransaction) -> None:
+                    row = tx.read(key)
+                    assert row is not None
+                    if row.value["settled"] is not True:
+                        raise SubagentBusy("子任务状态刚切换为活跃，请重试")
+                    _ = tx.save(key, {**row.value, "settled": False},
+                                expected_version=row.version)
+                    _ = tx.append_prepared(prepared)
+
+                await state.transact_async(commit)
+            finally:
+                writer.expire()
+
+        task = await self.start(key)
+        if background or request.background:
+            return {"job_id": job_id, "mode": "resumed_background", "status": "running"}
+        if task is not None:
+            _ = await task.join()
+        outcome = await self.outcome(catalog.reader(request.session_id))
+        status, text = ("completed", "") if outcome is None else outcome
+        return {"job_id": job_id, "mode": "resumed_sync", "status": status, "result": text[:2000]}
 
     async def read_child_messages(
         self, parent_session_id: str, job_id: str, *, after_seq: int = -1, limit: int = 50,
@@ -302,29 +419,34 @@ class Subagents:
         admitted = reader.get(request.input_id)
         if admitted is None or admitted.source != "subagent" or not isinstance(admitted.body, Input):
             raise ValueError("子任务程序缺少同来源的原 Input")
-        task.boundary_hint = admitted.seq
-        try:
-            # 1. 只有未关闭输入才进入原程序；最终消息或控制足以决定恢复方向。
-            if await self.outcome(reader) is None:
-                async with self.ctx.require(BINDINGS).open(request.program_binding, SUBAGENT_PROGRAM) as (program, _):
-                    _ = await program(task, reader, request)
-        except asyncio.CancelledError as error:
-            if await self.outcome(reader) is None:
-                if not task.active:
+        # Resume after the newest input, not the original one, so a run reopened by
+        # a parent message does not re-admit the turns before it.
+        latest_input = reader.latest_input("subagent", through_seq=reader.head())
+        task.boundary_hint = admitted.seq if latest_input is None else latest_input.seq
+        while True:
+            try:
+                # 1. 只有未关闭输入才进入原程序；最终消息或控制足以决定恢复方向。
+                if await self.outcome(reader) is None:
+                    async with self.ctx.require(BINDINGS).open(request.program_binding, SUBAGENT_PROGRAM) as (program, _):
+                        _ = await program(task, reader, request)
+            except asyncio.CancelledError as error:
+                if await self.outcome(reader) is None:
+                    if not task.active:
+                        raise
+                    # 程序自行取消没有撤销 Task，不能伪造用户 pause 或取消父等待者。
+                    await self._control(request, "failure", "子任务程序意外取消：" + (str(error) or type(error).__name__), task=task)
+            except Exception as error:
+                if task.active:
+                    await self._control(request, "failure", str(error) or type(error).__name__, task=task)
+                else:
                     raise
-                # 程序自行取消没有撤销 Task，不能伪造用户 pause 或取消父等待者。
-                await self._control(request, "failure", "子任务程序意外取消：" + (str(error) or type(error).__name__), task=task)
-        except Exception as error:
-            if task.active:
-                await self._control(request, "failure", str(error) or type(error).__name__, task=task)
-            else:
-                raise
-        # 2. 已开始的工具与原程序资源此时已经排空，回传不复制内部推理。
-        outcome = await self.outcome(reader)
-        if outcome is None:
-            raise RuntimeError("子任务程序没有保存终态")
-        if not request.background:
-            await self._settle(key)
+            # 2. 已开始的工具与原程序资源此时已经排空，回传不复制内部推理。
+            outcome = await self.outcome(reader)
+            if outcome is None:
+                raise RuntimeError("子任务程序没有保存终态")
+            # 3. 结算与收插话在同一把锁里二选一，回合末到达的插话不会被丢掉。
+            if not await self._drain_or_finish(key, request, task, outcome):
+                break
         await self._trace(request, outcome[0])
 
     async def _settle(self, key: str) -> None:
@@ -639,14 +761,26 @@ def _notice_state(reader: MessageReader, source: str) -> tuple[Message | None, M
 
 
 def _terminal(reader: MessageReader, source: str, *, through_seq: int | None = None) -> Message | None:
-    head = reader.head(source=source) if through_seq is None else through_seq
-    finished = reader.latest_finished_output_seq(source, after_seq=-1, through_seq=head)
-    control = reader.latest_control(source, through_seq=head)
-    if control is not None and control.body.action in {"pause", "failure", "abandon"} and (finished is None or control.seq > finished):
-        return control
-    if finished is None:
-        return None
-    return reader.read(after_seq=finished - 1, through_seq=finished, source=source, limit=1)[0]
+    """最后一条终态；但更晚的同来源 Input 会把这一轮重新打开。
+
+    反向扫描遇到 Input 就停。父 Agent 的插话写在上一条 Output 之后，所以这一轮
+    重新变成"未结束"，程序会接着跑，而 `inspect` 也会把它报成 pending 而不是
+    completed——否则插话进去的任务看起来已经结束了。
+
+    没有插话时结果与"取最后一条终态"完全一致：子会话里在终态之后本来不会再出现
+    同来源的 Input。
+    """
+    head = reader.head() if through_seq is None else through_seq
+    for message in reversed(reader.snapshot(through_seq=head)):
+        if message.source != source:
+            continue
+        if isinstance(message.body, Input):
+            return None
+        if isinstance(message.body, Output) and message.body.finish != "continue":
+            return message
+        if isinstance(message.body, Control) and message.body.action in {"pause", "failure", "abandon"}:
+            return message
+    return None
 
 
 def _pointer(record: OwnerRecord) -> tuple[str, str, bool]:

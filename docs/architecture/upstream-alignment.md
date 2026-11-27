@@ -10,23 +10,25 @@
 python3 scripts/diff_upstream_tools.py <upstream-core> <upstream-extra>
 ```
 
+工具的判定条件是 `register(...)` 调用里带 `parameters=`——那是给模型看的 schema。**第一版没加这个条件，数错了**：`register(name=...)` 同样用于上下文材料和 UI 插槽，于是上游的 `session-handoff`（一条上下文材料）被当成"缺一个工具"。修正后：
+
 | | 工具数 |
 | --- | ---: |
-| 本 fork | 30 |
-| 上游 core | 18 |
-| 上游 extra | 24 |
-| 上游合计 | 42 |
+| 本 fork | 19 |
+| 上游 core | 7 |
+| 上游 extra | 21 |
+| 上游合计 | 28 |
 
-补齐 `subagent_read` 之后，上游有而我们没有的从 17 项降到 **16 项**。
+补齐 `subagent_read` 与 `subagent_send` 之后，上游有而我们没有的是 **13 项**，其中没有一项是基本功能缺口（逐项见下）。
 
 上游把插件拆成了 core / extra 两个仓库（ADR 0167），所以必须两边一起比，只比 core 会得出"上游功能变少了"的错误结论。
 
-## 上游有、我们没有（16 项）
+## 上游有、我们没有（13 项）
 
 | 工具 | 在哪 | 判断 |
 | --- | --- | --- |
-| `subagent_send` | extra / subagent | **缺口，下一项**：需要向运行中的子任务注入消息（Steer），我们只有 pause / failure 两种控制 |
-| `session-handoff` | core / conversation | 缺口：会话交接 |
+| `subagent_send` | extra / subagent | **已补齐**（见下） |
+| ~~`session-handoff`~~ | core / conversation | **不是工具**：它是一条上下文材料（`MATERIALS_V4`），数据来自 `SessionOperations`，而那整套挂在上游的 Operation Bus（`OPERATIONS_V1`）上。单独做一个"交接材料"而没有交接机制，等于一条永远不触发的提醒。归入 Operation Bus 一并评估 |
 | `self` | core / self_cli | 上游新架构（Operation Bus），不属于"基本功能"，单独评估 |
 | `codemode` | core / codemode | 单独评估 |
 | `fetch_messages` | extra / akasha | **不是缺口**：我们有 `read_memory_source` / `search_memory_source`，且准入更严（按回执而非按范围），见 [fork 对比](fork-vs-upstream.md) |
@@ -59,16 +61,32 @@ python3 scripts/diff_upstream_tools.py <upstream-core> <upstream-extra>
 
 突变双向验证：去掉归属检查，测试在第 434 行失败；去掉截断，在第 421 行失败。
 
-## 下一项：`subagent_send`
+## 已补齐：`subagent_send` 与它背后的插话原语
 
-上游的 `subagent_send` 做两件事：运行中**实时 Steer 插话**，已结束则**沿用原上下文继续执行**。我们的 `_control` 只能 pause / failure，没有"往运行中的一轮注入一条消息"这个原语。
+上游的 `subagent_send` 做两件事：运行中**排队插话**，已结束则**沿用原上下文继续执行**。
 
-所以这一项不是加个工具，是**先要一个 Steer 原语**，它会碰到 react 循环和效果排空。没有和 `subagent_read` 一起做，是因为半成品的注入路径比没有更糟——它会在父 Agent 以为插话成功时静默丢消息。单独排。
+**比预期便宜，因为一半已经在了**：我们的 `ReplyExecuteV4` 本来就有 `before_step`（"每一步模型请求之前调用；对话来源用它写入用户的插话"）。缺的只是子任务这一侧的队列和结算互斥。
+
+实现（`plugins/subagent/runtime.py`）：
+
+- `_steers` 队列 + **一把 `asyncio.Lock`**。排队插话和结算必须互斥，否则一条正好在回合结束瞬间到达的插话会被丢掉，而父 Agent 已经收到 `queued`、以为它送达了。**静默丢消息比拒绝更糟**，所以这把锁是这次改动里最要紧的一行。
+- `_drain_steers` 把排队文本写成子会话的 `Input`（`author="parent"`，同一个账本），并把 `task.boundary_hint` 推到最新一条。写进账本才算送达，所以插话和子任务自己的消息一样能被 `subagent_read` 读到、回源核对。
+- `steer_before_step` 交给 `REPLY_EXECUTE` 的 `before_step`。
+- `_drain_or_finish` 在锁里二选一：还有插话就接着跑，没有就结算。**用户取消优先**，取消之后排队的插话一律丢弃。
+
+**还改了终态判定**，这是让"已结束的子任务能被重开"成立的关键。`_terminal` 原来取"最后一条终态"，现在反向扫描、**遇到同来源的 `Input` 就停**：父 Agent 的消息写在上一条 `Output` 之后，于是这一轮重新变成未结束，程序接着跑，`inspect` 也把它报成 pending 而不是 completed。没有插话时与原逻辑完全一致——子会话里在终态之后本来不会再出现同来源的 `Input`，既有的 522 项回归全部通过正是这一点的证据。
+
+**没有照搬的一件事**：上游还有 `retry_wake`，一个让退避等待中的步骤被插话唤醒的 Event。我们的 `REPLY_EXECUTE` 没有这个参数，而它只影响插话多快被看到（下一步边界 vs 立刻），不影响是否送达。**所以没有为它改核心循环，也没有加一个记而不用的 Event。**
+
+**回归**：`tests/test_background_jobs.py::test_parent_interjection_is_queued_or_reopens_and_is_never_silently_dropped`。覆盖排队、落账与出处、重开后 `outcome` 变 None 且状态回到 pending、回合末竞态、取消优先、跨会话被拒且对方账本无写入、空消息被拒、无真实调用消息被拒。
+
+突变四向验证，全部按文件行号失败：去掉回合末排空（静默丢消息）、让取消也排空、去掉父会话归属检查、让 `_terminal` 忽略更晚的 `Input`。
 
 ## 明确不跟的部分
 
 - `watch`：上游 ADR 0149 用它取代 Wake 和 Drift，依据是十四天生产数据（语义兴趣分日均 0.03）。我们保留 Wake + followups，理由与代价写在 [fork 对比](fork-vs-upstream.md#主动交互上游删掉了我们留着)。
-- `self` / `codemode` / Operation Bus / Parity 门禁：上游 11 月的新架构，是否跟进要先评估，不计入"基本功能对齐"。
+- `phone_use`（7 项）、`design_show_html`、`open_document`：可选集成。
+- `roll_dice`：不是功能，是 `skills/develop-akashic-plugin` 脚手架里的示例工具。
 - `phone_use`：可选硬件集成，和本项目的目标无关。
 
 ## 复核方式

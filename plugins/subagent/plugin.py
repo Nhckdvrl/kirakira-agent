@@ -49,7 +49,7 @@ from .inputs import (
 from .prompts import build_spawn_subagent_prompt
 from .request import PROFILE_TOOLS, Request, SpawnInput
 from .runtime import DEFAULT_MAX_ACTIVE, DEFAULT_RESULT_CHARS, SUBAGENT_PROGRAM, Subagents
-from .tools import Manage, ManageInput, Read, ReadInput, Spawn
+from .tools import Manage, ManageInput, Read, ReadInput, Send, SendInput, Spawn
 
 api_version = 3
 name = "subagent"
@@ -134,6 +134,10 @@ async def apply(ctx: Context) -> None:
     async def open_read(_state: Mapping[str, object]) -> AsyncGenerator[Read]:
         yield Read(jobs)
 
+    @asynccontextmanager
+    async def open_send(_state: Mapping[str, object]) -> AsyncGenerator[Send]:
+        yield Send(jobs)
+
     _ = await catalog.register(
         ctx,
         name="spawn",
@@ -169,6 +173,17 @@ async def apply(ctx: Context) -> None:
         open=open_read,
         idempotent=True,
     )
+    _ = await catalog.register(
+        ctx,
+        name="subagent_send",
+        description=("向本会话派出的子任务继续发送指令：运行中排队插话，子任务在下一步"
+                     "模型请求之前收到；已结束则沿用原上下文继续执行。"
+                     "两种情况都写进子会话账本，可用 subagent_read 回看。"
+                     "不属于当前会话的 job_id 会被拒绝。"),
+        parameters=SendInput.model_json_schema(),
+        open=open_send,
+        idempotent=False,
+    )
 
     async def program(task: Task, reader: MessageReader, request: Request) -> Message:
         task_dir = ctx.workspace_root("subagent-runs") / request.job_id
@@ -182,6 +197,7 @@ async def apply(ctx: Context) -> None:
                          ctx, task, reader, 'subagent',
                          check_admission=partial(ctx.require(SOURCE_CHECK), task, reader, "subagent", task.boundary_hint),
                          authorize=authorize,
+                         before_step=jobs.steer_before_step(reader.session_id, task=task),
                          tool_view=None,
                          fixed_bindings=request.tools,
                          max_output_tokens=config.max_output_tokens,
